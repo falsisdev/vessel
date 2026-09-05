@@ -8,7 +8,15 @@ func GetBuiltinThemes() []*Theme {
 		buildCatppuccinTheme(),
 		buildNordTheme(),
 		buildDraculaTheme(),
-		buildMangileNuxtTheme(),
+		buildMangileDumanTheme(),
+		buildMangileMauveTheme(),
+		buildMangileStoneTheme(),
+		buildMangileZincTheme(),
+		buildMangileSlateTheme(),
+		buildMangileOliveTheme(),
+		buildMangileTaupeTheme(),
+		buildMangileGrayTheme(),
+		buildMangileNeutralTheme(),
 	}
 }
 
@@ -354,186 +362,230 @@ func buildDraculaTheme() *Theme {
 	}
 }
 
-func buildMangileNuxtTheme() *Theme {
+func buildMangileTokens(base, surface, elevated, sidebar, textPrim, textSec, textMut string) map[string]string {
+	return map[string]string{
+		"bg-base":          base,
+		"bg-surface":       surface,
+		"bg-elevated":      elevated,
+		"bg-overlay":       "rgba(10, 14, 20, 0.88)",
+		"bg-sidebar":       sidebar,
+		"bg-player":        base,
+		"bg-card":          surface,
+		"text-primary":     textPrim,
+		"text-secondary":   textSec,
+		"text-muted":       textMut,
+		"text-inverse":     base,
+		"accent-primary":   "#22c55e",
+		"accent-secondary": "#4ade80",
+		"accent-hover":     "#16a34a",
+		"accent-active":    "#15803d",
+		"border-subtle":    "rgba(34, 197, 94, 0.12)",
+		"border-default":   "rgba(255, 255, 255, 0.12)",
+		"border-strong":    "rgba(255, 255, 255, 0.22)",
+		"status-success":   "#22c55e",
+		"status-warning":   "#eab308",
+		"status-error":     "#ef4444",
+		"status-info":      "#3b82f6",
+		"radius-sm":        "6px",
+		"radius-md":        "10px",
+		"radius-lg":        "16px",
+		"radius-full":      "9999px",
+		"blur-amount":      "18px",
+	}
+}
+
+func buildMangileDumanTheme() *Theme {
 	return &Theme{
 		IsBuiltin: true,
 		Manifest: ThemeManifest{
 			ID:             "mangile",
-			Name:           "Mangile (Nuxt UI)",
+			Name:           "Mangile Duman",
 			Version:        "1.0.0",
-			Description:    "Authentic Mangile reader palette with Nuxt UI emerald green accents and neutral tones",
-			Author:         "Mangile Team",
-			DefaultVariant: "mist",
+			Description:    "Puslu koyu arduvaz tonları ve zümrüt yeşili vurgular (Varsayılan Mangile)",
+			Author:         "Mangile",
+			DefaultVariant: "dark",
 			Variants: []Variant{
 				{
-					ID:     "mist",
-					Name:   "Mangile Duman (Mist - Default)",
+					ID:     "dark",
+					Name:   "Duman Koyu",
 					IsDark: true,
-					Tokens: map[string]string{
-						"bg-base":          "#0c1017",
-						"bg-surface":       "#131a24",
-						"bg-elevated":      "#1b2533",
-						"bg-overlay":       "rgba(12, 16, 23, 0.88)",
-						"bg-sidebar":       "#090d13",
-						"bg-player":        "#0c1017",
-						"bg-card":          "#131a24",
-						"text-primary":     "#f1f5f9",
-						"text-secondary":   "#94a3b8",
-						"text-muted":       "#64748b",
-						"text-inverse":     "#0c1017",
-						"accent-primary":   "#22c55e",
-						"accent-secondary": "#4ade80",
-						"accent-hover":     "#16a34a",
-						"accent-active":    "#15803d",
-						"border-subtle":    "rgba(34, 197, 94, 0.10)",
-						"border-default":   "rgba(255, 255, 255, 0.12)",
-						"border-strong":    "rgba(255, 255, 255, 0.22)",
-						"status-success":   "#22c55e",
-						"status-warning":   "#eab308",
-						"status-error":     "#ef4444",
-						"status-info":      "#3b82f6",
-						"radius-sm":        "6px",
-						"radius-md":        "10px",
-						"radius-lg":        "16px",
-						"radius-full":      "9999px",
-						"blur-amount":      "18px",
-					},
+					Tokens: buildMangileTokens("#0c1017", "#131a24", "#1b2533", "#090d13", "#f1f5f9", "#94a3b8", "#64748b"),
 				},
+			},
+		},
+	}
+}
+
+func buildMangileMauveTheme() *Theme {
+	return &Theme{
+		IsBuiltin: true,
+		Manifest: ThemeManifest{
+			ID:             "mangile-mauve",
+			Name:           "Mangile Leylak",
+			Version:        "1.0.0",
+			Description:    "Zarif leylak moru koyu zemin ve zümrüt yeşili vurgular",
+			Author:         "Mangile",
+			DefaultVariant: "dark",
+			Variants: []Variant{
 				{
-					ID:     "zinc",
-					Name:   "Mangile Çinko (Zinc)",
+					ID:     "dark",
+					Name:   "Leylak Koyu",
 					IsDark: true,
-					Tokens: map[string]string{
-						"bg-base":          "#09090b",
-						"bg-surface":       "#141417",
-						"bg-elevated":      "#1f1f23",
-						"bg-overlay":       "rgba(9, 9, 11, 0.90)",
-						"bg-sidebar":       "#09090b",
-						"bg-player":        "#09090b",
-						"bg-card":          "#18181b",
-						"text-primary":     "#fafafa",
-						"text-secondary":   "#a1a1aa",
-						"text-muted":       "#71717a",
-						"text-inverse":     "#09090b",
-						"accent-primary":   "#22c55e",
-						"accent-secondary": "#4ade80",
-						"accent-hover":     "#16a34a",
-						"accent-active":    "#15803d",
-						"border-subtle":    "rgba(255, 255, 255, 0.08)",
-						"border-default":   "rgba(255, 255, 255, 0.14)",
-						"border-strong":    "rgba(255, 255, 255, 0.25)",
-						"status-success":   "#22c55e",
-						"status-warning":   "#eab308",
-						"status-error":     "#ef4444",
-						"status-info":      "#3b82f6",
-						"radius-sm":        "6px",
-						"radius-md":        "10px",
-						"radius-lg":        "16px",
-						"radius-full":      "9999px",
-						"blur-amount":      "18px",
-					},
+					Tokens: buildMangileTokens("#131118", "#1a1722", "#24212e", "#0e0c12", "#f5f3f7", "#d8d4df", "#9e98a8"),
 				},
+			},
+		},
+	}
+}
+
+func buildMangileStoneTheme() *Theme {
+	return &Theme{
+		IsBuiltin: true,
+		Manifest: ThemeManifest{
+			ID:             "mangile-stone",
+			Name:           "Mangile Kaya",
+			Version:        "1.0.0",
+			Description:    "Sıcak doğal kaya ve taş tonlarında koyu zemin",
+			Author:         "Mangile",
+			DefaultVariant: "dark",
+			Variants: []Variant{
 				{
-					ID:     "slate",
-					Name:   "Mangile Arduvaz (Slate)",
+					ID:     "dark",
+					Name:   "Kaya Koyu",
 					IsDark: true,
-					Tokens: map[string]string{
-						"bg-base":          "#0b1120",
-						"bg-surface":       "#141d2f",
-						"bg-elevated":      "#1e293b",
-						"bg-overlay":       "rgba(11, 17, 32, 0.90)",
-						"bg-sidebar":       "#080d1a",
-						"bg-player":        "#0b1120",
-						"bg-card":          "#162033",
-						"text-primary":     "#f8fafc",
-						"text-secondary":   "#cbd5e1",
-						"text-muted":       "#64748b",
-						"text-inverse":     "#0b1120",
-						"accent-primary":   "#22c55e",
-						"accent-secondary": "#4ade80",
-						"accent-hover":     "#16a34a",
-						"accent-active":    "#15803d",
-						"border-subtle":    "rgba(255, 255, 255, 0.08)",
-						"border-default":   "rgba(255, 255, 255, 0.14)",
-						"border-strong":    "rgba(255, 255, 255, 0.25)",
-						"status-success":   "#22c55e",
-						"status-warning":   "#eab308",
-						"status-error":     "#ef4444",
-						"status-info":      "#3b82f6",
-						"radius-sm":        "6px",
-						"radius-md":        "10px",
-						"radius-lg":        "16px",
-						"radius-full":      "9999px",
-						"blur-amount":      "18px",
-					},
+					Tokens: buildMangileTokens("#141210", "#1c1917", "#292524", "#0c0a09", "#f5f5f4", "#d6d3d1", "#a8a29e"),
 				},
+			},
+		},
+	}
+}
+
+func buildMangileZincTheme() *Theme {
+	return &Theme{
+		IsBuiltin: true,
+		Manifest: ThemeManifest{
+			ID:             "mangile-zinc",
+			Name:           "Mangile Çinko",
+			Version:        "1.0.0",
+			Description:    "Modern derin çinko koyu zemin ve zümrüt yeşili vurgular",
+			Author:         "Mangile",
+			DefaultVariant: "dark",
+			Variants: []Variant{
 				{
-					ID:     "mauve",
-					Name:   "Mangile Leylak (Mauve)",
+					ID:     "dark",
+					Name:   "Çinko Koyu",
 					IsDark: true,
-					Tokens: map[string]string{
-						"bg-base":          "#120e16",
-						"bg-surface":       "#1b1622",
-						"bg-elevated":      "#262030",
-						"bg-overlay":       "rgba(18, 14, 22, 0.90)",
-						"bg-sidebar":       "#0e0b12",
-						"bg-player":        "#120e16",
-						"bg-card":          "#1f1926",
-						"text-primary":     "#fdf4ff",
-						"text-secondary":   "#e9d5ff",
-						"text-muted":       "#a855f7",
-						"text-inverse":     "#120e16",
-						"accent-primary":   "#22c55e",
-						"accent-secondary": "#4ade80",
-						"accent-hover":     "#16a34a",
-						"accent-active":    "#15803d",
-						"border-subtle":    "rgba(255, 255, 255, 0.08)",
-						"border-default":   "rgba(255, 255, 255, 0.14)",
-						"border-strong":    "rgba(255, 255, 255, 0.25)",
-						"status-success":   "#22c55e",
-						"status-warning":   "#eab308",
-						"status-error":     "#ef4444",
-						"status-info":      "#3b82f6",
-						"radius-sm":        "6px",
-						"radius-md":        "10px",
-						"radius-lg":        "16px",
-						"radius-full":      "9999px",
-						"blur-amount":      "18px",
-					},
+					Tokens: buildMangileTokens("#09090b", "#141417", "#18181b", "#09090b", "#fafafa", "#d4d4d8", "#a1a1aa"),
 				},
+			},
+		},
+	}
+}
+
+func buildMangileSlateTheme() *Theme {
+	return &Theme{
+		IsBuiltin: true,
+		Manifest: ThemeManifest{
+			ID:             "mangile-slate",
+			Name:           "Mangile Arduvaz",
+			Version:        "1.0.0",
+			Description:    "Gece mavisi arduvaz koyu zemin ve zümrüt yeşili vurgular",
+			Author:         "Mangile",
+			DefaultVariant: "dark",
+			Variants: []Variant{
 				{
-					ID:     "olive",
-					Name:   "Mangile Zeytin (Olive)",
+					ID:     "dark",
+					Name:   "Arduvaz Koyu",
 					IsDark: true,
-					Tokens: map[string]string{
-						"bg-base":          "#0d120d",
-						"bg-surface":       "#151c14",
-						"bg-elevated":      "#1f291e",
-						"bg-overlay":       "rgba(13, 18, 13, 0.90)",
-						"bg-sidebar":       "#0a0e0a",
-						"bg-player":        "#0d120d",
-						"bg-card":          "#182017",
-						"text-primary":     "#f7fee7",
-						"text-secondary":   "#bef264",
-						"text-muted":       "#84cc16",
-						"text-inverse":     "#0d120d",
-						"accent-primary":   "#22c55e",
-						"accent-secondary": "#4ade80",
-						"accent-hover":     "#16a34a",
-						"accent-active":    "#15803d",
-						"border-subtle":    "rgba(255, 255, 255, 0.08)",
-						"border-default":   "rgba(255, 255, 255, 0.14)",
-						"border-strong":    "rgba(255, 255, 255, 0.25)",
-						"status-success":   "#22c55e",
-						"status-warning":   "#eab308",
-						"status-error":     "#ef4444",
-						"status-info":      "#3b82f6",
-						"radius-sm":        "6px",
-						"radius-md":        "10px",
-						"radius-lg":        "16px",
-						"radius-full":      "9999px",
-						"blur-amount":      "18px",
-					},
+					Tokens: buildMangileTokens("#0b1120", "#141d2f", "#1e293b", "#080d1a", "#f8fafc", "#cbd5e1", "#94a3b8"),
+				},
+			},
+		},
+	}
+}
+
+func buildMangileOliveTheme() *Theme {
+	return &Theme{
+		IsBuiltin: true,
+		Manifest: ThemeManifest{
+			ID:             "mangile-olive",
+			Name:           "Mangile Zeytin",
+			Version:        "1.0.0",
+			Description:    "Doğal orman zeytini koyu zemin ve zümrüt yeşili vurgular",
+			Author:         "Mangile",
+			DefaultVariant: "dark",
+			Variants: []Variant{
+				{
+					ID:     "dark",
+					Name:   "Zeytin Koyu",
+					IsDark: true,
+					Tokens: buildMangileTokens("#0f120e", "#161c15", "#20291e", "#0b0e0a", "#f4f6f3", "#d2d7cf", "#9ba399"),
+				},
+			},
+		},
+	}
+}
+
+func buildMangileTaupeTheme() *Theme {
+	return &Theme{
+		IsBuiltin: true,
+		Manifest: ThemeManifest{
+			ID:             "mangile-taupe",
+			Name:           "Mangile Boz",
+			Version:        "1.0.0",
+			Description:    "Sıcak boz gri koyu zemin tonları",
+			Author:         "Mangile",
+			DefaultVariant: "dark",
+			Variants: []Variant{
+				{
+					ID:     "dark",
+					Name:   "Boz Koyu",
+					IsDark: true,
+					Tokens: buildMangileTokens("#141211", "#1d1a19", "#2a2624", "#0d0b0a", "#f6f4f3", "#d5d0ce", "#a39d99"),
+				},
+			},
+		},
+	}
+}
+
+func buildMangileGrayTheme() *Theme {
+	return &Theme{
+		IsBuiltin: true,
+		Manifest: ThemeManifest{
+			ID:             "mangile-gray",
+			Name:           "Mangile Kır",
+			Version:        "1.0.0",
+			Description:    "Klasik kır gri koyu zemin ve zümrüt yeşili vurgular",
+			Author:         "Mangile",
+			DefaultVariant: "dark",
+			Variants: []Variant{
+				{
+					ID:     "dark",
+					Name:   "Kır Koyu",
+					IsDark: true,
+					Tokens: buildMangileTokens("#111827", "#1f2937", "#374151", "#0d1117", "#f9fafb", "#d1d5db", "#9ca3af"),
+				},
+			},
+		},
+	}
+}
+
+func buildMangileNeutralTheme() *Theme {
+	return &Theme{
+		IsBuiltin: true,
+		Manifest: ThemeManifest{
+			ID:             "mangile-neutral",
+			Name:           "Mangile Yavan",
+			Version:        "1.0.0",
+			Description:    "Derin monokrom ve saf koyu zemin tonları",
+			Author:         "Mangile",
+			DefaultVariant: "dark",
+			Variants: []Variant{
+				{
+					ID:     "dark",
+					Name:   "Yavan Koyu",
+					IsDark: true,
+					Tokens: buildMangileTokens("#0a0a0a", "#171717", "#262626", "#050505", "#fafafa", "#e5e5e5", "#a3a3a3"),
 				},
 			},
 		},

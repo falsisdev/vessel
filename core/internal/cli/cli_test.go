@@ -153,8 +153,11 @@ func TestThemeList(t *testing.T) {
 	if !strings.Contains(output, "mangile") {
 		t.Errorf("expected builtin mangile theme in list: %s", output)
 	}
-	if !strings.Contains(output, "mist") {
-		t.Errorf("expected mist variant for mangile: %s", output)
+	if !strings.Contains(output, "Mangile Duman") {
+		t.Errorf("expected Mangile Duman in list: %s", output)
+	}
+	if !strings.Contains(output, "Mangile Leylak") {
+		t.Errorf("expected Mangile Leylak in list: %s", output)
 	}
 	if !strings.Contains(output, "vessel-dark") {
 		t.Errorf("expected vessel-dark in list: %s", output)
@@ -208,9 +211,9 @@ func TestThemeInstallApplyAndRemove(t *testing.T) {
 		t.Errorf("unexpected apply output: %s", applyOut.String())
 	}
 
-	// Apply Mangile Nuxt UI theme
+	// Apply Mangile Duman theme
 	var applyMangile bytes.Buffer
-	if err := cli.ThemeApply("mangile", "mist", tempThemesDir, &applyMangile); err != nil {
+	if err := cli.ThemeApply("mangile", "dark", tempThemesDir, &applyMangile); err != nil {
 		t.Fatalf("ThemeApply mangile failed: %v", err)
 	}
 
@@ -267,7 +270,7 @@ func TestRootExecute(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Execute theme list failed: %v", err)
 	}
-	if !strings.Contains(stdout.String(), "Mangile (Nuxt UI)") {
-		t.Errorf("expected Mangile in theme list: %s", stdout.String())
+	if !strings.Contains(stdout.String(), "Mangile Duman") {
+		t.Errorf("expected Mangile Duman in theme list: %s", stdout.String())
 	}
 }

@@ -593,9 +593,17 @@ class VesselApp {
       "catppuccin": ["#1e1e2e", "#313244", "#cba6f7"],
       "nord": ["#2e3440", "#3b4252", "#88c0d0"],
       "dracula": ["#282a36", "#44475a", "#bd93f9"],
-      "mangile": ["#0c1017", "#1b2533", "#22c55e"],
+      "mangile": ["#0c1017", "#131a24", "#22c55e"],
+      "mangile-mauve": ["#131118", "#1a1722", "#22c55e"],
+      "mangile-stone": ["#141210", "#1c1917", "#22c55e"],
+      "mangile-zinc": ["#09090b", "#141417", "#22c55e"],
+      "mangile-slate": ["#0b1120", "#141d2f", "#22c55e"],
+      "mangile-olive": ["#0f120e", "#161c15", "#22c55e"],
+      "mangile-taupe": ["#141211", "#1d1a19", "#22c55e"],
+      "mangile-gray": ["#111827", "#1f2937", "#22c55e"],
+      "mangile-neutral": ["#0a0a0a", "#171717", "#22c55e"],
     };
-    return (map[id] && map[id][idx]) || "#4f46e5";
+    return (map[id] && map[id][idx]) || "#22c55e";
   }
 
   async switchTheme(themeID, variantID) {
@@ -615,10 +623,23 @@ class VesselApp {
   }
 
   async cycleTheme() {
-    const list = ["vessel-dark", "vessel-light", "mangile", "midnight-oled", "dracula", "nord", "catppuccin"];
+    const list = [
+      "vessel-dark",
+      "vessel-light",
+      "mangile",
+      "mangile-mauve",
+      "mangile-stone",
+      "mangile-zinc",
+      "mangile-slate",
+      "mangile-olive",
+      "midnight-oled",
+      "catppuccin",
+      "dracula",
+      "nord"
+    ];
     const current = this.activeTheme?.theme?.id || "vessel-dark";
     const nextIdx = (list.indexOf(current) + 1) % list.length;
-    await this.switchTheme(list[nextIdx], "");
+    await this.switchTheme(list[nextIdx], "dark");
   }
 
   // --- Routing & Views ---

@@ -5,8 +5,12 @@ import (
 	"flag"
 	"fmt"
 	"log/slog"
+	"net"
 	"os"
+	"os/exec"
 	"os/signal"
+	"runtime"
+	"strings"
 	"syscall"
 	"time"
 
@@ -39,16 +43,32 @@ func RunServer(args []string) error {
 	testQuery := fs.String("search", "", "Query to search on connected plugins")
 	oneshot := fs.Bool("oneshot", false, "Exit immediately after executing operations")
 
+	host := fs.String("host", "", "Host to bind Web UI (e.g. 127.0.0.1 or 0.0.0.0 for LAN access)")
+	port := fs.Int("port", 0, "Port to bind Web UI (e.g. 8080)")
+	openBrowser := fs.Bool("open", false, "Automatically open Web UI in default browser upon start")
+	headless := fs.Bool("headless", false, "Run in headless mode (never open browser)")
+
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+
+	resolvedUIAddr := *uiAddr
+	if *host != "" || *port != 0 {
+		h := *host
+		if h == "" {
+			h = "127.0.0.1"
+		}
+		p := *port
+		if p == 0 {
+			p = 8080
+		}
+		resolvedUIAddr = fmt.Sprintf("%s:%d", h, p)
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
 	}))
 	slog.SetDefault(logger)
-
-	slog.Info("Starting Vessel Core runtime")
 
 	sqliteStorage, err := storage.NewSQLiteStorage(*dbPath)
 	if err != nil {
@@ -106,13 +126,24 @@ func RunServer(args []string) error {
 		defer coreServer.Stop()
 	}
 
+	var uiServerURL string
 	if !*noUI && !*oneshot {
-		uiServer := server.NewGatewayServer(*uiAddr, cinemaService, readingService, libraryService, streamService, pluginManager, themeManager, streamingProxy)
+		uiServer := server.NewGatewayServer(resolvedUIAddr, cinemaService, readingService, libraryService, streamService, pluginManager, themeManager, streamingProxy)
 		if err := uiServer.Start(); err != nil {
-			slog.Warn("Failed to start Native UI Gateway server", "addr", *uiAddr, "error", err)
+			slog.Warn("Failed to start Native UI Gateway server", "addr", resolvedUIAddr, "error", err)
 		} else {
 			defer uiServer.Stop()
-			slog.Info("Vessel Native UI running", "url", uiServer.URL())
+			uiServerURL = uiServer.URL()
+		}
+	}
+
+	if !*oneshot {
+		printBanner(uiServerURL, *listenAddr, *noServer)
+		if *openBrowser && !*headless && uiServerURL != "" {
+			go func() {
+				time.Sleep(250 * time.Millisecond)
+				openInBrowser(uiServerURL)
+			}()
 		}
 	}
 
@@ -204,4 +235,70 @@ func RunServer(args []string) error {
 	<-ctx.Done()
 	slog.Info("Shutting down Vessel Core runtime...")
 	return nil
+}
+
+func printBanner(uiURL, ipcAddr string, noServer bool) {
+	fmt.Println()
+	fmt.Println("==========================================================================")
+	fmt.Println("  ⚓ VESSEL - Local-First Digital Media & Reading Platform (v1.0.0)")
+	fmt.Println("==========================================================================")
+	if uiURL != "" {
+		fmt.Printf("  ► Local Web UI:    %s\n", uiURL)
+		if strings.Contains(uiURL, "0.0.0.0") {
+			parts := strings.Split(uiURL, ":")
+			port := parts[len(parts)-1]
+			for _, ip := range getLocalIPs() {
+				fmt.Printf("  ► Network Access:  http://%s:%s (phone / tablet / LAN)\n", ip, port)
+			}
+		}
+	}
+	if !noServer {
+		fmt.Printf("  ► Core IPC gRPC:   %s\n", ipcAddr)
+	}
+	fmt.Println("--------------------------------------------------------------------------")
+	fmt.Println("  Open in your browser on any device. Press Ctrl+C to stop.")
+	fmt.Println("==========================================================================")
+	fmt.Println()
+}
+
+func openInBrowser(targetURL string) {
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "darwin":
+		cmd = exec.Command("open", targetURL)
+	case "linux":
+		cmd = exec.Command("xdg-open", targetURL)
+	case "windows":
+		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", targetURL)
+	}
+	if cmd != nil {
+		_ = cmd.Start()
+	}
+}
+
+func getLocalIPs() []string {
+	var ips []string
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return nil
+	}
+	for _, i := range ifaces {
+		addrs, err := i.Addrs()
+		if err != nil {
+			continue
+		}
+		for _, addr := range addrs {
+			var ip net.IP
+			switch v := addr.(type) {
+			case *net.IPNet:
+				ip = v.IP
+			case *net.IPAddr:
+				ip = v.IP
+			}
+			if ip != nil && !ip.IsLoopback() && ip.To4() != nil {
+				ips = append(ips, ip.String())
+			}
+		}
+	}
+	return ips
 }
