@@ -112,6 +112,66 @@ func (c *Client) GetSupportedLocales(ctx context.Context) (*corev1.GetSupportedL
 	return c.service.GetSupportedLocales(ctx, &corev1.GetSupportedLocalesRequest{})
 }
 
+func (c *Client) SaveLibraryItem(ctx context.Context, item *corev1.LibraryItem) (*corev1.SaveLibraryItemResponse, error) {
+	return c.service.SaveLibraryItem(ctx, &corev1.SaveLibraryItemRequest{Item: item})
+}
+
+func (c *Client) GetLibraryItem(ctx context.Context, providerID, mediaID string) (*corev1.GetLibraryItemResponse, error) {
+	return c.service.GetLibraryItem(ctx, &corev1.GetLibraryItemRequest{
+		ProviderId: providerID,
+		MediaId:    mediaID,
+	})
+}
+
+func (c *Client) ListLibraryItems(ctx context.Context, domain pluginv1.Domain, status corev1.LibraryStatus, limit, offset int32) (*corev1.ListLibraryItemsResponse, error) {
+	return c.service.ListLibraryItems(ctx, &corev1.ListLibraryItemsRequest{
+		Domain: domain,
+		Status: status,
+		Limit:  limit,
+		Offset: offset,
+	})
+}
+
+func (c *Client) DeleteLibraryItem(ctx context.Context, providerID, mediaID string) (*corev1.DeleteLibraryItemResponse, error) {
+	return c.service.DeleteLibraryItem(ctx, &corev1.DeleteLibraryItemRequest{
+		ProviderId: providerID,
+		MediaId:    mediaID,
+	})
+}
+
+func (c *Client) SavePlaybackProgress(ctx context.Context, p *corev1.PlaybackProgress) (*corev1.SavePlaybackProgressResponse, error) {
+	return c.service.SavePlaybackProgress(ctx, &corev1.SavePlaybackProgressRequest{Progress: p})
+}
+
+func (c *Client) GetPlaybackProgress(ctx context.Context, providerID, mediaID string, season, episode int32) (*corev1.GetPlaybackProgressResponse, error) {
+	return c.service.GetPlaybackProgress(ctx, &corev1.GetPlaybackProgressRequest{
+		ProviderId:    providerID,
+		MediaId:       mediaID,
+		SeasonNumber:  season,
+		EpisodeNumber: episode,
+	})
+}
+
+func (c *Client) ListRecentPlaybackProgress(ctx context.Context, limit int32) (*corev1.ListRecentPlaybackProgressResponse, error) {
+	return c.service.ListRecentPlaybackProgress(ctx, &corev1.ListRecentPlaybackProgressRequest{Limit: limit})
+}
+
+func (c *Client) SaveReadingProgress(ctx context.Context, p *corev1.ReadingProgress) (*corev1.SaveReadingProgressResponse, error) {
+	return c.service.SaveReadingProgress(ctx, &corev1.SaveReadingProgressRequest{Progress: p})
+}
+
+func (c *Client) GetReadingProgress(ctx context.Context, providerID, mediaID, chapterID string) (*corev1.GetReadingProgressResponse, error) {
+	return c.service.GetReadingProgress(ctx, &corev1.GetReadingProgressRequest{
+		ProviderId: providerID,
+		MediaId:    mediaID,
+		ChapterId:  chapterID,
+	})
+}
+
+func (c *Client) ListRecentReadingProgress(ctx context.Context, limit int32) (*corev1.ListRecentReadingProgressResponse, error) {
+	return c.service.ListRecentReadingProgress(ctx, &corev1.ListRecentReadingProgressRequest{Limit: limit})
+}
+
 func (c *Client) Close() error {
 	if c.conn != nil {
 		return c.conn.Close()

@@ -63,7 +63,7 @@ func TestCoreIPCServerTCP(t *testing.T) {
 	srv := coreserver.NewServer(coreserver.ServerConfig{
 		ListenAddr: tcpAddr,
 		Version:    "1.0.0-test",
-	}, cinemaSvc, readingSvc, mgr, themeMgr)
+	}, cinemaSvc, readingSvc, nil, mgr, themeMgr)
 
 	if err := srv.Start(); err != nil {
 		t.Fatalf("failed to start core server: %v", err)
@@ -138,7 +138,7 @@ func TestCoreIPCServerUnixSocket(t *testing.T) {
 	srv := coreserver.NewServer(coreserver.ServerConfig{
 		ListenAddr: udsAddr,
 		Version:    "1.0.0-uds",
-	}, cinemaSvc, readingSvc, mgr, themeMgr)
+	}, cinemaSvc, readingSvc, nil, mgr, themeMgr)
 
 	if err := srv.Start(); err != nil {
 		t.Fatalf("failed to start core UDS server: %v", err)

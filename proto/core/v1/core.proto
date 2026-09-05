@@ -158,6 +158,148 @@ message GetSupportedLocalesResponse {
   string default_locale = 2;
 }
 
+enum LibraryStatus {
+  LIBRARY_STATUS_UNSPECIFIED = 0;
+  LIBRARY_STATUS_PLAN_TO_WATCH = 1;
+  LIBRARY_STATUS_WATCHING = 2;
+  LIBRARY_STATUS_COMPLETED = 3;
+  LIBRARY_STATUS_ON_HOLD = 4;
+  LIBRARY_STATUS_DROPPED = 5;
+  LIBRARY_STATUS_FAVORITE = 6;
+}
+
+message LibraryItem {
+  string id = 1;
+  string provider_id = 2;
+  string media_id = 3;
+  plugin.v1.Domain domain = 4;
+  string title = 5;
+  plugin.v1.MediaType type = 6;
+  string poster_url = 7;
+  LibraryStatus status = 8;
+  float user_rating = 9;
+  int64 last_interacted_at = 10;
+  int64 created_at = 11;
+  int64 updated_at = 12;
+}
+
+message SaveLibraryItemRequest {
+  LibraryItem item = 1;
+}
+
+message SaveLibraryItemResponse {
+  LibraryItem item = 1;
+}
+
+message GetLibraryItemRequest {
+  string provider_id = 1;
+  string media_id = 2;
+}
+
+message GetLibraryItemResponse {
+  LibraryItem item = 1;
+}
+
+message ListLibraryItemsRequest {
+  plugin.v1.Domain domain = 1;
+  LibraryStatus status = 2;
+  int32 limit = 3;
+  int32 offset = 4;
+}
+
+message ListLibraryItemsResponse {
+  repeated LibraryItem items = 1;
+  int32 total_count = 2;
+}
+
+message DeleteLibraryItemRequest {
+  string provider_id = 1;
+  string media_id = 2;
+}
+
+message DeleteLibraryItemResponse {
+  bool success = 1;
+}
+
+message PlaybackProgress {
+  string provider_id = 1;
+  string media_id = 2;
+  plugin.v1.Domain domain = 3;
+  int32 season_number = 4;
+  int32 episode_number = 5;
+  double current_position_seconds = 6;
+  double total_duration_seconds = 7;
+  float progress_percent = 8;
+  bool is_completed = 9;
+  int64 updated_at = 10;
+}
+
+message SavePlaybackProgressRequest {
+  PlaybackProgress progress = 1;
+}
+
+message SavePlaybackProgressResponse {
+  PlaybackProgress progress = 1;
+}
+
+message GetPlaybackProgressRequest {
+  string provider_id = 1;
+  string media_id = 2;
+  int32 season_number = 3;
+  int32 episode_number = 4;
+}
+
+message GetPlaybackProgressResponse {
+  PlaybackProgress progress = 1;
+}
+
+message ListRecentPlaybackProgressRequest {
+  int32 limit = 1;
+}
+
+message ListRecentPlaybackProgressResponse {
+  repeated PlaybackProgress items = 1;
+}
+
+message ReadingProgress {
+  string provider_id = 1;
+  string media_id = 2;
+  plugin.v1.Domain domain = 3;
+  string chapter_id = 4;
+  float chapter_number = 5;
+  int32 current_page = 6;
+  int32 total_pages = 7;
+  float text_scroll_ratio = 8;
+  bool is_completed = 9;
+  int64 updated_at = 10;
+}
+
+message SaveReadingProgressRequest {
+  ReadingProgress progress = 1;
+}
+
+message SaveReadingProgressResponse {
+  ReadingProgress progress = 1;
+}
+
+message GetReadingProgressRequest {
+  string provider_id = 1;
+  string media_id = 2;
+  string chapter_id = 3;
+}
+
+message GetReadingProgressResponse {
+  ReadingProgress progress = 1;
+}
+
+message ListRecentReadingProgressRequest {
+  int32 limit = 1;
+}
+
+message ListRecentReadingProgressResponse {
+  repeated ReadingProgress items = 1;
+}
+
 service CoreService {
   rpc Ping(PingRequest) returns (PingResponse);
   rpc SearchMedia(SearchMediaRequest) returns (SearchMediaResponse);
@@ -169,5 +311,15 @@ service CoreService {
   rpc GetActiveTheme(GetActiveThemeRequest) returns (GetActiveThemeResponse);
   rpc SetActiveTheme(SetActiveThemeRequest) returns (SetActiveThemeResponse);
   rpc GetSupportedLocales(GetSupportedLocalesRequest) returns (GetSupportedLocalesResponse);
+  rpc SaveLibraryItem(SaveLibraryItemRequest) returns (SaveLibraryItemResponse);
+  rpc GetLibraryItem(GetLibraryItemRequest) returns (GetLibraryItemResponse);
+  rpc ListLibraryItems(ListLibraryItemsRequest) returns (ListLibraryItemsResponse);
+  rpc DeleteLibraryItem(DeleteLibraryItemRequest) returns (DeleteLibraryItemResponse);
+  rpc SavePlaybackProgress(SavePlaybackProgressRequest) returns (SavePlaybackProgressResponse);
+  rpc GetPlaybackProgress(GetPlaybackProgressRequest) returns (GetPlaybackProgressResponse);
+  rpc ListRecentPlaybackProgress(ListRecentPlaybackProgressRequest) returns (ListRecentPlaybackProgressResponse);
+  rpc SaveReadingProgress(SaveReadingProgressRequest) returns (SaveReadingProgressResponse);
+  rpc GetReadingProgress(GetReadingProgressRequest) returns (GetReadingProgressResponse);
+  rpc ListRecentReadingProgress(ListRecentReadingProgressRequest) returns (ListRecentReadingProgressResponse);
 }
 

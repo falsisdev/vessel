@@ -22,6 +22,67 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type LibraryStatus int32
+
+const (
+	LibraryStatus_LIBRARY_STATUS_UNSPECIFIED   LibraryStatus = 0
+	LibraryStatus_LIBRARY_STATUS_PLAN_TO_WATCH LibraryStatus = 1
+	LibraryStatus_LIBRARY_STATUS_WATCHING      LibraryStatus = 2
+	LibraryStatus_LIBRARY_STATUS_COMPLETED     LibraryStatus = 3
+	LibraryStatus_LIBRARY_STATUS_ON_HOLD       LibraryStatus = 4
+	LibraryStatus_LIBRARY_STATUS_DROPPED       LibraryStatus = 5
+	LibraryStatus_LIBRARY_STATUS_FAVORITE      LibraryStatus = 6
+)
+
+// Enum value maps for LibraryStatus.
+var (
+	LibraryStatus_name = map[int32]string{
+		0: "LIBRARY_STATUS_UNSPECIFIED",
+		1: "LIBRARY_STATUS_PLAN_TO_WATCH",
+		2: "LIBRARY_STATUS_WATCHING",
+		3: "LIBRARY_STATUS_COMPLETED",
+		4: "LIBRARY_STATUS_ON_HOLD",
+		5: "LIBRARY_STATUS_DROPPED",
+		6: "LIBRARY_STATUS_FAVORITE",
+	}
+	LibraryStatus_value = map[string]int32{
+		"LIBRARY_STATUS_UNSPECIFIED":   0,
+		"LIBRARY_STATUS_PLAN_TO_WATCH": 1,
+		"LIBRARY_STATUS_WATCHING":      2,
+		"LIBRARY_STATUS_COMPLETED":     3,
+		"LIBRARY_STATUS_ON_HOLD":       4,
+		"LIBRARY_STATUS_DROPPED":       5,
+		"LIBRARY_STATUS_FAVORITE":      6,
+	}
+)
+
+func (x LibraryStatus) Enum() *LibraryStatus {
+	p := new(LibraryStatus)
+	*p = x
+	return p
+}
+
+func (x LibraryStatus) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (LibraryStatus) Descriptor() protoreflect.EnumDescriptor {
+	return file_core_v1_core_proto_enumTypes[0].Descriptor()
+}
+
+func (LibraryStatus) Type() protoreflect.EnumType {
+	return &file_core_v1_core_proto_enumTypes[0]
+}
+
+func (x LibraryStatus) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use LibraryStatus.Descriptor instead.
+func (LibraryStatus) EnumDescriptor() ([]byte, []int) {
+	return file_core_v1_core_proto_rawDescGZIP(), []int{0}
+}
+
 type PingRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -1578,6 +1639,1338 @@ func (x *GetSupportedLocalesResponse) GetDefaultLocale() string {
 	return ""
 }
 
+type LibraryItem struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Id               string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	ProviderId       string                 `protobuf:"bytes,2,opt,name=provider_id,json=providerId,proto3" json:"provider_id,omitempty"`
+	MediaId          string                 `protobuf:"bytes,3,opt,name=media_id,json=mediaId,proto3" json:"media_id,omitempty"`
+	Domain           v1.Domain              `protobuf:"varint,4,opt,name=domain,proto3,enum=plugin.v1.Domain" json:"domain,omitempty"`
+	Title            string                 `protobuf:"bytes,5,opt,name=title,proto3" json:"title,omitempty"`
+	Type             v1.MediaType           `protobuf:"varint,6,opt,name=type,proto3,enum=plugin.v1.MediaType" json:"type,omitempty"`
+	PosterUrl        string                 `protobuf:"bytes,7,opt,name=poster_url,json=posterUrl,proto3" json:"poster_url,omitempty"`
+	Status           LibraryStatus          `protobuf:"varint,8,opt,name=status,proto3,enum=core.v1.LibraryStatus" json:"status,omitempty"`
+	UserRating       float32                `protobuf:"fixed32,9,opt,name=user_rating,json=userRating,proto3" json:"user_rating,omitempty"`
+	LastInteractedAt int64                  `protobuf:"varint,10,opt,name=last_interacted_at,json=lastInteractedAt,proto3" json:"last_interacted_at,omitempty"`
+	CreatedAt        int64                  `protobuf:"varint,11,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt        int64                  `protobuf:"varint,12,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *LibraryItem) Reset() {
+	*x = LibraryItem{}
+	mi := &file_core_v1_core_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LibraryItem) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LibraryItem) ProtoMessage() {}
+
+func (x *LibraryItem) ProtoReflect() protoreflect.Message {
+	mi := &file_core_v1_core_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LibraryItem.ProtoReflect.Descriptor instead.
+func (*LibraryItem) Descriptor() ([]byte, []int) {
+	return file_core_v1_core_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *LibraryItem) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *LibraryItem) GetProviderId() string {
+	if x != nil {
+		return x.ProviderId
+	}
+	return ""
+}
+
+func (x *LibraryItem) GetMediaId() string {
+	if x != nil {
+		return x.MediaId
+	}
+	return ""
+}
+
+func (x *LibraryItem) GetDomain() v1.Domain {
+	if x != nil {
+		return x.Domain
+	}
+	return v1.Domain(0)
+}
+
+func (x *LibraryItem) GetTitle() string {
+	if x != nil {
+		return x.Title
+	}
+	return ""
+}
+
+func (x *LibraryItem) GetType() v1.MediaType {
+	if x != nil {
+		return x.Type
+	}
+	return v1.MediaType(0)
+}
+
+func (x *LibraryItem) GetPosterUrl() string {
+	if x != nil {
+		return x.PosterUrl
+	}
+	return ""
+}
+
+func (x *LibraryItem) GetStatus() LibraryStatus {
+	if x != nil {
+		return x.Status
+	}
+	return LibraryStatus_LIBRARY_STATUS_UNSPECIFIED
+}
+
+func (x *LibraryItem) GetUserRating() float32 {
+	if x != nil {
+		return x.UserRating
+	}
+	return 0
+}
+
+func (x *LibraryItem) GetLastInteractedAt() int64 {
+	if x != nil {
+		return x.LastInteractedAt
+	}
+	return 0
+}
+
+func (x *LibraryItem) GetCreatedAt() int64 {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return 0
+}
+
+func (x *LibraryItem) GetUpdatedAt() int64 {
+	if x != nil {
+		return x.UpdatedAt
+	}
+	return 0
+}
+
+type SaveLibraryItemRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Item          *LibraryItem           `protobuf:"bytes,1,opt,name=item,proto3" json:"item,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SaveLibraryItemRequest) Reset() {
+	*x = SaveLibraryItemRequest{}
+	mi := &file_core_v1_core_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SaveLibraryItemRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SaveLibraryItemRequest) ProtoMessage() {}
+
+func (x *SaveLibraryItemRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_core_v1_core_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SaveLibraryItemRequest.ProtoReflect.Descriptor instead.
+func (*SaveLibraryItemRequest) Descriptor() ([]byte, []int) {
+	return file_core_v1_core_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *SaveLibraryItemRequest) GetItem() *LibraryItem {
+	if x != nil {
+		return x.Item
+	}
+	return nil
+}
+
+type SaveLibraryItemResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Item          *LibraryItem           `protobuf:"bytes,1,opt,name=item,proto3" json:"item,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SaveLibraryItemResponse) Reset() {
+	*x = SaveLibraryItemResponse{}
+	mi := &file_core_v1_core_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SaveLibraryItemResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SaveLibraryItemResponse) ProtoMessage() {}
+
+func (x *SaveLibraryItemResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_core_v1_core_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SaveLibraryItemResponse.ProtoReflect.Descriptor instead.
+func (*SaveLibraryItemResponse) Descriptor() ([]byte, []int) {
+	return file_core_v1_core_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *SaveLibraryItemResponse) GetItem() *LibraryItem {
+	if x != nil {
+		return x.Item
+	}
+	return nil
+}
+
+type GetLibraryItemRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ProviderId    string                 `protobuf:"bytes,1,opt,name=provider_id,json=providerId,proto3" json:"provider_id,omitempty"`
+	MediaId       string                 `protobuf:"bytes,2,opt,name=media_id,json=mediaId,proto3" json:"media_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetLibraryItemRequest) Reset() {
+	*x = GetLibraryItemRequest{}
+	mi := &file_core_v1_core_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetLibraryItemRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetLibraryItemRequest) ProtoMessage() {}
+
+func (x *GetLibraryItemRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_core_v1_core_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetLibraryItemRequest.ProtoReflect.Descriptor instead.
+func (*GetLibraryItemRequest) Descriptor() ([]byte, []int) {
+	return file_core_v1_core_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *GetLibraryItemRequest) GetProviderId() string {
+	if x != nil {
+		return x.ProviderId
+	}
+	return ""
+}
+
+func (x *GetLibraryItemRequest) GetMediaId() string {
+	if x != nil {
+		return x.MediaId
+	}
+	return ""
+}
+
+type GetLibraryItemResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Item          *LibraryItem           `protobuf:"bytes,1,opt,name=item,proto3" json:"item,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetLibraryItemResponse) Reset() {
+	*x = GetLibraryItemResponse{}
+	mi := &file_core_v1_core_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetLibraryItemResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetLibraryItemResponse) ProtoMessage() {}
+
+func (x *GetLibraryItemResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_core_v1_core_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetLibraryItemResponse.ProtoReflect.Descriptor instead.
+func (*GetLibraryItemResponse) Descriptor() ([]byte, []int) {
+	return file_core_v1_core_proto_rawDescGZIP(), []int{29}
+}
+
+func (x *GetLibraryItemResponse) GetItem() *LibraryItem {
+	if x != nil {
+		return x.Item
+	}
+	return nil
+}
+
+type ListLibraryItemsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Domain        v1.Domain              `protobuf:"varint,1,opt,name=domain,proto3,enum=plugin.v1.Domain" json:"domain,omitempty"`
+	Status        LibraryStatus          `protobuf:"varint,2,opt,name=status,proto3,enum=core.v1.LibraryStatus" json:"status,omitempty"`
+	Limit         int32                  `protobuf:"varint,3,opt,name=limit,proto3" json:"limit,omitempty"`
+	Offset        int32                  `protobuf:"varint,4,opt,name=offset,proto3" json:"offset,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListLibraryItemsRequest) Reset() {
+	*x = ListLibraryItemsRequest{}
+	mi := &file_core_v1_core_proto_msgTypes[30]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListLibraryItemsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListLibraryItemsRequest) ProtoMessage() {}
+
+func (x *ListLibraryItemsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_core_v1_core_proto_msgTypes[30]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListLibraryItemsRequest.ProtoReflect.Descriptor instead.
+func (*ListLibraryItemsRequest) Descriptor() ([]byte, []int) {
+	return file_core_v1_core_proto_rawDescGZIP(), []int{30}
+}
+
+func (x *ListLibraryItemsRequest) GetDomain() v1.Domain {
+	if x != nil {
+		return x.Domain
+	}
+	return v1.Domain(0)
+}
+
+func (x *ListLibraryItemsRequest) GetStatus() LibraryStatus {
+	if x != nil {
+		return x.Status
+	}
+	return LibraryStatus_LIBRARY_STATUS_UNSPECIFIED
+}
+
+func (x *ListLibraryItemsRequest) GetLimit() int32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
+func (x *ListLibraryItemsRequest) GetOffset() int32 {
+	if x != nil {
+		return x.Offset
+	}
+	return 0
+}
+
+type ListLibraryItemsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Items         []*LibraryItem         `protobuf:"bytes,1,rep,name=items,proto3" json:"items,omitempty"`
+	TotalCount    int32                  `protobuf:"varint,2,opt,name=total_count,json=totalCount,proto3" json:"total_count,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListLibraryItemsResponse) Reset() {
+	*x = ListLibraryItemsResponse{}
+	mi := &file_core_v1_core_proto_msgTypes[31]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListLibraryItemsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListLibraryItemsResponse) ProtoMessage() {}
+
+func (x *ListLibraryItemsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_core_v1_core_proto_msgTypes[31]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListLibraryItemsResponse.ProtoReflect.Descriptor instead.
+func (*ListLibraryItemsResponse) Descriptor() ([]byte, []int) {
+	return file_core_v1_core_proto_rawDescGZIP(), []int{31}
+}
+
+func (x *ListLibraryItemsResponse) GetItems() []*LibraryItem {
+	if x != nil {
+		return x.Items
+	}
+	return nil
+}
+
+func (x *ListLibraryItemsResponse) GetTotalCount() int32 {
+	if x != nil {
+		return x.TotalCount
+	}
+	return 0
+}
+
+type DeleteLibraryItemRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ProviderId    string                 `protobuf:"bytes,1,opt,name=provider_id,json=providerId,proto3" json:"provider_id,omitempty"`
+	MediaId       string                 `protobuf:"bytes,2,opt,name=media_id,json=mediaId,proto3" json:"media_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteLibraryItemRequest) Reset() {
+	*x = DeleteLibraryItemRequest{}
+	mi := &file_core_v1_core_proto_msgTypes[32]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteLibraryItemRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteLibraryItemRequest) ProtoMessage() {}
+
+func (x *DeleteLibraryItemRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_core_v1_core_proto_msgTypes[32]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteLibraryItemRequest.ProtoReflect.Descriptor instead.
+func (*DeleteLibraryItemRequest) Descriptor() ([]byte, []int) {
+	return file_core_v1_core_proto_rawDescGZIP(), []int{32}
+}
+
+func (x *DeleteLibraryItemRequest) GetProviderId() string {
+	if x != nil {
+		return x.ProviderId
+	}
+	return ""
+}
+
+func (x *DeleteLibraryItemRequest) GetMediaId() string {
+	if x != nil {
+		return x.MediaId
+	}
+	return ""
+}
+
+type DeleteLibraryItemResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteLibraryItemResponse) Reset() {
+	*x = DeleteLibraryItemResponse{}
+	mi := &file_core_v1_core_proto_msgTypes[33]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteLibraryItemResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteLibraryItemResponse) ProtoMessage() {}
+
+func (x *DeleteLibraryItemResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_core_v1_core_proto_msgTypes[33]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteLibraryItemResponse.ProtoReflect.Descriptor instead.
+func (*DeleteLibraryItemResponse) Descriptor() ([]byte, []int) {
+	return file_core_v1_core_proto_rawDescGZIP(), []int{33}
+}
+
+func (x *DeleteLibraryItemResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+type PlaybackProgress struct {
+	state                  protoimpl.MessageState `protogen:"open.v1"`
+	ProviderId             string                 `protobuf:"bytes,1,opt,name=provider_id,json=providerId,proto3" json:"provider_id,omitempty"`
+	MediaId                string                 `protobuf:"bytes,2,opt,name=media_id,json=mediaId,proto3" json:"media_id,omitempty"`
+	Domain                 v1.Domain              `protobuf:"varint,3,opt,name=domain,proto3,enum=plugin.v1.Domain" json:"domain,omitempty"`
+	SeasonNumber           int32                  `protobuf:"varint,4,opt,name=season_number,json=seasonNumber,proto3" json:"season_number,omitempty"`
+	EpisodeNumber          int32                  `protobuf:"varint,5,opt,name=episode_number,json=episodeNumber,proto3" json:"episode_number,omitempty"`
+	CurrentPositionSeconds float64                `protobuf:"fixed64,6,opt,name=current_position_seconds,json=currentPositionSeconds,proto3" json:"current_position_seconds,omitempty"`
+	TotalDurationSeconds   float64                `protobuf:"fixed64,7,opt,name=total_duration_seconds,json=totalDurationSeconds,proto3" json:"total_duration_seconds,omitempty"`
+	ProgressPercent        float32                `protobuf:"fixed32,8,opt,name=progress_percent,json=progressPercent,proto3" json:"progress_percent,omitempty"`
+	IsCompleted            bool                   `protobuf:"varint,9,opt,name=is_completed,json=isCompleted,proto3" json:"is_completed,omitempty"`
+	UpdatedAt              int64                  `protobuf:"varint,10,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
+}
+
+func (x *PlaybackProgress) Reset() {
+	*x = PlaybackProgress{}
+	mi := &file_core_v1_core_proto_msgTypes[34]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PlaybackProgress) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PlaybackProgress) ProtoMessage() {}
+
+func (x *PlaybackProgress) ProtoReflect() protoreflect.Message {
+	mi := &file_core_v1_core_proto_msgTypes[34]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PlaybackProgress.ProtoReflect.Descriptor instead.
+func (*PlaybackProgress) Descriptor() ([]byte, []int) {
+	return file_core_v1_core_proto_rawDescGZIP(), []int{34}
+}
+
+func (x *PlaybackProgress) GetProviderId() string {
+	if x != nil {
+		return x.ProviderId
+	}
+	return ""
+}
+
+func (x *PlaybackProgress) GetMediaId() string {
+	if x != nil {
+		return x.MediaId
+	}
+	return ""
+}
+
+func (x *PlaybackProgress) GetDomain() v1.Domain {
+	if x != nil {
+		return x.Domain
+	}
+	return v1.Domain(0)
+}
+
+func (x *PlaybackProgress) GetSeasonNumber() int32 {
+	if x != nil {
+		return x.SeasonNumber
+	}
+	return 0
+}
+
+func (x *PlaybackProgress) GetEpisodeNumber() int32 {
+	if x != nil {
+		return x.EpisodeNumber
+	}
+	return 0
+}
+
+func (x *PlaybackProgress) GetCurrentPositionSeconds() float64 {
+	if x != nil {
+		return x.CurrentPositionSeconds
+	}
+	return 0
+}
+
+func (x *PlaybackProgress) GetTotalDurationSeconds() float64 {
+	if x != nil {
+		return x.TotalDurationSeconds
+	}
+	return 0
+}
+
+func (x *PlaybackProgress) GetProgressPercent() float32 {
+	if x != nil {
+		return x.ProgressPercent
+	}
+	return 0
+}
+
+func (x *PlaybackProgress) GetIsCompleted() bool {
+	if x != nil {
+		return x.IsCompleted
+	}
+	return false
+}
+
+func (x *PlaybackProgress) GetUpdatedAt() int64 {
+	if x != nil {
+		return x.UpdatedAt
+	}
+	return 0
+}
+
+type SavePlaybackProgressRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Progress      *PlaybackProgress      `protobuf:"bytes,1,opt,name=progress,proto3" json:"progress,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SavePlaybackProgressRequest) Reset() {
+	*x = SavePlaybackProgressRequest{}
+	mi := &file_core_v1_core_proto_msgTypes[35]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SavePlaybackProgressRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SavePlaybackProgressRequest) ProtoMessage() {}
+
+func (x *SavePlaybackProgressRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_core_v1_core_proto_msgTypes[35]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SavePlaybackProgressRequest.ProtoReflect.Descriptor instead.
+func (*SavePlaybackProgressRequest) Descriptor() ([]byte, []int) {
+	return file_core_v1_core_proto_rawDescGZIP(), []int{35}
+}
+
+func (x *SavePlaybackProgressRequest) GetProgress() *PlaybackProgress {
+	if x != nil {
+		return x.Progress
+	}
+	return nil
+}
+
+type SavePlaybackProgressResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Progress      *PlaybackProgress      `protobuf:"bytes,1,opt,name=progress,proto3" json:"progress,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SavePlaybackProgressResponse) Reset() {
+	*x = SavePlaybackProgressResponse{}
+	mi := &file_core_v1_core_proto_msgTypes[36]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SavePlaybackProgressResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SavePlaybackProgressResponse) ProtoMessage() {}
+
+func (x *SavePlaybackProgressResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_core_v1_core_proto_msgTypes[36]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SavePlaybackProgressResponse.ProtoReflect.Descriptor instead.
+func (*SavePlaybackProgressResponse) Descriptor() ([]byte, []int) {
+	return file_core_v1_core_proto_rawDescGZIP(), []int{36}
+}
+
+func (x *SavePlaybackProgressResponse) GetProgress() *PlaybackProgress {
+	if x != nil {
+		return x.Progress
+	}
+	return nil
+}
+
+type GetPlaybackProgressRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ProviderId    string                 `protobuf:"bytes,1,opt,name=provider_id,json=providerId,proto3" json:"provider_id,omitempty"`
+	MediaId       string                 `protobuf:"bytes,2,opt,name=media_id,json=mediaId,proto3" json:"media_id,omitempty"`
+	SeasonNumber  int32                  `protobuf:"varint,3,opt,name=season_number,json=seasonNumber,proto3" json:"season_number,omitempty"`
+	EpisodeNumber int32                  `protobuf:"varint,4,opt,name=episode_number,json=episodeNumber,proto3" json:"episode_number,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetPlaybackProgressRequest) Reset() {
+	*x = GetPlaybackProgressRequest{}
+	mi := &file_core_v1_core_proto_msgTypes[37]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetPlaybackProgressRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetPlaybackProgressRequest) ProtoMessage() {}
+
+func (x *GetPlaybackProgressRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_core_v1_core_proto_msgTypes[37]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetPlaybackProgressRequest.ProtoReflect.Descriptor instead.
+func (*GetPlaybackProgressRequest) Descriptor() ([]byte, []int) {
+	return file_core_v1_core_proto_rawDescGZIP(), []int{37}
+}
+
+func (x *GetPlaybackProgressRequest) GetProviderId() string {
+	if x != nil {
+		return x.ProviderId
+	}
+	return ""
+}
+
+func (x *GetPlaybackProgressRequest) GetMediaId() string {
+	if x != nil {
+		return x.MediaId
+	}
+	return ""
+}
+
+func (x *GetPlaybackProgressRequest) GetSeasonNumber() int32 {
+	if x != nil {
+		return x.SeasonNumber
+	}
+	return 0
+}
+
+func (x *GetPlaybackProgressRequest) GetEpisodeNumber() int32 {
+	if x != nil {
+		return x.EpisodeNumber
+	}
+	return 0
+}
+
+type GetPlaybackProgressResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Progress      *PlaybackProgress      `protobuf:"bytes,1,opt,name=progress,proto3" json:"progress,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetPlaybackProgressResponse) Reset() {
+	*x = GetPlaybackProgressResponse{}
+	mi := &file_core_v1_core_proto_msgTypes[38]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetPlaybackProgressResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetPlaybackProgressResponse) ProtoMessage() {}
+
+func (x *GetPlaybackProgressResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_core_v1_core_proto_msgTypes[38]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetPlaybackProgressResponse.ProtoReflect.Descriptor instead.
+func (*GetPlaybackProgressResponse) Descriptor() ([]byte, []int) {
+	return file_core_v1_core_proto_rawDescGZIP(), []int{38}
+}
+
+func (x *GetPlaybackProgressResponse) GetProgress() *PlaybackProgress {
+	if x != nil {
+		return x.Progress
+	}
+	return nil
+}
+
+type ListRecentPlaybackProgressRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Limit         int32                  `protobuf:"varint,1,opt,name=limit,proto3" json:"limit,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListRecentPlaybackProgressRequest) Reset() {
+	*x = ListRecentPlaybackProgressRequest{}
+	mi := &file_core_v1_core_proto_msgTypes[39]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListRecentPlaybackProgressRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListRecentPlaybackProgressRequest) ProtoMessage() {}
+
+func (x *ListRecentPlaybackProgressRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_core_v1_core_proto_msgTypes[39]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListRecentPlaybackProgressRequest.ProtoReflect.Descriptor instead.
+func (*ListRecentPlaybackProgressRequest) Descriptor() ([]byte, []int) {
+	return file_core_v1_core_proto_rawDescGZIP(), []int{39}
+}
+
+func (x *ListRecentPlaybackProgressRequest) GetLimit() int32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
+type ListRecentPlaybackProgressResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Items         []*PlaybackProgress    `protobuf:"bytes,1,rep,name=items,proto3" json:"items,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListRecentPlaybackProgressResponse) Reset() {
+	*x = ListRecentPlaybackProgressResponse{}
+	mi := &file_core_v1_core_proto_msgTypes[40]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListRecentPlaybackProgressResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListRecentPlaybackProgressResponse) ProtoMessage() {}
+
+func (x *ListRecentPlaybackProgressResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_core_v1_core_proto_msgTypes[40]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListRecentPlaybackProgressResponse.ProtoReflect.Descriptor instead.
+func (*ListRecentPlaybackProgressResponse) Descriptor() ([]byte, []int) {
+	return file_core_v1_core_proto_rawDescGZIP(), []int{40}
+}
+
+func (x *ListRecentPlaybackProgressResponse) GetItems() []*PlaybackProgress {
+	if x != nil {
+		return x.Items
+	}
+	return nil
+}
+
+type ReadingProgress struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	ProviderId      string                 `protobuf:"bytes,1,opt,name=provider_id,json=providerId,proto3" json:"provider_id,omitempty"`
+	MediaId         string                 `protobuf:"bytes,2,opt,name=media_id,json=mediaId,proto3" json:"media_id,omitempty"`
+	Domain          v1.Domain              `protobuf:"varint,3,opt,name=domain,proto3,enum=plugin.v1.Domain" json:"domain,omitempty"`
+	ChapterId       string                 `protobuf:"bytes,4,opt,name=chapter_id,json=chapterId,proto3" json:"chapter_id,omitempty"`
+	ChapterNumber   float32                `protobuf:"fixed32,5,opt,name=chapter_number,json=chapterNumber,proto3" json:"chapter_number,omitempty"`
+	CurrentPage     int32                  `protobuf:"varint,6,opt,name=current_page,json=currentPage,proto3" json:"current_page,omitempty"`
+	TotalPages      int32                  `protobuf:"varint,7,opt,name=total_pages,json=totalPages,proto3" json:"total_pages,omitempty"`
+	TextScrollRatio float32                `protobuf:"fixed32,8,opt,name=text_scroll_ratio,json=textScrollRatio,proto3" json:"text_scroll_ratio,omitempty"`
+	IsCompleted     bool                   `protobuf:"varint,9,opt,name=is_completed,json=isCompleted,proto3" json:"is_completed,omitempty"`
+	UpdatedAt       int64                  `protobuf:"varint,10,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *ReadingProgress) Reset() {
+	*x = ReadingProgress{}
+	mi := &file_core_v1_core_proto_msgTypes[41]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReadingProgress) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReadingProgress) ProtoMessage() {}
+
+func (x *ReadingProgress) ProtoReflect() protoreflect.Message {
+	mi := &file_core_v1_core_proto_msgTypes[41]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReadingProgress.ProtoReflect.Descriptor instead.
+func (*ReadingProgress) Descriptor() ([]byte, []int) {
+	return file_core_v1_core_proto_rawDescGZIP(), []int{41}
+}
+
+func (x *ReadingProgress) GetProviderId() string {
+	if x != nil {
+		return x.ProviderId
+	}
+	return ""
+}
+
+func (x *ReadingProgress) GetMediaId() string {
+	if x != nil {
+		return x.MediaId
+	}
+	return ""
+}
+
+func (x *ReadingProgress) GetDomain() v1.Domain {
+	if x != nil {
+		return x.Domain
+	}
+	return v1.Domain(0)
+}
+
+func (x *ReadingProgress) GetChapterId() string {
+	if x != nil {
+		return x.ChapterId
+	}
+	return ""
+}
+
+func (x *ReadingProgress) GetChapterNumber() float32 {
+	if x != nil {
+		return x.ChapterNumber
+	}
+	return 0
+}
+
+func (x *ReadingProgress) GetCurrentPage() int32 {
+	if x != nil {
+		return x.CurrentPage
+	}
+	return 0
+}
+
+func (x *ReadingProgress) GetTotalPages() int32 {
+	if x != nil {
+		return x.TotalPages
+	}
+	return 0
+}
+
+func (x *ReadingProgress) GetTextScrollRatio() float32 {
+	if x != nil {
+		return x.TextScrollRatio
+	}
+	return 0
+}
+
+func (x *ReadingProgress) GetIsCompleted() bool {
+	if x != nil {
+		return x.IsCompleted
+	}
+	return false
+}
+
+func (x *ReadingProgress) GetUpdatedAt() int64 {
+	if x != nil {
+		return x.UpdatedAt
+	}
+	return 0
+}
+
+type SaveReadingProgressRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Progress      *ReadingProgress       `protobuf:"bytes,1,opt,name=progress,proto3" json:"progress,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SaveReadingProgressRequest) Reset() {
+	*x = SaveReadingProgressRequest{}
+	mi := &file_core_v1_core_proto_msgTypes[42]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SaveReadingProgressRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SaveReadingProgressRequest) ProtoMessage() {}
+
+func (x *SaveReadingProgressRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_core_v1_core_proto_msgTypes[42]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SaveReadingProgressRequest.ProtoReflect.Descriptor instead.
+func (*SaveReadingProgressRequest) Descriptor() ([]byte, []int) {
+	return file_core_v1_core_proto_rawDescGZIP(), []int{42}
+}
+
+func (x *SaveReadingProgressRequest) GetProgress() *ReadingProgress {
+	if x != nil {
+		return x.Progress
+	}
+	return nil
+}
+
+type SaveReadingProgressResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Progress      *ReadingProgress       `protobuf:"bytes,1,opt,name=progress,proto3" json:"progress,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SaveReadingProgressResponse) Reset() {
+	*x = SaveReadingProgressResponse{}
+	mi := &file_core_v1_core_proto_msgTypes[43]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SaveReadingProgressResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SaveReadingProgressResponse) ProtoMessage() {}
+
+func (x *SaveReadingProgressResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_core_v1_core_proto_msgTypes[43]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SaveReadingProgressResponse.ProtoReflect.Descriptor instead.
+func (*SaveReadingProgressResponse) Descriptor() ([]byte, []int) {
+	return file_core_v1_core_proto_rawDescGZIP(), []int{43}
+}
+
+func (x *SaveReadingProgressResponse) GetProgress() *ReadingProgress {
+	if x != nil {
+		return x.Progress
+	}
+	return nil
+}
+
+type GetReadingProgressRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ProviderId    string                 `protobuf:"bytes,1,opt,name=provider_id,json=providerId,proto3" json:"provider_id,omitempty"`
+	MediaId       string                 `protobuf:"bytes,2,opt,name=media_id,json=mediaId,proto3" json:"media_id,omitempty"`
+	ChapterId     string                 `protobuf:"bytes,3,opt,name=chapter_id,json=chapterId,proto3" json:"chapter_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetReadingProgressRequest) Reset() {
+	*x = GetReadingProgressRequest{}
+	mi := &file_core_v1_core_proto_msgTypes[44]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetReadingProgressRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetReadingProgressRequest) ProtoMessage() {}
+
+func (x *GetReadingProgressRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_core_v1_core_proto_msgTypes[44]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetReadingProgressRequest.ProtoReflect.Descriptor instead.
+func (*GetReadingProgressRequest) Descriptor() ([]byte, []int) {
+	return file_core_v1_core_proto_rawDescGZIP(), []int{44}
+}
+
+func (x *GetReadingProgressRequest) GetProviderId() string {
+	if x != nil {
+		return x.ProviderId
+	}
+	return ""
+}
+
+func (x *GetReadingProgressRequest) GetMediaId() string {
+	if x != nil {
+		return x.MediaId
+	}
+	return ""
+}
+
+func (x *GetReadingProgressRequest) GetChapterId() string {
+	if x != nil {
+		return x.ChapterId
+	}
+	return ""
+}
+
+type GetReadingProgressResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Progress      *ReadingProgress       `protobuf:"bytes,1,opt,name=progress,proto3" json:"progress,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetReadingProgressResponse) Reset() {
+	*x = GetReadingProgressResponse{}
+	mi := &file_core_v1_core_proto_msgTypes[45]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetReadingProgressResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetReadingProgressResponse) ProtoMessage() {}
+
+func (x *GetReadingProgressResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_core_v1_core_proto_msgTypes[45]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetReadingProgressResponse.ProtoReflect.Descriptor instead.
+func (*GetReadingProgressResponse) Descriptor() ([]byte, []int) {
+	return file_core_v1_core_proto_rawDescGZIP(), []int{45}
+}
+
+func (x *GetReadingProgressResponse) GetProgress() *ReadingProgress {
+	if x != nil {
+		return x.Progress
+	}
+	return nil
+}
+
+type ListRecentReadingProgressRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Limit         int32                  `protobuf:"varint,1,opt,name=limit,proto3" json:"limit,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListRecentReadingProgressRequest) Reset() {
+	*x = ListRecentReadingProgressRequest{}
+	mi := &file_core_v1_core_proto_msgTypes[46]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListRecentReadingProgressRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListRecentReadingProgressRequest) ProtoMessage() {}
+
+func (x *ListRecentReadingProgressRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_core_v1_core_proto_msgTypes[46]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListRecentReadingProgressRequest.ProtoReflect.Descriptor instead.
+func (*ListRecentReadingProgressRequest) Descriptor() ([]byte, []int) {
+	return file_core_v1_core_proto_rawDescGZIP(), []int{46}
+}
+
+func (x *ListRecentReadingProgressRequest) GetLimit() int32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
+type ListRecentReadingProgressResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Items         []*ReadingProgress     `protobuf:"bytes,1,rep,name=items,proto3" json:"items,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListRecentReadingProgressResponse) Reset() {
+	*x = ListRecentReadingProgressResponse{}
+	mi := &file_core_v1_core_proto_msgTypes[47]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListRecentReadingProgressResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListRecentReadingProgressResponse) ProtoMessage() {}
+
+func (x *ListRecentReadingProgressResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_core_v1_core_proto_msgTypes[47]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListRecentReadingProgressResponse.ProtoReflect.Descriptor instead.
+func (*ListRecentReadingProgressResponse) Descriptor() ([]byte, []int) {
+	return file_core_v1_core_proto_rawDescGZIP(), []int{47}
+}
+
+func (x *ListRecentReadingProgressResponse) GetItems() []*ReadingProgress {
+	if x != nil {
+		return x.Items
+	}
+	return nil
+}
+
 var File_core_v1_core_proto protoreflect.FileDescriptor
 
 const file_core_v1_core_proto_rawDesc = "" +
@@ -1709,7 +3102,121 @@ const file_core_v1_core_proto_rawDesc = "" +
 	"\x1aGetSupportedLocalesRequest\"s\n" +
 	"\x1bGetSupportedLocalesResponse\x12-\n" +
 	"\alocales\x18\x01 \x03(\v2\x13.core.v1.LocaleInfoR\alocales\x12%\n" +
-	"\x0edefault_locale\x18\x02 \x01(\tR\rdefaultLocale2\x9e\x06\n" +
+	"\x0edefault_locale\x18\x02 \x01(\tR\rdefaultLocale\"\xa0\x03\n" +
+	"\vLibraryItem\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1f\n" +
+	"\vprovider_id\x18\x02 \x01(\tR\n" +
+	"providerId\x12\x19\n" +
+	"\bmedia_id\x18\x03 \x01(\tR\amediaId\x12)\n" +
+	"\x06domain\x18\x04 \x01(\x0e2\x11.plugin.v1.DomainR\x06domain\x12\x14\n" +
+	"\x05title\x18\x05 \x01(\tR\x05title\x12(\n" +
+	"\x04type\x18\x06 \x01(\x0e2\x14.plugin.v1.MediaTypeR\x04type\x12\x1d\n" +
+	"\n" +
+	"poster_url\x18\a \x01(\tR\tposterUrl\x12.\n" +
+	"\x06status\x18\b \x01(\x0e2\x16.core.v1.LibraryStatusR\x06status\x12\x1f\n" +
+	"\vuser_rating\x18\t \x01(\x02R\n" +
+	"userRating\x12,\n" +
+	"\x12last_interacted_at\x18\n" +
+	" \x01(\x03R\x10lastInteractedAt\x12\x1d\n" +
+	"\n" +
+	"created_at\x18\v \x01(\x03R\tcreatedAt\x12\x1d\n" +
+	"\n" +
+	"updated_at\x18\f \x01(\x03R\tupdatedAt\"B\n" +
+	"\x16SaveLibraryItemRequest\x12(\n" +
+	"\x04item\x18\x01 \x01(\v2\x14.core.v1.LibraryItemR\x04item\"C\n" +
+	"\x17SaveLibraryItemResponse\x12(\n" +
+	"\x04item\x18\x01 \x01(\v2\x14.core.v1.LibraryItemR\x04item\"S\n" +
+	"\x15GetLibraryItemRequest\x12\x1f\n" +
+	"\vprovider_id\x18\x01 \x01(\tR\n" +
+	"providerId\x12\x19\n" +
+	"\bmedia_id\x18\x02 \x01(\tR\amediaId\"B\n" +
+	"\x16GetLibraryItemResponse\x12(\n" +
+	"\x04item\x18\x01 \x01(\v2\x14.core.v1.LibraryItemR\x04item\"\xa2\x01\n" +
+	"\x17ListLibraryItemsRequest\x12)\n" +
+	"\x06domain\x18\x01 \x01(\x0e2\x11.plugin.v1.DomainR\x06domain\x12.\n" +
+	"\x06status\x18\x02 \x01(\x0e2\x16.core.v1.LibraryStatusR\x06status\x12\x14\n" +
+	"\x05limit\x18\x03 \x01(\x05R\x05limit\x12\x16\n" +
+	"\x06offset\x18\x04 \x01(\x05R\x06offset\"g\n" +
+	"\x18ListLibraryItemsResponse\x12*\n" +
+	"\x05items\x18\x01 \x03(\v2\x14.core.v1.LibraryItemR\x05items\x12\x1f\n" +
+	"\vtotal_count\x18\x02 \x01(\x05R\n" +
+	"totalCount\"V\n" +
+	"\x18DeleteLibraryItemRequest\x12\x1f\n" +
+	"\vprovider_id\x18\x01 \x01(\tR\n" +
+	"providerId\x12\x19\n" +
+	"\bmedia_id\x18\x02 \x01(\tR\amediaId\"5\n" +
+	"\x19DeleteLibraryItemResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\"\xa2\x03\n" +
+	"\x10PlaybackProgress\x12\x1f\n" +
+	"\vprovider_id\x18\x01 \x01(\tR\n" +
+	"providerId\x12\x19\n" +
+	"\bmedia_id\x18\x02 \x01(\tR\amediaId\x12)\n" +
+	"\x06domain\x18\x03 \x01(\x0e2\x11.plugin.v1.DomainR\x06domain\x12#\n" +
+	"\rseason_number\x18\x04 \x01(\x05R\fseasonNumber\x12%\n" +
+	"\x0eepisode_number\x18\x05 \x01(\x05R\repisodeNumber\x128\n" +
+	"\x18current_position_seconds\x18\x06 \x01(\x01R\x16currentPositionSeconds\x124\n" +
+	"\x16total_duration_seconds\x18\a \x01(\x01R\x14totalDurationSeconds\x12)\n" +
+	"\x10progress_percent\x18\b \x01(\x02R\x0fprogressPercent\x12!\n" +
+	"\fis_completed\x18\t \x01(\bR\visCompleted\x12\x1d\n" +
+	"\n" +
+	"updated_at\x18\n" +
+	" \x01(\x03R\tupdatedAt\"T\n" +
+	"\x1bSavePlaybackProgressRequest\x125\n" +
+	"\bprogress\x18\x01 \x01(\v2\x19.core.v1.PlaybackProgressR\bprogress\"U\n" +
+	"\x1cSavePlaybackProgressResponse\x125\n" +
+	"\bprogress\x18\x01 \x01(\v2\x19.core.v1.PlaybackProgressR\bprogress\"\xa4\x01\n" +
+	"\x1aGetPlaybackProgressRequest\x12\x1f\n" +
+	"\vprovider_id\x18\x01 \x01(\tR\n" +
+	"providerId\x12\x19\n" +
+	"\bmedia_id\x18\x02 \x01(\tR\amediaId\x12#\n" +
+	"\rseason_number\x18\x03 \x01(\x05R\fseasonNumber\x12%\n" +
+	"\x0eepisode_number\x18\x04 \x01(\x05R\repisodeNumber\"T\n" +
+	"\x1bGetPlaybackProgressResponse\x125\n" +
+	"\bprogress\x18\x01 \x01(\v2\x19.core.v1.PlaybackProgressR\bprogress\"9\n" +
+	"!ListRecentPlaybackProgressRequest\x12\x14\n" +
+	"\x05limit\x18\x01 \x01(\x05R\x05limit\"U\n" +
+	"\"ListRecentPlaybackProgressResponse\x12/\n" +
+	"\x05items\x18\x01 \x03(\v2\x19.core.v1.PlaybackProgressR\x05items\"\xf0\x02\n" +
+	"\x0fReadingProgress\x12\x1f\n" +
+	"\vprovider_id\x18\x01 \x01(\tR\n" +
+	"providerId\x12\x19\n" +
+	"\bmedia_id\x18\x02 \x01(\tR\amediaId\x12)\n" +
+	"\x06domain\x18\x03 \x01(\x0e2\x11.plugin.v1.DomainR\x06domain\x12\x1d\n" +
+	"\n" +
+	"chapter_id\x18\x04 \x01(\tR\tchapterId\x12%\n" +
+	"\x0echapter_number\x18\x05 \x01(\x02R\rchapterNumber\x12!\n" +
+	"\fcurrent_page\x18\x06 \x01(\x05R\vcurrentPage\x12\x1f\n" +
+	"\vtotal_pages\x18\a \x01(\x05R\n" +
+	"totalPages\x12*\n" +
+	"\x11text_scroll_ratio\x18\b \x01(\x02R\x0ftextScrollRatio\x12!\n" +
+	"\fis_completed\x18\t \x01(\bR\visCompleted\x12\x1d\n" +
+	"\n" +
+	"updated_at\x18\n" +
+	" \x01(\x03R\tupdatedAt\"R\n" +
+	"\x1aSaveReadingProgressRequest\x124\n" +
+	"\bprogress\x18\x01 \x01(\v2\x18.core.v1.ReadingProgressR\bprogress\"S\n" +
+	"\x1bSaveReadingProgressResponse\x124\n" +
+	"\bprogress\x18\x01 \x01(\v2\x18.core.v1.ReadingProgressR\bprogress\"v\n" +
+	"\x19GetReadingProgressRequest\x12\x1f\n" +
+	"\vprovider_id\x18\x01 \x01(\tR\n" +
+	"providerId\x12\x19\n" +
+	"\bmedia_id\x18\x02 \x01(\tR\amediaId\x12\x1d\n" +
+	"\n" +
+	"chapter_id\x18\x03 \x01(\tR\tchapterId\"R\n" +
+	"\x1aGetReadingProgressResponse\x124\n" +
+	"\bprogress\x18\x01 \x01(\v2\x18.core.v1.ReadingProgressR\bprogress\"8\n" +
+	" ListRecentReadingProgressRequest\x12\x14\n" +
+	"\x05limit\x18\x01 \x01(\x05R\x05limit\"S\n" +
+	"!ListRecentReadingProgressResponse\x12.\n" +
+	"\x05items\x18\x01 \x03(\v2\x18.core.v1.ReadingProgressR\x05items*\xe1\x01\n" +
+	"\rLibraryStatus\x12\x1e\n" +
+	"\x1aLIBRARY_STATUS_UNSPECIFIED\x10\x00\x12 \n" +
+	"\x1cLIBRARY_STATUS_PLAN_TO_WATCH\x10\x01\x12\x1b\n" +
+	"\x17LIBRARY_STATUS_WATCHING\x10\x02\x12\x1c\n" +
+	"\x18LIBRARY_STATUS_COMPLETED\x10\x03\x12\x1a\n" +
+	"\x16LIBRARY_STATUS_ON_HOLD\x10\x04\x12\x1a\n" +
+	"\x16LIBRARY_STATUS_DROPPED\x10\x05\x12\x1b\n" +
+	"\x17LIBRARY_STATUS_FAVORITE\x10\x062\xef\r\n" +
 	"\vCoreService\x123\n" +
 	"\x04Ping\x12\x14.core.v1.PingRequest\x1a\x15.core.v1.PingResponse\x12H\n" +
 	"\vSearchMedia\x12\x1b.core.v1.SearchMediaRequest\x1a\x1c.core.v1.SearchMediaResponse\x12T\n" +
@@ -1722,7 +3229,17 @@ const file_core_v1_core_proto_rawDesc = "" +
 	"ListThemes\x12\x1a.core.v1.ListThemesRequest\x1a\x1b.core.v1.ListThemesResponse\x12Q\n" +
 	"\x0eGetActiveTheme\x12\x1e.core.v1.GetActiveThemeRequest\x1a\x1f.core.v1.GetActiveThemeResponse\x12Q\n" +
 	"\x0eSetActiveTheme\x12\x1e.core.v1.SetActiveThemeRequest\x1a\x1f.core.v1.SetActiveThemeResponse\x12`\n" +
-	"\x13GetSupportedLocales\x12#.core.v1.GetSupportedLocalesRequest\x1a$.core.v1.GetSupportedLocalesResponseB9Z7github.com/falsisdev/vessel/proto/gen/go/core/v1;corev1b\x06proto3"
+	"\x13GetSupportedLocales\x12#.core.v1.GetSupportedLocalesRequest\x1a$.core.v1.GetSupportedLocalesResponse\x12T\n" +
+	"\x0fSaveLibraryItem\x12\x1f.core.v1.SaveLibraryItemRequest\x1a .core.v1.SaveLibraryItemResponse\x12Q\n" +
+	"\x0eGetLibraryItem\x12\x1e.core.v1.GetLibraryItemRequest\x1a\x1f.core.v1.GetLibraryItemResponse\x12W\n" +
+	"\x10ListLibraryItems\x12 .core.v1.ListLibraryItemsRequest\x1a!.core.v1.ListLibraryItemsResponse\x12Z\n" +
+	"\x11DeleteLibraryItem\x12!.core.v1.DeleteLibraryItemRequest\x1a\".core.v1.DeleteLibraryItemResponse\x12c\n" +
+	"\x14SavePlaybackProgress\x12$.core.v1.SavePlaybackProgressRequest\x1a%.core.v1.SavePlaybackProgressResponse\x12`\n" +
+	"\x13GetPlaybackProgress\x12#.core.v1.GetPlaybackProgressRequest\x1a$.core.v1.GetPlaybackProgressResponse\x12u\n" +
+	"\x1aListRecentPlaybackProgress\x12*.core.v1.ListRecentPlaybackProgressRequest\x1a+.core.v1.ListRecentPlaybackProgressResponse\x12`\n" +
+	"\x13SaveReadingProgress\x12#.core.v1.SaveReadingProgressRequest\x1a$.core.v1.SaveReadingProgressResponse\x12]\n" +
+	"\x12GetReadingProgress\x12\".core.v1.GetReadingProgressRequest\x1a#.core.v1.GetReadingProgressResponse\x12r\n" +
+	"\x19ListRecentReadingProgress\x12).core.v1.ListRecentReadingProgressRequest\x1a*.core.v1.ListRecentReadingProgressResponseB9Z7github.com/falsisdev/vessel/proto/gen/go/core/v1;corev1b\x06proto3"
 
 var (
 	file_core_v1_core_proto_rawDescOnce sync.Once
@@ -1736,89 +3253,153 @@ func file_core_v1_core_proto_rawDescGZIP() []byte {
 	return file_core_v1_core_proto_rawDescData
 }
 
-var file_core_v1_core_proto_msgTypes = make([]protoimpl.MessageInfo, 26)
+var file_core_v1_core_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_core_v1_core_proto_msgTypes = make([]protoimpl.MessageInfo, 49)
 var file_core_v1_core_proto_goTypes = []any{
-	(*PingRequest)(nil),                 // 0: core.v1.PingRequest
-	(*PingResponse)(nil),                // 1: core.v1.PingResponse
-	(*SearchMediaRequest)(nil),          // 2: core.v1.SearchMediaRequest
-	(*CoreMediaItem)(nil),               // 3: core.v1.CoreMediaItem
-	(*SearchMediaResponse)(nil),         // 4: core.v1.SearchMediaResponse
-	(*GetMediaDetailsRequest)(nil),      // 5: core.v1.GetMediaDetailsRequest
-	(*GetMediaDetailsResponse)(nil),     // 6: core.v1.GetMediaDetailsResponse
-	(*GetStreamsRequest)(nil),           // 7: core.v1.GetStreamsRequest
-	(*GetStreamsResponse)(nil),          // 8: core.v1.GetStreamsResponse
-	(*PluginInfo)(nil),                  // 9: core.v1.PluginInfo
-	(*ListPluginsRequest)(nil),          // 10: core.v1.ListPluginsRequest
-	(*ListPluginsResponse)(nil),         // 11: core.v1.ListPluginsResponse
-	(*GetChapterContentRequest)(nil),    // 12: core.v1.GetChapterContentRequest
-	(*GetChapterContentResponse)(nil),   // 13: core.v1.GetChapterContentResponse
-	(*ThemeVariantInfo)(nil),            // 14: core.v1.ThemeVariantInfo
-	(*ThemeSummary)(nil),                // 15: core.v1.ThemeSummary
-	(*ListThemesRequest)(nil),           // 16: core.v1.ListThemesRequest
-	(*ListThemesResponse)(nil),          // 17: core.v1.ListThemesResponse
-	(*GetActiveThemeRequest)(nil),       // 18: core.v1.GetActiveThemeRequest
-	(*GetActiveThemeResponse)(nil),      // 19: core.v1.GetActiveThemeResponse
-	(*SetActiveThemeRequest)(nil),       // 20: core.v1.SetActiveThemeRequest
-	(*SetActiveThemeResponse)(nil),      // 21: core.v1.SetActiveThemeResponse
-	(*LocaleInfo)(nil),                  // 22: core.v1.LocaleInfo
-	(*GetSupportedLocalesRequest)(nil),  // 23: core.v1.GetSupportedLocalesRequest
-	(*GetSupportedLocalesResponse)(nil), // 24: core.v1.GetSupportedLocalesResponse
-	nil,                                 // 25: core.v1.GetActiveThemeResponse.TokensEntry
-	(v1.Domain)(0),                      // 26: plugin.v1.Domain
-	(v1.MediaType)(0),                   // 27: plugin.v1.MediaType
-	(*v1.ExternalIDs)(nil),              // 28: plugin.v1.ExternalIDs
-	(*v1.Season)(nil),                   // 29: plugin.v1.Season
-	(*v1.StreamSource)(nil),             // 30: plugin.v1.StreamSource
-	(*v1.Subtitle)(nil),                 // 31: plugin.v1.Subtitle
-	(v1.Capability)(0),                  // 32: plugin.v1.Capability
-	(*v1.PageItem)(nil),                 // 33: plugin.v1.PageItem
+	(LibraryStatus)(0),                         // 0: core.v1.LibraryStatus
+	(*PingRequest)(nil),                        // 1: core.v1.PingRequest
+	(*PingResponse)(nil),                       // 2: core.v1.PingResponse
+	(*SearchMediaRequest)(nil),                 // 3: core.v1.SearchMediaRequest
+	(*CoreMediaItem)(nil),                      // 4: core.v1.CoreMediaItem
+	(*SearchMediaResponse)(nil),                // 5: core.v1.SearchMediaResponse
+	(*GetMediaDetailsRequest)(nil),             // 6: core.v1.GetMediaDetailsRequest
+	(*GetMediaDetailsResponse)(nil),            // 7: core.v1.GetMediaDetailsResponse
+	(*GetStreamsRequest)(nil),                  // 8: core.v1.GetStreamsRequest
+	(*GetStreamsResponse)(nil),                 // 9: core.v1.GetStreamsResponse
+	(*PluginInfo)(nil),                         // 10: core.v1.PluginInfo
+	(*ListPluginsRequest)(nil),                 // 11: core.v1.ListPluginsRequest
+	(*ListPluginsResponse)(nil),                // 12: core.v1.ListPluginsResponse
+	(*GetChapterContentRequest)(nil),           // 13: core.v1.GetChapterContentRequest
+	(*GetChapterContentResponse)(nil),          // 14: core.v1.GetChapterContentResponse
+	(*ThemeVariantInfo)(nil),                   // 15: core.v1.ThemeVariantInfo
+	(*ThemeSummary)(nil),                       // 16: core.v1.ThemeSummary
+	(*ListThemesRequest)(nil),                  // 17: core.v1.ListThemesRequest
+	(*ListThemesResponse)(nil),                 // 18: core.v1.ListThemesResponse
+	(*GetActiveThemeRequest)(nil),              // 19: core.v1.GetActiveThemeRequest
+	(*GetActiveThemeResponse)(nil),             // 20: core.v1.GetActiveThemeResponse
+	(*SetActiveThemeRequest)(nil),              // 21: core.v1.SetActiveThemeRequest
+	(*SetActiveThemeResponse)(nil),             // 22: core.v1.SetActiveThemeResponse
+	(*LocaleInfo)(nil),                         // 23: core.v1.LocaleInfo
+	(*GetSupportedLocalesRequest)(nil),         // 24: core.v1.GetSupportedLocalesRequest
+	(*GetSupportedLocalesResponse)(nil),        // 25: core.v1.GetSupportedLocalesResponse
+	(*LibraryItem)(nil),                        // 26: core.v1.LibraryItem
+	(*SaveLibraryItemRequest)(nil),             // 27: core.v1.SaveLibraryItemRequest
+	(*SaveLibraryItemResponse)(nil),            // 28: core.v1.SaveLibraryItemResponse
+	(*GetLibraryItemRequest)(nil),              // 29: core.v1.GetLibraryItemRequest
+	(*GetLibraryItemResponse)(nil),             // 30: core.v1.GetLibraryItemResponse
+	(*ListLibraryItemsRequest)(nil),            // 31: core.v1.ListLibraryItemsRequest
+	(*ListLibraryItemsResponse)(nil),           // 32: core.v1.ListLibraryItemsResponse
+	(*DeleteLibraryItemRequest)(nil),           // 33: core.v1.DeleteLibraryItemRequest
+	(*DeleteLibraryItemResponse)(nil),          // 34: core.v1.DeleteLibraryItemResponse
+	(*PlaybackProgress)(nil),                   // 35: core.v1.PlaybackProgress
+	(*SavePlaybackProgressRequest)(nil),        // 36: core.v1.SavePlaybackProgressRequest
+	(*SavePlaybackProgressResponse)(nil),       // 37: core.v1.SavePlaybackProgressResponse
+	(*GetPlaybackProgressRequest)(nil),         // 38: core.v1.GetPlaybackProgressRequest
+	(*GetPlaybackProgressResponse)(nil),        // 39: core.v1.GetPlaybackProgressResponse
+	(*ListRecentPlaybackProgressRequest)(nil),  // 40: core.v1.ListRecentPlaybackProgressRequest
+	(*ListRecentPlaybackProgressResponse)(nil), // 41: core.v1.ListRecentPlaybackProgressResponse
+	(*ReadingProgress)(nil),                    // 42: core.v1.ReadingProgress
+	(*SaveReadingProgressRequest)(nil),         // 43: core.v1.SaveReadingProgressRequest
+	(*SaveReadingProgressResponse)(nil),        // 44: core.v1.SaveReadingProgressResponse
+	(*GetReadingProgressRequest)(nil),          // 45: core.v1.GetReadingProgressRequest
+	(*GetReadingProgressResponse)(nil),         // 46: core.v1.GetReadingProgressResponse
+	(*ListRecentReadingProgressRequest)(nil),   // 47: core.v1.ListRecentReadingProgressRequest
+	(*ListRecentReadingProgressResponse)(nil),  // 48: core.v1.ListRecentReadingProgressResponse
+	nil,                     // 49: core.v1.GetActiveThemeResponse.TokensEntry
+	(v1.Domain)(0),          // 50: plugin.v1.Domain
+	(v1.MediaType)(0),       // 51: plugin.v1.MediaType
+	(*v1.ExternalIDs)(nil),  // 52: plugin.v1.ExternalIDs
+	(*v1.Season)(nil),       // 53: plugin.v1.Season
+	(*v1.StreamSource)(nil), // 54: plugin.v1.StreamSource
+	(*v1.Subtitle)(nil),     // 55: plugin.v1.Subtitle
+	(v1.Capability)(0),      // 56: plugin.v1.Capability
+	(*v1.PageItem)(nil),     // 57: plugin.v1.PageItem
 }
 var file_core_v1_core_proto_depIdxs = []int32{
-	26, // 0: core.v1.SearchMediaRequest.domain:type_name -> plugin.v1.Domain
-	27, // 1: core.v1.CoreMediaItem.type:type_name -> plugin.v1.MediaType
-	28, // 2: core.v1.CoreMediaItem.external_ids:type_name -> plugin.v1.ExternalIDs
-	3,  // 3: core.v1.SearchMediaResponse.items:type_name -> core.v1.CoreMediaItem
-	26, // 4: core.v1.GetMediaDetailsRequest.domain:type_name -> plugin.v1.Domain
-	27, // 5: core.v1.GetMediaDetailsResponse.type:type_name -> plugin.v1.MediaType
-	29, // 6: core.v1.GetMediaDetailsResponse.seasons:type_name -> plugin.v1.Season
-	28, // 7: core.v1.GetMediaDetailsResponse.external_ids:type_name -> plugin.v1.ExternalIDs
-	30, // 8: core.v1.GetStreamsResponse.streams:type_name -> plugin.v1.StreamSource
-	31, // 9: core.v1.GetStreamsResponse.subtitles:type_name -> plugin.v1.Subtitle
-	26, // 10: core.v1.PluginInfo.domain:type_name -> plugin.v1.Domain
-	32, // 11: core.v1.PluginInfo.capabilities:type_name -> plugin.v1.Capability
-	9,  // 12: core.v1.ListPluginsResponse.plugins:type_name -> core.v1.PluginInfo
-	33, // 13: core.v1.GetChapterContentResponse.pages:type_name -> plugin.v1.PageItem
-	14, // 14: core.v1.ThemeSummary.variants:type_name -> core.v1.ThemeVariantInfo
-	15, // 15: core.v1.ListThemesResponse.themes:type_name -> core.v1.ThemeSummary
-	15, // 16: core.v1.GetActiveThemeResponse.theme:type_name -> core.v1.ThemeSummary
-	25, // 17: core.v1.GetActiveThemeResponse.tokens:type_name -> core.v1.GetActiveThemeResponse.TokensEntry
-	19, // 18: core.v1.SetActiveThemeResponse.active_theme:type_name -> core.v1.GetActiveThemeResponse
-	22, // 19: core.v1.GetSupportedLocalesResponse.locales:type_name -> core.v1.LocaleInfo
-	0,  // 20: core.v1.CoreService.Ping:input_type -> core.v1.PingRequest
-	2,  // 21: core.v1.CoreService.SearchMedia:input_type -> core.v1.SearchMediaRequest
-	5,  // 22: core.v1.CoreService.GetMediaDetails:input_type -> core.v1.GetMediaDetailsRequest
-	7,  // 23: core.v1.CoreService.GetStreams:input_type -> core.v1.GetStreamsRequest
-	12, // 24: core.v1.CoreService.GetChapterContent:input_type -> core.v1.GetChapterContentRequest
-	10, // 25: core.v1.CoreService.ListPlugins:input_type -> core.v1.ListPluginsRequest
-	16, // 26: core.v1.CoreService.ListThemes:input_type -> core.v1.ListThemesRequest
-	18, // 27: core.v1.CoreService.GetActiveTheme:input_type -> core.v1.GetActiveThemeRequest
-	20, // 28: core.v1.CoreService.SetActiveTheme:input_type -> core.v1.SetActiveThemeRequest
-	23, // 29: core.v1.CoreService.GetSupportedLocales:input_type -> core.v1.GetSupportedLocalesRequest
-	1,  // 30: core.v1.CoreService.Ping:output_type -> core.v1.PingResponse
-	4,  // 31: core.v1.CoreService.SearchMedia:output_type -> core.v1.SearchMediaResponse
-	6,  // 32: core.v1.CoreService.GetMediaDetails:output_type -> core.v1.GetMediaDetailsResponse
-	8,  // 33: core.v1.CoreService.GetStreams:output_type -> core.v1.GetStreamsResponse
-	13, // 34: core.v1.CoreService.GetChapterContent:output_type -> core.v1.GetChapterContentResponse
-	11, // 35: core.v1.CoreService.ListPlugins:output_type -> core.v1.ListPluginsResponse
-	17, // 36: core.v1.CoreService.ListThemes:output_type -> core.v1.ListThemesResponse
-	19, // 37: core.v1.CoreService.GetActiveTheme:output_type -> core.v1.GetActiveThemeResponse
-	21, // 38: core.v1.CoreService.SetActiveTheme:output_type -> core.v1.SetActiveThemeResponse
-	24, // 39: core.v1.CoreService.GetSupportedLocales:output_type -> core.v1.GetSupportedLocalesResponse
-	30, // [30:40] is the sub-list for method output_type
-	20, // [20:30] is the sub-list for method input_type
-	20, // [20:20] is the sub-list for extension type_name
-	20, // [20:20] is the sub-list for extension extendee
-	0,  // [0:20] is the sub-list for field type_name
+	50, // 0: core.v1.SearchMediaRequest.domain:type_name -> plugin.v1.Domain
+	51, // 1: core.v1.CoreMediaItem.type:type_name -> plugin.v1.MediaType
+	52, // 2: core.v1.CoreMediaItem.external_ids:type_name -> plugin.v1.ExternalIDs
+	4,  // 3: core.v1.SearchMediaResponse.items:type_name -> core.v1.CoreMediaItem
+	50, // 4: core.v1.GetMediaDetailsRequest.domain:type_name -> plugin.v1.Domain
+	51, // 5: core.v1.GetMediaDetailsResponse.type:type_name -> plugin.v1.MediaType
+	53, // 6: core.v1.GetMediaDetailsResponse.seasons:type_name -> plugin.v1.Season
+	52, // 7: core.v1.GetMediaDetailsResponse.external_ids:type_name -> plugin.v1.ExternalIDs
+	54, // 8: core.v1.GetStreamsResponse.streams:type_name -> plugin.v1.StreamSource
+	55, // 9: core.v1.GetStreamsResponse.subtitles:type_name -> plugin.v1.Subtitle
+	50, // 10: core.v1.PluginInfo.domain:type_name -> plugin.v1.Domain
+	56, // 11: core.v1.PluginInfo.capabilities:type_name -> plugin.v1.Capability
+	10, // 12: core.v1.ListPluginsResponse.plugins:type_name -> core.v1.PluginInfo
+	57, // 13: core.v1.GetChapterContentResponse.pages:type_name -> plugin.v1.PageItem
+	15, // 14: core.v1.ThemeSummary.variants:type_name -> core.v1.ThemeVariantInfo
+	16, // 15: core.v1.ListThemesResponse.themes:type_name -> core.v1.ThemeSummary
+	16, // 16: core.v1.GetActiveThemeResponse.theme:type_name -> core.v1.ThemeSummary
+	49, // 17: core.v1.GetActiveThemeResponse.tokens:type_name -> core.v1.GetActiveThemeResponse.TokensEntry
+	20, // 18: core.v1.SetActiveThemeResponse.active_theme:type_name -> core.v1.GetActiveThemeResponse
+	23, // 19: core.v1.GetSupportedLocalesResponse.locales:type_name -> core.v1.LocaleInfo
+	50, // 20: core.v1.LibraryItem.domain:type_name -> plugin.v1.Domain
+	51, // 21: core.v1.LibraryItem.type:type_name -> plugin.v1.MediaType
+	0,  // 22: core.v1.LibraryItem.status:type_name -> core.v1.LibraryStatus
+	26, // 23: core.v1.SaveLibraryItemRequest.item:type_name -> core.v1.LibraryItem
+	26, // 24: core.v1.SaveLibraryItemResponse.item:type_name -> core.v1.LibraryItem
+	26, // 25: core.v1.GetLibraryItemResponse.item:type_name -> core.v1.LibraryItem
+	50, // 26: core.v1.ListLibraryItemsRequest.domain:type_name -> plugin.v1.Domain
+	0,  // 27: core.v1.ListLibraryItemsRequest.status:type_name -> core.v1.LibraryStatus
+	26, // 28: core.v1.ListLibraryItemsResponse.items:type_name -> core.v1.LibraryItem
+	50, // 29: core.v1.PlaybackProgress.domain:type_name -> plugin.v1.Domain
+	35, // 30: core.v1.SavePlaybackProgressRequest.progress:type_name -> core.v1.PlaybackProgress
+	35, // 31: core.v1.SavePlaybackProgressResponse.progress:type_name -> core.v1.PlaybackProgress
+	35, // 32: core.v1.GetPlaybackProgressResponse.progress:type_name -> core.v1.PlaybackProgress
+	35, // 33: core.v1.ListRecentPlaybackProgressResponse.items:type_name -> core.v1.PlaybackProgress
+	50, // 34: core.v1.ReadingProgress.domain:type_name -> plugin.v1.Domain
+	42, // 35: core.v1.SaveReadingProgressRequest.progress:type_name -> core.v1.ReadingProgress
+	42, // 36: core.v1.SaveReadingProgressResponse.progress:type_name -> core.v1.ReadingProgress
+	42, // 37: core.v1.GetReadingProgressResponse.progress:type_name -> core.v1.ReadingProgress
+	42, // 38: core.v1.ListRecentReadingProgressResponse.items:type_name -> core.v1.ReadingProgress
+	1,  // 39: core.v1.CoreService.Ping:input_type -> core.v1.PingRequest
+	3,  // 40: core.v1.CoreService.SearchMedia:input_type -> core.v1.SearchMediaRequest
+	6,  // 41: core.v1.CoreService.GetMediaDetails:input_type -> core.v1.GetMediaDetailsRequest
+	8,  // 42: core.v1.CoreService.GetStreams:input_type -> core.v1.GetStreamsRequest
+	13, // 43: core.v1.CoreService.GetChapterContent:input_type -> core.v1.GetChapterContentRequest
+	11, // 44: core.v1.CoreService.ListPlugins:input_type -> core.v1.ListPluginsRequest
+	17, // 45: core.v1.CoreService.ListThemes:input_type -> core.v1.ListThemesRequest
+	19, // 46: core.v1.CoreService.GetActiveTheme:input_type -> core.v1.GetActiveThemeRequest
+	21, // 47: core.v1.CoreService.SetActiveTheme:input_type -> core.v1.SetActiveThemeRequest
+	24, // 48: core.v1.CoreService.GetSupportedLocales:input_type -> core.v1.GetSupportedLocalesRequest
+	27, // 49: core.v1.CoreService.SaveLibraryItem:input_type -> core.v1.SaveLibraryItemRequest
+	29, // 50: core.v1.CoreService.GetLibraryItem:input_type -> core.v1.GetLibraryItemRequest
+	31, // 51: core.v1.CoreService.ListLibraryItems:input_type -> core.v1.ListLibraryItemsRequest
+	33, // 52: core.v1.CoreService.DeleteLibraryItem:input_type -> core.v1.DeleteLibraryItemRequest
+	36, // 53: core.v1.CoreService.SavePlaybackProgress:input_type -> core.v1.SavePlaybackProgressRequest
+	38, // 54: core.v1.CoreService.GetPlaybackProgress:input_type -> core.v1.GetPlaybackProgressRequest
+	40, // 55: core.v1.CoreService.ListRecentPlaybackProgress:input_type -> core.v1.ListRecentPlaybackProgressRequest
+	43, // 56: core.v1.CoreService.SaveReadingProgress:input_type -> core.v1.SaveReadingProgressRequest
+	45, // 57: core.v1.CoreService.GetReadingProgress:input_type -> core.v1.GetReadingProgressRequest
+	47, // 58: core.v1.CoreService.ListRecentReadingProgress:input_type -> core.v1.ListRecentReadingProgressRequest
+	2,  // 59: core.v1.CoreService.Ping:output_type -> core.v1.PingResponse
+	5,  // 60: core.v1.CoreService.SearchMedia:output_type -> core.v1.SearchMediaResponse
+	7,  // 61: core.v1.CoreService.GetMediaDetails:output_type -> core.v1.GetMediaDetailsResponse
+	9,  // 62: core.v1.CoreService.GetStreams:output_type -> core.v1.GetStreamsResponse
+	14, // 63: core.v1.CoreService.GetChapterContent:output_type -> core.v1.GetChapterContentResponse
+	12, // 64: core.v1.CoreService.ListPlugins:output_type -> core.v1.ListPluginsResponse
+	18, // 65: core.v1.CoreService.ListThemes:output_type -> core.v1.ListThemesResponse
+	20, // 66: core.v1.CoreService.GetActiveTheme:output_type -> core.v1.GetActiveThemeResponse
+	22, // 67: core.v1.CoreService.SetActiveTheme:output_type -> core.v1.SetActiveThemeResponse
+	25, // 68: core.v1.CoreService.GetSupportedLocales:output_type -> core.v1.GetSupportedLocalesResponse
+	28, // 69: core.v1.CoreService.SaveLibraryItem:output_type -> core.v1.SaveLibraryItemResponse
+	30, // 70: core.v1.CoreService.GetLibraryItem:output_type -> core.v1.GetLibraryItemResponse
+	32, // 71: core.v1.CoreService.ListLibraryItems:output_type -> core.v1.ListLibraryItemsResponse
+	34, // 72: core.v1.CoreService.DeleteLibraryItem:output_type -> core.v1.DeleteLibraryItemResponse
+	37, // 73: core.v1.CoreService.SavePlaybackProgress:output_type -> core.v1.SavePlaybackProgressResponse
+	39, // 74: core.v1.CoreService.GetPlaybackProgress:output_type -> core.v1.GetPlaybackProgressResponse
+	41, // 75: core.v1.CoreService.ListRecentPlaybackProgress:output_type -> core.v1.ListRecentPlaybackProgressResponse
+	44, // 76: core.v1.CoreService.SaveReadingProgress:output_type -> core.v1.SaveReadingProgressResponse
+	46, // 77: core.v1.CoreService.GetReadingProgress:output_type -> core.v1.GetReadingProgressResponse
+	48, // 78: core.v1.CoreService.ListRecentReadingProgress:output_type -> core.v1.ListRecentReadingProgressResponse
+	59, // [59:79] is the sub-list for method output_type
+	39, // [39:59] is the sub-list for method input_type
+	39, // [39:39] is the sub-list for extension type_name
+	39, // [39:39] is the sub-list for extension extendee
+	0,  // [0:39] is the sub-list for field type_name
 }
 
 func init() { file_core_v1_core_proto_init() }
@@ -1831,13 +3412,14 @@ func file_core_v1_core_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_core_v1_core_proto_rawDesc), len(file_core_v1_core_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   26,
+			NumEnums:      1,
+			NumMessages:   49,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
 		GoTypes:           file_core_v1_core_proto_goTypes,
 		DependencyIndexes: file_core_v1_core_proto_depIdxs,
+		EnumInfos:         file_core_v1_core_proto_enumTypes,
 		MessageInfos:      file_core_v1_core_proto_msgTypes,
 	}.Build()
 	File_core_v1_core_proto = out.File

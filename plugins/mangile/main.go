@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 
+	"github.com/falsisdev/vessel/pkg/config"
 	"github.com/falsisdev/vessel/plugins/mangile/internal/provider"
 	"github.com/falsisdev/vessel/plugins/mangile/internal/sanity"
 	pluginv1 "github.com/falsisdev/vessel/proto/gen/go/plugin/v1"
@@ -14,6 +15,8 @@ import (
 )
 
 func main() {
+	_ = config.LoadEnv()
+
 	port := flag.Int("port", 50053, "Port for Mangile gRPC server")
 	projectID := flag.String("sanity-project-id", "1yge7tlr", "Sanity Project ID (defaults to SANITY_PROJECT_ID env or 1yge7tlr)")
 	dataset := flag.String("sanity-dataset", "production", "Sanity Dataset (defaults to SANITY_DATASET env or production)")

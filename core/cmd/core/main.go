@@ -10,9 +10,11 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/falsisdev/vessel/pkg/config"
 	"github.com/falsisdev/vessel/core/internal/plugin"
 	"github.com/falsisdev/vessel/core/internal/server"
 	"github.com/falsisdev/vessel/core/internal/service"
+	"github.com/falsisdev/vessel/core/internal/storage"
 	"github.com/falsisdev/vessel/core/internal/theme"
 )
 
@@ -24,11 +26,14 @@ func main() {
 }
 
 func run() error {
+	_ = config.LoadEnv()
+
 	pluginAddr := flag.String("plugin-addr", "", "Direct plugin gRPC target to connect (e.g. 127.0.0.1:50051)")
 	pluginBin := flag.String("plugin-bin", "", "Path to plugin executable to launch as managed subprocess")
 	pluginID := flag.String("plugin-id", "plugin-local", "Identifier for managed plugin binary")
 	pluginsDir := flag.String("plugins-dir", "", "Directory containing plugins to discover")
 	themesDir := flag.String("themes-dir", "", "Directory containing custom themes to discover")
+	dbPath := flag.String("db-path", "vessel.db", "Path to SQLite database file")
 	listenAddr := flag.String("listen-addr", "127.0.0.1:50050", "Address for Core IPC gRPC server (TCP or unix:///path)")
 	noServer := flag.Bool("no-server", false, "Disable Core IPC gRPC server")
 	testQuery := flag.String("search", "", "Query to search on connected plugins")
@@ -42,6 +47,13 @@ func run() error {
 
 	slog.Info("Starting Vessel Core runtime")
 
+	sqliteStorage, err := storage.NewSQLiteStorage(*dbPath)
+	if err != nil {
+		return fmt.Errorf("failed to open database at %s: %w", *dbPath, err)
+	}
+	defer sqliteStorage.Close()
+
+	libraryService := service.NewLibraryService(sqliteStorage)
 	pluginManager := plugin.NewManager()
 	supervisor := plugin.NewSupervisor(pluginManager)
 
@@ -67,7 +79,7 @@ func run() error {
 		coreServer := server.NewServer(server.ServerConfig{
 			ListenAddr: *listenAddr,
 			Version:    "1.0.0",
-		}, cinemaService, readingService, pluginManager, themeManager)
+		}, cinemaService, readingService, libraryService, pluginManager, themeManager)
 
 		if err := coreServer.Start(); err != nil {
 			return fmt.Errorf("failed to start core IPC server at %s: %w", *listenAddr, err)

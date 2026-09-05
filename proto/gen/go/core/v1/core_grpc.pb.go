@@ -19,16 +19,26 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	CoreService_Ping_FullMethodName                = "/core.v1.CoreService/Ping"
-	CoreService_SearchMedia_FullMethodName         = "/core.v1.CoreService/SearchMedia"
-	CoreService_GetMediaDetails_FullMethodName     = "/core.v1.CoreService/GetMediaDetails"
-	CoreService_GetStreams_FullMethodName          = "/core.v1.CoreService/GetStreams"
-	CoreService_GetChapterContent_FullMethodName   = "/core.v1.CoreService/GetChapterContent"
-	CoreService_ListPlugins_FullMethodName         = "/core.v1.CoreService/ListPlugins"
-	CoreService_ListThemes_FullMethodName          = "/core.v1.CoreService/ListThemes"
-	CoreService_GetActiveTheme_FullMethodName      = "/core.v1.CoreService/GetActiveTheme"
-	CoreService_SetActiveTheme_FullMethodName      = "/core.v1.CoreService/SetActiveTheme"
-	CoreService_GetSupportedLocales_FullMethodName = "/core.v1.CoreService/GetSupportedLocales"
+	CoreService_Ping_FullMethodName                       = "/core.v1.CoreService/Ping"
+	CoreService_SearchMedia_FullMethodName                = "/core.v1.CoreService/SearchMedia"
+	CoreService_GetMediaDetails_FullMethodName            = "/core.v1.CoreService/GetMediaDetails"
+	CoreService_GetStreams_FullMethodName                 = "/core.v1.CoreService/GetStreams"
+	CoreService_GetChapterContent_FullMethodName          = "/core.v1.CoreService/GetChapterContent"
+	CoreService_ListPlugins_FullMethodName                = "/core.v1.CoreService/ListPlugins"
+	CoreService_ListThemes_FullMethodName                 = "/core.v1.CoreService/ListThemes"
+	CoreService_GetActiveTheme_FullMethodName             = "/core.v1.CoreService/GetActiveTheme"
+	CoreService_SetActiveTheme_FullMethodName             = "/core.v1.CoreService/SetActiveTheme"
+	CoreService_GetSupportedLocales_FullMethodName        = "/core.v1.CoreService/GetSupportedLocales"
+	CoreService_SaveLibraryItem_FullMethodName            = "/core.v1.CoreService/SaveLibraryItem"
+	CoreService_GetLibraryItem_FullMethodName             = "/core.v1.CoreService/GetLibraryItem"
+	CoreService_ListLibraryItems_FullMethodName           = "/core.v1.CoreService/ListLibraryItems"
+	CoreService_DeleteLibraryItem_FullMethodName          = "/core.v1.CoreService/DeleteLibraryItem"
+	CoreService_SavePlaybackProgress_FullMethodName       = "/core.v1.CoreService/SavePlaybackProgress"
+	CoreService_GetPlaybackProgress_FullMethodName        = "/core.v1.CoreService/GetPlaybackProgress"
+	CoreService_ListRecentPlaybackProgress_FullMethodName = "/core.v1.CoreService/ListRecentPlaybackProgress"
+	CoreService_SaveReadingProgress_FullMethodName        = "/core.v1.CoreService/SaveReadingProgress"
+	CoreService_GetReadingProgress_FullMethodName         = "/core.v1.CoreService/GetReadingProgress"
+	CoreService_ListRecentReadingProgress_FullMethodName  = "/core.v1.CoreService/ListRecentReadingProgress"
 )
 
 // CoreServiceClient is the client API for CoreService service.
@@ -45,6 +55,16 @@ type CoreServiceClient interface {
 	GetActiveTheme(ctx context.Context, in *GetActiveThemeRequest, opts ...grpc.CallOption) (*GetActiveThemeResponse, error)
 	SetActiveTheme(ctx context.Context, in *SetActiveThemeRequest, opts ...grpc.CallOption) (*SetActiveThemeResponse, error)
 	GetSupportedLocales(ctx context.Context, in *GetSupportedLocalesRequest, opts ...grpc.CallOption) (*GetSupportedLocalesResponse, error)
+	SaveLibraryItem(ctx context.Context, in *SaveLibraryItemRequest, opts ...grpc.CallOption) (*SaveLibraryItemResponse, error)
+	GetLibraryItem(ctx context.Context, in *GetLibraryItemRequest, opts ...grpc.CallOption) (*GetLibraryItemResponse, error)
+	ListLibraryItems(ctx context.Context, in *ListLibraryItemsRequest, opts ...grpc.CallOption) (*ListLibraryItemsResponse, error)
+	DeleteLibraryItem(ctx context.Context, in *DeleteLibraryItemRequest, opts ...grpc.CallOption) (*DeleteLibraryItemResponse, error)
+	SavePlaybackProgress(ctx context.Context, in *SavePlaybackProgressRequest, opts ...grpc.CallOption) (*SavePlaybackProgressResponse, error)
+	GetPlaybackProgress(ctx context.Context, in *GetPlaybackProgressRequest, opts ...grpc.CallOption) (*GetPlaybackProgressResponse, error)
+	ListRecentPlaybackProgress(ctx context.Context, in *ListRecentPlaybackProgressRequest, opts ...grpc.CallOption) (*ListRecentPlaybackProgressResponse, error)
+	SaveReadingProgress(ctx context.Context, in *SaveReadingProgressRequest, opts ...grpc.CallOption) (*SaveReadingProgressResponse, error)
+	GetReadingProgress(ctx context.Context, in *GetReadingProgressRequest, opts ...grpc.CallOption) (*GetReadingProgressResponse, error)
+	ListRecentReadingProgress(ctx context.Context, in *ListRecentReadingProgressRequest, opts ...grpc.CallOption) (*ListRecentReadingProgressResponse, error)
 }
 
 type coreServiceClient struct {
@@ -155,6 +175,106 @@ func (c *coreServiceClient) GetSupportedLocales(ctx context.Context, in *GetSupp
 	return out, nil
 }
 
+func (c *coreServiceClient) SaveLibraryItem(ctx context.Context, in *SaveLibraryItemRequest, opts ...grpc.CallOption) (*SaveLibraryItemResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SaveLibraryItemResponse)
+	err := c.cc.Invoke(ctx, CoreService_SaveLibraryItem_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *coreServiceClient) GetLibraryItem(ctx context.Context, in *GetLibraryItemRequest, opts ...grpc.CallOption) (*GetLibraryItemResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetLibraryItemResponse)
+	err := c.cc.Invoke(ctx, CoreService_GetLibraryItem_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *coreServiceClient) ListLibraryItems(ctx context.Context, in *ListLibraryItemsRequest, opts ...grpc.CallOption) (*ListLibraryItemsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListLibraryItemsResponse)
+	err := c.cc.Invoke(ctx, CoreService_ListLibraryItems_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *coreServiceClient) DeleteLibraryItem(ctx context.Context, in *DeleteLibraryItemRequest, opts ...grpc.CallOption) (*DeleteLibraryItemResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeleteLibraryItemResponse)
+	err := c.cc.Invoke(ctx, CoreService_DeleteLibraryItem_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *coreServiceClient) SavePlaybackProgress(ctx context.Context, in *SavePlaybackProgressRequest, opts ...grpc.CallOption) (*SavePlaybackProgressResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SavePlaybackProgressResponse)
+	err := c.cc.Invoke(ctx, CoreService_SavePlaybackProgress_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *coreServiceClient) GetPlaybackProgress(ctx context.Context, in *GetPlaybackProgressRequest, opts ...grpc.CallOption) (*GetPlaybackProgressResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetPlaybackProgressResponse)
+	err := c.cc.Invoke(ctx, CoreService_GetPlaybackProgress_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *coreServiceClient) ListRecentPlaybackProgress(ctx context.Context, in *ListRecentPlaybackProgressRequest, opts ...grpc.CallOption) (*ListRecentPlaybackProgressResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListRecentPlaybackProgressResponse)
+	err := c.cc.Invoke(ctx, CoreService_ListRecentPlaybackProgress_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *coreServiceClient) SaveReadingProgress(ctx context.Context, in *SaveReadingProgressRequest, opts ...grpc.CallOption) (*SaveReadingProgressResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SaveReadingProgressResponse)
+	err := c.cc.Invoke(ctx, CoreService_SaveReadingProgress_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *coreServiceClient) GetReadingProgress(ctx context.Context, in *GetReadingProgressRequest, opts ...grpc.CallOption) (*GetReadingProgressResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetReadingProgressResponse)
+	err := c.cc.Invoke(ctx, CoreService_GetReadingProgress_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *coreServiceClient) ListRecentReadingProgress(ctx context.Context, in *ListRecentReadingProgressRequest, opts ...grpc.CallOption) (*ListRecentReadingProgressResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListRecentReadingProgressResponse)
+	err := c.cc.Invoke(ctx, CoreService_ListRecentReadingProgress_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // CoreServiceServer is the server API for CoreService service.
 // All implementations must embed UnimplementedCoreServiceServer
 // for forward compatibility.
@@ -169,6 +289,16 @@ type CoreServiceServer interface {
 	GetActiveTheme(context.Context, *GetActiveThemeRequest) (*GetActiveThemeResponse, error)
 	SetActiveTheme(context.Context, *SetActiveThemeRequest) (*SetActiveThemeResponse, error)
 	GetSupportedLocales(context.Context, *GetSupportedLocalesRequest) (*GetSupportedLocalesResponse, error)
+	SaveLibraryItem(context.Context, *SaveLibraryItemRequest) (*SaveLibraryItemResponse, error)
+	GetLibraryItem(context.Context, *GetLibraryItemRequest) (*GetLibraryItemResponse, error)
+	ListLibraryItems(context.Context, *ListLibraryItemsRequest) (*ListLibraryItemsResponse, error)
+	DeleteLibraryItem(context.Context, *DeleteLibraryItemRequest) (*DeleteLibraryItemResponse, error)
+	SavePlaybackProgress(context.Context, *SavePlaybackProgressRequest) (*SavePlaybackProgressResponse, error)
+	GetPlaybackProgress(context.Context, *GetPlaybackProgressRequest) (*GetPlaybackProgressResponse, error)
+	ListRecentPlaybackProgress(context.Context, *ListRecentPlaybackProgressRequest) (*ListRecentPlaybackProgressResponse, error)
+	SaveReadingProgress(context.Context, *SaveReadingProgressRequest) (*SaveReadingProgressResponse, error)
+	GetReadingProgress(context.Context, *GetReadingProgressRequest) (*GetReadingProgressResponse, error)
+	ListRecentReadingProgress(context.Context, *ListRecentReadingProgressRequest) (*ListRecentReadingProgressResponse, error)
 	mustEmbedUnimplementedCoreServiceServer()
 }
 
@@ -208,6 +338,36 @@ func (UnimplementedCoreServiceServer) SetActiveTheme(context.Context, *SetActive
 }
 func (UnimplementedCoreServiceServer) GetSupportedLocales(context.Context, *GetSupportedLocalesRequest) (*GetSupportedLocalesResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetSupportedLocales not implemented")
+}
+func (UnimplementedCoreServiceServer) SaveLibraryItem(context.Context, *SaveLibraryItemRequest) (*SaveLibraryItemResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SaveLibraryItem not implemented")
+}
+func (UnimplementedCoreServiceServer) GetLibraryItem(context.Context, *GetLibraryItemRequest) (*GetLibraryItemResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetLibraryItem not implemented")
+}
+func (UnimplementedCoreServiceServer) ListLibraryItems(context.Context, *ListLibraryItemsRequest) (*ListLibraryItemsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListLibraryItems not implemented")
+}
+func (UnimplementedCoreServiceServer) DeleteLibraryItem(context.Context, *DeleteLibraryItemRequest) (*DeleteLibraryItemResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method DeleteLibraryItem not implemented")
+}
+func (UnimplementedCoreServiceServer) SavePlaybackProgress(context.Context, *SavePlaybackProgressRequest) (*SavePlaybackProgressResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SavePlaybackProgress not implemented")
+}
+func (UnimplementedCoreServiceServer) GetPlaybackProgress(context.Context, *GetPlaybackProgressRequest) (*GetPlaybackProgressResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetPlaybackProgress not implemented")
+}
+func (UnimplementedCoreServiceServer) ListRecentPlaybackProgress(context.Context, *ListRecentPlaybackProgressRequest) (*ListRecentPlaybackProgressResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListRecentPlaybackProgress not implemented")
+}
+func (UnimplementedCoreServiceServer) SaveReadingProgress(context.Context, *SaveReadingProgressRequest) (*SaveReadingProgressResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SaveReadingProgress not implemented")
+}
+func (UnimplementedCoreServiceServer) GetReadingProgress(context.Context, *GetReadingProgressRequest) (*GetReadingProgressResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetReadingProgress not implemented")
+}
+func (UnimplementedCoreServiceServer) ListRecentReadingProgress(context.Context, *ListRecentReadingProgressRequest) (*ListRecentReadingProgressResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListRecentReadingProgress not implemented")
 }
 func (UnimplementedCoreServiceServer) mustEmbedUnimplementedCoreServiceServer() {}
 func (UnimplementedCoreServiceServer) testEmbeddedByValue()                     {}
@@ -410,6 +570,186 @@ func _CoreService_GetSupportedLocales_Handler(srv interface{}, ctx context.Conte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _CoreService_SaveLibraryItem_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SaveLibraryItemRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CoreServiceServer).SaveLibraryItem(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CoreService_SaveLibraryItem_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CoreServiceServer).SaveLibraryItem(ctx, req.(*SaveLibraryItemRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _CoreService_GetLibraryItem_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetLibraryItemRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CoreServiceServer).GetLibraryItem(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CoreService_GetLibraryItem_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CoreServiceServer).GetLibraryItem(ctx, req.(*GetLibraryItemRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _CoreService_ListLibraryItems_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListLibraryItemsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CoreServiceServer).ListLibraryItems(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CoreService_ListLibraryItems_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CoreServiceServer).ListLibraryItems(ctx, req.(*ListLibraryItemsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _CoreService_DeleteLibraryItem_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteLibraryItemRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CoreServiceServer).DeleteLibraryItem(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CoreService_DeleteLibraryItem_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CoreServiceServer).DeleteLibraryItem(ctx, req.(*DeleteLibraryItemRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _CoreService_SavePlaybackProgress_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SavePlaybackProgressRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CoreServiceServer).SavePlaybackProgress(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CoreService_SavePlaybackProgress_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CoreServiceServer).SavePlaybackProgress(ctx, req.(*SavePlaybackProgressRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _CoreService_GetPlaybackProgress_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetPlaybackProgressRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CoreServiceServer).GetPlaybackProgress(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CoreService_GetPlaybackProgress_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CoreServiceServer).GetPlaybackProgress(ctx, req.(*GetPlaybackProgressRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _CoreService_ListRecentPlaybackProgress_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListRecentPlaybackProgressRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CoreServiceServer).ListRecentPlaybackProgress(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CoreService_ListRecentPlaybackProgress_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CoreServiceServer).ListRecentPlaybackProgress(ctx, req.(*ListRecentPlaybackProgressRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _CoreService_SaveReadingProgress_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SaveReadingProgressRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CoreServiceServer).SaveReadingProgress(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CoreService_SaveReadingProgress_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CoreServiceServer).SaveReadingProgress(ctx, req.(*SaveReadingProgressRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _CoreService_GetReadingProgress_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetReadingProgressRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CoreServiceServer).GetReadingProgress(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CoreService_GetReadingProgress_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CoreServiceServer).GetReadingProgress(ctx, req.(*GetReadingProgressRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _CoreService_ListRecentReadingProgress_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListRecentReadingProgressRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CoreServiceServer).ListRecentReadingProgress(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CoreService_ListRecentReadingProgress_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CoreServiceServer).ListRecentReadingProgress(ctx, req.(*ListRecentReadingProgressRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // CoreService_ServiceDesc is the grpc.ServiceDesc for CoreService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -456,6 +796,46 @@ var CoreService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetSupportedLocales",
 			Handler:    _CoreService_GetSupportedLocales_Handler,
+		},
+		{
+			MethodName: "SaveLibraryItem",
+			Handler:    _CoreService_SaveLibraryItem_Handler,
+		},
+		{
+			MethodName: "GetLibraryItem",
+			Handler:    _CoreService_GetLibraryItem_Handler,
+		},
+		{
+			MethodName: "ListLibraryItems",
+			Handler:    _CoreService_ListLibraryItems_Handler,
+		},
+		{
+			MethodName: "DeleteLibraryItem",
+			Handler:    _CoreService_DeleteLibraryItem_Handler,
+		},
+		{
+			MethodName: "SavePlaybackProgress",
+			Handler:    _CoreService_SavePlaybackProgress_Handler,
+		},
+		{
+			MethodName: "GetPlaybackProgress",
+			Handler:    _CoreService_GetPlaybackProgress_Handler,
+		},
+		{
+			MethodName: "ListRecentPlaybackProgress",
+			Handler:    _CoreService_ListRecentPlaybackProgress_Handler,
+		},
+		{
+			MethodName: "SaveReadingProgress",
+			Handler:    _CoreService_SaveReadingProgress_Handler,
+		},
+		{
+			MethodName: "GetReadingProgress",
+			Handler:    _CoreService_GetReadingProgress_Handler,
+		},
+		{
+			MethodName: "ListRecentReadingProgress",
+			Handler:    _CoreService_ListRecentReadingProgress_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

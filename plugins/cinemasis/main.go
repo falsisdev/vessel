@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 
+	"github.com/falsisdev/vessel/pkg/config"
 	"github.com/falsisdev/vessel/plugins/cinemasis/internal/provider"
 	"github.com/falsisdev/vessel/plugins/cinemasis/internal/tmdb"
 	pluginv1 "github.com/falsisdev/vessel/proto/gen/go/plugin/v1"
@@ -14,6 +15,8 @@ import (
 )
 
 func main() {
+	_ = config.LoadEnv()
+
 	port := flag.Int("port", 50052, "Port for Cinemasis gRPC server")
 	apiKey := flag.String("tmdb-api-key", "", "TMDB API v3 Key (defaults to TMDB_API_KEY env)")
 	baseURL := flag.String("tmdb-base-url", "", "TMDB Base URL (defaults to TMDB_BASE_URL env)")

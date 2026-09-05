@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/falsisdev/vessel/core/internal/domain/cinema"
+	"github.com/falsisdev/vessel/core/internal/domain/library"
 	"github.com/falsisdev/vessel/core/internal/domain/locale"
 	"github.com/falsisdev/vessel/core/internal/domain/reading"
 	"github.com/falsisdev/vessel/core/internal/plugin"
@@ -35,6 +36,7 @@ type Server struct {
 	grpcServer     *grpc.Server
 	cinemaService  *service.CinemaService
 	readingService *service.ReadingService
+	libraryService *service.LibraryService
 	pluginManager  *plugin.Manager
 	themeManager   *theme.Manager
 	startTime      time.Time
@@ -42,7 +44,7 @@ type Server struct {
 	socketPath     string
 }
 
-func NewServer(cfg ServerConfig, cinemaSvc *service.CinemaService, readingSvc *service.ReadingService, pluginMgr *plugin.Manager, themeMgr *theme.Manager) *Server {
+func NewServer(cfg ServerConfig, cinemaSvc *service.CinemaService, readingSvc *service.ReadingService, librarySvc *service.LibraryService, pluginMgr *plugin.Manager, themeMgr *theme.Manager) *Server {
 	if cfg.Version == "" {
 		cfg.Version = "1.0.0"
 	}
@@ -53,6 +55,7 @@ func NewServer(cfg ServerConfig, cinemaSvc *service.CinemaService, readingSvc *s
 		cfg:            cfg,
 		cinemaService:  cinemaSvc,
 		readingService: readingSvc,
+		libraryService: librarySvc,
 		pluginManager:  pluginMgr,
 		themeManager:   themeMgr,
 		startTime:      time.Now(),
@@ -509,6 +512,334 @@ func (s *Server) GetSupportedLocales(ctx context.Context, req *corev1.GetSupport
 		Locales:       locales,
 		DefaultLocale: locale.DefaultLocale,
 	}, nil
+}
+
+func (s *Server) SaveLibraryItem(ctx context.Context, req *corev1.SaveLibraryItemRequest) (*corev1.SaveLibraryItemResponse, error) {
+	if s.libraryService == nil {
+		return nil, errors.New("library service not initialized")
+	}
+	if req.Item == nil {
+		return nil, errors.New("item cannot be nil")
+	}
+
+	item := mapLibraryItemFromProto(req.Item)
+	if err := s.libraryService.SaveItem(ctx, item); err != nil {
+		return nil, fmt.Errorf("failed to save library item: %w", err)
+	}
+
+	saved, err := s.libraryService.GetItem(ctx, item.ProviderID, item.MediaID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &corev1.SaveLibraryItemResponse{Item: mapLibraryItemToProto(saved)}, nil
+}
+
+func (s *Server) GetLibraryItem(ctx context.Context, req *corev1.GetLibraryItemRequest) (*corev1.GetLibraryItemResponse, error) {
+	if s.libraryService == nil {
+		return nil, errors.New("library service not initialized")
+	}
+
+	item, err := s.libraryService.GetItem(ctx, req.ProviderId, req.MediaId)
+	if err != nil {
+		return nil, err
+	}
+
+	return &corev1.GetLibraryItemResponse{Item: mapLibraryItemToProto(item)}, nil
+}
+
+func (s *Server) ListLibraryItems(ctx context.Context, req *corev1.ListLibraryItemsRequest) (*corev1.ListLibraryItemsResponse, error) {
+	if s.libraryService == nil {
+		return nil, errors.New("library service not initialized")
+	}
+
+	filter := library.Filter{
+		Domain: req.Domain,
+		Status: mapLibraryStatusFromProto(req.Status),
+		Limit:  int(req.Limit),
+		Offset: int(req.Offset),
+	}
+
+	items, total, err := s.libraryService.ListItems(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+
+	var protoItems []*corev1.LibraryItem
+	for _, it := range items {
+		protoItems = append(protoItems, mapLibraryItemToProto(it))
+	}
+
+	return &corev1.ListLibraryItemsResponse{
+		Items:      protoItems,
+		TotalCount: int32(total),
+	}, nil
+}
+
+func (s *Server) DeleteLibraryItem(ctx context.Context, req *corev1.DeleteLibraryItemRequest) (*corev1.DeleteLibraryItemResponse, error) {
+	if s.libraryService == nil {
+		return nil, errors.New("library service not initialized")
+	}
+
+	if err := s.libraryService.DeleteItem(ctx, req.ProviderId, req.MediaId); err != nil {
+		return nil, err
+	}
+
+	return &corev1.DeleteLibraryItemResponse{Success: true}, nil
+}
+
+func (s *Server) SavePlaybackProgress(ctx context.Context, req *corev1.SavePlaybackProgressRequest) (*corev1.SavePlaybackProgressResponse, error) {
+	if s.libraryService == nil {
+		return nil, errors.New("library service not initialized")
+	}
+	if req.Progress == nil {
+		return nil, errors.New("progress cannot be nil")
+	}
+
+	p := mapPlaybackProgressFromProto(req.Progress)
+	if err := s.libraryService.RecordPlayback(ctx, p); err != nil {
+		return nil, err
+	}
+
+	saved, err := s.libraryService.GetPlayback(ctx, p.ProviderID, p.MediaID, p.SeasonNumber, p.EpisodeNumber)
+	if err != nil {
+		return nil, err
+	}
+
+	return &corev1.SavePlaybackProgressResponse{Progress: mapPlaybackProgressToProto(saved)}, nil
+}
+
+func (s *Server) GetPlaybackProgress(ctx context.Context, req *corev1.GetPlaybackProgressRequest) (*corev1.GetPlaybackProgressResponse, error) {
+	if s.libraryService == nil {
+		return nil, errors.New("library service not initialized")
+	}
+
+	p, err := s.libraryService.GetPlayback(ctx, req.ProviderId, req.MediaId, req.SeasonNumber, req.EpisodeNumber)
+	if err != nil {
+		return nil, err
+	}
+
+	return &corev1.GetPlaybackProgressResponse{Progress: mapPlaybackProgressToProto(p)}, nil
+}
+
+func (s *Server) ListRecentPlaybackProgress(ctx context.Context, req *corev1.ListRecentPlaybackProgressRequest) (*corev1.ListRecentPlaybackProgressResponse, error) {
+	if s.libraryService == nil {
+		return nil, errors.New("library service not initialized")
+	}
+
+	list, err := s.libraryService.ListRecentPlayback(ctx, int(req.Limit))
+	if err != nil {
+		return nil, err
+	}
+
+	var protoList []*corev1.PlaybackProgress
+	for _, p := range list {
+		protoList = append(protoList, mapPlaybackProgressToProto(p))
+	}
+
+	return &corev1.ListRecentPlaybackProgressResponse{Items: protoList}, nil
+}
+
+func (s *Server) SaveReadingProgress(ctx context.Context, req *corev1.SaveReadingProgressRequest) (*corev1.SaveReadingProgressResponse, error) {
+	if s.libraryService == nil {
+		return nil, errors.New("library service not initialized")
+	}
+	if req.Progress == nil {
+		return nil, errors.New("progress cannot be nil")
+	}
+
+	p := mapReadingProgressFromProto(req.Progress)
+	if err := s.libraryService.RecordReading(ctx, p); err != nil {
+		return nil, err
+	}
+
+	saved, err := s.libraryService.GetReading(ctx, p.ProviderID, p.MediaID, p.ChapterID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &corev1.SaveReadingProgressResponse{Progress: mapReadingProgressToProto(saved)}, nil
+}
+
+func (s *Server) GetReadingProgress(ctx context.Context, req *corev1.GetReadingProgressRequest) (*corev1.GetReadingProgressResponse, error) {
+	if s.libraryService == nil {
+		return nil, errors.New("library service not initialized")
+	}
+
+	p, err := s.libraryService.GetReading(ctx, req.ProviderId, req.MediaId, req.ChapterId)
+	if err != nil {
+		return nil, err
+	}
+
+	return &corev1.GetReadingProgressResponse{Progress: mapReadingProgressToProto(p)}, nil
+}
+
+func (s *Server) ListRecentReadingProgress(ctx context.Context, req *corev1.ListRecentReadingProgressRequest) (*corev1.ListRecentReadingProgressResponse, error) {
+	if s.libraryService == nil {
+		return nil, errors.New("library service not initialized")
+	}
+
+	list, err := s.libraryService.ListRecentReading(ctx, int(req.Limit))
+	if err != nil {
+		return nil, err
+	}
+
+	var protoList []*corev1.ReadingProgress
+	for _, p := range list {
+		protoList = append(protoList, mapReadingProgressToProto(p))
+	}
+
+	return &corev1.ListRecentReadingProgressResponse{Items: protoList}, nil
+}
+
+func mapLibraryItemToProto(it *library.Item) *corev1.LibraryItem {
+	if it == nil {
+		return nil
+	}
+	return &corev1.LibraryItem{
+		Id:               it.ID,
+		ProviderId:       it.ProviderID,
+		MediaId:          it.MediaID,
+		Domain:           it.Domain,
+		Title:            it.Title,
+		Type:             it.Type,
+		PosterUrl:        it.PosterURL,
+		Status:           mapLibraryStatusToProto(it.Status),
+		UserRating:       it.UserRating,
+		LastInteractedAt: it.LastInteractedAt.Unix(),
+		CreatedAt:        it.CreatedAt.Unix(),
+		UpdatedAt:        it.UpdatedAt.Unix(),
+	}
+}
+
+func mapLibraryItemFromProto(it *corev1.LibraryItem) *library.Item {
+	if it == nil {
+		return nil
+	}
+	return &library.Item{
+		ID:               it.Id,
+		ProviderID:       it.ProviderId,
+		MediaID:          it.MediaId,
+		Domain:           it.Domain,
+		Title:            it.Title,
+		Type:             it.Type,
+		PosterURL:        it.PosterUrl,
+		Status:           mapLibraryStatusFromProto(it.Status),
+		UserRating:       it.UserRating,
+		LastInteractedAt: time.Unix(it.LastInteractedAt, 0),
+		CreatedAt:        time.Unix(it.CreatedAt, 0),
+		UpdatedAt:        time.Unix(it.UpdatedAt, 0),
+	}
+}
+
+func mapLibraryStatusToProto(s library.Status) corev1.LibraryStatus {
+	switch s {
+	case library.StatusPlanToWatch:
+		return corev1.LibraryStatus_LIBRARY_STATUS_PLAN_TO_WATCH
+	case library.StatusWatching:
+		return corev1.LibraryStatus_LIBRARY_STATUS_WATCHING
+	case library.StatusCompleted:
+		return corev1.LibraryStatus_LIBRARY_STATUS_COMPLETED
+	case library.StatusOnHold:
+		return corev1.LibraryStatus_LIBRARY_STATUS_ON_HOLD
+	case library.StatusDropped:
+		return corev1.LibraryStatus_LIBRARY_STATUS_DROPPED
+	case library.StatusFavorite:
+		return corev1.LibraryStatus_LIBRARY_STATUS_FAVORITE
+	default:
+		return corev1.LibraryStatus_LIBRARY_STATUS_UNSPECIFIED
+	}
+}
+
+func mapLibraryStatusFromProto(s corev1.LibraryStatus) library.Status {
+	switch s {
+	case corev1.LibraryStatus_LIBRARY_STATUS_PLAN_TO_WATCH:
+		return library.StatusPlanToWatch
+	case corev1.LibraryStatus_LIBRARY_STATUS_WATCHING:
+		return library.StatusWatching
+	case corev1.LibraryStatus_LIBRARY_STATUS_COMPLETED:
+		return library.StatusCompleted
+	case corev1.LibraryStatus_LIBRARY_STATUS_ON_HOLD:
+		return library.StatusOnHold
+	case corev1.LibraryStatus_LIBRARY_STATUS_DROPPED:
+		return library.StatusDropped
+	case corev1.LibraryStatus_LIBRARY_STATUS_FAVORITE:
+		return library.StatusFavorite
+	default:
+		return library.StatusUnspecified
+	}
+}
+
+func mapPlaybackProgressToProto(p *library.PlaybackProgress) *corev1.PlaybackProgress {
+	if p == nil {
+		return nil
+	}
+	return &corev1.PlaybackProgress{
+		ProviderId:             p.ProviderID,
+		MediaId:                p.MediaID,
+		Domain:                 p.Domain,
+		SeasonNumber:           p.SeasonNumber,
+		EpisodeNumber:          p.EpisodeNumber,
+		CurrentPositionSeconds: p.CurrentPositionSeconds,
+		TotalDurationSeconds:   p.TotalDurationSeconds,
+		ProgressPercent:        p.ProgressPercent,
+		IsCompleted:            p.IsCompleted,
+		UpdatedAt:              p.UpdatedAt.Unix(),
+	}
+}
+
+func mapPlaybackProgressFromProto(p *corev1.PlaybackProgress) *library.PlaybackProgress {
+	if p == nil {
+		return nil
+	}
+	return &library.PlaybackProgress{
+		ProviderID:             p.ProviderId,
+		MediaID:                p.MediaId,
+		Domain:                 p.Domain,
+		SeasonNumber:           p.SeasonNumber,
+		EpisodeNumber:          p.EpisodeNumber,
+		CurrentPositionSeconds: p.CurrentPositionSeconds,
+		TotalDurationSeconds:   p.TotalDurationSeconds,
+		ProgressPercent:        p.ProgressPercent,
+		IsCompleted:            p.IsCompleted,
+		UpdatedAt:              time.Unix(p.UpdatedAt, 0),
+	}
+}
+
+func mapReadingProgressToProto(p *library.ReadingProgress) *corev1.ReadingProgress {
+	if p == nil {
+		return nil
+	}
+	return &corev1.ReadingProgress{
+		ProviderId:      p.ProviderID,
+		MediaId:         p.MediaID,
+		Domain:          p.Domain,
+		ChapterId:       p.ChapterID,
+		ChapterNumber:   p.ChapterNumber,
+		CurrentPage:     p.CurrentPage,
+		TotalPages:      p.TotalPages,
+		TextScrollRatio: p.TextScrollRatio,
+		IsCompleted:     p.IsCompleted,
+		UpdatedAt:       p.UpdatedAt.Unix(),
+	}
+}
+
+func mapReadingProgressFromProto(p *corev1.ReadingProgress) *library.ReadingProgress {
+	if p == nil {
+		return nil
+	}
+	return &library.ReadingProgress{
+		ProviderID:      p.ProviderId,
+		MediaID:         p.MediaId,
+		Domain:          p.Domain,
+		ChapterID:       p.ChapterId,
+		ChapterNumber:   p.ChapterNumber,
+		CurrentPage:     p.CurrentPage,
+		TotalPages:      p.TotalPages,
+		TextScrollRatio: p.TextScrollRatio,
+		IsCompleted:     p.IsCompleted,
+		UpdatedAt:       time.Unix(p.UpdatedAt, 0),
+	}
 }
 
 func parseListenAddr(addr string) (network string, address string, err error) {

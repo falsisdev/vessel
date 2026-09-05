@@ -205,7 +205,7 @@ func TestMangileIntegrationWithCoreAndIPC(t *testing.T) {
 	srv := coreserver.NewServer(coreserver.ServerConfig{
 		ListenAddr: tcpAddr,
 		Version:    "1.0.0-mangile-test",
-	}, cinemaSvc, readingSvc, mgr, themeMgr)
+	}, cinemaSvc, readingSvc, nil, mgr, themeMgr)
 
 	if err := srv.Start(); err != nil {
 		t.Fatalf("failed to start core IPC server: %v", err)
