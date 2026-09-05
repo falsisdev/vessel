@@ -87,6 +87,10 @@ func (s *IPTVService) Search(ctx context.Context, req *pluginv1.SearchRequest) (
 		}
 	}
 
+	if countryFilter == "ALL" {
+		countryFilter = ""
+	}
+
 	var matches []Channel
 	for _, ch := range s.channels {
 		if countryFilter != "" && !strings.EqualFold(ch.Country, countryFilter) {
@@ -212,15 +216,28 @@ func (s *IPTVService) loadFallbackChannels() {
 	defer s.mu.Unlock()
 
 	fallbacks := []Channel{
+		// Global / International Top Channels (shown first for ALL)
+		{ID: "uk-bbcnews", Name: "BBC News", Category: "News", StreamURL: "https://vs-hls-push-ww-live.akamaized.net/x=4/i=urn:bbc:pips:service:bbc_news_channel_hd/t=3840/v=pv14/b=5070016/main.m3u8", LogoURL: "https://upload.wikimedia.org/wikipedia/commons/6/62/BBC_News_2019.svg", Country: "UK", Quality: "1080p"},
+		{ID: "us-bloomberg", Name: "Bloomberg TV", Category: "News", StreamURL: "https://liveproduseast.akamaized.net/us/Channel-USTV-AWS-virginia-1/Source-4000-1080p_pa.m3u8", LogoURL: "https://upload.wikimedia.org/wikipedia/commons/4/40/Bloomberg_Television_logo.svg", Country: "US", Quality: "1080p"},
+		{ID: "uk-skynews", Name: "Sky News", Category: "News", StreamURL: "https://linear417-gb-dash1-prd-cf.cdn.sky.com/13214/1/video/hd/live.m3u8", LogoURL: "https://upload.wikimedia.org/wikipedia/commons/8/87/Sky_News_logo_2015.svg", Country: "UK", Quality: "1080p"},
+		{ID: "fr-france24", Name: "France 24", Category: "News", StreamURL: "https://stream.france24.com/hls/en/live.m3u8", LogoURL: "https://upload.wikimedia.org/wikipedia/commons/2/23/France_24_logo.svg", Country: "FR", Quality: "720p"},
+		{ID: "de-dw", Name: "Deutsche Welle", Category: "News", StreamURL: "https://dwamdstream102.akamaized.net/hls/live/2015525/dwstream102/index.m3u8", LogoURL: "https://upload.wikimedia.org/wikipedia/commons/7/75/Deutsche_Welle_logo.svg", Country: "DE", Quality: "720p"},
+		{ID: "us-cbsnews", Name: "CBS News Live", Category: "News", StreamURL: "https://cbsn-us.cbsnstream.cbsnews.com/out/v1/55a8648e8f134e82a470f83d562de701/master.m3u8", LogoURL: "https://upload.wikimedia.org/wikipedia/commons/1/19/CBS_News_logo_2020.svg", Country: "US", Quality: "1080p"},
+		{ID: "us-abcnews", Name: "ABC News Live", Category: "News", StreamURL: "https://content.uplynk.com/channel/3324f2467c414329b3b0cc5cd987b6be.m3u8", LogoURL: "https://upload.wikimedia.org/wikipedia/commons/6/60/ABC_News_Live_logo.svg", Country: "US", Quality: "1080p"},
+		{ID: "us-nasatv", Name: "NASA TV", Category: "Science", StreamURL: "https://ntv1.akamaized.net/hls/live/2014075/NASA-NTV1-HLS/master.m3u8", LogoURL: "https://upload.wikimedia.org/wikipedia/commons/e/e5/NASA_logo.svg", Country: "US", Quality: "1080p"},
+		{ID: "fr-euronews", Name: "Euronews Français", Category: "News", StreamURL: "https://euronews-euronews-world-1-au.samsung.wurl.tv/playlist.m3u8", LogoURL: "https://upload.wikimedia.org/wikipedia/commons/4/4b/Euronews_2016_logo.svg", Country: "FR", Quality: "1080p"},
+		{ID: "tr-trtworld", Name: "TRT World", Category: "News", StreamURL: "https://tv-trtworld.medya.trt.com.tr/master.m3u8", LogoURL: "https://upload.wikimedia.org/wikipedia/commons/8/87/TRT_World_logo.svg", Country: "TR", Quality: "1080p"},
+		{ID: "jp-nhk", Name: "NHK World Japan", Category: "News", StreamURL: "https://nhkwlive-ojproto.akamaized.net/hls/live/2003459/nhkwlive-oj-en/index.m3u8", LogoURL: "https://upload.wikimedia.org/wikipedia/commons/7/7b/NHK_World-Japan_logo.svg", Country: "JP", Quality: "1080p"},
+
 		// Turkey (TR) Channels
 		{ID: "tr-trt1", Name: "TRT 1", Category: "General", StreamURL: "https://tv-trt1.medya.trt.com.tr/master.m3u8", LogoURL: "https://upload.wikimedia.org/wikipedia/commons/4/47/TRT_1_logo.png", Country: "TR", Quality: "1080p"},
 		{ID: "tr-trthaber", Name: "TRT Haber", Category: "News", StreamURL: "https://tv-trthaber.medya.trt.com.tr/master.m3u8", LogoURL: "https://upload.wikimedia.org/wikipedia/commons/e/e0/TRT_Haber_logo.png", Country: "TR", Quality: "1080p"},
 		{ID: "tr-trtspore", Name: "TRT Spor", Category: "Sports", StreamURL: "https://tv-trtspor.medya.trt.com.tr/master.m3u8", LogoURL: "https://upload.wikimedia.org/wikipedia/commons/2/23/TRT_Spor_logo.png", Country: "TR", Quality: "1080p"},
 		{ID: "tr-trtbelgesel", Name: "TRT Belgesel", Category: "Documentary", StreamURL: "https://tv-trtbelgesel.medya.trt.com.tr/master.m3u8", LogoURL: "https://upload.wikimedia.org/wikipedia/commons/b/b8/TRT_Belgesel_logo.png", Country: "TR", Quality: "1080p"},
 		{ID: "tr-ahaber", Name: "A Haber", Category: "News", StreamURL: "https://rnttwmjcin.turknet.ercdn.net/lcpmvefbyo/ahaber/ahaber.m3u8", LogoURL: "https://upload.wikimedia.org/wikipedia/commons/7/7c/Ahaber_Logo.png", Country: "TR", Quality: "1080p"},
-		{ID: "tr-aspor", Name: "A Spor", Category: "Sports", StreamURL: "https://rnttwmjcin.turknet.ercdn.net/lcpmvefbyo/aspor/aspor.m3u8", LogoURL: "https://i.imgur.com/ZhkZzLf.png", Country: "TR", Quality: "1080p"},
-		{ID: "tr-atv", Name: "ATV", Category: "General", StreamURL: "https://rnttwmjcin.turknet.ercdn.net/lcpmvefbyo/atv/atv_1080p.m3u8", LogoURL: "https://i.imgur.com/HyVUwFC.png", Country: "TR", Quality: "1080p"},
-		{ID: "tr-tv360", Name: "360 TV", Category: "General", StreamURL: "https://turkmedya-live.ercdn.net/tv360/tv360.m3u8", LogoURL: "https://i.imgur.com/agn47sQ.png", Country: "TR", Quality: "720p"},
+		{ID: "tr-aspor", Name: "A Spor", Category: "Sports", StreamURL: "https://rnttwmjcin.turknet.ercdn.net/lcpmvefbyo/aspor/aspor.m3u8", LogoURL: "https://upload.wikimedia.org/wikipedia/commons/e/ea/A_Spor_logo.png", Country: "TR", Quality: "1080p"},
+		{ID: "tr-atv", Name: "ATV", Category: "General", StreamURL: "https://rnttwmjcin.turknet.ercdn.net/lcpmvefbyo/atv/atv_1080p.m3u8", LogoURL: "https://upload.wikimedia.org/wikipedia/commons/4/4c/Atv_logo.png", Country: "TR", Quality: "1080p"},
+		{ID: "tr-tv360", Name: "360 TV", Category: "General", StreamURL: "https://turkmedya-live.ercdn.net/tv360/tv360.m3u8", LogoURL: "https://upload.wikimedia.org/wikipedia/commons/4/41/360_TV_logo.png", Country: "TR", Quality: "720p"},
 
 		// Azerbaijan (AZ) Channels
 		{ID: "az-aztv", Name: "AzTV", Category: "General", StreamURL: "https://stream.aztv.az/live/aztv/index.m3u8", LogoURL: "https://upload.wikimedia.org/wikipedia/commons/5/52/AzTV_logo.png", Country: "AZ", Quality: "1080p"},
@@ -228,23 +245,11 @@ func (s *IPTVService) loadFallbackChannels() {
 		{ID: "az-idman", Name: "İdman TV", Category: "Sports", StreamURL: "https://stream.aztv.az/live/idman/index.m3u8", LogoURL: "https://upload.wikimedia.org/wikipedia/commons/2/2a/Idman_Azerbaycan_TV_logo.png", Country: "AZ", Quality: "720p"},
 		{ID: "az-medeniyyet", Name: "Mədəniyyət TV", Category: "Documentary", StreamURL: "https://stream.aztv.az/live/medeniyyet/index.m3u8", LogoURL: "https://upload.wikimedia.org/wikipedia/commons/a/a2/Medeniyyet_TV_logo.png", Country: "AZ", Quality: "720p"},
 
-		// United States (US) Channels
-		{ID: "us-bloomberg", Name: "Bloomberg TV", Category: "News", StreamURL: "https://liveproduseast.akamaized.net/us/Channel-USTV-AWS-virginia-1/Source-4000-1080p_pa.m3u8", LogoURL: "https://upload.wikimedia.org/wikipedia/commons/4/40/Bloomberg_Television_logo.svg", Country: "US", Quality: "1080p"},
-		{ID: "us-nasatv", Name: "NASA TV", Category: "Science", StreamURL: "https://ntv1.akamaized.net/hls/live/2014075/NASA-NTV1-HLS/master.m3u8", LogoURL: "https://upload.wikimedia.org/wikipedia/commons/e/e5/NASA_logo.svg", Country: "US", Quality: "1080p"},
-		{ID: "us-cbsnews", Name: "CBS News Live", Category: "News", StreamURL: "https://cbsn-us.cbsnstream.cbsnews.com/out/v1/55a8648e8f134e82a470f83d562de701/master.m3u8", LogoURL: "https://upload.wikimedia.org/wikipedia/commons/1/19/CBS_News_logo_2020.svg", Country: "US", Quality: "1080p"},
-		{ID: "us-abcnews", Name: "ABC News Live", Category: "News", StreamURL: "https://content.uplynk.com/channel/3324f2467c414329b3b0cc5cd987b6be.m3u8", LogoURL: "https://upload.wikimedia.org/wikipedia/commons/6/60/ABC_News_Live_logo.svg", Country: "US", Quality: "1080p"},
-
-		// United Kingdom (UK) Channels
-		{ID: "uk-bbcnews", Name: "BBC News", Category: "News", StreamURL: "https://vs-hls-push-ww-live.akamaized.net/x=4/i=urn:bbc:pips:service:bbc_news_channel_hd/t=3840/v=pv14/b=5070016/main.m3u8", LogoURL: "https://upload.wikimedia.org/wikipedia/commons/6/62/BBC_News_2019.svg", Country: "UK", Quality: "1080p"},
-		{ID: "uk-skynews", Name: "Sky News", Category: "News", StreamURL: "https://linear417-gb-dash1-prd-cf.cdn.sky.com/13214/1/video/hd/live.m3u8", LogoURL: "https://upload.wikimedia.org/wikipedia/commons/8/87/Sky_News_logo_2015.svg", Country: "UK", Quality: "1080p"},
-
 		// Germany (DE) Channels
-		{ID: "de-dw", Name: "Deutsche Welle", Category: "News", StreamURL: "https://dwamdstream102.akamaized.net/hls/live/2015525/dwstream102/index.m3u8", LogoURL: "https://upload.wikimedia.org/wikipedia/commons/7/75/Deutsche_Welle_logo.svg", Country: "DE", Quality: "720p"},
 		{ID: "de-zdf", Name: "ZDF Info", Category: "Documentary", StreamURL: "https://zdf-hls-17.akamaized.net/hls/live/2016500/de/veryhigh/master.m3u8", LogoURL: "https://upload.wikimedia.org/wikipedia/commons/a/af/ZDFinfo_logo_2021.svg", Country: "DE", Quality: "1080p"},
 
 		// France (FR) Channels
-		{ID: "fr-france24", Name: "France 24", Category: "News", StreamURL: "https://stream.france24.com/hls/en/live.m3u8", LogoURL: "https://upload.wikimedia.org/wikipedia/commons/2/23/France_24_logo.svg", Country: "FR", Quality: "720p"},
-		{ID: "fr-euronews", Name: "Euronews Français", Category: "News", StreamURL: "https://euronews-euronews-world-1-au.samsung.wurl.tv/playlist.m3u8", LogoURL: "https://upload.wikimedia.org/wikipedia/commons/4/4b/Euronews_2016_logo.svg", Country: "FR", Quality: "1080p"},
+		{ID: "fr-arte", Name: "Arte TV", Category: "Culture", StreamURL: "https://artesimulcast.akamaized.net/hls/live/2031003/artelive_de/index.m3u8", LogoURL: "https://upload.wikimedia.org/wikipedia/commons/e/e8/Arte_logo_2017.svg", Country: "FR", Quality: "720p"},
 	}
 
 	s.channels = fallbacks

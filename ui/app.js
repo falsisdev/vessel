@@ -97,7 +97,20 @@ const I18N_STRINGS = {
     theme_mangile_olive: "Mangile Zeytin",
     theme_mangile_taupe: "Mangile Boz",
     theme_mangile_gray: "Mangile Kır",
-    theme_mangile_neutral: "Mangile Yavan"
+    theme_mangile_neutral: "Mangile Yavan",
+    cat_popular_movies: "Popular Movies",
+    cat_top_rated_movies: "Top Rated",
+    cat_trending_movies: "Trending Now",
+    cat_popular_contents: "Popular Content",
+    cat_latest_contents: "Latest Releases",
+    cat_popular_channels: "Popular Channels",
+    cat_news_info: "News & Information",
+    cat_sports_live: "Sports & Entertainment",
+    status_offline: "Offline Downloads",
+    lan_sync_title: "LAN Sync & Remote Control",
+    lan_this_device: "This Device",
+    lan_discovered_devices: "Discovered Devices",
+    lan_remote_control: "Remote Control"
   },
   tr: {
     nav_cinema: "Sinema",
@@ -194,7 +207,20 @@ const I18N_STRINGS = {
     theme_mangile_olive: "Mangile Zeytin",
     theme_mangile_taupe: "Mangile Boz",
     theme_mangile_gray: "Mangile Kır",
-    theme_mangile_neutral: "Mangile Yavan"
+    theme_mangile_neutral: "Mangile Yavan",
+    cat_popular_movies: "Popüler Filmler",
+    cat_top_rated_movies: "En Çok Oy Alanlar",
+    cat_trending_movies: "Trend Olanlar",
+    cat_popular_contents: "Popüler İçerikler",
+    cat_latest_contents: "Son Oluşturulan İçerikler",
+    cat_popular_channels: "Popüler Kanallar",
+    cat_news_info: "Haber & Bilgi",
+    cat_sports_live: "Spor & Canlı",
+    status_offline: "İndirilenler",
+    lan_sync_title: "LAN Cihazları ve Uzaktan Kumanda",
+    lan_this_device: "Bu Cihaz",
+    lan_discovered_devices: "Ağdaki Cihazlar",
+    lan_remote_control: "Uzaktan Kumanda"
   },
   de: {
     nav_cinema: "Kino",
@@ -1308,6 +1334,9 @@ class VesselApp {
     document.getElementById("save-tb-btn")?.addEventListener("click", () => {
       this.saveDebrid("torbox", document.getElementById("tb-api-key").value);
     });
+
+    // Multi-Device LAN Sync & Remote Control
+    this.setupLanSync();
   }
 
   // --- Localization (i18n) Engine ---
@@ -1646,6 +1675,11 @@ class VesselApp {
     }
   }
 
+  getChannelLogoFallback(name) {
+    const clean = (name || "TV").replace(/[^a-zA-Z0-9]/g, "").substring(0, 4).toUpperCase() || "TV";
+    return `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="%231e293b"/><text x="50%" y="54%" dominant-baseline="middle" text-anchor="middle" fill="%2338bdf8" font-size="14" font-weight="900" font-family="system-ui, sans-serif">${clean}</text></svg>`;
+  }
+
   async fetchIPTVChannels() {
     const listElem = document.getElementById("iptv-channels-list");
     if (listElem) {
@@ -1662,7 +1696,7 @@ class VesselApp {
       if (this.iptvState.country !== "ALL") {
         query = `country:${this.iptvState.country}`;
       }
-      const res = await fetch(`/api/search?domain=7&q=${encodeURIComponent(query)}`);
+      const res = await fetch(`/api/search?domain=7&query=${encodeURIComponent(query)}&q=${encodeURIComponent(query)}`);
       if (!res.ok) throw new Error("Could not fetch IPTV channels");
       const data = await res.json();
       this.iptvState.channels = data.items || [];
@@ -1711,10 +1745,13 @@ class VesselApp {
       const quality = extra.quality || "HD";
       const isActive = this.iptvState.activeChannel && this.iptvState.activeChannel.id === ch.id;
 
+      const logoFallback = this.getChannelLogoFallback(ch.title);
+      const logoSrc = ch.poster_url || logoFallback;
+
       const item = document.createElement("div");
       item.className = `iptv-channel-card ${isActive ? "active" : ""}`;
       item.innerHTML = `
-        <img class="iptv-channel-logo" src="${ch.poster_url || '/assets/vessel_primary.png'}" alt="${ch.title}" onerror="this.src='/assets/vessel_primary.png'">
+        <img class="iptv-channel-logo" src="${logoSrc}" alt="${ch.title}" onerror="this.onerror=null; this.src='${logoFallback}';">
         <div class="iptv-channel-meta">
           <div class="iptv-channel-name">${ch.title}</div>
           <div class="iptv-channel-sub">
@@ -1859,6 +1896,36 @@ class VesselApp {
     modal.classList.remove("hidden");
     if (centerSpinner) centerSpinner.classList.remove("hidden");
 
+    const swarmBadge = document.getElementById("vessel-swarm-badge");
+    if (this.torrentPollInterval) {
+      clearInterval(this.torrentPollInterval);
+      this.torrentPollInterval = null;
+    }
+
+    if (streamUrl && (streamUrl.includes("/stream/torrent") || streamUrl.startsWith("magnet:"))) {
+      if (swarmBadge) {
+        swarmBadge.classList.remove("hidden");
+        swarmBadge.innerHTML = `🧲 P2P Swarm: Bağlantı kuruluyor...`;
+      }
+      const pollSwarm = async () => {
+        try {
+          const res = await fetch(`/api/torrent/status?uri=${encodeURIComponent(streamUrl)}`);
+          if (res.ok) {
+            const data = await res.json();
+            if (swarmBadge) {
+              const speedMB = ((data.download_speed || 0) / (1024 * 1024)).toFixed(1);
+              const progressPct = Math.round((data.progress || 0) * 100);
+              swarmBadge.innerHTML = `🧲 P2P: <strong>${data.peers || 0} peers</strong> • ${speedMB} MB/s • ${progressPct}% buffered`;
+            }
+          }
+        } catch (e) {}
+      };
+      pollSwarm();
+      this.torrentPollInterval = setInterval(pollSwarm, 1500);
+    } else {
+      if (swarmBadge) swarmBadge.classList.add("hidden");
+    }
+
     if (this.vesselHlsInstance) {
       this.vesselHlsInstance.destroy();
       this.vesselHlsInstance = null;
@@ -1870,16 +1937,45 @@ class VesselApp {
       if (centerPlay) centerPlay.classList.toggle("hidden", playing);
     };
 
-    if (window.Hls && window.Hls.isSupported() && (streamUrl.includes(".m3u8") || streamUrl.includes("hls") || !streamUrl.endsWith(".mp4"))) {
-      const hls = new window.Hls({ enableWorker: true });
-      this.vesselHlsInstance = hls;
-      hls.loadSource(streamUrl);
-      hls.attachMedia(video);
+    // YouTube Stream Detection & Responsive Embed
+    const extractYT = (u) => {
+      if (!u) return null;
+      const m = u.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|live\/|v\/))([a-zA-Z0-9_-]{11})/);
+      return m ? m[1] : null;
+    };
+    const ytId = extractYT(streamUrl);
 
-      hls.on(window.Hls.Events.MANIFEST_PARSED, () => {
-        if (centerSpinner) centerSpinner.classList.add("hidden");
-        video.play().catch(e => console.log("Autoplay:", e));
-        setPlayState(true);
+    let existingYt = document.getElementById("vessel-yt-frame");
+    if (existingYt) existingYt.remove();
+
+    if (ytId) {
+      const ytFrame = document.createElement("iframe");
+      ytFrame.id = "vessel-yt-frame";
+      ytFrame.style.cssText = "position:absolute; top:0; left:0; width:100%; height:100%; border:none; z-index:1;";
+      ytFrame.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share";
+      ytFrame.allowFullscreen = true;
+      ytFrame.src = `https://www.youtube-nocookie.com/embed/${ytId}?autoplay=1&enablejsapi=1&rel=0`;
+      modal.insertBefore(ytFrame, modal.firstChild);
+
+      video.classList.add("hidden");
+      if (centerSpinner) centerSpinner.classList.add("hidden");
+      if (centerPlay) centerPlay.classList.add("hidden");
+      if (scrubberContainer) scrubberContainer.style.opacity = "0.2";
+    } else {
+      video.classList.remove("hidden");
+      if (scrubberContainer) scrubberContainer.style.opacity = "1";
+
+      const isHls = streamUrl.includes(".m3u8") || streamUrl.includes("/hls") || meta.format === 1;
+      if (isHls && window.Hls && window.Hls.isSupported()) {
+        const hls = new window.Hls({ enableWorker: true });
+        this.vesselHlsInstance = hls;
+        hls.loadSource(streamUrl);
+        hls.attachMedia(video);
+
+        hls.on(window.Hls.Events.MANIFEST_PARSED, () => {
+          if (centerSpinner) centerSpinner.classList.add("hidden");
+          video.play().catch(e => console.log("Autoplay:", e));
+          setPlayState(true);
 
         // Audio Tracks
         if (hls.audioTracks && hls.audioTracks.length > 0 && audioMenu) {
@@ -2133,6 +2229,10 @@ class VesselApp {
       this.savePlaybackProgressPing(item, season, episode, video.currentTime, video.duration);
       video.pause();
       video.src = "";
+      video.classList.remove("hidden");
+      const ytF = document.getElementById("vessel-yt-frame");
+      if (ytF) ytF.remove();
+      if (scrubberContainer) scrubberContainer.style.opacity = "1";
       if (this.vesselHlsInstance) {
         this.vesselHlsInstance.destroy();
         this.vesselHlsInstance = null;
@@ -2140,6 +2240,12 @@ class VesselApp {
       if (document.fullscreenElement) {
         document.exitFullscreen?.().catch(() => {});
       }
+      if (this.torrentPollInterval) {
+        clearInterval(this.torrentPollInterval);
+        this.torrentPollInterval = null;
+      }
+      const swarmBadge = document.getElementById("vessel-swarm-badge");
+      if (swarmBadge) swarmBadge.classList.add("hidden");
       modal.classList.add("hidden");
       window.removeEventListener("keydown", keyHandler);
       this.loadResumeProgress();
@@ -2257,6 +2363,37 @@ class VesselApp {
     });
   }
 
+  localizeCatalogTitle(catRow) {
+    if (!catRow) return "Catalog";
+    const type = catRow.catalog_type || "";
+    const id = catRow.id || "";
+    const dom = catRow.domain || (this.currentDomain === "reading" ? 2 : (this.currentDomain === "iptv" ? 7 : 1));
+    const provName = catRow.provider_name || "Vessel";
+
+    let label = "";
+    if (dom === 1 || dom === "cinema") {
+      if (type === "popular" || id.includes("-popular")) label = this.t("cat_popular_movies");
+      else if (type === "top_rated" || id.includes("-toprated")) label = this.t("cat_top_rated_movies");
+      else if (type === "featured" || type === "trending" || id.includes("-featured")) label = this.t("cat_trending_movies");
+    } else if (dom === 2 || dom === "reading" || dom === 4 || dom === 5 || dom === 6) {
+      if (type === "popular" || id.includes("-popular")) label = this.t("cat_popular_contents");
+      else if (type === "latest" || id.includes("-latest")) label = this.t("cat_latest_contents");
+    } else if (dom === 7 || dom === "iptv") {
+      if (type === "popular" || id.includes("-popular")) label = this.t("cat_popular_channels");
+      else if (id.includes("-news")) label = this.t("cat_news_info");
+      else if (id.includes("-sports")) label = this.t("cat_sports_live");
+    }
+
+    if (!label) {
+      label = catRow.title || "Catalog";
+      if (label.includes(" • ")) {
+        label = label.split(" • ")[1];
+      }
+    }
+
+    return `${provName} • ${label}`;
+  }
+
   // --- Modern Streaming Swipers / Catalog Rows ---
   async loadCatalogsForDomain(domain) {
     const container = document.getElementById("catalogs-container");
@@ -2273,6 +2410,23 @@ class VesselApp {
       if (!res.ok) throw new Error("Failed to load catalogs");
       const data = await res.json();
       const catalogs = data.catalogs || [];
+
+      // Sort catalogs by user-defined plugin priority order if saved
+      const rawOrder = localStorage.getItem("vessel_plugin_order");
+      if (rawOrder) {
+        try {
+          const pluginOrder = JSON.parse(rawOrder);
+          if (Array.isArray(pluginOrder) && pluginOrder.length > 0) {
+            catalogs.sort((a, b) => {
+              const idxA = pluginOrder.indexOf(a.provider_id);
+              const idxB = pluginOrder.indexOf(b.provider_id);
+              const wA = idxA === -1 ? 999 : idxA;
+              const wB = idxB === -1 ? 999 : idxB;
+              return wA - wB;
+            });
+          }
+        } catch (_) {}
+      }
 
       container.innerHTML = "";
 
@@ -2294,7 +2448,7 @@ class VesselApp {
         rowElem.innerHTML = `
           <div class="catalog-header">
             <div class="catalog-title-group">
-              <h3 class="catalog-title">${catRow.title}</h3>
+              <h3 class="catalog-title">${this.localizeCatalogTitle(catRow)}</h3>
               <span class="catalog-provider-badge">${catRow.provider_name || "Vessel"}</span>
             </div>
             <div class="catalog-nav-controls">
@@ -2407,6 +2561,21 @@ class VesselApp {
       if (!res.ok) throw new Error("Arama sorgusu başarısız oldu");
       const data = await res.json();
       this.allSearchResults = data.items || [];
+      const rawOrder = localStorage.getItem("vessel_plugin_order");
+      if (rawOrder) {
+        try {
+          const pluginOrder = JSON.parse(rawOrder);
+          if (Array.isArray(pluginOrder) && pluginOrder.length > 0) {
+            this.allSearchResults.sort((a, b) => {
+              const idxA = pluginOrder.indexOf(a.provider_id);
+              const idxB = pluginOrder.indexOf(b.provider_id);
+              const wA = idxA === -1 ? 999 : idxA;
+              const wB = idxB === -1 ? 999 : idxB;
+              return wA - wB;
+            });
+          }
+        } catch (_) {}
+      }
       this.renderSearchResults();
     } catch (e) {
       if (grid) grid.innerHTML = `<div style="grid-column: 1/-1; text-align: center; color: var(--v-status-error); padding: 40px;">${e.message}</div>`;
@@ -3061,12 +3230,15 @@ class VesselApp {
               const chNum = (ch.chapter_number !== undefined && ch.chapter_number !== null) ? ch.chapter_number : 0;
               const chId = ch.id || "";
               return `
-                <div class="chapter-row" data-ch="${chNum}" data-chid="${chId}" style="margin-bottom: 8px; cursor: pointer;">
+                <div class="chapter-row" data-ch="${chNum}" data-chid="${chId}" style="margin-bottom: 8px; cursor: pointer; display: flex; justify-content: space-between; align-items: center;">
                   <div>
                     <span style="font-weight: 600;">${this.t("chapter")} ${chNum}</span>
                     ${ch.title ? `<span style="color: var(--v-text-muted); margin-left: 8px;">- ${ch.title}</span>` : ""}
                   </div>
-                  <button class="btn btn-secondary" style="padding: 5px 14px; font-size: 0.8rem;">${this.t("btn_read")}</button>
+                  <div style="display: flex; gap: 8px; align-items: center;">
+                    <button class="btn btn-secondary chapter-dl-action-btn" data-ch="${chNum}" data-chid="${chId}" data-title="${ch.title || ''}" title="Download for Offline" style="padding: 5px 10px; font-size: 0.8rem;">📥</button>
+                    <button class="btn btn-secondary" style="padding: 5px 14px; font-size: 0.8rem;">${this.t("btn_read")}</button>
+                  </div>
                 </div>
               `;
             }).join("") : `<div style="text-align: center; color: var(--v-text-muted); padding: 24px;">No chapters found.</div>`}
@@ -3091,6 +3263,37 @@ class VesselApp {
         this.openInlineChapter(item, details, chNum, chId, chapters);
       });
     });
+
+    content.querySelectorAll(".chapter-dl-action-btn").forEach(btn => {
+      btn.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        const chNum = parseFloat(btn.dataset.ch);
+        const chId = btn.dataset.chid || "";
+        const chTitle = btn.dataset.title || "";
+        btn.textContent = "⏳";
+        try {
+          const res = await fetch("/api/reading/download", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              provider_id: item.provider_id || "com.vessel.reading.mangile",
+              media_id: item.id,
+              media_title: title,
+              poster_url: poster,
+              chapter_id: chId,
+              chapter_num: chNum,
+              title: chTitle
+            })
+          });
+          if (!res.ok) throw new Error("Download request failed");
+          btn.textContent = "✓";
+          this.showToast(`Bölüm ${chNum} indirme kuyruğuna alındı / Download started`);
+        } catch (err) {
+          btn.textContent = "📥";
+          this.showToast(err.message, "error");
+        }
+      });
+    });
   }
 
   async openInlineChapter(item, details, chapterNum, chapterId, chapters) {
@@ -3108,9 +3311,14 @@ class VesselApp {
 
     try {
       const provider = item.provider_id || "com.vessel.reading.mangile";
-      let url = `/api/chapter?provider=${encodeURIComponent(provider)}&media=${encodeURIComponent(item.id)}&chapter_num=${chapterNum}`;
-      if (chapterId) {
-        url += `&chapter=${encodeURIComponent(chapterId)}`;
+      let url;
+      if (item.isOffline) {
+        url = `/api/reading/offline/content?provider=${encodeURIComponent(provider)}&media=${encodeURIComponent(item.id)}&chapter=${encodeURIComponent(chapterId)}`;
+      } else {
+        url = `/api/chapter?provider=${encodeURIComponent(provider)}&media=${encodeURIComponent(item.id)}&chapter_num=${chapterNum}`;
+        if (chapterId) {
+          url += `&chapter=${encodeURIComponent(chapterId)}`;
+        }
       }
       const res = await fetch(url);
       if (!res.ok) {
@@ -3663,15 +3871,29 @@ class VesselApp {
       const instData = instRes.ok ? await instRes.json() : { plugins: [] };
       const installed = instData.plugins || [];
 
+      // Sort installed according to custom priority
+      const rawOrder = localStorage.getItem("vessel_plugin_order");
+      if (rawOrder) {
+        try {
+          const pOrder = JSON.parse(rawOrder);
+          installed.sort((a, b) => {
+            const idxA = pOrder.indexOf(a.id);
+            const idxB = pOrder.indexOf(b.id);
+            return (idxA === -1 ? 999 : idxA) - (idxB === -1 ? 999 : idxB);
+          });
+        } catch (_) {}
+      }
+
       installedList.innerHTML = "";
       if (installed.length === 0) {
         installedList.innerHTML = `<div style="grid-column: 1/-1; text-align: center; padding: 30px; color: var(--v-text-muted);">No plugins installed.</div>`;
       } else {
-        installed.forEach(p => {
+        installed.forEach((p, idx) => {
           const card = document.createElement("div");
           card.className = "plugin-card";
           const isEnabled = p.enabled !== false;
           const loc = this.getPluginLocalizedInfo(p.id, p.name || p.id, p.description || "");
+          const langDisplay = p.language_display || (p.id.includes("mangile") ? "🇹🇷 TR" : "🌐 Universal");
 
           card.innerHTML = `
             <div class="plugin-card-header">
@@ -3679,18 +3901,54 @@ class VesselApp {
                 <h4 class="plugin-card-title">${loc.title}</h4>
                 <div style="font-size: 0.8rem; color: var(--v-text-muted); margin-top: 4px;">v${p.version || "1.0.0"} • ${p.author || "Vessel"}</div>
               </div>
-              <span class="badge-subtle" style="background: ${isEnabled ? "rgba(var(--v-status-success-rgb, 16, 185, 129), 0.15)" : "rgba(156, 163, 175, 0.15)"}; color: ${isEnabled ? "var(--v-status-success)" : "var(--v-text-muted)"};">
-                ${isEnabled ? this.t("btn_active") : "Devre Dışı"}
-              </span>
+              <div style="display: flex; gap: 6px; align-items: center;">
+                <span class="badge-subtle" style="background: rgba(56, 189, 248, 0.12); color: var(--v-accent); font-size: 0.75rem;">
+                  ${langDisplay}
+                </span>
+                <span class="badge-subtle" style="background: ${isEnabled ? "rgba(var(--v-status-success-rgb, 16, 185, 129), 0.15)" : "rgba(156, 163, 175, 0.15)"}; color: ${isEnabled ? "var(--v-status-success)" : "var(--v-text-muted)"};">
+                  ${isEnabled ? this.t("btn_active") : "Devre Dışı"}
+                </span>
+              </div>
             </div>
             <p class="plugin-card-desc">${loc.description}</p>
             <div class="plugin-card-footer">
               <span style="font-size: 0.8rem; color: var(--v-text-muted);">${p.is_builtin ? this.t("plugin_builtin") : this.t("plugin_external")}</span>
-              <button class="btn btn-secondary toggle-plugin-btn" style="font-size: 0.8rem; padding: 4px 12px;">
-                ${isEnabled ? this.t("btn_disable") : this.t("btn_enable")}
-              </button>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <div class="plugin-reorder-group" style="display: inline-flex; gap: 4px;">
+                  <button class="btn btn-secondary reorder-up-btn" title="Önceliği Artır (Yukarı Taşı)" style="padding: 3px 8px; font-size: 0.75rem;">⬆</button>
+                  <button class="btn btn-secondary reorder-down-btn" title="Önceliği Azalt (Aşağı Taşı)" style="padding: 3px 8px; font-size: 0.75rem;">⬇</button>
+                </div>
+                <button class="btn btn-secondary toggle-plugin-btn" style="font-size: 0.8rem; padding: 4px 12px;">
+                  ${isEnabled ? this.t("btn_disable") : this.t("btn_enable")}
+                </button>
+              </div>
             </div>
           `;
+
+          const upBtn = card.querySelector(".reorder-up-btn");
+          const downBtn = card.querySelector(".reorder-down-btn");
+
+          upBtn.addEventListener("click", () => {
+            if (idx === 0) return;
+            const newOrder = installed.map(item => item.id);
+            const temp = newOrder[idx];
+            newOrder[idx] = newOrder[idx - 1];
+            newOrder[idx - 1] = temp;
+            localStorage.setItem("vessel_plugin_order", JSON.stringify(newOrder));
+            this.showToast("Eklenti önceliği artırıldı", "info");
+            this.loadPluginsView();
+          });
+
+          downBtn.addEventListener("click", () => {
+            if (idx === installed.length - 1) return;
+            const newOrder = installed.map(item => item.id);
+            const temp = newOrder[idx];
+            newOrder[idx] = newOrder[idx + 1];
+            newOrder[idx + 1] = temp;
+            localStorage.setItem("vessel_plugin_order", JSON.stringify(newOrder));
+            this.showToast("Eklenti önceliği azaltıldı", "info");
+            this.loadPluginsView();
+          });
 
           const toggleBtn = card.querySelector(".toggle-plugin-btn");
           toggleBtn.addEventListener("click", async () => {
@@ -3712,6 +3970,7 @@ class VesselApp {
         card.className = "plugin-card";
         const isInst = p.installed;
         const loc = this.getPluginLocalizedInfo(p.id, p.name, p.description);
+        const langDisplay = p.language_display || (p.id.includes("mangile") ? "🇹🇷 TR" : "🌐 Universal");
 
         card.innerHTML = `
           <div class="plugin-card-header">
@@ -3719,7 +3978,12 @@ class VesselApp {
               <h4 class="plugin-card-title">${loc.title}</h4>
               <div style="font-size: 0.8rem; color: var(--v-text-muted); margin-top: 4px;">v${p.version} • ${p.author}</div>
             </div>
-            <span class="badge-subtle">${(p.domain || "MEDIA").toUpperCase()}</span>
+            <div style="display: flex; gap: 6px; align-items: center;">
+              <span class="badge-subtle" style="background: rgba(56, 189, 248, 0.12); color: var(--v-accent); font-size: 0.75rem;">
+                ${langDisplay}
+              </span>
+              <span class="badge-subtle">${(p.domain || "MEDIA").toUpperCase()}</span>
+            </div>
           </div>
           <p class="plugin-card-desc">${loc.description}</p>
           <div class="plugin-card-footer">
@@ -3803,8 +4067,20 @@ class VesselApp {
       items.forEach(p => {
         const card = document.createElement("div");
         card.className = "resume-card";
-        const title = p.title || p.Title || p.media_id || p.MediaID || "Media";
-        const poster = p.poster_url || p.PosterURL || "/assets/vessel_primary.png";
+        const rawId = p.media_id || p.MediaID || "";
+        let title = p.title || p.Title || "";
+        let poster = p.poster_url || p.PosterURL || "";
+
+        if (!title || title === rawId) {
+          if (rawId.includes("-") && !rawId.match(/^[0-9a-f]{8}-/i)) {
+            title = rawId.split("-").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+          } else {
+            title = isReading ? "Reading Progress" : "Media Progress";
+          }
+        }
+
+        const fallbackThumb = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="130" viewBox="0 0 200 130"><rect width="200" height="130" fill="%231e293b"/><text x="50%" y="54%" dominant-baseline="middle" text-anchor="middle" fill="%2364748b" font-size="28" font-weight="bold">${isReading ? '📖' : '🎬'}</text></svg>`;
+        const posterSrc = poster || fallbackThumb;
 
         if (isReading) {
           const chNum = p.chapter_number || p.ChapterNumber || 1;
@@ -3814,7 +4090,7 @@ class VesselApp {
 
           card.innerHTML = `
             <div class="resume-thumb-wrap" style="position: relative; width: 100%; height: 130px; overflow: hidden; background: var(--v-bg-elevated);">
-              <img class="resume-thumb" src="${poster}" alt="${title}" onerror="this.src='/assets/vessel_primary.png'">
+              <img class="resume-thumb" src="${posterSrc}" alt="${title}" onerror="this.onerror=null; this.src='${fallbackThumb}';">
               <button class="resume-delete-btn" title="Kaldır / Sil" data-del="true">✕</button>
             </div>
             <div class="resume-info">
@@ -3826,7 +4102,7 @@ class VesselApp {
             </div>
           `;
           card.addEventListener("click", () => {
-            this.openDetailsView({ id: p.media_id, provider_id: p.provider_id, title, poster_url: poster, type: 4 });
+            this.openDetailsView({ id: p.media_id, provider_id: p.provider_id, title, poster_url: posterSrc, type: 4 });
           });
         } else {
           const percent = Math.min(100, Math.round(p.progress_percent || p.ProgressPercent || 0));
@@ -3835,7 +4111,7 @@ class VesselApp {
 
           card.innerHTML = `
             <div class="resume-thumb-wrap" style="position: relative; width: 100%; height: 130px; overflow: hidden; background: var(--v-bg-elevated);">
-              <img class="resume-thumb" src="${poster}" alt="${title}" onerror="this.src='/assets/vessel_primary.png'">
+              <img class="resume-thumb" src="${posterSrc}" alt="${title}" onerror="this.onerror=null; this.src='${fallbackThumb}';">
               <button class="resume-delete-btn" title="Kaldır / Sil" data-del="true">✕</button>
             </div>
             <div class="resume-info">
@@ -3847,8 +4123,27 @@ class VesselApp {
             </div>
           `;
           card.addEventListener("click", () => {
-            this.openDetailsView({ id: p.media_id, provider_id: p.provider_id, title, poster_url: poster, type: 1 });
+            this.openDetailsView({ id: p.media_id, provider_id: p.provider_id, title, poster_url: posterSrc, type: 1 });
           });
+        }
+
+        // Auto-enrich title & poster from media endpoint if not available in SQLite
+        if (!p.title || !p.poster_url) {
+          fetch(`/api/media?provider=${encodeURIComponent(p.provider_id || "")}&id=${encodeURIComponent(rawId)}&domain=${isReading ? 2 : 1}`)
+            .then(r => r.ok ? r.json() : null)
+            .then(d => {
+              if (d && (d.title || d.poster_url)) {
+                if (d.title) {
+                  const tEl = card.querySelector(".resume-title");
+                  if (tEl) tEl.textContent = d.title;
+                }
+                if (d.poster_url) {
+                  const pEl = card.querySelector(".resume-thumb");
+                  if (pEl) pEl.src = d.poster_url;
+                }
+              }
+            })
+            .catch(() => {});
         }
 
         const delBtn = card.querySelector(".resume-delete-btn");
@@ -3886,6 +4181,9 @@ class VesselApp {
   // --- Library System ---
   async loadLibraryItems(status) {
     const grid = document.getElementById("library-grid");
+    if (status === "OFFLINE") {
+      return this.loadOfflineDownloads(grid);
+    }
     grid.innerHTML = `<div style="grid-column: 1/-1; text-align: center; color: var(--v-text-muted); padding: 40px;">⏳ Loading collection...</div>`;
 
     try {
@@ -4045,6 +4343,268 @@ class VesselApp {
       this.loadDebridStatus();
     } catch (e) {
       this.showToast(`Error: ${e.message}`, "error");
+    }
+  }
+
+  // --- Offline Manga & E-Book Library System ---
+  async loadOfflineDownloads(grid) {
+    grid.innerHTML = `<div style="grid-column: 1/-1; text-align: center; color: var(--v-text-muted); padding: 40px;">⏳ İndirilenler yükleniyor / Loading offline collection...</div>`;
+    try {
+      const res = await fetch("/api/reading/downloads");
+      if (!res.ok) throw new Error("Could not fetch offline downloads");
+      const data = await res.json();
+      const downloads = data.downloads || [];
+
+      grid.innerHTML = "";
+      if (downloads.length === 0) {
+        grid.innerHTML = `<div style="grid-column: 1/-1; text-align: center; color: var(--v-text-muted); padding: 50px;">Henüz indirilmiş çevrimdışı bölüm bulunmuyor.<br><span style="font-size: 0.85rem;">Manga & E-Kitap bölümlerinin yanındaki 📥 butonuna tıklayarak istediğiniz bölümleri çevrimdışı okumak için indirebilirsiniz.</span></div>`;
+        return;
+      }
+
+      downloads.forEach(dl => {
+        const card = document.createElement("div");
+        card.className = "media-card";
+        const title = dl.media_title || dl.media_id || "Manga";
+        const chTitle = dl.title || `Bölüm ${dl.chapter_number}`;
+        const poster = dl.poster_url || "/assets/vessel_primary.png";
+        const mb = ((dl.total_bytes || 0) / (1024 * 1024)).toFixed(1);
+
+        card.innerHTML = `
+          <div class="poster-wrapper">
+            <img src="${poster}" alt="${title}" class="poster-img" loading="lazy" onerror="this.src='/assets/vessel_primary.png'">
+            <span class="card-badge" style="background: rgba(16, 185, 129, 0.9); color: #fff;">📥 Çevrimdışı</span>
+            <div class="poster-overlay-btn">📖</div>
+          </div>
+          <div class="card-details">
+            <div class="card-title" title="${title}">${title}</div>
+            <div style="font-size: 0.82rem; color: var(--v-text-muted); margin-bottom: 4px;">${chTitle}</div>
+            <div style="font-size: 0.75rem; color: var(--v-accent-primary); font-weight: 600;">${dl.downloaded_pages || dl.total_pages}/${dl.total_pages || 0} Sayfa (${mb} MB)</div>
+            <div class="library-card-actions" style="margin-top: 8px; display: flex; gap: 6px;">
+              <button class="btn btn-primary offline-read-btn" style="padding: 5px 12px; font-size: 0.78rem; flex: 1;">📖 Oku</button>
+              <button class="library-item-remove-btn offline-delete-btn" title="İndirmeyi Cihazdan Sil">🗑</button>
+            </div>
+          </div>
+        `;
+
+        card.querySelector(".offline-read-btn").addEventListener("click", () => {
+          this.openOfflineReader(dl);
+        });
+        card.querySelector(".poster-wrapper").addEventListener("click", () => {
+          this.openOfflineReader(dl);
+        });
+
+        const delBtn = card.querySelector(".offline-delete-btn");
+        delBtn.addEventListener("click", async (e) => {
+          e.stopPropagation();
+          try {
+            const delRes = await fetch(`/api/reading/download?provider=${encodeURIComponent(dl.provider_id || "com.vessel.reading.mangile")}&media=${encodeURIComponent(dl.media_id || "")}&chapter=${encodeURIComponent(dl.chapter_id || "")}`, {
+              method: "DELETE"
+            });
+            if (!delRes.ok) throw new Error("Delete failed");
+            this.showToast("İndirme silindi / Download removed", "info");
+            card.remove();
+          } catch (err) {
+            this.showToast(err.message, "error");
+          }
+        });
+
+        grid.appendChild(card);
+      });
+    } catch (err) {
+      grid.innerHTML = `<div style="grid-column: 1/-1; text-align: center; color: #ef4444; padding: 40px;">Hata: ${err.message}</div>`;
+    }
+  }
+
+  async openOfflineReader(dl) {
+    const item = {
+      id: dl.media_id,
+      provider_id: dl.provider_id || "com.vessel.reading.mangile",
+      title: dl.media_title || dl.media_id,
+      poster_url: dl.poster_url,
+      type: 4,
+      isOffline: true
+    };
+    const details = {
+      title: item.title,
+      poster_url: item.poster_url,
+      chapters: [{ id: dl.chapter_id, chapter_number: dl.chapter_number, title: dl.title }]
+    };
+    this.openDetailsView(item);
+    setTimeout(() => {
+      this.openInlineChapter(item, details, dl.chapter_number, dl.chapter_id, details.chapters);
+    }, 120);
+  }
+
+  // --- Multi-Device LAN Sync & Remote Control ---
+  setupLanSync() {
+    const lanToggle = document.getElementById("quick-lan-toggle");
+    const lanModal = document.getElementById("lan-sync-modal");
+    const lanClose = document.getElementById("lan-modal-close");
+    const refreshBtn = document.getElementById("lan-refresh-btn");
+
+    if (lanToggle && lanModal) {
+      lanToggle.addEventListener("click", () => {
+        lanModal.classList.remove("hidden");
+        this.refreshLanDevices();
+      });
+    }
+
+    if (lanClose && lanModal) {
+      lanClose.addEventListener("click", () => {
+        lanModal.classList.add("hidden");
+      });
+    }
+
+    if (refreshBtn) {
+      refreshBtn.addEventListener("click", () => {
+        this.refreshLanDevices();
+      });
+    }
+
+    // Remote control buttons
+    document.querySelectorAll(".lan-remote-btn").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const action = btn.dataset.action;
+        const payload = btn.dataset.payload || "";
+        await this.sendLanRemoteCommand(action, payload);
+      });
+    });
+
+    // Start background poll for remote control commands
+    this.startLanCommandPolling();
+  }
+
+  async refreshLanDevices() {
+    const listEl = document.getElementById("lan-devices-list");
+    const localNameEl = document.getElementById("lan-local-name");
+    const localPortEl = document.getElementById("lan-local-port");
+    if (!listEl) return;
+
+    listEl.innerHTML = `<div style="text-align: center; color: var(--v-text-muted); padding: 16px;">Scanning LAN for Vessel instances...</div>`;
+
+    try {
+      const res = await fetch("/api/sync/devices");
+      if (!res.ok) throw new Error("Could not fetch LAN devices");
+      const data = await res.json();
+
+      if (localNameEl && data.device_name) localNameEl.textContent = data.device_name;
+      if (localPortEl && data.port) localPortEl.textContent = `Port ${data.port}`;
+
+      const devices = data.devices || [];
+      const remoteDevices = devices.filter(d => d.device_id !== data.device_id);
+
+      listEl.innerHTML = "";
+      if (remoteDevices.length === 0) {
+        listEl.innerHTML = `<div style="text-align: center; color: var(--v-text-muted); padding: 16px;">Yerel ağda başka aktif Vessel cihazı bulunamadı.<br><span style="font-size: 0.75rem;">(Diğer bilgisayar, tablet veya telefonunuzda Vessel'ı açtığınızda otomatik eşleşir)</span></div>`;
+        return;
+      }
+
+      remoteDevices.forEach(dev => {
+        const row = document.createElement("div");
+        row.className = "lan-device-row";
+        const isSelected = this.selectedLanTargetId === dev.device_id;
+        if (isSelected) row.style.borderColor = "var(--v-accent-primary)";
+
+        row.innerHTML = `
+          <div>
+            <div style="font-weight: 600; font-size: 0.9rem;">${dev.device_name || "Vessel Node"}</div>
+            <div style="font-size: 0.75rem; color: var(--v-text-muted);">${dev.ip_address || "LAN"}:${dev.port || 8080}</div>
+          </div>
+          <button class="btn btn-secondary" style="padding: 4px 10px; font-size: 0.75rem;">
+            ${isSelected ? "✓ Seçildi" : "Seç"}
+          </button>
+        `;
+
+        row.addEventListener("click", () => {
+          this.selectedLanTargetId = dev.device_id;
+          const label = document.getElementById("lan-selected-target-label");
+          if (label) label.textContent = `Hedef: ${dev.device_name} (${dev.ip_address})`;
+          this.refreshLanDevices();
+        });
+
+        listEl.appendChild(row);
+      });
+    } catch (e) {
+      listEl.innerHTML = `<div style="text-align: center; color: #ef4444; padding: 16px;">${e.message}</div>`;
+    }
+  }
+
+  async sendLanRemoteCommand(action, payload = "") {
+    if (!this.selectedLanTargetId) {
+      this.showToast("Lütfen önce listeden kontrol edilecek bir cihaz seçin.", "error");
+      return;
+    }
+
+    if (action === "cast_current") {
+      const video = document.getElementById("vessel-video-element");
+      if (video && video.src && !video.classList.contains("hidden")) {
+        action = "load";
+        payload = video.src;
+      } else {
+        this.showToast("Şu an oynatılan aktif bir video bulunmuyor.", "error");
+        return;
+      }
+    }
+
+    try {
+      const res = await fetch("/api/sync/remote", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          target_id: this.selectedLanTargetId,
+          action: action,
+          payload: payload
+        })
+      });
+      if (!res.ok) throw new Error("Remote command failed");
+      this.showToast(`Komut iletildi: ${action}`);
+    } catch (err) {
+      this.showToast(err.message, "error");
+    }
+  }
+
+  startLanCommandPolling() {
+    setInterval(async () => {
+      try {
+        const res = await fetch("/api/sync/poll");
+        if (!res.ok) return;
+        const data = await res.json();
+        const commands = data.commands || [];
+        for (const cmd of commands) {
+          this.executeRemoteCommand(cmd);
+        }
+      } catch (e) {}
+    }, 4000);
+  }
+
+  executeRemoteCommand(cmd) {
+    const video = document.getElementById("vessel-video-element");
+    this.showToast(`📡 Uzaktan kumanda: ${cmd.action}`, "info");
+
+    switch (cmd.action) {
+      case "play":
+        if (video) video.play();
+        break;
+      case "pause":
+        if (video) video.pause();
+        break;
+      case "seek":
+        if (video) {
+          const delta = parseFloat(cmd.payload) || 0;
+          video.currentTime = Math.max(0, Math.min(video.duration || 0, video.currentTime + delta));
+        }
+        break;
+      case "volume":
+        if (video) {
+          const vol = parseFloat(cmd.payload) || 1;
+          video.volume = Math.max(0, Math.min(1, vol));
+        }
+        break;
+      case "load":
+        if (cmd.payload) {
+          this.openVesselPlayer(cmd.payload, { title: "Casted Stream from LAN" });
+        }
+        break;
     }
   }
 

@@ -5,11 +5,11 @@ import "github.com/falsisdev/vessel/core/internal/domain/cinema"
 type ReadingType int
 
 const (
-	ReadingTypeUnspecified ReadingType = iota
-	ReadingTypeManga
-	ReadingTypeWebtoon
-	ReadingTypeWebook
-	ReadingTypeBook
+	ReadingTypeUnspecified ReadingType = 0
+	ReadingTypeManga       ReadingType = 4
+	ReadingTypeWebtoon     ReadingType = 5
+	ReadingTypeWebook      ReadingType = 6
+	ReadingTypeBook        ReadingType = 7
 )
 
 func (t ReadingType) String() string {

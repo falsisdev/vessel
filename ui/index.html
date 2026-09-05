@@ -181,6 +181,16 @@
               <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
             </svg>
           </button>
+
+          <!-- Quick LAN Sync / Multi-Device Toggle -->
+          <button class="theme-quick-btn" id="quick-lan-toggle" title="LAN Devices & Remote Control">
+            <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none">
+              <path d="M5 12.55a11 11 0 0 1 14.08 0"></path>
+              <path d="M1.42 9a16 16 0 0 1 21.16 0"></path>
+              <path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path>
+              <line x1="12" y1="20" x2="12.01" y2="20"></line>
+            </svg>
+          </button>
         </div>
       </header>
 
@@ -364,6 +374,7 @@
               <button class="tab" data-status="COMPLETED" data-i18n="status_completed">Completed</button>
               <button class="tab" data-status="DROPPED" data-i18n="status_dropped">Dropped</button>
               <button class="tab" data-status="FAVORITE" data-i18n="status_favorites">Favorites</button>
+              <button class="tab" data-status="OFFLINE" data-i18n="status_offline">📥 Offline Downloads</button>
             </div>
           </div>
           <div class="media-grid" id="library-grid"></div>
@@ -517,6 +528,7 @@
           <div class="vessel-hud-info">
             <h2 class="vessel-hud-title" id="vessel-hud-title">Media Title</h2>
             <span class="vessel-hud-subtitle" id="vessel-hud-subtitle">Season 1 Episode 1</span>
+            <div class="torrent-swarm-badge hidden" id="vessel-swarm-badge"></div>
           </div>
           <div class="vessel-hud-top-actions">
             <button class="hud-btn" id="vessel-pip-btn" title="Picture in Picture">
@@ -620,6 +632,51 @@
             </div>
           </div>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- LAN Sync & Multi-Device Remote Control Modal -->
+  <div class="modal-overlay hidden" id="lan-sync-modal">
+    <div class="lan-sync-card">
+      <div class="lan-header-bar">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 1.3rem;">📡</span>
+          <h3 style="font-size: 1.1rem; font-weight: 700; margin: 0;" data-i18n="lan_sync_title">LAN Sync & Multi-Device Control</h3>
+        </div>
+        <button class="modal-close" id="lan-modal-close" style="position: static;">&times;</button>
+      </div>
+
+      <!-- This Device Info -->
+      <div class="lan-this-device" id="lan-this-device-info">
+        <div>
+          <div style="font-size: 0.75rem; color: var(--v-text-muted);" data-i18n="lan_this_device">This Device</div>
+          <div id="lan-local-name" style="font-weight: 700; font-size: 0.95rem;">Vessel Node</div>
+        </div>
+        <span class="badge-subtle" id="lan-local-port" style="color: #10b981; border-color: rgba(16, 185, 129, 0.3);">Port 8080</span>
+      </div>
+
+      <!-- Discovered Devices -->
+      <div style="margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
+        <span style="font-size: 0.85rem; font-weight: 600;" data-i18n="lan_discovered_devices">Discovered Devices</span>
+        <button class="btn btn-secondary" id="lan-refresh-btn" style="padding: 3px 8px; font-size: 0.75rem;">🔄 Refresh</button>
+      </div>
+      <div class="lan-devices-list" id="lan-devices-list">
+        <div style="text-align: center; color: var(--v-text-muted); padding: 16px;">Scanning LAN...</div>
+      </div>
+
+      <!-- Remote Control Pad -->
+      <div style="margin-bottom: 8px;">
+        <span style="font-size: 0.85rem; font-weight: 600;" data-i18n="lan_remote_control">Remote Control</span>
+        <span style="font-size: 0.75rem; color: var(--v-text-muted); margin-left: 6px;" id="lan-selected-target-label">(Select a device above)</span>
+      </div>
+      <div class="lan-remote-pad">
+        <button class="lan-remote-btn" data-action="play">▶ Play</button>
+        <button class="lan-remote-btn" data-action="pause">⏸ Pause</button>
+        <button class="lan-remote-btn" data-action="seek" data-payload="-10">⏪ -10s</button>
+        <button class="lan-remote-btn" data-action="seek" data-payload="10">⏩ +10s</button>
+        <button class="lan-remote-btn" data-action="volume" data-payload="0.8">🔊 Vol 80%</button>
+        <button class="lan-remote-btn" data-action="cast_current">📺 Cast Stream</button>
       </div>
     </div>
   </div>

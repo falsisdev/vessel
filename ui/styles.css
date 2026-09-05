@@ -2553,5 +2553,134 @@ html, body {
   border-color: var(--v-accent-primary);
 }
 
+/* ==========================================================================
+   TORRENT SWARM HUD BADGE (VESSEL PLAYER)
+   ========================================================================== */
+.torrent-swarm-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(14, 165, 233, 0.2);
+  border: 1px solid rgba(14, 165, 233, 0.4);
+  color: #38bdf8;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  backdrop-filter: blur(8px);
+  margin-top: 4px;
+  animation: pulse-border 2s infinite;
+}
+
+@keyframes pulse-border {
+  0%, 100% { border-color: rgba(14, 165, 233, 0.4); }
+  50% { border-color: rgba(56, 189, 248, 0.8); }
+}
+
+/* ==========================================================================
+   LAN SYNC & REMOTE CONTROL MODAL
+   ========================================================================== */
+.lan-sync-card {
+  width: 580px;
+  max-width: 95vw;
+  background: var(--v-bg-surface);
+  border: 1px solid var(--v-border-default);
+  border-radius: var(--v-radius-lg);
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.6);
+  padding: 24px;
+}
+
+.lan-header-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--v-border-subtle);
+  padding-bottom: 16px;
+  margin-bottom: 20px;
+}
+
+.lan-this-device {
+  background: var(--v-bg-elevated);
+  border: 1px solid var(--v-border-subtle);
+  border-radius: var(--v-radius-md);
+  padding: 12px 16px;
+  margin-bottom: 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.lan-devices-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 240px;
+  overflow-y: auto;
+  margin-bottom: 20px;
+}
+
+.lan-device-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: var(--v-bg-elevated);
+  border: 1px solid var(--v-border-subtle);
+  border-radius: var(--v-radius-md);
+  transition: all 0.2s ease;
+}
+
+.lan-device-row:hover {
+  border-color: var(--v-accent-primary);
+}
+
+.lan-remote-pad {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  background: var(--v-bg-elevated);
+  border: 1px solid var(--v-border-subtle);
+  border-radius: var(--v-radius-md);
+  padding: 16px;
+}
+
+.lan-remote-btn {
+  padding: 10px;
+  border-radius: var(--v-radius-sm);
+  background: var(--v-bg-surface);
+  color: var(--v-text-primary);
+  border: 1px solid var(--v-border-subtle);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.8rem;
+  transition: all 0.15s;
+}
+
+.lan-remote-btn:hover {
+  background: var(--v-accent-primary);
+  color: #fff;
+  border-color: var(--v-accent-primary);
+}
+
+/* Offline Download Card UI */
+.download-progress-bar {
+  width: 100%;
+  height: 4px;
+  background: var(--v-bg-elevated);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-top: 6px;
+}
+
+.download-progress-fill {
+  height: 100%;
+  background: var(--v-accent-primary);
+  transition: width 0.3s;
+}
+
 
 

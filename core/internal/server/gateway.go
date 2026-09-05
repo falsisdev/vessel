@@ -22,23 +22,27 @@ import (
 	"github.com/falsisdev/vessel/core/internal/service"
 	"github.com/falsisdev/vessel/core/internal/streaming"
 	"github.com/falsisdev/vessel/core/internal/theme"
+	vesselsync "github.com/falsisdev/vessel/core/internal/sync"
 	pluginv1 "github.com/falsisdev/vessel/proto/gen/go/plugin/v1"
 	"github.com/falsisdev/vessel/ui"
 )
 
 type GatewayServer struct {
-	addr       string
-	server     *http.Server
-	listener   net.Listener
-	cinemaSvc  *service.CinemaService
-	readingSvc *service.ReadingService
-	librarySvc *service.LibraryService
-	streamSvc  *service.StreamService
-	catalogSvc *service.CatalogService
-	themeMgr   *theme.Manager
-	pluginMgr  *plugin.Manager
-	proxy      *streaming.Proxy
-	startTime  time.Time
+	addr          string
+	server        *http.Server
+	listener      net.Listener
+	cinemaSvc     *service.CinemaService
+	readingSvc    *service.ReadingService
+	librarySvc    *service.LibraryService
+	streamSvc     *service.StreamService
+	catalogSvc    *service.CatalogService
+	themeMgr      *theme.Manager
+	pluginMgr     *plugin.Manager
+	proxy         *streaming.Proxy
+	torrentEngine *streaming.TorrentEngine
+	downloadSvc   *service.DownloadService
+	lanSyncSvc    *vesselsync.LANSyncService
+	startTime     time.Time
 }
 
 func NewGatewayServer(
@@ -60,17 +64,25 @@ func NewGatewayServer(
 		catSvc = service.NewCatalogService(pluginMgr, 5*time.Second)
 	}
 
+	torrentEng, _ := streaming.NewTorrentEngine("")
+	dlSvc, _ := service.NewDownloadService(readingSvc, "")
+	lanSvc := vesselsync.NewLANSyncService(8080)
+	_ = lanSvc.Start(context.Background())
+
 	g := &GatewayServer{
-		addr:       addr,
-		cinemaSvc:  cinemaSvc,
-		readingSvc: readingSvc,
-		librarySvc: librarySvc,
-		streamSvc:  streamSvc,
-		catalogSvc: catSvc,
-		themeMgr:   themeMgr,
-		pluginMgr:  pluginMgr,
-		proxy:      proxy,
-		startTime:  time.Now(),
+		addr:          addr,
+		cinemaSvc:     cinemaSvc,
+		readingSvc:    readingSvc,
+		librarySvc:    librarySvc,
+		streamSvc:     streamSvc,
+		catalogSvc:    catSvc,
+		themeMgr:      themeMgr,
+		pluginMgr:     pluginMgr,
+		proxy:         proxy,
+		torrentEngine: torrentEng,
+		downloadSvc:   dlSvc,
+		lanSyncSvc:    lanSvc,
+		startTime:     time.Now(),
 	}
 
 	mux := http.NewServeMux()
@@ -170,6 +182,22 @@ func (g *GatewayServer) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/plugins/toggle", g.handlePluginsToggle)
 	mux.HandleFunc("/api/plugins/available", g.handlePluginsAvailable)
 
+	// Torrent & P2P Streaming
+	mux.HandleFunc("/api/torrent/add", g.handleTorrentAdd)
+	mux.HandleFunc("/api/torrent/status", g.handleTorrentStatus)
+	mux.HandleFunc("/stream/torrent", g.handleTorrentStream)
+
+	// Offline / Downloads Mode
+	mux.HandleFunc("/api/reading/download", g.handleReadingDownload)
+	mux.HandleFunc("/api/reading/downloads", g.handleReadingDownloadsList)
+	mux.HandleFunc("/api/reading/offline/content", g.handleReadingOfflineContent)
+	mux.HandleFunc("/api/reading/offline/page", g.handleReadingOfflinePage)
+
+	// Multi-Device LAN Sync & Remote Control
+	mux.HandleFunc("/api/sync/devices", g.handleSyncDevices)
+	mux.HandleFunc("/api/sync/remote", g.handleSyncRemote)
+	mux.HandleFunc("/api/sync/poll", g.handleSyncPoll)
+
 	// Range-enabled streaming proxy endpoint
 	mux.HandleFunc("/stream", g.handleStreamProxy)
 
@@ -225,6 +253,9 @@ func (g *GatewayServer) handlePing(w http.ResponseWriter, r *http.Request) {
 
 func (g *GatewayServer) handleSearch(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query().Get("query")
+	if q == "" {
+		q = r.URL.Query().Get("q")
+	}
 	domainStr := r.URL.Query().Get("domain")
 
 	if q == "" {
@@ -247,7 +278,18 @@ func (g *GatewayServer) handleSearch(w http.ResponseWriter, r *http.Request) {
 			if items, err := g.cinemaSvc.Search(ctx, q); err == nil {
 				mu.Lock()
 				for _, it := range items {
-					allItems = append(allItems, it)
+					allItems = append(allItems, map[string]any{
+						"id":           it.ID,
+						"provider_id":  it.ProviderID,
+						"title":        it.Title,
+						"type":         int(it.Type),
+						"type_name":    it.Type.String(),
+						"year":         it.Year,
+						"poster_url":   it.PosterURL,
+						"overview":     it.Overview,
+						"domain":       1,
+						"external_ids": it.ExternalIDs,
+					})
 				}
 				mu.Unlock()
 			}
@@ -261,7 +303,18 @@ func (g *GatewayServer) handleSearch(w http.ResponseWriter, r *http.Request) {
 			if items, err := g.readingSvc.Search(ctx, pluginv1.Domain_DOMAIN_MANGA, q); err == nil {
 				mu.Lock()
 				for _, it := range items {
-					allItems = append(allItems, it)
+					allItems = append(allItems, map[string]any{
+						"id":           it.ID,
+						"provider_id":  it.ProviderID,
+						"title":        it.Title,
+						"type":         int(it.Type),
+						"type_name":    it.Type.String(),
+						"year":         it.Year,
+						"poster_url":   it.PosterURL,
+						"overview":     it.Overview,
+						"domain":       2,
+						"external_ids": it.ExternalIDs,
+					})
 				}
 				mu.Unlock()
 			}
@@ -704,6 +757,19 @@ func (g *GatewayServer) handleRecentPlayback(w http.ResponseWriter, r *http.Requ
 		g.writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	for _, item := range items {
+		if (item.Title == "" || item.PosterURL == "") && g.cinemaSvc != nil {
+			if details, err := g.cinemaSvc.GetMetadata(r.Context(), item.ProviderID, item.MediaID); err == nil && details != nil {
+				if item.Title == "" {
+					item.Title = details.Title
+				}
+				if item.PosterURL == "" {
+					item.PosterURL = details.PosterURL
+				}
+				_ = g.librarySvc.RecordPlayback(r.Context(), item)
+			}
+		}
+	}
 	g.writeJSON(w, http.StatusOK, map[string]any{"items": items})
 }
 
@@ -758,6 +824,19 @@ func (g *GatewayServer) handleRecentReading(w http.ResponseWriter, r *http.Reque
 	if err != nil {
 		g.writeError(w, http.StatusInternalServerError, err.Error())
 		return
+	}
+	for _, item := range items {
+		if (item.Title == "" || item.PosterURL == "") && g.readingSvc != nil {
+			if details, err := g.readingSvc.GetMetadata(r.Context(), item.ProviderID, item.MediaID); err == nil && details != nil {
+				if item.Title == "" {
+					item.Title = details.Title
+				}
+				if item.PosterURL == "" {
+					item.PosterURL = details.PosterURL
+				}
+				_ = g.librarySvc.RecordReading(r.Context(), item)
+			}
+		}
 	}
 	g.writeJSON(w, http.StatusOK, map[string]any{"items": items})
 }
@@ -926,34 +1005,40 @@ func (g *GatewayServer) isPluginInstalled(id string) bool {
 func (g *GatewayServer) handlePluginsAvailable(w http.ResponseWriter, r *http.Request) {
 	available := []map[string]any{
 		{
-			"id":          "com.vessel.cinema.cinemasis",
-			"name":        "Cinemasis",
-			"description": "Film ve Dizi Katalogları (TMDB Canlı API & En İyiler)",
-			"domain":      "cinema",
-			"version":     "1.0.0",
-			"author":      "Vessel Team",
-			"installed":   g.isPluginInstalled("com.vessel.cinema.cinemasis"),
-			"is_builtin":  true,
+			"id":               "com.vessel.cinema.cinemasis",
+			"name":             "Cinemasis",
+			"description":      "Film ve Dizi Katalogları (TMDB Canlı API & En İyiler)",
+			"domain":           "cinema",
+			"version":          "1.0.0",
+			"author":           "Vessel Team",
+			"installed":        g.isPluginInstalled("com.vessel.cinema.cinemasis"),
+			"is_builtin":       true,
+			"languages":        []string{"multilingual", "en", "tr", "es", "fr", "de", "it", "ja", "ko", "zh", "ru", "pt", "ar"},
+			"language_display": "🌐 Çok Dilli / Multilingual",
 		},
 		{
-			"id":          "com.vessel.reading.mangile",
-			"name":        "Mangile",
-			"description": "Manga ve E-Kitap Okuma Sağlayıcısı (Sanity)",
-			"domain":      "reading",
-			"version":     "1.0.0",
-			"author":      "Vessel Team",
-			"installed":   g.isPluginInstalled("com.vessel.reading.mangile"),
-			"is_builtin":  true,
+			"id":               "com.vessel.reading.mangile",
+			"name":             "Mangile",
+			"description":      "Manga ve E-Kitap Okuma Sağlayıcısı (Sanity)",
+			"domain":           "reading",
+			"version":          "1.0.0",
+			"author":           "Vessel Team",
+			"installed":        g.isPluginInstalled("com.vessel.reading.mangile"),
+			"is_builtin":       true,
+			"languages":        []string{"tr"},
+			"language_display": "🇹🇷 Türkçe (TR)",
 		},
 		{
-			"id":          "com.vessel.iptv",
-			"name":        "IPTV",
-			"description": "Dünya genelinden açık TV yayınları ve canlı kanallar (iptv-org)",
-			"domain":      "iptv",
-			"version":     "1.0.0",
-			"author":      "Vessel Team",
-			"installed":   g.isPluginInstalled("com.vessel.iptv"),
-			"is_builtin":  true,
+			"id":               "com.vessel.iptv",
+			"name":             "IPTV",
+			"description":      "Dünya genelinden açık TV yayınları ve canlı kanallar (iptv-org)",
+			"domain":           "iptv",
+			"version":          "1.0.0",
+			"author":           "Vessel Team",
+			"installed":        g.isPluginInstalled("com.vessel.iptv"),
+			"is_builtin":       true,
+			"languages":        []string{"multilingual", "en", "tr", "az", "de", "fr", "es", "int"},
+			"language_display": "🌐 Evrensel / Global (TR, AZ, US, UK, DE, FR...)",
 		},
 	}
 
@@ -1066,4 +1151,243 @@ func (g *GatewayServer) handlePluginsToggle(w http.ResponseWriter, r *http.Reque
 		"id":      req.ID,
 		"enabled": req.Enabled,
 	})
+}
+
+// --- Torrent & P2P Streaming Handlers ---
+
+func (g *GatewayServer) handleTorrentAdd(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		g.writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	var req struct {
+		Magnet string `json:"magnet"`
+		Title  string `json:"title"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		g.writeError(w, http.StatusBadRequest, "invalid json")
+		return
+	}
+
+	if g.torrentEngine == nil {
+		g.writeError(w, http.StatusServiceUnavailable, "torrent engine unavailable")
+		return
+	}
+
+	sess, err := g.torrentEngine.AddMagnet(req.Magnet, req.Title)
+	if err != nil {
+		g.writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	g.writeJSON(w, http.StatusOK, map[string]any{
+		"session":      sess,
+		"playback_url": fmt.Sprintf("/stream/torrent?ih=%s", sess.InfoHash),
+	})
+}
+
+func (g *GatewayServer) handleTorrentStatus(w http.ResponseWriter, r *http.Request) {
+	if g.torrentEngine == nil {
+		g.writeError(w, http.StatusServiceUnavailable, "torrent engine unavailable")
+		return
+	}
+
+	ih := r.URL.Query().Get("ih")
+	if ih != "" {
+		sess, err := g.torrentEngine.GetSession(ih)
+		if err != nil {
+			g.writeError(w, http.StatusNotFound, err.Error())
+			return
+		}
+		g.writeJSON(w, http.StatusOK, sess)
+		return
+	}
+
+	g.writeJSON(w, http.StatusOK, map[string]any{"sessions": g.torrentEngine.ListSessions()})
+}
+
+func (g *GatewayServer) handleTorrentStream(w http.ResponseWriter, r *http.Request) {
+	if g.torrentEngine == nil {
+		g.writeError(w, http.StatusServiceUnavailable, "torrent engine unavailable")
+		return
+	}
+
+	ih := r.URL.Query().Get("ih")
+	if ih == "" {
+		g.writeError(w, http.StatusBadRequest, "missing 'ih' infohash parameter")
+		return
+	}
+
+	g.torrentEngine.ServeTorrentStream(w, r, ih)
+}
+
+// --- Offline Manga & E-Books Downloads Handlers ---
+
+func (g *GatewayServer) handleReadingDownload(w http.ResponseWriter, r *http.Request) {
+	if g.downloadSvc == nil {
+		g.writeError(w, http.StatusServiceUnavailable, "download service unavailable")
+		return
+	}
+
+	switch r.Method {
+	case http.MethodPost:
+		var req struct {
+			ProviderID    string  `json:"provider"`
+			ProviderIDAlt string  `json:"provider_id"`
+			MediaID       string  `json:"media"`
+			MediaIDAlt    string  `json:"media_id"`
+			MediaTitle    string  `json:"media_title"`
+			PosterURL     string  `json:"poster_url"`
+			ChapterID     string  `json:"chapter"`
+			ChapterIDAlt  string  `json:"chapter_id"`
+			ChapterNumber float64 `json:"chapter_num"`
+			ChapterNumAlt float64 `json:"chapter_number"`
+			Title         string  `json:"title"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			g.writeError(w, http.StatusBadRequest, "invalid json")
+			return
+		}
+
+		prov := req.ProviderID
+		if prov == "" {
+			prov = req.ProviderIDAlt
+		}
+		if prov == "" {
+			prov = "com.vessel.reading.mangile"
+		}
+		media := req.MediaID
+		if media == "" {
+			media = req.MediaIDAlt
+		}
+		chapter := req.ChapterID
+		if chapter == "" {
+			chapter = req.ChapterIDAlt
+		}
+		chNum := req.ChapterNumber
+		if chNum == 0 && req.ChapterNumAlt != 0 {
+			chNum = req.ChapterNumAlt
+		}
+
+		item, err := g.downloadSvc.StartDownload(r.Context(), prov, media, chapter, chNum, req.MediaTitle, req.PosterURL, req.Title)
+		if err != nil {
+			g.writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		g.writeJSON(w, http.StatusOK, item)
+
+	case http.MethodDelete:
+		provider := r.URL.Query().Get("provider")
+		if provider == "" {
+			provider = "com.vessel.reading.mangile"
+		}
+		media := r.URL.Query().Get("media")
+		chapter := r.URL.Query().Get("chapter")
+
+		if err := g.downloadSvc.DeleteDownload(provider, media, chapter); err != nil {
+			g.writeError(w, http.StatusNotFound, err.Error())
+			return
+		}
+		g.writeJSON(w, http.StatusOK, map[string]bool{"deleted": true})
+
+	default:
+		g.writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
+}
+
+func (g *GatewayServer) handleReadingDownloadsList(w http.ResponseWriter, r *http.Request) {
+	if g.downloadSvc == nil {
+		g.writeJSON(w, http.StatusOK, map[string]any{"downloads": []any{}})
+		return
+	}
+
+	media := r.URL.Query().Get("media")
+	downloads := g.downloadSvc.ListDownloads(media)
+	g.writeJSON(w, http.StatusOK, map[string]any{"downloads": downloads})
+}
+
+func (g *GatewayServer) handleReadingOfflineContent(w http.ResponseWriter, r *http.Request) {
+	if g.downloadSvc == nil {
+		g.writeError(w, http.StatusServiceUnavailable, "download service unavailable")
+		return
+	}
+
+	provider := r.URL.Query().Get("provider")
+	if provider == "" {
+		provider = "com.vessel.reading.mangile"
+	}
+	media := r.URL.Query().Get("media")
+	chapter := r.URL.Query().Get("chapter")
+
+	content, err := g.downloadSvc.GetChapterOffline(provider, media, chapter)
+	if err != nil {
+		g.writeError(w, http.StatusNotFound, err.Error())
+		return
+	}
+	g.writeJSON(w, http.StatusOK, content)
+}
+
+func (g *GatewayServer) handleReadingOfflinePage(w http.ResponseWriter, r *http.Request) {
+	if g.downloadSvc == nil {
+		g.writeError(w, http.StatusServiceUnavailable, "download service unavailable")
+		return
+	}
+
+	provider := r.URL.Query().Get("provider")
+	if provider == "" {
+		provider = "com.vessel.reading.mangile"
+	}
+	media := r.URL.Query().Get("media")
+	chapter := r.URL.Query().Get("chapter")
+	pageNum, _ := strconv.Atoi(r.URL.Query().Get("page"))
+
+	g.downloadSvc.ServeOfflinePage(w, r, provider, media, chapter, pageNum)
+}
+
+// --- Multi-Device LAN Sync & Remote Control Handlers ---
+
+func (g *GatewayServer) handleSyncDevices(w http.ResponseWriter, r *http.Request) {
+	if g.lanSyncSvc == nil {
+		g.writeJSON(w, http.StatusOK, map[string]any{"devices": []any{}})
+		return
+	}
+
+	devices := g.lanSyncSvc.ListDevices()
+	g.writeJSON(w, http.StatusOK, map[string]any{"devices": devices})
+}
+
+func (g *GatewayServer) handleSyncRemote(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		g.writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	if g.lanSyncSvc == nil {
+		g.writeError(w, http.StatusServiceUnavailable, "sync service unavailable")
+		return
+	}
+
+	var cmd vesselsync.RemoteCommand
+	if err := json.NewDecoder(r.Body).Decode(&cmd); err != nil {
+		g.writeError(w, http.StatusBadRequest, "invalid json")
+		return
+	}
+
+	if err := g.lanSyncSvc.SendCommand(&cmd); err != nil {
+		g.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	g.writeJSON(w, http.StatusOK, map[string]bool{"sent": true})
+}
+
+func (g *GatewayServer) handleSyncPoll(w http.ResponseWriter, r *http.Request) {
+	if g.lanSyncSvc == nil {
+		g.writeJSON(w, http.StatusOK, map[string]any{"command": nil})
+		return
+	}
+
+	cmd := g.lanSyncSvc.PollCommand()
+	g.writeJSON(w, http.StatusOK, map[string]any{"command": cmd})
 }

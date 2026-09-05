@@ -85,14 +85,21 @@ func handlePluginSubcommand(args []string, out io.Writer) error {
 		}
 		return PluginEnable(args[1], "", out)
 
-	case "disable":
+	case "init":
 		if len(args) < 2 {
-			return fmt.Errorf("usage: vessel plugin disable <plugin-id>")
+			return fmt.Errorf("usage: vessel plugin init <target-dir> [--id <id>] [--name <name>] [--domain <cinema|reading|iptv>]")
 		}
-		return PluginDisable(args[1], "", out)
+		return PluginInit(args[1:], out)
+
+	case "validate", "check":
+		target := "."
+		if len(args) >= 2 {
+			target = args[1]
+		}
+		return PluginValidate(target, out)
 
 	default:
-		return fmt.Errorf("unknown plugin command '%s'. Available: list, install, remove, enable, disable", sub)
+		return fmt.Errorf("unknown plugin command '%s'. Available: list, install, remove, enable, disable, init, validate", sub)
 	}
 }
 
