@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -305,6 +306,7 @@ func (s *IPTVService) refreshFromIPTVOrg() {
 			// Channel name is after the last comma
 			if idx := strings.LastIndex(line, ","); idx != -1 {
 				curName = strings.TrimSpace(line[idx+1:])
+				curName = cleanChannelTitle(curName)
 			}
 		} else if strings.HasPrefix(line, "http://") || strings.HasPrefix(line, "https://") {
 			if curName != "" {
@@ -312,6 +314,7 @@ func (s *IPTVService) refreshFromIPTVOrg() {
 				if chID == "" {
 					chID = fmt.Sprintf("ch-%d", len(parsed)+1)
 				}
+				curLogo = resolveVerifiedLogo(curName, curLogo)
 				parsed = append(parsed, Channel{
 					ID:        chID,
 					Name:      curName,
@@ -337,4 +340,76 @@ func (s *IPTVService) refreshFromIPTVOrg() {
 		}
 		s.loaded = true
 	}
+}
+
+var (
+	reResolution = regexp.MustCompile(`(?i)\s*\(\d+p\)`)
+	reBracketTag = regexp.MustCompile(`(?i)\s*\[[^\]]*\]`)
+)
+
+func cleanChannelTitle(raw string) string {
+	cleaned := reResolution.ReplaceAllString(raw, "")
+	cleaned = reBracketTag.ReplaceAllString(cleaned, "")
+	return strings.TrimSpace(cleaned)
+}
+
+func resolveVerifiedLogo(name, existingLogo string) string {
+	lower := strings.ToLower(name)
+
+	// Direct High-Resolution Wikimedia Verified Logos Map
+	verifiedLogos := map[string]string{
+		"trt 1":        "https://upload.wikimedia.org/wikipedia/commons/4/47/TRT_1_logo.png",
+		"trt haber":    "https://upload.wikimedia.org/wikipedia/commons/e/e0/TRT_Haber_logo.png",
+		"trt spor":     "https://upload.wikimedia.org/wikipedia/commons/2/23/TRT_Spor_logo.png",
+		"trt belgesel": "https://upload.wikimedia.org/wikipedia/commons/b/b8/TRT_Belgesel_logo.png",
+		"trt world":    "https://upload.wikimedia.org/wikipedia/commons/8/87/TRT_World_logo.svg",
+		"trt müzik":    "https://upload.wikimedia.org/wikipedia/commons/a/a9/TRT_M%C3%BCzik_logo.png",
+		"trt çocuk":    "https://upload.wikimedia.org/wikipedia/commons/4/47/TRT_%C3%87ocuk_logo.png",
+		"atv":          "https://upload.wikimedia.org/wikipedia/commons/4/4c/Atv_logo.png",
+		"a haber":      "https://upload.wikimedia.org/wikipedia/commons/7/7c/Ahaber_Logo.png",
+		"a spor":       "https://upload.wikimedia.org/wikipedia/commons/e/ea/A_Spor_logo.png",
+		"360 tv":       "https://upload.wikimedia.org/wikipedia/commons/4/41/360_TV_logo.png",
+		"360":          "https://upload.wikimedia.org/wikipedia/commons/4/41/360_TV_logo.png",
+		"tv8":          "https://upload.wikimedia.org/wikipedia/commons/1/14/Tv8_logo.png",
+		"show tv":      "https://upload.wikimedia.org/wikipedia/commons/4/41/Show_TV_logo_2014.png",
+		"kanal d":      "https://upload.wikimedia.org/wikipedia/commons/1/1c/Kanal_D_logo_2018.png",
+		"star tv":      "https://upload.wikimedia.org/wikipedia/commons/7/72/Star_TV_logo_2011.png",
+		"now":          "https://upload.wikimedia.org/wikipedia/commons/4/49/NOW_T%C3%BCrkiye_logo.png",
+		"now tv":       "https://upload.wikimedia.org/wikipedia/commons/4/49/NOW_T%C3%BCrkiye_logo.png",
+		"cnn türk":     "https://upload.wikimedia.org/wikipedia/commons/2/24/CNN_T%C3%BCrk_logo.png",
+		"habertürk":    "https://upload.wikimedia.org/wikipedia/commons/6/65/Habert%C3%BCrk_TV_logo.png",
+		"ntv":          "https://upload.wikimedia.org/wikipedia/commons/6/64/NTV_logo.png",
+		"halk tv":      "https://upload.wikimedia.org/wikipedia/commons/2/2a/Halk_TV_logo_2020.png",
+		"tele1":        "https://upload.wikimedia.org/wikipedia/commons/5/52/Tele1_logo.png",
+		"beyaz tv":     "https://upload.wikimedia.org/wikipedia/commons/8/87/Beyaz_TV_logo.png",
+		"aztv":         "https://upload.wikimedia.org/wikipedia/commons/5/52/AzTV_logo.png",
+		"i̇ctimai tv":   "https://upload.wikimedia.org/wikipedia/commons/7/7a/%C4%B0ctimai_Television_logo.png",
+		"ictimai tv":   "https://upload.wikimedia.org/wikipedia/commons/7/7a/%C4%B0ctimai_Television_logo.png",
+		"i̇dman tv":     "https://upload.wikimedia.org/wikipedia/commons/2/2a/Idman_Azerbaycan_TV_logo.png",
+		"idman tv":     "https://upload.wikimedia.org/wikipedia/commons/2/2a/Idman_Azerbaycan_TV_logo.png",
+		"bbc news":     "https://upload.wikimedia.org/wikipedia/commons/6/62/BBC_News_2019.svg",
+		"bloomberg tv": "https://upload.wikimedia.org/wikipedia/commons/4/40/Bloomberg_Television_logo.svg",
+		"bloomberg":    "https://upload.wikimedia.org/wikipedia/commons/4/40/Bloomberg_Television_logo.svg",
+		"sky news":     "https://upload.wikimedia.org/wikipedia/commons/8/87/Sky_News_logo_2015.svg",
+		"france 24":    "https://upload.wikimedia.org/wikipedia/commons/2/23/France_24_logo.svg",
+		"deutsche welle": "https://upload.wikimedia.org/wikipedia/commons/7/75/Deutsche_Welle_logo.svg",
+		"cbs news":     "https://upload.wikimedia.org/wikipedia/commons/1/19/CBS_News_logo_2020.svg",
+		"abc news":     "https://upload.wikimedia.org/wikipedia/commons/6/60/ABC_News_Live_logo.svg",
+		"nasa tv":      "https://upload.wikimedia.org/wikipedia/commons/e/e5/NASA_logo.svg",
+		"euronews":     "https://upload.wikimedia.org/wikipedia/commons/4/4b/Euronews_2016_logo.svg",
+		"nhk world":    "https://upload.wikimedia.org/wikipedia/commons/7/7b/NHK_World-Japan_logo.svg",
+		"zdf":          "https://upload.wikimedia.org/wikipedia/commons/a/af/ZDFinfo_logo_2021.svg",
+		"arte":         "https://upload.wikimedia.org/wikipedia/commons/e/e8/Arte_logo_2017.svg",
+	}
+
+	for k, logo := range verifiedLogos {
+		if strings.Contains(lower, k) {
+			return logo
+		}
+	}
+
+	if existingLogo != "" {
+		return existingLogo
+	}
+	return ""
 }

@@ -1337,6 +1337,9 @@ class VesselApp {
 
     // Multi-Device LAN Sync & Remote Control
     this.setupLanSync();
+
+    // TV & Gamepad Spatial Navigation
+    this.setupSpatialAndGamepadNavigation();
   }
 
   // --- Localization (i18n) Engine ---
@@ -1576,6 +1579,10 @@ class VesselApp {
     pluginsView.classList.add("hidden");
     settingsView.classList.add("hidden");
 
+    if (route !== "iptv") {
+      this.stopIPTVPlayback();
+    }
+
     if (route === "iptv") {
       this.currentDomain = "iptv";
       if (iptvView) iptvView.classList.remove("hidden");
@@ -1675,9 +1682,18 @@ class VesselApp {
     }
   }
 
+  cleanChannelName(name) {
+    if (!name) return "Channel";
+    return name
+      .replace(/\s*\(\d+p\)/gi, "")
+      .replace(/\s*\[[^\]]*\]/gi, "")
+      .trim();
+  }
+
   getChannelLogoFallback(name) {
     const clean = (name || "TV").replace(/[^a-zA-Z0-9]/g, "").substring(0, 4).toUpperCase() || "TV";
-    return `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="%231e293b"/><text x="50%" y="54%" dominant-baseline="middle" text-anchor="middle" fill="%2338bdf8" font-size="14" font-weight="900" font-family="system-ui, sans-serif">${clean}</text></svg>`;
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64"><defs><linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#1e293b"/><stop offset="100%" stop-color="#0f172a"/></linearGradient></defs><rect width="64" height="64" rx="14" fill="url(#g)" stroke="#334155" stroke-width="1.5"/><text x="50%" y="54%" dominant-baseline="middle" text-anchor="middle" fill="#38bdf8" font-size="14" font-weight="900" font-family="system-ui, -apple-system, sans-serif">${clean}</text></svg>`;
+    return `data:image/svg+xml;base64,${btoa(svg)}`;
   }
 
   async fetchIPTVChannels() {
@@ -1739,21 +1755,23 @@ class VesselApp {
     }
 
     list.forEach(ch => {
+      const cleanTitle = this.cleanChannelName(ch.title);
       const extra = ch.extra || (ch.external_ids ? ch.external_ids.extra : {}) || {};
       const country = extra.country || "TV";
       const category = extra.category || "General";
       const quality = extra.quality || "HD";
       const isActive = this.iptvState.activeChannel && this.iptvState.activeChannel.id === ch.id;
 
-      const logoFallback = this.getChannelLogoFallback(ch.title);
+      const logoFallback = this.getChannelLogoFallback(cleanTitle);
       const logoSrc = ch.poster_url || logoFallback;
 
       const item = document.createElement("div");
       item.className = `iptv-channel-card ${isActive ? "active" : ""}`;
+      item.setAttribute("tabindex", "0");
       item.innerHTML = `
-        <img class="iptv-channel-logo" src="${logoSrc}" alt="${ch.title}" onerror="this.onerror=null; this.src='${logoFallback}';">
+        <img class="iptv-channel-logo" src="${logoSrc}" alt="${cleanTitle}" referrerpolicy="no-referrer">
         <div class="iptv-channel-meta">
-          <div class="iptv-channel-name">${ch.title}</div>
+          <div class="iptv-channel-name">${cleanTitle}</div>
           <div class="iptv-channel-sub">
             <span class="iptv-tag">${country}</span>
             <span class="iptv-tag">${category}</span>
@@ -1761,6 +1779,14 @@ class VesselApp {
           </div>
         </div>
       `;
+
+      const img = item.querySelector(".iptv-channel-logo");
+      if (img) {
+        img.onerror = () => {
+          img.onerror = null;
+          img.src = logoFallback;
+        };
+      }
 
       item.addEventListener("click", () => {
         this.playIPTVChannel(ch);
@@ -1844,6 +1870,22 @@ class VesselApp {
         if (loadText) loadText.textContent = "Yayın oynatılamadı.";
       };
     }
+  }
+
+  stopIPTVPlayback() {
+    const video = document.getElementById("iptv-video-player");
+    if (video) {
+      video.pause();
+      video.src = "";
+    }
+    if (this.iptvHlsInstance) {
+      this.iptvHlsInstance.destroy();
+      this.iptvHlsInstance = null;
+    }
+    const overlay = document.getElementById("iptv-player-overlay");
+    const emptyElem = document.getElementById("iptv-player-empty");
+    if (emptyElem) emptyElem.classList.remove("hidden");
+    if (overlay) overlay.classList.add("hidden");
   }
 
   // --- Vessel Custom Engineered Video Player Modal ---
@@ -2517,6 +2559,7 @@ class VesselApp {
   // --- Dedicated Full-Page Multi-Domain Search System ---
   async openSearchView(query) {
     if (!query) return;
+    this.stopIPTVPlayback();
     this.currentSearchQuery = query;
     this.searchDomainFilter = this.searchDomainFilter || "all";
 
@@ -2705,6 +2748,7 @@ class VesselApp {
 
   // --- Full-Page Details View (NO MODALS / POPUPS!) ---
   async openDetailsView(item) {
+    this.stopIPTVPlayback();
     this.currentDetailsItem = item;
     const detailsView = document.getElementById("details-view");
     const content = document.getElementById("details-content");
@@ -4607,6 +4651,251 @@ class VesselApp {
         }
         break;
     }
+  }
+
+  // --- Step 1: Spatial & Gamepad TV Navigation Engine ---
+  setupSpatialAndGamepadNavigation() {
+    let lastNavTime = 0;
+    const NAV_THROTTLE = 180; // ms
+
+    const getNavCandidates = () => {
+      // If video player modal is open, only navigate within player HUD
+      const playerModal = document.getElementById("vessel-player-modal");
+      if (playerModal && !playerModal.classList.contains("hidden")) {
+        return Array.from(playerModal.querySelectorAll("button, input, select, [tabindex='0']"))
+          .filter(el => !el.classList.contains("hidden") && el.offsetParent !== null);
+      }
+
+      // If details view is open
+      const detailsView = document.getElementById("details-view");
+      if (detailsView && !detailsView.classList.contains("hidden")) {
+        return Array.from(detailsView.querySelectorAll("button, input, select, .chapter-row, [tabindex='0']"))
+          .filter(el => !el.classList.contains("hidden") && el.offsetParent !== null);
+      }
+
+      // If LAN sync modal is open
+      const lanModal = document.getElementById("lan-sync-modal");
+      if (lanModal && !lanModal.classList.contains("hidden")) {
+        return Array.from(lanModal.querySelectorAll("button, input, select, .lan-device-row, [tabindex='0']"))
+          .filter(el => !el.classList.contains("hidden") && el.offsetParent !== null);
+      }
+
+      // Main application view
+      const selectors = [
+        ".nav-item",
+        "#search-input",
+        "#locale-select",
+        "#quick-theme-toggle",
+        "#quick-lan-toggle",
+        ".domain-pills .pill",
+        ".library-tabs .tab",
+        ".plugins-nav-tabs .tab",
+        ".media-card",
+        ".resume-card",
+        ".iptv-channel-card",
+        ".iptv-pill",
+        ".btn",
+        ".chapter-row",
+        ".hud-btn"
+      ];
+      return Array.from(document.querySelectorAll(selectors.join(",")))
+        .filter(el => {
+          if (el.classList.contains("hidden")) return false;
+          if (el.closest(".hidden")) return false;
+          return el.offsetParent !== null;
+        });
+    };
+
+    const navigateDirection = (dir) => {
+      const now = Date.now();
+      if (now - lastNavTime < NAV_THROTTLE) return;
+      lastNavTime = now;
+
+      const candidates = getNavCandidates();
+      if (candidates.length === 0) return;
+
+      let current = document.querySelector(".tv-focused") || document.activeElement;
+      if (!current || !candidates.includes(current)) {
+        setFocus(candidates[0]);
+        return;
+      }
+
+      const curRect = current.getBoundingClientRect();
+      const curCenter = { x: curRect.left + curRect.width / 2, y: curRect.top + curRect.height / 2 };
+
+      let bestCandidate = null;
+      let minDistance = Infinity;
+
+      candidates.forEach(cand => {
+        if (cand === current) return;
+        const cRect = cand.getBoundingClientRect();
+        const cCenter = { x: cRect.left + cRect.width / 2, y: cRect.top + cRect.height / 2 };
+
+        const dx = cCenter.x - curCenter.x;
+        const dy = cCenter.y - curCenter.y;
+
+        let isMatch = false;
+        let dist = Infinity;
+
+        switch (dir) {
+          case "up":
+            if (dy < -8) {
+              isMatch = true;
+              dist = Math.abs(dy) + Math.abs(dx) * 2.2;
+            }
+            break;
+          case "down":
+            if (dy > 8) {
+              isMatch = true;
+              dist = Math.abs(dy) + Math.abs(dx) * 2.2;
+            }
+            break;
+          case "left":
+            if (dx < -8) {
+              isMatch = true;
+              dist = Math.abs(dx) + Math.abs(dy) * 2.2;
+            }
+            break;
+          case "right":
+            if (dx > 8) {
+              isMatch = true;
+              dist = Math.abs(dx) + Math.abs(dy) * 2.2;
+            }
+            break;
+        }
+
+        if (isMatch && dist < minDistance) {
+          minDistance = dist;
+          bestCandidate = cand;
+        }
+      });
+
+      if (bestCandidate) {
+        setFocus(bestCandidate);
+      }
+    };
+
+    const setFocus = (el) => {
+      document.querySelectorAll(".tv-focused").forEach(e => e.classList.remove("tv-focused"));
+      if (el) {
+        el.classList.add("tv-focused");
+        if (typeof el.focus === "function") el.focus();
+        el.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
+      }
+    };
+
+    // Keyboard Arrow Listeners
+    window.addEventListener("keydown", (e) => {
+      const isInput = document.activeElement && (document.activeElement.tagName === "INPUT" || document.activeElement.tagName === "TEXTAREA");
+
+      if (e.key === "ArrowUp") {
+        if (!isInput) { e.preventDefault(); navigateDirection("up"); }
+      } else if (e.key === "ArrowDown") {
+        if (isInput && document.activeElement.id === "search-input") {
+          e.preventDefault();
+          document.activeElement.blur();
+          navigateDirection("down");
+        } else if (!isInput) {
+          e.preventDefault();
+          navigateDirection("down");
+        }
+      } else if (e.key === "ArrowLeft") {
+        if (!isInput) { e.preventDefault(); navigateDirection("left"); }
+      } else if (e.key === "ArrowRight") {
+        if (!isInput) { e.preventDefault(); navigateDirection("right"); }
+      } else if (e.key === "Enter") {
+        const focused = document.querySelector(".tv-focused");
+        if (focused && focused !== document.activeElement) {
+          e.preventDefault();
+          focused.click();
+        }
+      } else if (e.key === "Escape" || e.key === "Backspace") {
+        if (!isInput) {
+          const detailsView = document.getElementById("details-view");
+          if (detailsView && !detailsView.classList.contains("hidden")) {
+            e.preventDefault();
+            document.getElementById("details-back-btn")?.click();
+          }
+        }
+      }
+    });
+
+    // Gamepad API integration
+    let gamepadPollActive = false;
+    let lastButtonStates = {};
+
+    window.addEventListener("gamepadconnected", (e) => {
+      this.showToast(`🎮 Gamepad bağlandı: ${e.gamepad.id.split("(")[0]} (TV Modu Aktif)`, "info");
+      if (!gamepadPollActive) {
+        gamepadPollActive = true;
+        pollGamepad();
+      }
+    });
+
+    const pollGamepad = () => {
+      if (!gamepadPollActive) return;
+      const gamepads = navigator.getGamepads ? navigator.getGamepads() : [];
+      for (const gp of gamepads) {
+        if (!gp) continue;
+
+        // D-Pad and Left Stick
+        const stickX = gp.axes[0] || 0;
+        const stickY = gp.axes[1] || 0;
+        const dpadUp = gp.buttons[12] && gp.buttons[12].pressed;
+        const dpadDown = gp.buttons[13] && gp.buttons[13].pressed;
+        const dpadLeft = gp.buttons[14] && gp.buttons[14].pressed;
+        const dpadRight = gp.buttons[15] && gp.buttons[15].pressed;
+
+        if (dpadUp || stickY < -0.55) navigateDirection("up");
+        else if (dpadDown || stickY > 0.55) navigateDirection("down");
+        else if (dpadLeft || stickX < -0.55) navigateDirection("left");
+        else if (dpadRight || stickX > 0.55) navigateDirection("right");
+
+        // Action Buttons
+        const btnA = gp.buttons[0] && gp.buttons[0].pressed;
+        const btnB = gp.buttons[1] && gp.buttons[1].pressed;
+        const btnX = gp.buttons[2] && gp.buttons[2].pressed;
+        const btnL1 = gp.buttons[4] && gp.buttons[4].pressed;
+        const btnR1 = gp.buttons[5] && gp.buttons[5].pressed;
+
+        if (btnA && !lastButtonStates["btnA"]) {
+          const focused = document.querySelector(".tv-focused") || document.activeElement;
+          if (focused) focused.click();
+        }
+        if (btnB && !lastButtonStates["btnB"]) {
+          const modal = document.getElementById("vessel-player-modal");
+          if (modal && !modal.classList.contains("hidden")) {
+            document.getElementById("vessel-close-player-btn")?.click();
+          } else {
+            document.getElementById("details-back-btn")?.click();
+          }
+        }
+        if (btnX && !lastButtonStates["btnX"]) {
+          document.getElementById("search-input")?.focus();
+        }
+
+        // Domain switching with L1 / R1
+        if (btnL1 && !lastButtonStates["btnL1"]) {
+          const domains = ["cinema", "reading", "iptv", "library"];
+          const curIdx = domains.indexOf(this.currentDomain || "cinema");
+          const nextIdx = (curIdx - 1 + domains.length) % domains.length;
+          this.switchRoute(domains[nextIdx]);
+        }
+        if (btnR1 && !lastButtonStates["btnR1"]) {
+          const domains = ["cinema", "reading", "iptv", "library"];
+          const curIdx = domains.indexOf(this.currentDomain || "cinema");
+          const nextIdx = (curIdx + 1) % domains.length;
+          this.switchRoute(domains[nextIdx]);
+        }
+
+        lastButtonStates["btnA"] = btnA;
+        lastButtonStates["btnB"] = btnB;
+        lastButtonStates["btnX"] = btnX;
+        lastButtonStates["btnL1"] = btnL1;
+        lastButtonStates["btnR1"] = btnR1;
+      }
+      requestAnimationFrame(pollGamepad);
+    };
   }
 
   // --- Toast Notification ---

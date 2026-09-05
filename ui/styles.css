@@ -2682,5 +2682,20 @@ html, body {
   transition: width 0.3s;
 }
 
+/* ==========================================================================
+   SPATIAL & GAMEPAD TV NAVIGATION FOCUS STYLES
+   ========================================================================== */
+.tv-focused {
+  outline: 3px solid var(--v-accent-primary) !important;
+  outline-offset: 3px !important;
+  box-shadow: 0 0 24px rgba(56, 189, 248, 0.7), inset 0 0 0 1px rgba(255, 255, 255, 0.2) !important;
+  transform: scale(1.03) !important;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, outline 0.15s ease !important;
+  z-index: 25 !important;
+}
 
-
+.iptv-channel-card:focus,
+.iptv-channel-card.tv-focused {
+  border-color: var(--v-accent-primary) !important;
+  background: var(--v-bg-elevated) !important;
+}
