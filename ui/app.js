@@ -105,12 +105,18 @@ const I18N_STRINGS = {
     cat_latest_contents: "Latest Releases",
     cat_popular_channels: "Popular Channels",
     cat_news_info: "News & Information",
-    cat_sports_live: "Sports & Entertainment",
     status_offline: "Offline Downloads",
     lan_sync_title: "LAN Sync & Remote Control",
     lan_this_device: "This Device",
     lan_discovered_devices: "Discovered Devices",
-    lan_remote_control: "Remote Control"
+    lan_remote_control: "Remote Control",
+    ai_badge_title: "Local AI Discovery Engine",
+    ai_main_headline: "Discover by Mood & Vibe",
+    ai_taste_summary: "Your Taste DNA calculated locally on device (100% Offline & Private).",
+    ai_btn_discover: "Find Matches",
+    ai_results_title: "AI Curated Matches",
+    ai_shelf_title: "✨ Tailored to Your Taste (AI Taste Match)",
+    ai_input_placeholder: "Describe what you want (e.g. 'mind-bending psychological anime', '90s cyberpunk')..."
   },
   tr: {
     nav_cinema: "Sinema",
@@ -214,13 +220,18 @@ const I18N_STRINGS = {
     cat_popular_contents: "Popüler İçerikler",
     cat_latest_contents: "Son Oluşturulan İçerikler",
     cat_popular_channels: "Popüler Kanallar",
-    cat_news_info: "Haber & Bilgi",
-    cat_sports_live: "Spor & Canlı",
     status_offline: "İndirilenler",
     lan_sync_title: "LAN Cihazları ve Uzaktan Kumanda",
     lan_this_device: "Bu Cihaz",
     lan_discovered_devices: "Ağdaki Cihazlar",
-    lan_remote_control: "Uzaktan Kumanda"
+    lan_remote_control: "Uzaktan Kumanda",
+    ai_badge_title: "Yerel AI Keşif Motoru",
+    ai_main_headline: "Ruh Haline & Zevkine Göre Keşfet",
+    ai_taste_summary: "Kişisel zevk profiliniz yerel olarak hesaplandı (100% Çevrimdışı & Gizli).",
+    ai_btn_discover: "Öneri Getir",
+    ai_results_title: "Yapay Zeka Keşifleri",
+    ai_shelf_title: "✨ Senin Zevkine Özel (AI Taste Match)",
+    ai_input_placeholder: "Nasıl bir şey arıyorsun? (örn: 'ters köşe psikolojik anime', '90lar siberpunk', 'kafa dağıtmalık komedi')..."
   },
   de: {
     nav_cinema: "Kino",
@@ -1177,6 +1188,7 @@ class VesselApp {
     await this.loadLocalePreference();
     await this.loadActiveTheme();
     this.bindEvents();
+    this.initAIDiscoveryEngine();
     this.switchRoute("cinema");
   }
 
@@ -1468,12 +1480,15 @@ class VesselApp {
       container.innerHTML = "";
       themes.forEach(t => {
         const isCurrent = this.activeTheme && (this.activeTheme.theme?.id === t.id || this.activeTheme.id === t.id);
-        const item = document.createElement("div");
-        item.className = `theme-item ${isCurrent ? "active" : ""}`;
-
         // Localized theme name
         const transKey = "theme_" + t.id.replace(/-/g, "_");
         const displayName = this.t(transKey) !== transKey ? this.t(transKey) : (t.display_name || t.name);
+
+        const item = document.createElement("div");
+        item.className = `theme-item ${isCurrent ? "active" : ""}`;
+        item.tabIndex = 0;
+        item.setAttribute("role", "button");
+        item.setAttribute("aria-label", displayName);
 
         const tokens = t.variants?.[0]?.tokens || {};
         const primaryColor = tokens["accent-primary"] || this.getThemeColor(t.id, "primary");
@@ -1491,6 +1506,13 @@ class VesselApp {
 
         item.addEventListener("click", () => {
           this.applyTheme(t.id);
+        });
+
+        item.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            this.applyTheme(t.id);
+          }
         });
 
         container.appendChild(item);
@@ -1563,6 +1585,7 @@ class VesselApp {
 
     const mainView = document.getElementById("main-view");
     const resumeSection = document.getElementById("resume-section");
+    const aiSection = document.getElementById("ai-discovery-section");
     const detailsView = document.getElementById("details-view");
     const searchView = document.getElementById("search-view");
     const iptvView = document.getElementById("iptv-view");
@@ -1574,6 +1597,7 @@ class VesselApp {
     mainView.classList.add("hidden");
     if (searchView) searchView.classList.add("hidden");
     if (iptvView) iptvView.classList.add("hidden");
+    if (aiSection) aiSection.classList.add("hidden");
     detailsView.classList.add("hidden");
     libraryView.classList.add("hidden");
     pluginsView.classList.add("hidden");
@@ -1592,6 +1616,7 @@ class VesselApp {
       this.currentDomain = route;
       mainView.classList.remove("hidden");
       resumeSection.classList.remove("hidden");
+      if (aiSection) aiSection.classList.remove("hidden");
 
       // Update Header Title based on domain
       const titleMap = {
@@ -1616,7 +1641,16 @@ class VesselApp {
       settingsView.classList.remove("hidden");
       resumeSection.classList.add("hidden");
       this.loadDebridStatus();
-      this.renderThemeSelector();
+      this.renderThemeSelector().then(() => {
+        if (document.querySelector(".tv-focused")) {
+          const firstTarget = document.querySelector("#theme-options .theme-item.active") ||
+                              document.querySelector("#theme-options .theme-item") ||
+                              document.querySelector("#settings-view input, #settings-view button");
+          if (firstTarget && typeof this.setTVFocus === "function") {
+            this.setTVFocus(firstTarget);
+          }
+        }
+      });
     }
   }
 
@@ -2437,6 +2471,202 @@ class VesselApp {
     return `${provName} • ${label}`;
   }
 
+  // --- Local AI Smart Discovery & Taste Engine ---
+  async initAIDiscoveryEngine() {
+    await this.loadAITasteProfile();
+    await this.loadAIMoods();
+
+    const submitBtn = document.getElementById("ai-vibe-submit-btn");
+    const input = document.getElementById("ai-vibe-prompt");
+    const clearBtn = document.getElementById("ai-clear-results-btn");
+
+    if (submitBtn && input) {
+      submitBtn.addEventListener("click", () => {
+        const q = input.value.trim();
+        if (q) this.triggerAIDiscover({ query: q, heading: q });
+      });
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          const q = input.value.trim();
+          if (q) this.triggerAIDiscover({ query: q, heading: q });
+        }
+      });
+    }
+
+    if (clearBtn) {
+      clearBtn.addEventListener("click", () => {
+        document.getElementById("ai-results-container")?.classList.add("hidden");
+      });
+    }
+  }
+
+  async loadAITasteProfile() {
+    try {
+      const res = await fetch("/api/ai/taste-profile");
+      if (!res.ok) return;
+      const data = await res.json();
+
+      const tagsContainer = document.getElementById("ai-taste-tags");
+      if (tagsContainer && (data.active_traits_tr || data.active_traits_en)) {
+        tagsContainer.innerHTML = "";
+        const isTR = this.getEffectiveLocale() === "tr";
+        const traits = isTR ? (data.active_traits_tr || []) : (data.active_traits_en || []);
+        traits.forEach(t => {
+          const tag = document.createElement("span");
+          tag.className = "ai-dna-tag";
+          tag.textContent = t;
+          tagsContainer.appendChild(tag);
+        });
+      }
+    } catch (_) {}
+  }
+
+  async loadAIMoods() {
+    const container = document.getElementById("ai-mood-chips");
+    if (!container) return;
+
+    try {
+      const res = await fetch("/api/ai/moods");
+      if (!res.ok) return;
+      const data = await res.json();
+      const moods = data.moods || [];
+
+      container.innerHTML = "";
+      const isTR = this.getEffectiveLocale() === "tr";
+
+      moods.forEach(m => {
+        const chip = document.createElement("button");
+        chip.type = "button";
+        chip.className = "ai-mood-chip";
+        const title = isTR ? m.title_tr : m.title_en;
+        chip.innerHTML = `<span>${m.icon || "✨"}</span><span>${title}</span>`;
+        chip.addEventListener("click", () => {
+          document.querySelectorAll(".ai-mood-chip").forEach(c => c.classList.remove("active"));
+          chip.classList.add("active");
+          this.triggerAIDiscover({ mood: m.id, heading: title });
+        });
+        container.appendChild(chip);
+      });
+    } catch (_) {}
+  }
+
+  async triggerAIDiscover({ query = "", mood = "", heading = "" }) {
+    const resultsContainer = document.getElementById("ai-results-container");
+    const headingEl = document.getElementById("ai-results-heading");
+    const grid = document.getElementById("ai-results-grid");
+    if (!resultsContainer || !grid) return;
+
+    resultsContainer.classList.remove("hidden");
+    if (headingEl) {
+      headingEl.textContent = `✨ ${heading || this.t("ai_results_title")}`;
+    }
+    grid.innerHTML = `
+      <div style="padding: 24px; color: #94a3b8; display: flex; align-items: center; gap: 10px;">
+        <span style="animation: spin 1s linear infinite; display: inline-block;">⚙️</span>
+        <span>${this.t("ai_main_headline")}...</span>
+      </div>
+    `;
+
+    try {
+      const res = await fetch("/api/ai/discover", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: query, mood: mood, limit: 12 })
+      });
+      if (!res.ok) throw new Error("AI discovery failed");
+      const data = await res.json();
+      const items = data.recommendations || [];
+
+      grid.innerHTML = "";
+      if (items.length === 0) {
+        grid.innerHTML = `<div style="padding: 20px; color: #64748b;">${this.t("no_results")}</div>`;
+        return;
+      }
+
+      items.forEach(it => {
+        const card = this.createAICard(it);
+        grid.appendChild(card);
+      });
+      grid.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    } catch (e) {
+      grid.innerHTML = `<div style="padding: 20px; color: var(--v-status-error);">${e.message}</div>`;
+    }
+  }
+
+  createAICard(item) {
+    const card = document.createElement("div");
+    card.className = "media-card ai-media-card";
+    const title = item.title || "Unknown Title";
+    const poster = item.poster_url || "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=400";
+    const score = item.match_score || 85;
+    const isReading = item.domain === "reading" || item.type === "manga" || item.type === "webtoon";
+    const overlayIcon = isReading ? "📖" : "▶";
+    const reason = this.getEffectiveLocale() === "tr" ? (item.reason_tr || `%${score} Eşleşme`) : (item.reason_en || `${score}% Match`);
+
+    card.innerHTML = `
+      <div class="poster-wrapper">
+        <img src="${poster}" alt="${title}" class="poster-img" loading="lazy" onerror="this.src='https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=400'">
+        <span class="ai-card-badge">⚡ %${score}</span>
+        <div class="poster-overlay-btn">${overlayIcon}</div>
+      </div>
+      <div class="card-details">
+        <div class="card-title" title="${title}">${title}</div>
+        <div class="ai-card-insight" title="${reason}">✦ ${reason}</div>
+      </div>
+    `;
+
+    card.addEventListener("click", () => {
+      this.openDetailsView({
+        id: item.id,
+        provider_id: item.provider_id,
+        title: title,
+        poster_url: poster,
+        type: isReading ? 4 : 1,
+        type_name: item.type || (isReading ? "Manga" : "Movie"),
+        domain: isReading ? 2 : 1,
+        overview: item.overview || ""
+      });
+    });
+
+    return card;
+  }
+
+  async loadAITasteShelf(domain, container) {
+    try {
+      const res = await fetch(`/api/ai/recommendations?domain=${encodeURIComponent(domain)}&limit=12`);
+      if (!res.ok) return;
+      const data = await res.json();
+      const items = data.recommendations || [];
+      if (items.length === 0) return;
+
+      const shelf = document.createElement("div");
+      shelf.className = "catalog-row ai-taste-shelf";
+      shelf.innerHTML = `
+        <div class="catalog-header">
+          <div class="catalog-title-group">
+            <h3 class="catalog-title">${this.t("ai_shelf_title")}</h3>
+            <span class="catalog-provider-badge" style="background: linear-gradient(135deg, rgba(139, 92, 246, 0.3), rgba(6, 182, 212, 0.3)); color: #c4b5fd; border: 1px solid rgba(139, 92, 246, 0.4);">⚡ Local AI</span>
+          </div>
+        </div>
+        <div class="catalog-swiper-container">
+          <div class="catalog-swiper" id="swiper-ai-taste"></div>
+        </div>
+      `;
+
+      const swiper = shelf.querySelector("#swiper-ai-taste");
+      items.forEach(it => {
+        const card = this.createAICard(it);
+        swiper.appendChild(card);
+      });
+
+      if (container.firstChild) {
+        container.insertBefore(shelf, container.firstChild);
+      } else {
+        container.appendChild(shelf);
+      }
+    } catch (_) {}
+  }
+
   // --- Modern Streaming Swipers / Catalog Rows ---
   async loadCatalogsForDomain(domain) {
     const container = document.getElementById("catalogs-container");
@@ -2482,6 +2712,9 @@ class VesselApp {
 
       emptyNotice.classList.add("hidden");
       this.currentCatalogs = catalogs;
+
+      // Automatically inject AI Taste Match Shelf on top
+      this.loadAITasteShelf(domain, container);
 
       catalogs.forEach((catRow, idx) => {
         const rowElem = document.createElement("div");
@@ -4696,7 +4929,20 @@ class VesselApp {
         ".iptv-pill",
         ".btn",
         ".chapter-row",
-        ".hud-btn"
+        ".hud-btn",
+        ".theme-item",
+        ".ai-mood-chip",
+        "#ai-vibe-prompt",
+        "#ai-vibe-submit-btn",
+        "#ai-clear-results-btn",
+        "#settings-view input",
+        "#settings-view button",
+        "#settings-view [tabindex='0']",
+        "#plugins-view input",
+        "#plugins-view button",
+        "#plugins-view [tabindex='0']",
+        ".install-card input",
+        ".install-card button"
       ];
       return Array.from(document.querySelectorAll(selectors.join(",")))
         .filter(el => {
@@ -4764,9 +5010,16 @@ class VesselApp {
             break;
         }
 
-        if (isMatch && dist < minDistance) {
-          minDistance = dist;
-          bestCandidate = cand;
+        if (isMatch) {
+          // If moving right from sidebar nav item, prioritize main page content over top header search bar
+          if (current.classList.contains("nav-item") && dir === "right" && cand.closest(".app-header")) {
+            dist += 10000;
+          }
+
+          if (dist < minDistance) {
+            minDistance = dist;
+            bestCandidate = cand;
+          }
         }
       });
 
@@ -4783,6 +5036,7 @@ class VesselApp {
         el.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
       }
     };
+    this.setTVFocus = setFocus;
 
     // Keyboard Arrow Listeners
     window.addEventListener("keydown", (e) => {
@@ -4857,6 +5111,7 @@ class VesselApp {
         const btnX = gp.buttons[2] && gp.buttons[2].pressed;
         const btnL1 = gp.buttons[4] && gp.buttons[4].pressed;
         const btnR1 = gp.buttons[5] && gp.buttons[5].pressed;
+        const btnStart = gp.buttons[9] && gp.buttons[9].pressed;
 
         if (btnA && !lastButtonStates["btnA"]) {
           const focused = document.querySelector(".tv-focused") || document.activeElement;
@@ -4874,18 +5129,28 @@ class VesselApp {
           document.getElementById("search-input")?.focus();
         }
 
-        // Domain switching with L1 / R1
+        // Domain & Route switching with L1 / R1
+        const allRoutes = ["cinema", "reading", "iptv", "library", "plugins", "settings"];
         if (btnL1 && !lastButtonStates["btnL1"]) {
-          const domains = ["cinema", "reading", "iptv", "library"];
-          const curIdx = domains.indexOf(this.currentDomain || "cinema");
-          const nextIdx = (curIdx - 1 + domains.length) % domains.length;
-          this.switchRoute(domains[nextIdx]);
+          let curIdx = allRoutes.indexOf(this.currentRoute || "cinema");
+          if (curIdx === -1) curIdx = 0;
+          const nextIdx = (curIdx - 1 + allRoutes.length) % allRoutes.length;
+          this.switchRoute(allRoutes[nextIdx]);
         }
         if (btnR1 && !lastButtonStates["btnR1"]) {
-          const domains = ["cinema", "reading", "iptv", "library"];
-          const curIdx = domains.indexOf(this.currentDomain || "cinema");
-          const nextIdx = (curIdx + 1) % domains.length;
-          this.switchRoute(domains[nextIdx]);
+          let curIdx = allRoutes.indexOf(this.currentRoute || "cinema");
+          if (curIdx === -1) curIdx = 0;
+          const nextIdx = (curIdx + 1) % allRoutes.length;
+          this.switchRoute(allRoutes[nextIdx]);
+        }
+
+        // Start / Menu button (Button 9) toggles Settings directly
+        if (btnStart && !lastButtonStates["btnStart"]) {
+          if (this.currentRoute === "settings") {
+            this.switchRoute(this.previousRoute || "cinema");
+          } else {
+            this.switchRoute("settings");
+          }
         }
 
         lastButtonStates["btnA"] = btnA;
@@ -4893,6 +5158,7 @@ class VesselApp {
         lastButtonStates["btnX"] = btnX;
         lastButtonStates["btnL1"] = btnL1;
         lastButtonStates["btnR1"] = btnR1;
+        lastButtonStates["btnStart"] = btnStart;
       }
       requestAnimationFrame(pollGamepad);
     };

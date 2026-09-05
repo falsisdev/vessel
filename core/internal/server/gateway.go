@@ -16,13 +16,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/falsisdev/vessel/core/internal/discovery"
 	"github.com/falsisdev/vessel/core/internal/domain/library"
 	"github.com/falsisdev/vessel/core/internal/domain/locale"
 	"github.com/falsisdev/vessel/core/internal/plugin"
 	"github.com/falsisdev/vessel/core/internal/service"
 	"github.com/falsisdev/vessel/core/internal/streaming"
-	"github.com/falsisdev/vessel/core/internal/theme"
 	vesselsync "github.com/falsisdev/vessel/core/internal/sync"
+	"github.com/falsisdev/vessel/core/internal/theme"
 	pluginv1 "github.com/falsisdev/vessel/proto/gen/go/plugin/v1"
 	"github.com/falsisdev/vessel/ui"
 )
@@ -42,6 +43,7 @@ type GatewayServer struct {
 	torrentEngine *streaming.TorrentEngine
 	downloadSvc   *service.DownloadService
 	lanSyncSvc    *vesselsync.LANSyncService
+	aiEngine      *discovery.AIEngine
 	startTime     time.Time
 }
 
@@ -69,6 +71,8 @@ func NewGatewayServer(
 	lanSvc := vesselsync.NewLANSyncService(8080)
 	_ = lanSvc.Start(context.Background())
 
+	aiEng := discovery.NewAIEngine(librarySvc, cinemaSvc, readingSvc, catSvc)
+
 	g := &GatewayServer{
 		addr:          addr,
 		cinemaSvc:     cinemaSvc,
@@ -82,6 +86,7 @@ func NewGatewayServer(
 		torrentEngine: torrentEng,
 		downloadSvc:   dlSvc,
 		lanSyncSvc:    lanSvc,
+		aiEngine:      aiEng,
 		startTime:     time.Now(),
 	}
 
@@ -200,6 +205,12 @@ func (g *GatewayServer) registerRoutes(mux *http.ServeMux) {
 
 	// Range-enabled streaming proxy endpoint
 	mux.HandleFunc("/stream", g.handleStreamProxy)
+
+	// Local AI Smart Discovery & Recommendation Endpoints
+	mux.HandleFunc("/api/ai/taste-profile", g.handleAITasteProfile)
+	mux.HandleFunc("/api/ai/recommendations", g.handleAIRecommendations)
+	mux.HandleFunc("/api/ai/discover", g.handleAIDiscover)
+	mux.HandleFunc("/api/ai/moods", g.handleAIMoods)
 
 	// Embedded Static UI Assets with Cache-Busting Headers
 	subFS, err := fs.Sub(ui.DistFS, ".")
@@ -1391,3 +1402,94 @@ func (g *GatewayServer) handleSyncPoll(w http.ResponseWriter, r *http.Request) {
 	cmd := g.lanSyncSvc.PollCommand()
 	g.writeJSON(w, http.StatusOK, map[string]any{"command": cmd})
 }
+
+// Local AI Smart Discovery & Recommendation Handlers
+
+func (g *GatewayServer) handleAITasteProfile(w http.ResponseWriter, r *http.Request) {
+	if g.aiEngine == nil {
+		g.writeError(w, http.StatusServiceUnavailable, "AI engine not available")
+		return
+	}
+	profile, _, err := g.aiEngine.BuildTasteProfile(r.Context(), false)
+	if err != nil {
+		g.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	g.writeJSON(w, http.StatusOK, profile)
+}
+
+func (g *GatewayServer) handleAIRecommendations(w http.ResponseWriter, r *http.Request) {
+	if g.aiEngine == nil {
+		g.writeError(w, http.StatusServiceUnavailable, "AI engine not available")
+		return
+	}
+	domain := r.URL.Query().Get("domain")
+	limitStr := r.URL.Query().Get("limit")
+	limit := 12
+	if limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
+			limit = l
+		}
+	}
+	items, err := g.aiEngine.GetTasteRecommendations(r.Context(), domain, limit)
+	if err != nil {
+		g.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	g.writeJSON(w, http.StatusOK, map[string]any{
+		"domain":          domain,
+		"recommendations": items,
+		"count":           len(items),
+	})
+}
+
+func (g *GatewayServer) handleAIDiscover(w http.ResponseWriter, r *http.Request) {
+	if g.aiEngine == nil {
+		g.writeError(w, http.StatusServiceUnavailable, "AI engine not available")
+		return
+	}
+
+	var req struct {
+		Query string `json:"query"`
+		Mood  string `json:"mood"`
+		Limit int    `json:"limit"`
+	}
+
+	if r.Method == http.MethodPost {
+		_ = json.NewDecoder(r.Body).Decode(&req)
+	} else {
+		req.Query = r.URL.Query().Get("query")
+		req.Mood = r.URL.Query().Get("mood")
+		if l, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil && l > 0 {
+			req.Limit = l
+		}
+	}
+
+	if req.Limit <= 0 {
+		req.Limit = 15
+	}
+
+	items, err := g.aiEngine.DiscoverByMood(r.Context(), req.Query, req.Mood, req.Limit)
+	if err != nil {
+		g.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	g.writeJSON(w, http.StatusOK, map[string]any{
+		"query":           req.Query,
+		"mood":            req.Mood,
+		"recommendations": items,
+		"count":           len(items),
+	})
+}
+
+func (g *GatewayServer) handleAIMoods(w http.ResponseWriter, r *http.Request) {
+	if g.aiEngine == nil {
+		g.writeError(w, http.StatusServiceUnavailable, "AI engine not available")
+		return
+	}
+	g.writeJSON(w, http.StatusOK, map[string]any{
+		"moods": g.aiEngine.GetMoodPresets(),
+	})
+}
+

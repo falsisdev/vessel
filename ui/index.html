@@ -206,6 +206,53 @@
           </div>
         </div>
 
+        <!-- Local AI Smart Discovery & Taste Engine -->
+        <div class="section-container ai-discovery-section" id="ai-discovery-section">
+          <div class="ai-discovery-card">
+            <div class="ai-header-row">
+              <div class="ai-title-wrap">
+                <div class="ai-badge">
+                  <span class="ai-sparkle">✨</span>
+                  <span data-i18n="ai_badge_title">Local AI Discovery Engine</span>
+                </div>
+                <h3 class="ai-main-title" data-i18n="ai_main_headline">Discover by Mood & Vibe</h3>
+                <p class="ai-subtitle" id="ai-taste-summary" data-i18n="ai_taste_summary">Analyzing your taste profile locally with zero cloud telemetry...</p>
+              </div>
+              <div class="ai-taste-dna-tags" id="ai-taste-tags">
+                <!-- Dynamically populated from /api/ai/taste-profile -->
+              </div>
+            </div>
+
+            <!-- Quick Mood Pills / Vibe Selector -->
+            <div class="ai-mood-chips-scroll" id="ai-mood-chips">
+              <!-- Dynamically populated from /api/ai/moods -->
+            </div>
+
+            <!-- Free-form Prompt / Semantic Vibe Bar -->
+            <div class="ai-prompt-bar">
+              <div class="ai-input-wrap">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="11" cy="11" r="8"></circle>
+                  <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                </svg>
+                <input type="text" id="ai-vibe-prompt" placeholder="Describe what you want (e.g. 'mind-bending psychological anime', '90s cyberpunk')..." />
+                <button type="button" class="btn btn-primary ai-submit-btn" id="ai-vibe-submit-btn">
+                  <span data-i18n="ai_btn_discover">Find Matches</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- AI Discovery Results Row (Hidden until active) -->
+            <div class="ai-results-container hidden" id="ai-results-container">
+              <div class="ai-results-header">
+                <h4 id="ai-results-heading">AI Curated Matches</h4>
+                <button type="button" class="btn btn-secondary btn-sm" id="ai-clear-results-btn">✕ Kapat</button>
+              </div>
+              <div class="media-carousel ai-carousel" id="ai-results-grid"></div>
+            </div>
+          </div>
+        </div>
+
         <!-- Main Catalog / Domain View -->
         <div class="section-container" id="main-view">
           <div class="section-header">
@@ -685,7 +732,7 @@
   <div class="toast-container" id="toast-container"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
-  <script src="/app.js?v=2.4.0"></script>
+  <script src="/app.js?v=2.6.0"></script>
 </body>
 
 </html>

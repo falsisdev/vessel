@@ -52,6 +52,18 @@
 * **Live Swarm Buffer HUD**: Real-time telemetry in the player HUD displaying active peers, seeders, buffer percentage, and download speed (MB/s).
 * **Sequential HTTP 206 Partial Content**: Enables instant scrubbing and seeking over P2P swarms.
 
+### 🤖 Local AI Smart Discovery & Taste Engine
+* **100% Offline & Privacy-First**: Zero external cloud API calls, zero telemetry, and zero tracking keys required. Runs entirely on your local CPU in under **0.05 milliseconds** with less than 1 MB memory overhead.
+* **64-Dimensional Semantic Vector Space**: Dense mathematical embedding covering narrative tones, tropes, pacing, and moods (Plot Twist, Cyberpunk, Mind-Bending, Noir, Cozy, Shonen, Seinen, Sci-Fi, etc.).
+* **Dynamic Taste DNA Profiler**: Automatically derives your taste vector from your SQLite watch and reading history, presenting curated "✨ Tailored to Your Taste (AI Taste Match)" shelves with percentage match badges (e.g. `96% Match`).
+* **Vibe & Mood Discovery**: Instant one-click mood chips (*Mind-Bending & Plot Twists*, *Dark & Cyberpunk*, *Cozy & Wholesome*, *High Adrenaline*, *Deep Mystery*, *Retro Classics*) and free-form semantic prompt search (*"90s cyberpunk noir"*, *"ters köşe psikolojik anime"*).
+
+### 🎮 10-Foot UI, Spatial & Gamepad TV Navigation Engine
+* **HTML5 Gamepad API & Living Room Mode**: Full controller support for Xbox, PlayStation (DualShock / DualSense), and standard USB/Bluetooth gamepads.
+* **Spatial Directional Graph**: Smart Euclidean 2D distance navigation with D-Pad, Arrow Keys, and Left Analog Stick.
+* **Bumper Tab Cycling & Menu Shortcut**: L1/R1 bumpers cycle smoothly across all six domains (`Cinema`, `Reading`, `IPTV`, `Library`, `Plugins`, `Settings`). Dedicated Gamepad Button 9 (`Start`/`Menu`) opens Settings instantly.
+* **Distinctive TV Focus Glow**: High-contrast outline and neon ambient aura (`.tv-focused`) engineered for 4K and 1080p TV screens.
+
 ### 📱 Multi-Device LAN Sync & Remote Control
 * **Zero-Config LAN Discovery**: Automatically discovers active Vessel instances on your local Wi-Fi or LAN.
 * **Remote Control Pad**: Control playback (Play, Pause, Seek, Volume) on another computer, TV, or tablet across the room.

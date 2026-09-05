@@ -664,6 +664,15 @@ html, body {
   background-color: var(--v-bg-elevated);
 }
 
+.theme-item:focus,
+.theme-item:focus-visible,
+.theme-item.tv-focused {
+  outline: none;
+  border-color: var(--v-accent-primary) !important;
+  box-shadow: 0 0 20px rgba(56, 189, 248, 0.6) !important;
+  transform: scale(1.05) !important;
+}
+
 .theme-palette {
   display: flex;
   height: 20px;
@@ -2699,3 +2708,253 @@ html, body {
   border-color: var(--v-accent-primary) !important;
   background: var(--v-bg-elevated) !important;
 }
+
+/* ==========================================================================
+   LOCAL AI SMART DISCOVERY & TASTE ENGINE STYLES
+   ========================================================================== */
+.ai-discovery-section {
+  margin-bottom: 24px;
+}
+
+.ai-discovery-card {
+  position: relative;
+  background: linear-gradient(135deg, rgba(30, 27, 46, 0.85) 0%, rgba(15, 23, 42, 0.85) 100%);
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  border-radius: var(--v-radius-lg, 16px);
+  padding: 22px 26px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(16px);
+  overflow: hidden;
+}
+
+.ai-discovery-card::before {
+  content: "";
+  position: absolute;
+  top: -50%;
+  right: -20%;
+  width: 320px;
+  height: 320px;
+  background: radial-gradient(circle, rgba(168, 85, 247, 0.15) 0%, transparent 70%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.ai-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 16px;
+  position: relative;
+  z-index: 1;
+}
+
+.ai-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.25), rgba(6, 182, 212, 0.2));
+  border: 1px solid rgba(168, 85, 247, 0.4);
+  border-radius: 9999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #c4b5fd;
+  margin-bottom: 6px;
+}
+
+.ai-sparkle {
+  font-size: 0.85rem;
+}
+
+.ai-main-title {
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: #f8fafc;
+  margin: 0 0 4px 0;
+  letter-spacing: -0.02em;
+}
+
+.ai-subtitle {
+  font-size: 0.85rem;
+  color: var(--v-text-muted, #94a3b8);
+  margin: 0;
+}
+
+.ai-taste-dna-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+  max-width: 50%;
+}
+
+.ai-dna-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--v-radius-md, 10px);
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: #e2e8f0;
+  white-space: nowrap;
+}
+
+.ai-mood-chips-scroll {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding: 6px 2px 14px 2px;
+  scrollbar-width: thin;
+  position: relative;
+  z-index: 1;
+}
+
+.ai-mood-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 15px;
+  background: rgba(30, 41, 59, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 9999px;
+  font-size: 0.83rem;
+  font-weight: 600;
+  color: #f1f5f9;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  user-select: none;
+}
+
+.ai-mood-chip:hover {
+  background: rgba(99, 102, 241, 0.25);
+  border-color: rgba(168, 85, 247, 0.5);
+  transform: translateY(-1px);
+}
+
+.ai-mood-chip.active,
+.ai-mood-chip.tv-focused {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.8), rgba(168, 85, 247, 0.8));
+  border-color: #a855f7;
+  color: #ffffff;
+  box-shadow: 0 0 16px rgba(168, 85, 247, 0.5);
+  transform: scale(1.04);
+}
+
+.ai-prompt-bar {
+  margin-top: 6px;
+  position: relative;
+  z-index: 1;
+}
+
+.ai-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: var(--v-radius-md, 10px);
+  padding: 6px 10px 6px 14px;
+  transition: all 0.2s ease;
+}
+
+.ai-input-wrap:focus-within {
+  border-color: #8b5cf6;
+  box-shadow: 0 0 16px rgba(139, 92, 246, 0.35);
+}
+
+.ai-input-wrap svg {
+  color: #94a3b8;
+  flex-shrink: 0;
+}
+
+.ai-input-wrap input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: #f8fafc;
+  font-size: 0.92rem;
+  outline: none;
+}
+
+.ai-input-wrap input::placeholder {
+  color: #64748b;
+}
+
+.ai-submit-btn {
+  padding: 8px 18px;
+  border-radius: var(--v-radius-sm, 6px);
+  font-weight: 600;
+  font-size: 0.85rem;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.ai-submit-btn:hover {
+  filter: brightness(1.15);
+  box-shadow: 0 0 14px rgba(139, 92, 246, 0.5);
+}
+
+.ai-results-container {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  position: relative;
+  z-index: 1;
+}
+
+.ai-results-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.ai-results-header h4 {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #f1f5f9;
+}
+
+.ai-carousel {
+  display: flex;
+  gap: 16px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+  scrollbar-width: thin;
+}
+
+.ai-card-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: rgba(16, 185, 129, 0.9);
+  color: #ffffff;
+  padding: 3px 8px;
+  border-radius: 9999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.4);
+  z-index: 3;
+}
+
+.ai-card-insight {
+  font-size: 0.72rem;
+  color: #38bdf8;
+  margin-top: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
