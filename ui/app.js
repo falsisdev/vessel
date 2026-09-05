@@ -32,6 +32,12 @@ const I18N_STRINGS = {
     btn_in_library: "✓ In Library",
     no_results: "No media items found. Try another query.",
     episodes: "Episodes",
+    chapters: "Chapters",
+    btn_read: "Read",
+    pill_manga: "Manga",
+    pill_webtoon: "Webtoon",
+    pill_novel: "Novels",
+    resume_empty: "You haven't started watching or reading anything yet. Explore content below!",
     streams_loading: "Resolving highest quality stream...",
   },
   tr: {
@@ -45,6 +51,10 @@ const I18N_STRINGS = {
     pill_movies: "Filmler",
     pill_series: "Diziler",
     pill_anime: "Animeler",
+    pill_manga: "Manga",
+    pill_webtoon: "Webtoon",
+    pill_novel: "Roman",
+    resume_empty: "Henüz izlemeye veya okumaya başlamadınız. Aşağıdan içerikleri keşfedin!",
     library_title: "Koleksiyonunuz",
     status_watching: "Devam Edenler",
     status_plan: "İzlenecekler",
@@ -59,11 +69,13 @@ const I18N_STRINGS = {
     settings_plugins_desc: "Yüklü katalog ve medya sağlayıcı süreçleri.",
     btn_save: "Kaydet",
     btn_play: "Oynat",
+    btn_read: "Oku",
     btn_resume: "Devam Et",
     btn_add_library: "+ Kütüphaneye Ekle",
     btn_in_library: "✓ Kütüphanede",
     no_results: "Sonuç bulunamadı. Farklı bir arama deneyin.",
     episodes: "Bölümler",
+    chapters: "Bölümler",
     streams_loading: "En yüksek kaliteli akış çözümleniyor...",
   },
   de: {
@@ -376,8 +388,7 @@ class VesselApp {
     await this.loadLocalePreference();
     await this.checkCoreStatus();
     await this.loadActiveTheme();
-    await this.loadResumeProgress();
-    await this.loadInitialMedia();
+    this.switchRoute("cinema");
     await this.loadDebridStatus();
   }
 
@@ -607,17 +618,17 @@ class VesselApp {
       "catppuccin": ["#1e1e2e", "#313244", "#cba6f7"],
       "nord": ["#2e3440", "#3b4252", "#88c0d0"],
       "dracula": ["#282a36", "#44475a", "#bd93f9"],
-      "mangile": ["#0c1017", "#131a24", "#22c55e"],
-      "mangile-mauve": ["#131118", "#1a1722", "#22c55e"],
-      "mangile-stone": ["#141210", "#1c1917", "#22c55e"],
-      "mangile-zinc": ["#09090b", "#141417", "#22c55e"],
-      "mangile-slate": ["#0b1120", "#141d2f", "#22c55e"],
-      "mangile-olive": ["#0f120e", "#161c15", "#22c55e"],
-      "mangile-taupe": ["#141211", "#1d1a19", "#22c55e"],
-      "mangile-gray": ["#111827", "#1f2937", "#22c55e"],
-      "mangile-neutral": ["#0a0a0a", "#171717", "#22c55e"],
+      "mangile": ["#0c1017", "#131a24", "#ffffff"],
+      "mangile-mauve": ["#131118", "#1a1722", "#ffffff"],
+      "mangile-stone": ["#141210", "#1c1917", "#ffffff"],
+      "mangile-zinc": ["#09090b", "#141417", "#ffffff"],
+      "mangile-slate": ["#0b1120", "#141d2f", "#ffffff"],
+      "mangile-olive": ["#0f120e", "#161c15", "#ffffff"],
+      "mangile-taupe": ["#141211", "#1d1a19", "#ffffff"],
+      "mangile-gray": ["#111827", "#1f2937", "#ffffff"],
+      "mangile-neutral": ["#0a0a0a", "#171717", "#ffffff"],
     };
-    return (map[id] && map[id][idx]) || "#22c55e";
+    return (map[id] && map[id][idx]) || "#ffffff";
   }
 
   async switchTheme(themeID, variantID) {
@@ -677,16 +688,20 @@ class VesselApp {
       mainView.classList.remove("hidden");
       resumeSection.classList.remove("hidden");
       document.getElementById("view-title").textContent = this.t("section_discover");
+      this.updatePillsForDomain("cinema");
+      this.loadResumeProgress();
       this.loadInitialMedia();
     } else if (route === "reading") {
       this.currentDomain = "reading";
       mainView.classList.remove("hidden");
       resumeSection.classList.remove("hidden");
       document.getElementById("view-title").textContent = this.t("nav_reading");
+      this.updatePillsForDomain("reading");
+      this.loadResumeProgress();
       this.loadInitialMedia();
     } else if (route === "library") {
       libraryView.classList.remove("hidden");
-      resumeSection.classList.remove("hidden");
+      resumeSection.classList.add("hidden");
       this.loadLibraryItems("WATCHING");
     } else if (route === "settings") {
       settingsView.classList.remove("hidden");
@@ -696,19 +711,52 @@ class VesselApp {
     }
   }
 
+  updatePillsForDomain(domain) {
+    const container = document.getElementById("domain-pills");
+    if (!container) return;
+
+    if (domain === "reading") {
+      container.innerHTML = `
+        <button class="pill active" data-filter="all">${this.t("pill_all")}</button>
+        <button class="pill" data-filter="manga">${this.t("pill_manga") || "Manga"}</button>
+        <button class="pill" data-filter="webtoon">${this.t("pill_webtoon") || "Webtoon"}</button>
+        <button class="pill" data-filter="webook">${this.t("pill_novel") || "Roman"}</button>
+      `;
+    } else {
+      container.innerHTML = `
+        <button class="pill active" data-filter="all">${this.t("pill_all")}</button>
+        <button class="pill" data-filter="movie">${this.t("pill_movies")}</button>
+        <button class="pill" data-filter="series">${this.t("pill_series")}</button>
+        <button class="pill" data-filter="anime">${this.t("pill_anime")}</button>
+      `;
+    }
+
+    this.currentFilter = "all";
+    container.querySelectorAll(".pill").forEach(pill => {
+      pill.addEventListener("click", () => {
+        container.querySelectorAll(".pill").forEach(p => p.classList.remove("active"));
+        pill.classList.add("active");
+        this.currentFilter = pill.dataset.filter;
+        this.filterAndRenderMedia();
+      });
+    });
+  }
+
   // --- Media Catalog & Search ---
   async loadInitialMedia() {
     await this.performSearch("popular");
   }
 
   async performSearch(query) {
-    if (!query) return;
     const grid = document.getElementById("media-grid");
-    grid.innerHTML = `<div style="grid-column: 1/-1; text-align: center; color: var(--v-text-muted); padding: 40px;">Loading...</div>`;
+    grid.innerHTML = `<div style="grid-column: 1/-1; text-align: center; color: var(--v-text-muted); padding: 50px;">
+      <div style="font-size: 1.5rem; margin-bottom: 8px;">⏳</div>
+      <div>Loading...</div>
+    </div>`;
 
     try {
       const domainNum = this.currentDomain === "cinema" ? 1 : 2;
-      const res = await fetch(`/api/search?domain=${domainNum}&query=${encodeURIComponent(query)}`);
+      const res = await fetch(`/api/search?domain=${domainNum}&query=${encodeURIComponent(query || "popular")}`);
       if (!res.ok) throw new Error("Search failed");
       const data = await res.json();
 
@@ -746,17 +794,19 @@ class VesselApp {
       const year = item.year || item.Year || "";
       const id = item.id || item.ID || "";
       const providerId = item.provider_id || item.ProviderID || "";
+      const isReading = this.currentDomain === "reading" || typeVal >= 4;
 
       card.innerHTML = `
         <div class="poster-wrapper">
           <img src="${poster}" alt="${title}" class="poster-img" loading="lazy" onerror="this.src='https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=400'">
           <span class="card-badge">${typeLabel}</span>
+          <div class="poster-overlay-btn">${isReading ? "📖" : "▶"}</div>
         </div>
         <div class="card-details">
           <div class="card-title" title="${title}">${title}</div>
           <div class="card-meta">
-            <span>${year}</span>
-            <span style="color: var(--v-accent-secondary)">★ 8.5</span>
+            <span>${year || "2024"}</span>
+            <span class="rating-badge">★ 8.5</span>
           </div>
         </div>
       `;
@@ -791,44 +841,94 @@ class VesselApp {
 
   // --- Continue Watching / Reading Resume Progress ---
   async loadResumeProgress() {
+    const resumeSection = document.getElementById("resume-section");
+    const container = document.getElementById("resume-cards");
+    if (!container) return;
+
+    if (this.currentRoute === "library" || this.currentRoute === "settings") {
+      if (resumeSection) resumeSection.classList.add("hidden");
+      return;
+    }
+    if (resumeSection) resumeSection.classList.remove("hidden");
+
     try {
-      const res = await fetch("/api/progress/playback/recent?limit=5");
+      const isReading = this.currentDomain === "reading";
+      const endpoint = isReading ? "/api/progress/reading/recent?limit=8" : "/api/progress/playback/recent?limit=8";
+      const res = await fetch(endpoint);
       if (!res.ok) return;
       const data = await res.json();
-      const container = document.getElementById("resume-cards");
-      if (!container) return;
 
       container.innerHTML = "";
       const items = data.items || [];
       if (items.length === 0) {
-        document.getElementById("resume-section").classList.add("hidden");
+        container.innerHTML = `
+          <div class="resume-empty">
+            <span style="font-size: 1.25rem;">⏳</span>
+            <span>${this.t("resume_empty")}</span>
+          </div>
+        `;
         return;
       }
-      document.getElementById("resume-section").classList.remove("hidden");
 
       items.forEach(p => {
         const card = document.createElement("div");
         card.className = "resume-card";
-        const percent = Math.min(100, Math.round(p.progress_percent || 0));
 
-        card.innerHTML = `
-          <div class="resume-info">
-            <div class="resume-title">${p.media_id}</div>
-            <div class="resume-sub">S${p.season_number} E${p.episode_number} • ${percent}%</div>
-            <div class="progress-bar-container">
-              <div class="progress-bar-fill" style="width: ${percent}%;"></div>
+        const title = p.title || p.Title || p.media_id || p.MediaID;
+        const mediaId = p.media_id || p.MediaID;
+        const providerId = p.provider_id || p.ProviderID;
+
+        if (isReading) {
+          const chNum = p.chapter_number || p.ChapterNumber || 1;
+          const currPage = p.current_page || p.CurrentPage || 1;
+          const totPages = p.total_pages || p.TotalPages || 1;
+          const percent = totPages > 0 ? Math.min(100, Math.round((currPage / totPages) * 100)) : 0;
+
+          card.innerHTML = `
+            <div class="resume-info">
+              <div class="resume-title">${title}</div>
+              <div class="resume-sub">${this.t("chapters") || "Bölüm"} ${chNum} • Sayfa ${currPage}/${totPages}</div>
+              <div class="progress-bar-container">
+                <div class="progress-bar-fill" style="width: ${percent}%;"></div>
+              </div>
             </div>
-          </div>
-        `;
+          `;
 
-        card.addEventListener("click", () => {
-          this.openMediaModal({
-            id: p.media_id,
-            provider_id: p.provider_id,
-            title: p.media_id,
-            type: 2
+          card.addEventListener("click", () => {
+            this.openMediaModal({
+              id: mediaId,
+              provider_id: providerId,
+              title: title,
+              type: 4,
+              resumeChapter: chNum
+            });
           });
-        });
+        } else {
+          const percent = Math.min(100, Math.round(p.progress_percent || p.ProgressPercent || 0));
+          const sNum = p.season_number || p.SeasonNumber || 1;
+          const epNum = p.episode_number || p.EpisodeNumber || 1;
+
+          card.innerHTML = `
+            <div class="resume-info">
+              <div class="resume-title">${title}</div>
+              <div class="resume-sub">S${sNum} E${epNum} • ${percent}%</div>
+              <div class="progress-bar-container">
+                <div class="progress-bar-fill" style="width: ${percent}%;"></div>
+              </div>
+            </div>
+          `;
+
+          card.addEventListener("click", () => {
+            this.openMediaModal({
+              id: mediaId,
+              provider_id: providerId,
+              title: title,
+              type: p.media_type || 2,
+              resumeSeason: sNum,
+              resumeEpisode: epNum
+            });
+          });
+        }
 
         container.appendChild(card);
       });
@@ -837,69 +937,275 @@ class VesselApp {
     }
   }
 
-  // --- Media Modal & Video Player ---
+  // --- Media Modal & Video Player / Reading Reader ---
   async openMediaModal(item) {
     const modal = document.getElementById("media-modal");
     const content = document.getElementById("modal-content");
     modal.classList.remove("hidden");
-    content.innerHTML = `<div style="text-align: center; padding: 60px; color: var(--v-text-muted);">Loading details...</div>`;
+    content.innerHTML = `<div style="text-align: center; padding: 60px; color: var(--v-text-muted);"><span style="font-size: 1.5rem; display: block; margin-bottom: 8px;">⏳</span>Loading details...</div>`;
 
     try {
-      const domainNum = this.currentDomain === "cinema" ? 1 : 2;
+      const isReading = this.currentDomain === "reading" || item.type >= 4 || (item.id && (item.id.startsWith("manga-") || item.id.startsWith("novel-")));
+      const domainNum = isReading ? 2 : 1;
       const res = await fetch(`/api/media?domain=${domainNum}&provider=${encodeURIComponent(item.provider_id || "")}&id=${encodeURIComponent(item.id)}`);
       const details = res.ok ? (await res.json()) : item;
 
-      content.innerHTML = `
-        <div class="player-container" id="player-mount">
-          <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 16px;">
-            <button class="btn btn-primary" id="start-stream-btn" style="padding: 12px 28px; font-size: 1.05rem;">
-              ▶ ${this.t("btn_play")}
-            </button>
-            <span id="stream-status" style="font-size: 0.85rem; color: var(--v-text-muted);">Ready to stream</span>
-          </div>
-        </div>
+      if (isReading) {
+        this.renderReadingModal(item, details);
+      } else {
+        this.renderCinemaModal(item, details);
+      }
+    } catch (e) {
+      content.innerHTML = `<div style="text-align: center; padding: 40px; color: var(--v-status-error);">Failed to load metadata: ${e.message}</div>`;
+    }
+  }
 
-        <div class="modal-details">
-          <div class="modal-title-row">
-            <h2>${details.title || item.title}</h2>
+  renderReadingModal(item, details) {
+    const content = document.getElementById("modal-content");
+    const chapters = (details.seasons && details.seasons.length > 0)
+      ? details.seasons[0].episodes
+      : (details.chapters || []);
+
+    const typeLabel = (item.type === 6) ? "Roman" : (item.type === 5 ? "Webtoon" : "Manga");
+    const posterSrc = details.poster_url || item.poster_url || "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='200' fill='%23222'%3E%3Crect width='100%25' height='100%25'/%3E%3C/svg%3E";
+
+    content.innerHTML = `
+      <div class="reading-hero">
+        <img class="reading-cover" src="${posterSrc}" alt="${details.title || item.title}" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=\\'http://www.w3.org/2000/svg\\' width=\\'140\\' height=\\'200\\' fill=\\'%23222\\'%3E%3Crect width=\\'100%25\\' height=\\'100%25\\'/ %3E%3C/svg%3E'">
+        <div class="reading-info">
+          <div class="reading-meta-tags">
+            <span class="badge-subtle" style="background: rgba(var(--v-accent-primary-rgb, 99, 102, 241), 0.15); color: var(--v-accent-primary); font-weight: 600;">${typeLabel}</span>
+            ${(details.genres || []).map(g => `<span class="badge-subtle">${g}</span>`).join("")}
+          </div>
+          <h2>${details.title || item.title}</h2>
+          <div class="modal-overview" style="margin-bottom: 8px;">${details.overview || "No synopsis available."}</div>
+          <div class="reading-actions">
+            ${chapters.length > 0 ? `
+              <button class="btn btn-primary" id="start-reading-btn">
+                📖 ${this.t("btn_read")} ${this.t("chapters") || "Bölüm"} 1
+              </button>
+            ` : ""}
             <button class="btn btn-secondary" id="lib-toggle-btn">${this.t("btn_add_library")}</button>
           </div>
-          <div class="modal-overview">${details.overview || "No synopsis available."}</div>
-
-          ${details.seasons && details.seasons.length > 0 ? `
-            <h3 style="margin-top: 20px; font-size: 1.1rem;">${this.t("episodes")}</h3>
-            <div class="episode-list">
-              ${details.seasons[0].episodes.map(ep => `
-                <div class="episode-item" data-ep="${ep.episode_number}">
-                  <span>Episode ${ep.episode_number}: ${ep.title}</span>
-                  <button class="btn btn-secondary" style="padding: 4px 10px; font-size: 0.75rem;">Play</button>
-                </div>
-              `).join("")}
-            </div>
-          ` : ""}
         </div>
-      `;
+      </div>
 
-      // Start stream handler
-      document.getElementById("start-stream-btn").addEventListener("click", () => {
-        this.resolveAndPlayStream(item, 1, 1);
+      <div class="modal-details" style="padding: 24px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+          <h3 style="font-size: 1.15rem; font-weight: 600;">${this.t("chapters") || "Bölümler"} (${chapters.length})</h3>
+        </div>
+        <div class="episode-list" style="max-height: 380px;">
+          ${chapters.length > 0 ? chapters.map(ch => {
+            const chNum = ch.episode_number || ch.chapter_number || 1;
+            return `
+              <div class="chapter-row" data-ch="${chNum}">
+                <div>
+                  <span style="font-weight: 600;">${this.t("chapters") || "Bölüm"} ${chNum}</span>
+                  ${ch.title ? `<span style="color: var(--v-text-muted); margin-left: 8px;">- ${ch.title}</span>` : ""}
+                </div>
+                <button class="btn btn-secondary" style="padding: 5px 14px; font-size: 0.8rem;">${this.t("btn_read") || "Oku"}</button>
+              </div>
+            `;
+          }).join("") : `<div style="text-align: center; color: var(--v-text-muted); padding: 24px;">Bölüm bulunamadı.</div>`}
+        </div>
+      </div>
+    `;
+
+    // Button event listeners
+    const startReadBtn = document.getElementById("start-reading-btn");
+    if (startReadBtn && chapters.length > 0) {
+      startReadBtn.addEventListener("click", () => {
+        const firstCh = chapters[0].episode_number || chapters[0].chapter_number || 1;
+        this.openChapterReader(item, details, firstCh, chapters);
       });
+    }
 
-      // Episode click handlers
-      content.querySelectorAll(".episode-item").forEach(el => {
-        el.addEventListener("click", () => {
-          const epNum = parseInt(el.dataset.ep, 10);
-          this.resolveAndPlayStream(item, 1, epNum);
-        });
+    content.querySelectorAll(".chapter-row").forEach(el => {
+      el.addEventListener("click", () => {
+        const chNum = parseFloat(el.dataset.ch);
+        this.openChapterReader(item, details, chNum, chapters);
       });
+    });
 
-      // Library toggle
-      document.getElementById("lib-toggle-btn").addEventListener("click", () => {
-        this.toggleLibraryItem(item);
-      });
+    document.getElementById("lib-toggle-btn")?.addEventListener("click", () => {
+      this.toggleLibraryItem(item);
+    });
 
+    // If item was opened with resumeChapter
+    if (item.resumeChapter && chapters.length > 0) {
+      this.openChapterReader(item, details, item.resumeChapter, chapters);
+    }
+  }
+
+  async openChapterReader(item, details, chapterNum, chapters) {
+    const content = document.getElementById("modal-content");
+    content.innerHTML = `
+      <div class="reader-header">
+        <button class="btn btn-secondary" id="back-to-details-btn" style="padding: 6px 12px; font-size: 0.85rem;">
+          ← ${this.t("btn_back") || "Geri"}
+        </button>
+        <div style="font-weight: 600; font-size: 0.95rem; text-align: center;">
+          <span>${details.title || item.title}</span>
+          <span style="color: var(--v-text-muted); margin-left: 6px;">(${this.t("chapters") || "Bölüm"} ${chapterNum})</span>
+        </div>
+        <select id="reader-chapter-select" class="header-select" style="padding: 4px 8px; font-size: 0.82rem;">
+          ${(chapters || []).map(ch => {
+            const num = ch.episode_number || ch.chapter_number || 1;
+            return `<option value="${num}" ${num === chapterNum ? "selected" : ""}>${this.t("chapters") || "Bölüm"} ${num}</option>`;
+          }).join("")}
+        </select>
+      </div>
+      <div class="reader-container" id="reader-body">
+        <div style="text-align: center; padding: 60px; color: var(--v-text-muted);">
+          <div style="font-size: 1.5rem; margin-bottom: 8px;">⏳</div>
+          <div>Bölüm sayfaları yükleniyor...</div>
+        </div>
+      </div>
+    `;
+
+    document.getElementById("back-to-details-btn").addEventListener("click", () => {
+      this.renderReadingModal(item, details);
+    });
+
+    const chSelect = document.getElementById("reader-chapter-select");
+    chSelect.addEventListener("change", (e) => {
+      const nextCh = parseFloat(e.target.value);
+      this.openChapterReader(item, details, nextCh, chapters);
+    });
+
+    try {
+      const res = await fetch(`/api/chapter?provider=${encodeURIComponent(item.provider_id || "")}&media=${encodeURIComponent(item.id)}&chapter_num=${chapterNum}`);
+      if (!res.ok) throw new Error("Bölüm verisi alınamadı");
+      const data = await res.json();
+
+      const readerBody = document.getElementById("reader-body");
+      if (!readerBody) return;
+
+      if (data.pages && data.pages.length > 0) {
+        readerBody.innerHTML = `
+          <div class="reader-pages-flow" style="display: flex; flex-direction: column; gap: 4px; align-items: center;">
+            ${data.pages.map((p, idx) => `
+              <div style="position: relative; width: 100%; display: flex; justify-content: center;" data-page="${p.page_number || idx + 1}">
+                <img src="${p.url}" alt="Sayfa ${p.page_number || idx + 1}" loading="lazy" style="max-width: 100%; width: 780px; border-radius: 4px;">
+              </div>
+            `).join("")}
+          </div>
+        `;
+
+        // Track reading progress on scroll
+        const totalPages = data.pages.length;
+        readerBody.addEventListener("scroll", () => {
+          const scrollPct = (readerBody.scrollTop / (readerBody.scrollHeight - readerBody.clientHeight)) || 0;
+          const currPage = Math.min(totalPages, Math.max(1, Math.round(scrollPct * totalPages)));
+          this.recordReadingProgress(item, chapterNum, currPage, totalPages, scrollPct);
+        }, { passive: true });
+
+        // Record initial reading
+        this.recordReadingProgress(item, chapterNum, 1, totalPages, 0);
+
+      } else if (data.text_content) {
+        const paragraphs = data.text_content.split(/\n+/).filter(p => p.trim() !== "");
+        readerBody.innerHTML = `
+          <div class="reader-text-content">
+            ${paragraphs.map(p => `<p>${p}</p>`).join("")}
+          </div>
+        `;
+
+        readerBody.addEventListener("scroll", () => {
+          const scrollPct = (readerBody.scrollTop / (readerBody.scrollHeight - readerBody.clientHeight)) || 0;
+          this.recordReadingProgress(item, chapterNum, 1, 1, scrollPct);
+        }, { passive: true });
+
+        this.recordReadingProgress(item, chapterNum, 1, 1, 0);
+      } else {
+        readerBody.innerHTML = `<div style="text-align: center; padding: 40px; color: var(--v-text-muted);">Bu bölüme ait içerik bulunamadı.</div>`;
+      }
     } catch (e) {
-      content.innerHTML = `<div style="text-align: center; padding: 40px; color: var(--v-status-error);">Failed to load metadata.</div>`;
+      const readerBody = document.getElementById("reader-body");
+      if (readerBody) {
+        readerBody.innerHTML = `<div style="text-align: center; padding: 40px; color: var(--v-status-error);">Bölüm yüklenirken hata oluştu: ${e.message}</div>`;
+      }
+    }
+  }
+
+  async recordReadingProgress(item, chapterNum, currentPage, totalPages, ratio) {
+    try {
+      await fetch("/api/progress/reading", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          provider_id: item.provider_id || "com.vessel.reading.mangile",
+          media_id: item.id,
+          domain: 2,
+          chapter_number: chapterNum,
+          current_page: currentPage,
+          total_pages: totalPages,
+          text_scroll_ratio: ratio,
+          is_completed: ratio >= 0.95
+        })
+      });
+    } catch (e) {
+      // silent fail
+    }
+  }
+
+  renderCinemaModal(item, details) {
+    const content = document.getElementById("modal-content");
+    content.innerHTML = `
+      <div class="player-container" id="player-mount">
+        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 16px;">
+          <button class="btn btn-primary" id="start-stream-btn" style="padding: 12px 28px; font-size: 1.05rem;">
+            ▶ ${this.t("btn_play")}
+          </button>
+          <span id="stream-status" style="font-size: 0.85rem; color: var(--v-text-muted);">Ready to stream</span>
+        </div>
+      </div>
+
+      <div class="modal-details">
+        <div class="modal-title-row">
+          <div>
+            <h2>${details.title || item.title}</h2>
+            ${details.year ? `<span style="font-size: 0.88rem; color: var(--v-text-muted);">${details.year}</span>` : ""}
+          </div>
+          <button class="btn btn-secondary" id="lib-toggle-btn">${this.t("btn_add_library")}</button>
+        </div>
+        <div class="modal-overview">${details.overview || "No synopsis available."}</div>
+
+        ${details.seasons && details.seasons.length > 0 ? `
+          <h3 style="margin-top: 20px; font-size: 1.1rem;">${this.t("episodes")}</h3>
+          <div class="episode-list">
+            ${details.seasons[0].episodes.map(ep => `
+              <div class="episode-item" data-ep="${ep.episode_number}">
+                <span>Episode ${ep.episode_number}: ${ep.title}</span>
+                <button class="btn btn-secondary" style="padding: 4px 10px; font-size: 0.75rem;">Play</button>
+              </div>
+            `).join("")}
+          </div>
+        ` : ""}
+      </div>
+    `;
+
+    // Start stream handler
+    document.getElementById("start-stream-btn").addEventListener("click", () => {
+      this.resolveAndPlayStream(item, 1, 1);
+    });
+
+    // Episode click handlers
+    content.querySelectorAll(".episode-item").forEach(el => {
+      el.addEventListener("click", () => {
+        const epNum = parseInt(el.dataset.ep, 10);
+        this.resolveAndPlayStream(item, 1, epNum);
+      });
+    });
+
+    // Library toggle
+    document.getElementById("lib-toggle-btn").addEventListener("click", () => {
+      this.toggleLibraryItem(item);
+    });
+
+    // If item was opened with resume season/episode
+    if (item.resumeEpisode) {
+      this.resolveAndPlayStream(item, item.resumeSeason || 1, item.resumeEpisode);
     }
   }
 
@@ -1059,15 +1365,47 @@ class VesselApp {
       if (!container) return;
 
       container.innerHTML = "";
-      (data.plugins || []).forEach(p => {
-        const row = document.createElement("div");
-        row.style.cssText = "display: flex; justify-content: space-between; padding: 10px; border-bottom: 1px solid var(--v-border-subtle);";
-        row.innerHTML = `
-          <div>
-            <strong>${p.name}</strong> <span style="font-size: 0.8rem; color: var(--v-text-muted);">${p.version}</span>
-            <div style="font-size: 0.78rem; color: var(--v-text-secondary);">${p.description || ""}</div>
+      const plugins = data.plugins || [];
+      if (plugins.length === 0) {
+        container.innerHTML = `
+          <div style="padding: 24px; text-align: center; color: var(--v-text-muted); background: var(--v-bg-base); border-radius: var(--v-radius-md); border: 1px dashed var(--v-border-subtle);">
+            <div style="font-size: 1.5rem; margin-bottom: 8px;">🔌</div>
+            <div>${this.t("plugin_none") || "Henüz bağlı eklenti tespit edilmedi."}</div>
           </div>
-          <span style="color: var(--v-status-success); font-weight: 600; font-size: 0.85rem;">Online</span>
+        `;
+        return;
+      }
+
+      plugins.forEach(p => {
+        const row = document.createElement("div");
+        row.className = "plugin-card-row";
+        const isCinema = (p.id && p.id.includes("cinema")) || p.domain === 1;
+        const iconSvg = isCinema
+          ? `<svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none"><rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"></rect><line x1="7" y1="2" x2="7" y2="22"></line><line x1="17" y1="2" x2="17" y2="22"></line><line x1="2" y1="12" x2="22" y2="12"></line><line x1="2" y1="7" x2="7" y2="7"></line><line x1="2" y1="17" x2="7" y2="17"></line><line x1="17" y1="17" x2="22" y2="17"></line><line x1="17" y1="7" x2="22" y2="7"></line></svg>`
+          : `<svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>`;
+
+        const domainName = isCinema ? (this.t("nav_cinema") || "Sinema & Dizi") : (this.t("nav_reading") || "Manga & Roman");
+
+        row.innerHTML = `
+          <div style="display: flex; align-items: center; gap: 14px;">
+            <div style="width: 40px; height: 40px; border-radius: var(--v-radius-md); background: var(--v-bg-elevated); border: 1px solid var(--v-border-subtle); display: flex; align-items: center; justify-content: center; color: var(--v-accent-primary);">
+              ${iconSvg}
+            </div>
+            <div>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <strong style="font-size: 0.95rem; color: var(--v-text-primary);">${p.name || p.id}</strong>
+                <span class="badge-subtle">${p.version || "1.0.0"}</span>
+                ${p.is_builtin ? `<span class="badge-subtle" style="background: rgba(var(--v-accent-primary-rgb, 99, 102, 241), 0.12); color: var(--v-accent-primary); font-size: 0.72rem;">Dahili</span>` : ""}
+              </div>
+              <div style="font-size: 0.8rem; color: var(--v-text-secondary); margin-top: 2px;">
+                ${p.description || domainName}
+              </div>
+            </div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span class="status-indicator online" style="width: 8px; height: 8px; border-radius: 50%; background-color: var(--v-status-success); display: inline-block;"></span>
+            <span style="color: var(--v-status-success); font-weight: 600; font-size: 0.82rem;">${this.t("plugin_online") || "Aktif"}</span>
+          </div>
         `;
         container.appendChild(row);
       });

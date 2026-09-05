@@ -137,10 +137,17 @@ func (c *Client) Search(ctx context.Context, query string, page int32) (*MultiSe
 		page = 1
 	}
 
-	endpoint := fmt.Sprintf("%s/search/multi", c.baseURL)
+	qTrim := strings.TrimSpace(query)
+	var endpoint string
 	params := url.Values{}
-	params.Set("query", query)
 	params.Set("page", strconv.Itoa(int(page)))
+
+	if qTrim == "" || strings.EqualFold(qTrim, "popular") || strings.EqualFold(qTrim, "trending") {
+		endpoint = fmt.Sprintf("%s/trending/all/week", c.baseURL)
+	} else {
+		endpoint = fmt.Sprintf("%s/search/multi", c.baseURL)
+		params.Set("query", qTrim)
+	}
 
 	var resp MultiSearchResponse
 	if err := c.doGet(ctx, endpoint, params, &resp); err != nil {
@@ -197,14 +204,24 @@ func (c *Client) doGet(ctx context.Context, endpoint string, params url.Values, 
 		return ErrEmptyAPIKey
 	}
 
-	params.Set("api_key", c.apiKey)
-	fullURL := endpoint + "?" + params.Encode()
+	isBearer := strings.HasPrefix(c.apiKey, "ey") || strings.Contains(c.apiKey, ".")
+	if !isBearer {
+		params.Set("api_key", c.apiKey)
+	}
+
+	fullURL := endpoint
+	if len(params) > 0 {
+		fullURL += "?" + params.Encode()
+	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fullURL, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
 	req.Header.Set("Accept", "application/json")
+	if isBearer {
+		req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	}
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {

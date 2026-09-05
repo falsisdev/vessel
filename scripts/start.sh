@@ -29,9 +29,16 @@ if [ ! -f "./bin/mangile" ] || [ "$REBUILD" = true ]; then
     go build -o ./bin/mangile ./plugins/mangile
 fi
 
-# Ensure local plugin directory symlinks or copies exist for seamless discovery
+# Ensure local and user config plugin directory copies exist for seamless discovery
 mkdir -p plugins/cinemasis plugins/mangile
 cp -f ./bin/cinemasis ./plugins/cinemasis/cinemasis 2>/dev/null || true
 cp -f ./bin/mangile ./plugins/mangile/mangile 2>/dev/null || true
+
+USER_PLUGINS_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/vessel/plugins"
+mkdir -p "$USER_PLUGINS_DIR/cinemasis" "$USER_PLUGINS_DIR/mangile"
+cp -f ./plugins/cinemasis/plugin.json "$USER_PLUGINS_DIR/cinemasis/" 2>/dev/null || true
+cp -f ./bin/cinemasis "$USER_PLUGINS_DIR/cinemasis/cinemasis" 2>/dev/null || true
+cp -f ./plugins/mangile/plugin.json "$USER_PLUGINS_DIR/mangile/" 2>/dev/null || true
+cp -f ./bin/mangile "$USER_PLUGINS_DIR/mangile/mangile" 2>/dev/null || true
 
 exec ./bin/vessel serve "$@"

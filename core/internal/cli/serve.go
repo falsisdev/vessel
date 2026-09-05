@@ -109,6 +109,14 @@ func RunServer(args []string) error {
 	if *themesDir != "" {
 		customThemeDirs = append(customThemeDirs, *themesDir)
 	}
+	customThemeDirs = append(customThemeDirs, "themes", DefaultThemesDir())
+	if execPath, err := os.Executable(); err == nil {
+		execDir := filepath.Dir(execPath)
+		customThemeDirs = append(customThemeDirs,
+			filepath.Join(execDir, "themes"),
+			filepath.Join(execDir, "..", "themes"),
+		)
+	}
 
 	themeManager := theme.NewManager(customThemeDirs...)
 	if cfg != nil && cfg.ActiveThemeID != "" {
@@ -170,7 +178,14 @@ func RunServer(args []string) error {
 	if cfg != nil && cfg.PluginsDir != "" {
 		rawDirs = append(rawDirs, cfg.PluginsDir)
 	}
-	rawDirs = append(rawDirs, "plugins")
+	rawDirs = append(rawDirs, "plugins", DefaultPluginsDir())
+	if execPath, err := os.Executable(); err == nil {
+		execDir := filepath.Dir(execPath)
+		rawDirs = append(rawDirs,
+			filepath.Join(execDir, "plugins"),
+			filepath.Join(execDir, "..", "plugins"),
+		)
+	}
 
 	seenDirs := make(map[string]bool)
 	var searchDirs []string
@@ -188,6 +203,7 @@ func RunServer(args []string) error {
 		}
 	}
 
+	launchedPlugins := make(map[string]bool)
 	for _, pDir := range searchDirs {
 		if pDir == "" {
 			continue
@@ -202,11 +218,13 @@ func RunServer(args []string) error {
 				slog.Info("Skipping disabled plugin", "id", desc.ID)
 				continue
 			}
-			if !desc.Enabled {
+			if !desc.Enabled || launchedPlugins[desc.ID] {
 				continue
 			}
 			if _, err := supervisor.LaunchDescriptor(ctx, desc); err != nil {
 				slog.Warn("Failed to launch discovered plugin", "id", desc.ID, "error", err)
+			} else {
+				launchedPlugins[desc.ID] = true
 			}
 		}
 	}

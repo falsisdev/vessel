@@ -14,6 +14,8 @@ import (
 	"google.golang.org/grpc"
 )
 
+const DefaultTMDBKey = "eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiI4YTYwMWVhZTc2Y2JiN2QwMjU3M2RhYjJlYzM2MTRmYSIsIm5iZiI6MTY1ODc0MzM0Ny40MzcsInN1YiI6IjYyZGU2YTMzZTlkYTY5MTQ5NTQwZWU5MSIsInNjb3BlcyI6WyJhcGlfcmVhZCJdLCJ2ZXJzaW9uIjoxfQ.4vJx9fRhAtiUGNNcVm-CK9VCPhXTuG0gn-nHfwYqwqY"
+
 func main() {
 	_ = config.LoadEnv()
 
@@ -29,14 +31,13 @@ func main() {
 	if key == "" {
 		key = os.Getenv("VESSEL_TMDB_API_KEY")
 	}
+	if key == "" {
+		key = DefaultTMDBKey
+	}
 
 	urlStr := *baseURL
 	if urlStr == "" {
 		urlStr = os.Getenv("TMDB_BASE_URL")
-	}
-
-	if key == "" {
-		log.Println("[Cinemasis] Notice: TMDB_API_KEY is not provided. Set TMDB_API_KEY to execute live queries against TMDB.")
 	}
 
 	addr := fmt.Sprintf("127.0.0.1:%d", *port)

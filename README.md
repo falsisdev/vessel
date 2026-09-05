@@ -36,8 +36,8 @@ Vessel will display your local IP addresses in the terminal (e.g. `http://192.16
 
 Vessel features a built-in theme engine with curated color palettes, including authentic manga & novel reading themes:
 
-* **Mangile Duman** (`mangile`): Misty dark slate with emerald green accents (Default)
-* **Mangile Leylak** (`mangile-mauve`): Elegant subtle mauve dark with emerald green accents
+* **Mangile Duman** (`mangile`): Misty dark slate with clean white accents (Default)
+* **Mangile Leylak** (`mangile-mauve`): Elegant subtle mauve dark with clean white accents
 * **Mangile Kaya** (`mangile-stone`): Warm earthy dark stone tones
 * **Mangile Çinko** (`mangile-zinc`): Deep modern zinc neutral
 * **Mangile Arduvaz** (`mangile-slate`): Deep navy slate

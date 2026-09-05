@@ -633,7 +633,7 @@ func (g *GatewayServer) handlePlugins(w http.ResponseWriter, r *http.Request) {
 	}
 
 	clients := g.pluginMgr.ListAll()
-	var list []any
+	list := make([]any, 0, len(clients))
 	for _, c := range clients {
 		list = append(list, c.Manifest())
 	}

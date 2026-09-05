@@ -56,6 +56,16 @@ func LoadDescriptor(path string) (*PluginDescriptor, error) {
 				}
 			}
 			if !found {
+				if _, err := os.Stat(filepath.Join(dir, "main.go")); err == nil {
+					targetBin := filepath.Join(dir, baseName)
+					cmd := exec.Command("go", "build", "-o", targetBin, dir)
+					if err := cmd.Run(); err == nil {
+						desc.ExecutablePath, _ = filepath.Abs(targetBin)
+						found = true
+					}
+				}
+			}
+			if !found {
 				if look, err := exec.LookPath(baseName); err == nil {
 					desc.ExecutablePath = look
 				} else {
