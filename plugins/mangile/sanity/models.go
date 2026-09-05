@@ -117,9 +117,40 @@ func (c *SanityChapterDetails) ExtractTextContent() string {
 	var sb strings.Builder
 	for _, b := range c.Content {
 		if b.Type == "block" {
+			// Build map of link markDefs
+			linkMap := make(map[string]string)
+			for _, md := range b.MarkDefs {
+				if md.Type == "link" && md.Href != "" {
+					linkMap[md.Key] = md.Href
+				}
+			}
+
 			var line strings.Builder
 			for _, child := range b.Children {
-				line.WriteString(child.Text)
+				hasImageLink := false
+				for _, mKey := range child.Marks {
+					if href, ok := linkMap[mKey]; ok {
+						lowHref := strings.ToLower(href)
+						if strings.Contains(lowHref, "cdn.sanity.io/images") ||
+							strings.HasSuffix(lowHref, ".jpg") || strings.HasSuffix(lowHref, ".jpeg") ||
+							strings.HasSuffix(lowHref, ".png") || strings.HasSuffix(lowHref, ".webp") ||
+							strings.HasSuffix(lowHref, ".gif") || strings.HasSuffix(lowHref, ".svg") {
+							alt := child.Text
+							if alt == "" {
+								alt = "Görsel"
+							}
+							if sb.Len() > 0 {
+								sb.WriteString("\n\n")
+							}
+							sb.WriteString(fmt.Sprintf("![%s](%s)", alt, href))
+							hasImageLink = true
+							break
+						}
+					}
+				}
+				if !hasImageLink {
+					line.WriteString(child.Text)
+				}
 			}
 			text := strings.TrimSpace(line.String())
 			if text != "" {

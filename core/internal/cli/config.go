@@ -54,8 +54,8 @@ func LoadConfig() (*Config, error) {
 	defer configMu.RUnlock()
 
 	cfg := &Config{
-		ActiveThemeID:   "vessel-dark",
-		ActiveVariantID: "slate-indigo",
+		ActiveThemeID:   "catppuccin",
+		ActiveVariantID: "mocha",
 		PluginsDir:      DefaultPluginsDir(),
 		ThemesDir:       DefaultThemesDir(),
 		DisabledPlugins: make(map[string]bool),

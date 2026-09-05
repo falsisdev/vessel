@@ -29,11 +29,11 @@ func ThemeList(themesDir string, out io.Writer) error {
 
 	activeThemeID := cfg.ActiveThemeID
 	if activeThemeID == "" {
-		activeThemeID = "vessel-dark"
+		activeThemeID = "catppuccin"
 	}
 	activeVariantID := cfg.ActiveVariantID
 	if activeVariantID == "" {
-		activeVariantID = "slate-indigo"
+		activeVariantID = "mocha"
 	}
 
 	w := tabwriter.NewWriter(out, 0, 0, 3, ' ', 0)
@@ -230,10 +230,10 @@ func ThemeRemove(themeID, themesDir string, out io.Writer) error {
 	}
 
 	if cfg.ActiveThemeID == themeID {
-		cfg.ActiveThemeID = "vessel-dark"
-		cfg.ActiveVariantID = "slate-indigo"
+		cfg.ActiveThemeID = "catppuccin"
+		cfg.ActiveVariantID = "mocha"
 		_ = SaveConfig(cfg)
-		fmt.Fprintf(out, "Active theme reset to default (vessel-dark / slate-indigo)\n")
+		fmt.Fprintf(out, "Active theme reset to default (catppuccin / mocha)\n")
 	}
 
 	fmt.Fprintf(out, "✓ Successfully removed theme '%s'\n", themeID)

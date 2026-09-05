@@ -22,13 +22,13 @@ func TestBuiltinThemes(t *testing.T) {
 		t.Fatalf("GetActive error: %v", err)
 	}
 
-	if active.Theme.Manifest.ID != "vessel-dark" {
-		t.Errorf("expected default theme vessel-dark, got %s", active.Theme.Manifest.ID)
+	if active.Theme.Manifest.ID != "catppuccin" {
+		t.Errorf("expected default theme catppuccin, got %s", active.Theme.Manifest.ID)
 	}
-	if active.Variant.ID != "slate-indigo" {
-		t.Errorf("expected default variant slate-indigo, got %s", active.Variant.ID)
+	if active.Variant.ID != "mocha" {
+		t.Errorf("expected default variant mocha, got %s", active.Variant.ID)
 	}
-	if !strings.Contains(active.CompiledCSS, "--v-bg-base: #0b0f17;") {
+	if !strings.Contains(active.CompiledCSS, "--v-bg-base: #1e1e2e;") {
 		t.Errorf("compiled CSS missing --v-bg-base variable: %s", active.CompiledCSS)
 	}
 }

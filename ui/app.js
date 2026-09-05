@@ -116,7 +116,26 @@ const I18N_STRINGS = {
     ai_btn_discover: "Find Matches",
     ai_results_title: "AI Curated Matches",
     ai_shelf_title: "✨ Tailored to Your Taste (AI Taste Match)",
-    ai_input_placeholder: "Describe what you want (e.g. 'mind-bending psychological anime', '90s cyberpunk')..."
+    ai_input_placeholder: "Describe what you want (e.g. 'mind-bending psychological anime', '90s cyberpunk')...",
+    ai_domain_all: "✨ All",
+    ai_domain_cinema: "🎬 Cinema & Series",
+    ai_domain_reading: "📖 Manga & Books",
+    ai_btn_close: "✕ Close",
+    ai_model_name: "Vessel-Embed-v2.4 (MiniLM-64D Core)",
+    mood_mind_bending: "Mind-Bending & Plot Twists",
+    mood_dark_cyberpunk: "Dark & Cyberpunk",
+    mood_cozy_wholesome: "Cozy & Chill",
+    mood_high_adrenaline: "Adrenaline & Epic Action",
+    mood_deep_mystery: "Deep Mystery & Crime",
+    mood_retro_classics: "Retro 80s & 90s",
+    trait_epic_action: "Epic Adventure & Action",
+    trait_mind_bending: "Mind-Bending & Plot Twist",
+    trait_dark_cyberpunk: "Dark Atmosphere & Cyberpunk",
+    trait_deep_mystery: "Deep Mystery & Detective",
+    trait_cozy_wholesome: "Cozy, Wholesome & Chill",
+    trait_scifi_space: "Sci-Fi & Cosmic Space",
+    trait_horror_thriller: "Horror & Psychological Thriller",
+    trait_anime_manga: "Immersive Anime & Manga"
   },
   tr: {
     nav_cinema: "Sinema",
@@ -231,7 +250,26 @@ const I18N_STRINGS = {
     ai_btn_discover: "Öneri Getir",
     ai_results_title: "Yapay Zeka Keşifleri",
     ai_shelf_title: "✨ Senin Zevkine Özel (AI Taste Match)",
-    ai_input_placeholder: "Nasıl bir şey arıyorsun? (örn: 'ters köşe psikolojik anime', '90lar siberpunk', 'kafa dağıtmalık komedi')..."
+    ai_input_placeholder: "Nasıl bir şey arıyorsun? (örn: 'ters köşe psikolojik anime', '90lar siberpunk', 'kafa dağıtmalık komedi')...",
+    ai_domain_all: "✨ Tümü",
+    ai_domain_cinema: "🎬 Sinema & Dizi",
+    ai_domain_reading: "📖 Manga & Kitap",
+    ai_btn_close: "✕ Kapat",
+    ai_model_name: "Vessel-Embed-v2.4 (MiniLM-64D Çekirdek)",
+    mood_mind_bending: "Zihin Yakan & Ters Köşe",
+    mood_dark_cyberpunk: "Karanlık & Siberpunk",
+    mood_cozy_wholesome: "Kafa Dağıtmalık & Huzurlu",
+    mood_high_adrenaline: "Adrenalin & Epik Aksiyon",
+    mood_deep_mystery: "Derin Gizem & Polisiye",
+    mood_retro_classics: "Retro 80'ler & 90'lar",
+    trait_epic_action: "Epik Macera & Aksiyon",
+    trait_mind_bending: "Zihin Yakan & Ters Köşe",
+    trait_dark_cyberpunk: "Karanlık Atmosfer & Siberpunk",
+    trait_deep_mystery: "Derin Gizem & Polisiye",
+    trait_cozy_wholesome: "Kafa Dağıtmalık & Huzurlu",
+    trait_scifi_space: "Bilim Kurgu & Uzay",
+    trait_horror_thriller: "Korku & Gerilim",
+    trait_anime_manga: "Sürükleyici Şonen / Seinen Anime"
   },
   de: {
     nav_cinema: "Kino",
@@ -321,7 +359,33 @@ const I18N_STRINGS = {
     theme_ember: "Glutrot",
     theme_amethyst: "Amethyst Violett",
     theme_forest: "Waldgrün",
-    theme_light_clean: "Klar Hell"
+    theme_light_clean: "Klar Hell",
+    ai_badge_title: "Lokale KI-Entdeckungsengine",
+    ai_main_headline: "Nach Stimmung & Vibe entdecken",
+    ai_taste_summary: "Dein Geschmacksprofil wird lokal auf dem Gerät berechnet (100% Offline & Privat).",
+    ai_btn_discover: "Treffer finden",
+    ai_results_title: "KI-Kuratierte Treffer",
+    ai_shelf_title: "✨ Auf deinen Geschmack abgestimmt (AI Taste Match)",
+    ai_input_placeholder: "Beschreibe, was du suchst (z.B. 'mind-bending Anime mit Plot-Twist', '90er Cyberpunk')...",
+    ai_domain_all: "✨ Alle",
+    ai_domain_cinema: "🎬 Kino & Serien",
+    ai_domain_reading: "📖 Manga & Bücher",
+    ai_btn_close: "✕ Schließen",
+    ai_model_name: "Vessel-Embed-v2.4 (MiniLM-64D Core)",
+    mood_mind_bending: "Mind-Bending & Plot-Twists",
+    mood_dark_cyberpunk: "Dunkel & Cyberpunk",
+    mood_cozy_wholesome: "Gemütlich & Entspannend",
+    mood_high_adrenaline: "Adrenalin & Epische Action",
+    mood_deep_mystery: "Tiefes Mysterium & Krimi",
+    mood_retro_classics: "Retro 80er & 90er",
+    trait_epic_action: "Episches Abenteuer & Action",
+    trait_mind_bending: "Mind-Bending & Plot-Twist",
+    trait_dark_cyberpunk: "Dunkle Atmosphäre & Cyberpunk",
+    trait_deep_mystery: "Tiefes Mysterium & Detektiv",
+    trait_cozy_wholesome: "Gemütlich & Entspannend",
+    trait_scifi_space: "Sci-Fi & Weltraum",
+    trait_horror_thriller: "Horror & Psychothriller",
+    trait_anime_manga: "Packender Anime & Manga"
   },
   fr: {
     nav_cinema: "Cinéma",
@@ -411,7 +475,33 @@ const I18N_STRINGS = {
     theme_ember: "Braise Chaude",
     theme_amethyst: "Améthyste",
     theme_forest: "Forêt Émeraude",
-    theme_light_clean: "Clair Épuré"
+    theme_light_clean: "Clair Épuré",
+    ai_badge_title: "Moteur IA de découverte locale",
+    ai_main_headline: "Découvrir selon votre humeur",
+    ai_taste_summary: "Votre profil de goût est calculé localement sur l'appareil (100% Hors-ligne & Privé).",
+    ai_btn_discover: "Trouver des pépites",
+    ai_results_title: "Recommandations IA",
+    ai_shelf_title: "✨ Adapté à vos goûts (AI Taste Match)",
+    ai_input_placeholder: "Décrivez vos envies (ex: 'animé psychologique à rebondissements', 'cyberpunk 90s')...",
+    ai_domain_all: "✨ Tous",
+    ai_domain_cinema: "🎬 Cinéma & Séries",
+    ai_domain_reading: "📖 Manga & Livres",
+    ai_btn_close: "✕ Fermer",
+    ai_model_name: "Vessel-Embed-v2.4 (MiniLM-64D Core)",
+    mood_mind_bending: "Casse-tête & Rebondissements",
+    mood_dark_cyberpunk: "Sombre & Cyberpunk",
+    mood_cozy_wholesome: "Réconfortant & Détente",
+    mood_high_adrenaline: "Adrénaline & Action Épique",
+    mood_deep_mystery: "Mystère Profond & Polar",
+    mood_retro_classics: "Rétro Années 80 & 90",
+    trait_epic_action: "Aventure Épique & Action",
+    trait_mind_bending: "Casse-tête & Rebondissements",
+    trait_dark_cyberpunk: "Atmosphère Sombre & Cyberpunk",
+    trait_deep_mystery: "Mystère Profond & Enquête",
+    trait_cozy_wholesome: "Chaleureux & Réconfortant",
+    trait_scifi_space: "Science-Fiction & Espace",
+    trait_horror_thriller: "Horreur & Thriller Psychologique",
+    trait_anime_manga: "Anime & Manga Immersifs"
   },
   es: {
     nav_cinema: "Cine",
@@ -501,7 +591,33 @@ const I18N_STRINGS = {
     theme_ember: "Brasa Cálida",
     theme_amethyst: "Amatista",
     theme_forest: "Bosque Esmeralda",
-    theme_light_clean: "Claro Limpio"
+    theme_light_clean: "Claro Limpio",
+    ai_badge_title: "Motor IA de Descubrimiento Local",
+    ai_main_headline: "Descubre según tu Estado de Ánimo",
+    ai_taste_summary: "Tu perfil de gustos se calcula localmente en el dispositivo (100% Sin conexión y Privado).",
+    ai_btn_discover: "Buscar Coincidencias",
+    ai_results_title: "Recomendaciones de IA",
+    ai_shelf_title: "✨ A la Medida de tus Gustos (AI Taste Match)",
+    ai_input_placeholder: "Describe lo que buscas (ej: 'anime psicológico con giros inesperados', 'cyberpunk de los 90')...",
+    ai_domain_all: "✨ Todo",
+    ai_domain_cinema: "🎬 Cine y Series",
+    ai_domain_reading: "📖 Manga y Libros",
+    ai_btn_close: "✕ Cerrar",
+    ai_model_name: "Vessel-Embed-v2.4 (MiniLM-64D Core)",
+    mood_mind_bending: "Mente Inquieta y Giros Inesperados",
+    mood_dark_cyberpunk: "Oscuro y Cyberpunk",
+    mood_cozy_wholesome: "Cálido y Relajante",
+    mood_high_adrenaline: "Adrenalina y Acción Épica",
+    mood_deep_mystery: "Misterio Profundo y Policial",
+    mood_retro_classics: "Retro Años 80 y 90",
+    trait_epic_action: "Aventura Épica y Acción",
+    trait_mind_bending: "Mente Inquieta y Giros Inesperados",
+    trait_dark_cyberpunk: "Atmósfera Oscura y Cyberpunk",
+    trait_deep_mystery: "Misterio Profundo y Detectives",
+    trait_cozy_wholesome: "Cálido y Relajante",
+    trait_scifi_space: "Ciencia Ficción y Espacio",
+    trait_horror_thriller: "Terror y Suspenso Psicológico",
+    trait_anime_manga: "Anime y Manga Inmersivo"
   },
   pt: {
     nav_cinema: "Cinema",
@@ -591,7 +707,33 @@ const I18N_STRINGS = {
     theme_ember: "Brasa Quente",
     theme_amethyst: "Ametista",
     theme_forest: "Floresta Esmeralda",
-    theme_light_clean: "Claro Limpo"
+    theme_light_clean: "Claro Limpo",
+    ai_badge_title: "Motor de Descoberta por IA Local",
+    ai_main_headline: "Descubra pelo seu Estado de Espírito",
+    ai_taste_summary: "O seu DNA de gostos é calculado localmente no dispositivo (100% Offline e Privado).",
+    ai_btn_discover: "Encontrar Recomendações",
+    ai_results_title: "Recomendações da IA",
+    ai_shelf_title: "✨ Feito sob Medida para Você (AI Taste Match)",
+    ai_input_placeholder: "Descreva o que procura (ex: 'anime psicológico com reviravoltas', 'cyberpunk dos anos 90')...",
+    ai_domain_all: "✨ Tudo",
+    ai_domain_cinema: "🎬 Cinema e Séries",
+    ai_domain_reading: "📖 Mangá e Livros",
+    ai_btn_close: "✕ Fechar",
+    ai_model_name: "Vessel-Embed-v2.4 (MiniLM-64D Core)",
+    mood_mind_bending: "Reviravoltas e Enigmas Mentais",
+    mood_dark_cyberpunk: "Sombrio e Cyberpunk",
+    mood_cozy_wholesome: "Aconchegante e Relaxante",
+    mood_high_adrenaline: "Adrenalina e Ação Épica",
+    mood_deep_mystery: "Mistério Profundo e Crime",
+    mood_retro_classics: "Clássicos Retrô Anos 80 e 90",
+    trait_epic_action: "Aventura Épica e Ação",
+    trait_mind_bending: "Reviravoltas e Enigmas Mentais",
+    trait_dark_cyberpunk: "Atmosfera Sombria e Cyberpunk",
+    trait_deep_mystery: "Mistério Profundo e Detetives",
+    trait_cozy_wholesome: "Aconchegante e Relaxante",
+    trait_scifi_space: "Ficção Científica e Espaço",
+    trait_horror_thriller: "Terror e Suspense Psicológico",
+    trait_anime_manga: "Anime e Mangá Envolventes"
   },
   ru: {
     nav_cinema: "Кино",
@@ -681,7 +823,33 @@ const I18N_STRINGS = {
     theme_ember: "Теплый уголь",
     theme_amethyst: "Аметист",
     theme_forest: "Изумрудный лес",
-    theme_light_clean: "Чистая светлая"
+    theme_light_clean: "Чистая светлая",
+    ai_badge_title: "Локальный ИИ-движок рекомендаций",
+    ai_main_headline: "Поиск по настроению и атмосфере",
+    ai_taste_summary: "Ваш профиль вкусов вычисляется локально на устройстве (100% офлайн и конфиденциально).",
+    ai_btn_discover: "Найти совпадения",
+    ai_results_title: "Рекомендации ИИ",
+    ai_shelf_title: "✨ Специально для вашего вкуса (AI Taste Match)",
+    ai_input_placeholder: "Опишите, что вы ищете (напр. 'психологическое аниме с неожиданной развязкой', 'киберпанк 90-х')...",
+    ai_domain_all: "✨ Всё",
+    ai_domain_cinema: "🎬 Кино и сериалы",
+    ai_domain_reading: "📖 Манга и книги",
+    ai_btn_close: "✕ Закрыть",
+    ai_model_name: "Vessel-Embed-v2.4 (MiniLM-64D Core)",
+    mood_mind_bending: "Сюжетные повороты и психология",
+    mood_dark_cyberpunk: "Мрачный киберпанк",
+    mood_cozy_wholesome: "Уютное и ламповое",
+    mood_high_adrenaline: "Адреналин и экшен",
+    mood_deep_mystery: "Глубокая тайна и детектив",
+    mood_retro_classics: "Ретро-классика 80-х и 90-х",
+    trait_epic_action: "Эпические приключения и экшен",
+    trait_mind_bending: "Головоломки и сюжетные твисты",
+    trait_dark_cyberpunk: "Мрачная киберпанк-атмосфера",
+    trait_deep_mystery: "Глубокая тайна и детектив",
+    trait_cozy_wholesome: "Уютное и спокойное",
+    trait_scifi_space: "Научная фантастика и космос",
+    trait_horror_thriller: "Ужасы и психологический триллер",
+    trait_anime_manga: "Захватывающее аниме и манга"
   },
   ja: {
     nav_cinema: "映画",
@@ -771,7 +939,33 @@ const I18N_STRINGS = {
     theme_ember: "ウォームアンバー",
     theme_amethyst: "アメジストパープル",
     theme_forest: "フォレストエメラルド",
-    theme_light_clean: "クリーンライト"
+    theme_light_clean: "クリーンライト",
+    ai_badge_title: "ローカルAIレコメンドエンジン",
+    ai_main_headline: "気分や雰囲気から見つける",
+    ai_taste_summary: "あなたの好みのDNAはデバイス上でローカルに計算されます（100%オフライン＆プライベート）。",
+    ai_btn_discover: "マッチする作品を探す",
+    ai_results_title: "AIのおすすめ作品",
+    ai_shelf_title: "✨ あなたの好みにぴったり (AI Taste Match)",
+    ai_input_placeholder: "探している作品を説明してください（例: 『伏線回収がすごい心理戦アニメ』、『90年代サイバーパンク』など）...",
+    ai_domain_all: "✨ すべて",
+    ai_domain_cinema: "🎬 映画・ドラマ",
+    ai_domain_reading: "📖 マンガ・書籍",
+    ai_btn_close: "✕ 閉じる",
+    ai_model_name: "Vessel-Embed-v2.4 (MiniLM-64D Core)",
+    mood_mind_bending: "どんでん返し・頭脳戦",
+    mood_dark_cyberpunk: "ダーク＆サイバーパンク",
+    mood_cozy_wholesome: "癒やし・ほのぼの",
+    mood_high_adrenaline: "アドレナリン全開アクション",
+    mood_deep_mystery: "重厚なミステリー・サスペンス",
+    mood_retro_classics: "80・90年代レトロ名作",
+    trait_epic_action: "壮大な冒険・アクション",
+    trait_mind_bending: "頭脳戦・衝撃の結末",
+    trait_dark_cyberpunk: "退廃的サイバーパンク世界",
+    trait_deep_mystery: "重厚なミステリー・推理",
+    trait_cozy_wholesome: "癒やし・日常系ほのぼの",
+    trait_scifi_space: "SF・宇宙アドベンチャー",
+    trait_horror_thriller: "ホラー・心理スリラー",
+    trait_anime_manga: "没入型アニメ・マンガ"
   },
   zh: {
     nav_cinema: "电影",
@@ -861,7 +1055,33 @@ const I18N_STRINGS = {
     theme_ember: "余烬暖金",
     theme_amethyst: "紫水晶",
     theme_forest: "翡翠森林",
-    theme_light_clean: "极简素白"
+    theme_light_clean: "极简素白",
+    ai_badge_title: "本地 AI 智能探索引擎",
+    ai_main_headline: "根据心情与氛围探索",
+    ai_taste_summary: "您的偏好 DNA 完全在设备本地计算生成（100% 离线且保护隐私）。",
+    ai_btn_discover: "寻找匹配作品",
+    ai_results_title: "AI 精选推荐",
+    ai_shelf_title: "✨ 量身打造的专属推荐 (AI Taste Match)",
+    ai_input_placeholder: "描述你想看的内容（例如：'高智商反转心理悬疑动漫'、'90年代赛博朋克'）...",
+    ai_domain_all: "✨ 全部",
+    ai_domain_cinema: "🎬 影视剧集",
+    ai_domain_reading: "📖 漫画与图书",
+    ai_btn_close: "✕ 关闭",
+    ai_model_name: "Vessel-Embed-v2.4 (MiniLM-64D Core)",
+    mood_mind_bending: "烧脑悬疑与反转",
+    mood_dark_cyberpunk: "暗黑赛博朋克",
+    mood_cozy_wholesome: "温馨治愈与轻松",
+    mood_high_adrenaline: "肾上腺素飙升动作",
+    mood_deep_mystery: "深度侦探与犯罪",
+    mood_retro_classics: "80与90年代经典",
+    trait_epic_action: "史诗冒险与激战",
+    trait_mind_bending: "极限反转与烧脑",
+    trait_dark_cyberpunk: "沉浸式暗黑赛博",
+    trait_deep_mystery: "深度侦探与悬疑",
+    trait_cozy_wholesome: "温馨治愈与日常",
+    trait_scifi_space: "硬核科幻与太空",
+    trait_horror_thriller: "惊悚恐怖与心理",
+    trait_anime_manga: "高能沉浸动漫与漫画"
   },
   ar: {
     nav_cinema: "السينما",
@@ -951,7 +1171,33 @@ const I18N_STRINGS = {
     theme_ember: "جمر دافئ",
     theme_amethyst: "جمشت بنفسجي",
     theme_forest: "غابة الزمرد",
-    theme_light_clean: "فاتح نقي"
+    theme_light_clean: "فاتح نقي",
+    ai_badge_title: "محرك الاستكشاف بالذكاء الاصطناعي المحلي",
+    ai_main_headline: "اكتشف حسب المزاج والأجواء",
+    ai_taste_summary: "يتم تحليل تفضيلاتك محلياً بالكامل على جهازك (100٪ بدون إنترنت وخاص تماماً).",
+    ai_btn_discover: "البحث عن تطابقات",
+    ai_results_title: "توصيات الذكاء الاصطناعي المختارة",
+    ai_shelf_title: "✨ مُصمم خصيصاً لذوقك (AI Taste Match)",
+    ai_input_placeholder: "صف ما تبحث عنه (مثال: 'أنمي نفسي مع حبكة غير متوقعة'، 'سايبربانك من التسعينيات')...",
+    ai_domain_all: "✨ الكل",
+    ai_domain_cinema: "🎬 سينما ومسلسلات",
+    ai_domain_reading: "📖 مانغا وكتب",
+    ai_btn_close: "✕ إغلاق",
+    ai_model_name: "Vessel-Embed-v2.4 (MiniLM-64D Core)",
+    mood_mind_bending: "حبكات غير متوقعة وتلاعب بالعقل",
+    mood_dark_cyberpunk: "مظلم وسايبربانك",
+    mood_cozy_wholesome: "دافئ ومريح للأعصاب",
+    mood_high_adrenaline: "أدرينالين وأكشن ملحمي",
+    mood_deep_mystery: "غموض عميق وتحقيق جنائي",
+    mood_retro_classics: "كلاسيكيات الثمانينيات والتسعينيات",
+    trait_epic_action: "مغامرة ملحمية وإثارة",
+    trait_mind_bending: "ألغاز وحبكات ملتوية",
+    trait_dark_cyberpunk: "أجواء سايبربانك سوداوية",
+    trait_deep_mystery: "غموض عميق وتحقيق",
+    trait_cozy_wholesome: "دافئ ومريح للأعصاب",
+    trait_scifi_space: "خيال علمي وفضاء",
+    trait_horror_thriller: "رعب وإثارة نفسية",
+    trait_anime_manga: "أنمي ومانغا شيقة"
   },
   fa: {
     nav_cinema: "سینما",
@@ -1041,7 +1287,33 @@ const I18N_STRINGS = {
     theme_ember: "اخگر گرم",
     theme_amethyst: "یاقوت ارغوانی",
     theme_forest: "زمرد جنگل",
-    theme_light_clean: "روشن شفاف"
+    theme_light_clean: "روشن شفاف",
+    ai_badge_title: "موتور کاوش با هوش مصنوعی محلی",
+    ai_main_headline: "کاوش بر اساس حال‌وهوا و سلیقه",
+    ai_taste_summary: "شناسنامه سلیقه شما کاملاً به صورت محلی بر روی دستگاه پردازش می‌شود (۱۰۰٪ آفلاین و محرمانه).",
+    ai_btn_discover: "یافتن همخوانی‌ها",
+    ai_results_title: "پیشنهادات منتخب هوش مصنوعی",
+    ai_shelf_title: "✨ متناسب با سلیقه شما (AI Taste Match)",
+    ai_input_placeholder: "آنچه می‌خواهید را توصیف کنید (مثلاً: 'انیمه روانشناختی با پیچش داستانی غافلگیرکننده')...",
+    ai_domain_all: "✨ همه",
+    ai_domain_cinema: "🎬 سینما و سریال",
+    ai_domain_reading: "📖 مانگا و کتاب",
+    ai_btn_close: "✕ بستن",
+    ai_model_name: "Vessel-Embed-v2.4 (MiniLM-64D Core)",
+    mood_mind_bending: "پیچش داستانی و چالش فکری",
+    mood_dark_cyberpunk: "سایبرپانک و تاریک",
+    mood_cozy_wholesome: "آرامش‌بخش و دلنشین",
+    mood_high_adrenaline: "آدرنالین بالا و اکشن حماسی",
+    mood_deep_mystery: "معمایی پیچیده و جنایی",
+    mood_retro_classics: "کلاسیک‌های دهه ۸۰ و ۹۰",
+    trait_epic_action: "ماجراجویی حماسی و اکشن",
+    trait_mind_bending: "چالش ذهنی و پیچش‌های غافلگیرکننده",
+    trait_dark_cyberpunk: "فضای تاریک سایبرپانک",
+    trait_deep_mystery: "معمایی و کارآگاهی عمیق",
+    trait_cozy_wholesome: "آرامش‌بخش و دلنشین",
+    trait_scifi_space: "علمی تخیلی و فضایی",
+    trait_horror_thriller: "ترسناک و هیجان‌انگیز روان‌شناختی",
+    trait_anime_manga: "انیمه و مانگای گیرا"
   },
   az: {
     nav_cinema: "Kino",
@@ -1123,7 +1395,33 @@ const I18N_STRINGS = {
     streams_loading: "Yayım mənbələri axtarılır...",
     no_streams: "Yayım mənbəyi tapılmadı.",
     no_episode_streams: "Bu seriya üçün yayım mənbəyi tapılmadı.",
-    synopsis: "Xülasə"
+    synopsis: "Xülasə",
+    ai_badge_title: "Lokal AI Kəşf Mühərriki",
+    ai_main_headline: "Əhval-ruhiyyə və Zövqə Görə Kəşf Edin",
+    ai_taste_summary: "Zövq DNT-niz cihazınızda tam lokal olaraq hesablanır (100% Oflayn və Məxfi).",
+    ai_btn_discover: "Uyğun Məzmunu Tap",
+    ai_results_title: "AI Tövsiyələri",
+    ai_shelf_title: "✨ Sizin Zövqünüzə Uyğun (AI Taste Match)",
+    ai_input_placeholder: "Axtardığınız məzmunu təsvir edin (məs: 'gözlənilməz sonluqlu psixoloji anime', '90-lar kiberpank')...",
+    ai_domain_all: "✨ Hamısı",
+    ai_domain_cinema: "🎬 Kino & Serial",
+    ai_domain_reading: "📖 Manqa & Kitab",
+    ai_btn_close: "✕ Bağla",
+    ai_model_name: "Vessel-Embed-v2.4 (MiniLM-64D Core)",
+    mood_mind_bending: "Zehin Qarıxdıran & Tərs Künc",
+    mood_dark_cyberpunk: "Qaranlıq & Kiberpank",
+    mood_cozy_wholesome: "Rahatladıcı & Xoş",
+    mood_high_adrenaline: "Adrenalin & Epik Döyüş",
+    mood_deep_mystery: "Dərin Sirr & Detektiv",
+    mood_retro_classics: "80 və 90-lar Retro Klassika",
+    trait_epic_action: "Epik Macera və Döyüş",
+    trait_mind_bending: "Zehin Qarıxdıran və Gözlənilməz Sonluq",
+    trait_dark_cyberpunk: "Qaranlıq Atmosfer və Kiberpank",
+    trait_deep_mystery: "Dərin Sirr və Detektiv",
+    trait_cozy_wholesome: "Rahatladıcı və Xoş",
+    trait_scifi_space: "Elmi Fantastika və Kosmos",
+    trait_horror_thriller: "Qorxu və Psixoloji Triller",
+    trait_anime_manga: "Maraqlı Anime və Manqa"
   }
 };
 
@@ -1302,6 +1600,11 @@ class VesselApp {
       this.cycleTheme();
     });
 
+    // Quick open local book / comic
+    document.getElementById("quick-open-book-btn")?.addEventListener("click", () => {
+      this.openLocalBookDialog();
+    });
+
     // Plugins Tabs
     document.querySelectorAll(".plugins-nav-tabs .tab").forEach(tab => {
       tab.addEventListener("click", () => {
@@ -1406,6 +1709,16 @@ class VesselApp {
     if (searchInput) {
       searchInput.placeholder = dict.search_placeholder || "Search movies, series, manga, anime...";
     }
+
+    // Localized AI vibe prompt placeholder
+    const aiPromptInput = document.getElementById("ai-vibe-prompt");
+    if (aiPromptInput) {
+      aiPromptInput.placeholder = dict.ai_input_placeholder || "Describe what you want (e.g. 'mind-bending psychological anime', '90s cyberpunk')...";
+    }
+
+    // Re-render AI discovery mood chips & taste tags with new locale
+    this.loadAIMoods();
+    this.loadAITasteProfile();
   }
 
   t(key) {
@@ -2473,6 +2786,7 @@ class VesselApp {
 
   // --- Local AI Smart Discovery & Taste Engine ---
   async initAIDiscoveryEngine() {
+    this.selectedAIDomain = "all";
     await this.loadAITasteProfile();
     await this.loadAIMoods();
 
@@ -2498,6 +2812,22 @@ class VesselApp {
         document.getElementById("ai-results-container")?.classList.add("hidden");
       });
     }
+
+    // AI Domain Scope Tabs
+    const domainFilters = document.getElementById("ai-domain-filters");
+    if (domainFilters) {
+      domainFilters.querySelectorAll(".pill").forEach(pill => {
+        pill.addEventListener("click", () => {
+          domainFilters.querySelectorAll(".pill").forEach(p => p.classList.remove("active"));
+          pill.classList.add("active");
+          this.selectedAIDomain = pill.dataset.domain || "all";
+          const q = input ? input.value.trim() : "";
+          const activeChip = document.querySelector(".ai-mood-chip.active");
+          const moodId = activeChip ? activeChip.dataset.id : "";
+          this.triggerAIDiscover({ query: q, mood: moodId, domain: this.selectedAIDomain });
+        });
+      });
+    }
   }
 
   async loadAITasteProfile() {
@@ -2507,16 +2837,39 @@ class VesselApp {
       const data = await res.json();
 
       const tagsContainer = document.getElementById("ai-taste-tags");
-      if (tagsContainer && (data.active_traits_tr || data.active_traits_en)) {
+      if (tagsContainer) {
         tagsContainer.innerHTML = "";
-        const isTR = this.getEffectiveLocale() === "tr";
+        const traitIds = data.active_trait_ids || [];
+        const isTR = this.getEffectiveLocale() === "tr" || this.getEffectiveLocale() === "az";
         const traits = isTR ? (data.active_traits_tr || []) : (data.active_traits_en || []);
-        traits.forEach(t => {
-          const tag = document.createElement("span");
-          tag.className = "ai-dna-tag";
-          tag.textContent = t;
-          tagsContainer.appendChild(tag);
-        });
+
+        if (traitIds.length > 0) {
+          traitIds.forEach(id => {
+            const localized = this.t("trait_" + id);
+            const text = (localized && localized !== ("trait_" + id)) ? localized : (this.t("mood_" + id) || id);
+            const tag = document.createElement("span");
+            tag.className = "ai-dna-tag";
+            tag.textContent = text;
+            tagsContainer.appendChild(tag);
+          });
+        } else if (traits.length > 0) {
+          traits.forEach(t => {
+            let localizedText = t;
+            if (t.includes("Epik") || t.includes("Epic")) localizedText = this.t("trait_epic_action");
+            else if (t.includes("Zihin") || t.includes("Mind")) localizedText = this.t("trait_mind_bending");
+            else if (t.includes("Karanlık") || t.includes("Dark")) localizedText = this.t("trait_dark_cyberpunk");
+            else if (t.includes("Gizem") || t.includes("Mystery") || t.includes("Polisiye")) localizedText = this.t("trait_deep_mystery");
+            else if (t.includes("Huzurlu") || t.includes("Cozy") || t.includes("Wholesome")) localizedText = this.t("trait_cozy_wholesome");
+            else if (t.includes("Uzay") || t.includes("Sci-Fi") || t.includes("Space")) localizedText = this.t("trait_scifi_space");
+            else if (t.includes("Korku") || t.includes("Horror")) localizedText = this.t("trait_horror_thriller");
+            else if (t.includes("Anime") || t.includes("Manga") || t.includes("Şonen")) localizedText = this.t("trait_anime_manga");
+
+            const tag = document.createElement("span");
+            tag.className = "ai-dna-tag";
+            tag.textContent = localizedText || t;
+            tagsContainer.appendChild(tag);
+          });
+        }
       }
     } catch (_) {}
   }
@@ -2538,7 +2891,11 @@ class VesselApp {
         const chip = document.createElement("button");
         chip.type = "button";
         chip.className = "ai-mood-chip";
-        const title = isTR ? m.title_tr : m.title_en;
+        chip.dataset.id = m.id;
+        const localizedTitle = this.t("mood_" + m.id);
+        const title = (localizedTitle && localizedTitle !== ("mood_" + m.id))
+          ? localizedTitle
+          : (isTR ? m.title_tr : m.title_en);
         chip.innerHTML = `<span>${m.icon || "✨"}</span><span>${title}</span>`;
         chip.addEventListener("click", () => {
           document.querySelectorAll(".ai-mood-chip").forEach(c => c.classList.remove("active"));
@@ -2550,7 +2907,7 @@ class VesselApp {
     } catch (_) {}
   }
 
-  async triggerAIDiscover({ query = "", mood = "", heading = "" }) {
+  async triggerAIDiscover({ query = "", mood = "", heading = "", domain = "" }) {
     const resultsContainer = document.getElementById("ai-results-container");
     const headingEl = document.getElementById("ai-results-heading");
     const grid = document.getElementById("ai-results-grid");
@@ -2561,17 +2918,23 @@ class VesselApp {
       headingEl.textContent = `✨ ${heading || this.t("ai_results_title")}`;
     }
     grid.innerHTML = `
-      <div style="padding: 24px; color: #94a3b8; display: flex; align-items: center; gap: 10px;">
+      <div style="padding: 24px; color: var(--v-text-muted); display: flex; align-items: center; gap: 10px;">
         <span style="animation: spin 1s linear infinite; display: inline-block;">⚙️</span>
         <span>${this.t("ai_main_headline")}...</span>
       </div>
     `;
 
+    // Determine domain scope: explicit > selected tab > current domain page
+    let effectiveDomain = domain || this.selectedAIDomain || "all";
+    if (effectiveDomain === "all" && (this.currentDomain === "cinema" || this.currentDomain === "reading")) {
+      effectiveDomain = this.currentDomain;
+    }
+
     try {
       const res = await fetch("/api/ai/discover", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: query, mood: mood, limit: 12 })
+        body: JSON.stringify({ query: query, mood: mood, domain: effectiveDomain, limit: 12 })
       });
       if (!res.ok) throw new Error("AI discovery failed");
       const data = await res.json();
@@ -2579,7 +2942,7 @@ class VesselApp {
 
       grid.innerHTML = "";
       if (items.length === 0) {
-        grid.innerHTML = `<div style="padding: 20px; color: #64748b;">${this.t("no_results")}</div>`;
+        grid.innerHTML = `<div style="padding: 20px; color: var(--v-text-muted);">${this.t("no_results")}</div>`;
         return;
       }
 
@@ -2601,12 +2964,15 @@ class VesselApp {
     const score = item.match_score || 85;
     const isReading = item.domain === "reading" || item.type === "manga" || item.type === "webtoon";
     const overlayIcon = isReading ? "📖" : "▶";
-    const reason = this.getEffectiveLocale() === "tr" ? (item.reason_tr || `%${score} Eşleşme`) : (item.reason_en || `${score}% Match`);
+    const isTR = this.getEffectiveLocale() === "tr" || this.getEffectiveLocale() === "az";
+    const matchLabel = isTR ? `%${score}` : `${score}%`;
+    const defaultReason = isTR ? `${matchLabel} Eşleşme` : `${matchLabel} Match`;
+    const reason = isTR ? (item.reason_tr || defaultReason) : (item.reason_en || defaultReason);
 
     card.innerHTML = `
       <div class="poster-wrapper">
         <img src="${poster}" alt="${title}" class="poster-img" loading="lazy" onerror="this.src='https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=400'">
-        <span class="ai-card-badge">⚡ %${score}</span>
+        <span class="ai-card-badge">⚡ ${matchLabel}</span>
         <div class="poster-overlay-btn">${overlayIcon}</div>
       </div>
       <div class="card-details">
@@ -3006,6 +3372,15 @@ class VesselApp {
     `;
 
     try {
+      if (item.isOffline || (item.isLocal && item.localSession)) {
+        this.renderReadingDetails(item, item.details || {
+          title: item.title,
+          poster_url: item.poster_url,
+          chapters: item.chapters || (item.localSession ? [{ id: item.id, chapter_number: 1, title: item.title }] : [])
+        });
+        return;
+      }
+
       const isIPTV = item.domain === 7 || item.type === 7 || item.type_name === "IPTV" || (item.id && (item.id.startsWith("tr-") || item.id.startsWith("intl-"))) || (item.provider_id === "com.vessel.iptv");
       const isReading = !isIPTV && (this.currentDomain === "reading" || (item.type >= 4 && item.type <= 6));
 
@@ -3542,6 +3917,33 @@ class VesselApp {
       });
     });
 
+    // Highlight downloaded chapters if already saved locally
+    if (item.id) {
+      fetch(`/api/reading/downloads?media=${encodeURIComponent(item.id)}`)
+        .then(r => r.ok ? r.json() : [])
+        .then(downloads => {
+          if (!Array.isArray(downloads)) return;
+          const dlMap = new Map();
+          downloads.forEach(d => {
+            if (d.chapter_id) dlMap.set(String(d.chapter_id), d);
+            if (d.chapter_number !== undefined && d.chapter_number !== null) dlMap.set(String(d.chapter_number), d);
+          });
+          content.querySelectorAll(".chapter-dl-action-btn").forEach(btn => {
+            const chId = String(btn.dataset.chid || "");
+            const chNum = String(btn.dataset.ch || "");
+            if (dlMap.has(chId) || dlMap.has(chNum)) {
+              btn.innerHTML = "✓ İndirildi";
+              btn.classList.remove("btn-secondary");
+              btn.classList.add("btn-primary");
+              btn.style.background = "var(--v-accent-primary, #6366f1)";
+              btn.style.color = "#fff";
+              btn.title = "İndirildi (Çevrimdışı hazır)";
+            }
+          });
+        })
+        .catch(() => {});
+    }
+
     content.querySelectorAll(".chapter-dl-action-btn").forEach(btn => {
       btn.addEventListener("click", async (e) => {
         e.stopPropagation();
@@ -3564,8 +3966,12 @@ class VesselApp {
             })
           });
           if (!res.ok) throw new Error("Download request failed");
-          btn.textContent = "✓";
-          this.showToast(`Bölüm ${chNum} indirme kuyruğuna alındı / Download started`);
+          btn.innerHTML = "✓ İndirildi";
+          btn.classList.remove("btn-secondary");
+          btn.classList.add("btn-primary");
+          btn.style.background = "var(--v-accent-primary, #6366f1)";
+          btn.style.color = "#fff";
+          this.showToast(`Bölüm ${chNum} indirildi / Downloaded successfully`, "success");
         } catch (err) {
           btn.textContent = "📥";
           this.showToast(err.message, "error");
@@ -3588,22 +3994,27 @@ class VesselApp {
     `;
 
     try {
-      const provider = item.provider_id || "com.vessel.reading.mangile";
-      let url;
-      if (item.isOffline) {
-        url = `/api/reading/offline/content?provider=${encodeURIComponent(provider)}&media=${encodeURIComponent(item.id)}&chapter=${encodeURIComponent(chapterId)}`;
+      let content;
+      if (item.isLocal && item.localSession) {
+        content = item.localSession;
       } else {
-        url = `/api/chapter?provider=${encodeURIComponent(provider)}&media=${encodeURIComponent(item.id)}&chapter_num=${chapterNum}`;
-        if (chapterId) {
-          url += `&chapter=${encodeURIComponent(chapterId)}`;
+        const provider = item.provider_id || "com.vessel.reading.mangile";
+        let url;
+        if (item.isOffline) {
+          url = `/api/reading/offline/content?provider=${encodeURIComponent(provider)}&media=${encodeURIComponent(item.id)}&chapter=${encodeURIComponent(chapterId)}`;
+        } else {
+          url = `/api/chapter?provider=${encodeURIComponent(provider)}&media=${encodeURIComponent(item.id)}&chapter_num=${chapterNum}`;
+          if (chapterId) {
+            url += `&chapter=${encodeURIComponent(chapterId)}`;
+          }
         }
+        const res = await fetch(url);
+        if (!res.ok) {
+          const errJson = await res.json().catch(() => ({}));
+          throw new Error(errJson.error || "Could not fetch chapter content");
+        }
+        content = await res.json();
       }
-      const res = await fetch(url);
-      if (!res.ok) {
-        const errJson = await res.json().catch(() => ({}));
-        throw new Error(errJson.error || "Could not fetch chapter content");
-      }
-      const content = await res.json();
 
       const chList = chapters || details.chapters || [];
       const currentIndex = chList.findIndex(c => {
@@ -3616,6 +4027,8 @@ class VesselApp {
       const pages = content.pages || [];
       const hasPages = pages.length > 0;
       const hasText = !!content.text_content;
+      const hasPDF = !!(content.pdf_url || content.direct_url || (content.format === "pdf"));
+      if (hasPDF && !content.pdf_url) content.pdf_url = content.direct_url;
       const totalPages = hasPages ? pages.length : 1;
 
       // Manga Reader Local State (Mangile-inspired)
@@ -3723,12 +4136,21 @@ class VesselApp {
       const progressFill = document.getElementById("reader-progress-fill");
       const pageIndicator = document.getElementById("reader-page-indicator");
 
-      // Render content according to mode
       const renderReaderMode = () => {
+        if (hasPDF) {
+          bodyRender.innerHTML = `
+            <div style="width: 100%; height: 85vh; padding: 10px;">
+              <iframe src="${content.pdf_url}#toolbar=1" class="reader-pdf-frame" style="width: 100%; height: 100%; border: none; border-radius: var(--v-radius-md); background: #0b0d13;"></iframe>
+            </div>
+          `;
+          if (pageIndicator) pageIndicator.textContent = `${content.title || 'PDF Document'}`;
+          return;
+        }
+
         if (hasPages) {
           if (readerMode === "paged") {
             const curP = pages[pagedIndex] || pages[0];
-            const pNum = curP.page_number || (pagedIndex + 1);
+            const pNum = curP.page_number || pagedIndex + 1;
             bodyRender.innerHTML = `
               <div class="reader-pages-container mode-paged">
                 <div class="reader-paged-wrap" style="transform: scale(${zoomLevel / 100}); transform-origin: top center; transition: transform 0.15s ease;">
@@ -3738,8 +4160,12 @@ class VesselApp {
                 </div>
               </div>
             `;
-            if (pageIndicator) pageIndicator.textContent = `Sayfa ${pNum} / ${totalPages} (${Math.round((pNum / totalPages) * 100)}%)`;
-            if (progressFill) progressFill.style.width = `${(pNum / totalPages) * 100}%`;
+            if (pageIndicator) {
+              pageIndicator.textContent = `${this.t("chapter")} ${chapterNum} • Sayfa ${pNum} / ${totalPages}`;
+            }
+            if (progressFill) {
+              progressFill.style.width = `${Math.round((pNum / totalPages) * 100)}%`;
+            }
 
             document.getElementById("reader-tap-left")?.addEventListener("click", () => {
               if (pagedIndex > 0) {
@@ -3776,26 +4202,64 @@ class VesselApp {
             `;
           }
         } else if (hasText) {
-          const paragraphs = content.text_content.split(/\n\n+/).map(p => {
+          const formatTextParagraph = (p) => {
             const trimmed = p.trim();
             if (!trimmed) return "";
-            const imgMatch = trimmed.match(/^!\[(.*?)\]\((https?:\/\/[^\s)]+)\)$/);
-            if (imgMatch) {
-              return `<figure class="reader-illustration" style="text-align: center; margin: 24px 0;"><img src="${imgMatch[2]}" alt="${imgMatch[1]}" style="max-width: 100%; max-height: 70vh; border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.3);"><figcaption style="font-size: 0.85rem; color: var(--v-text-muted); margin-top: 6px; font-style: italic;">${imgMatch[1]}</figcaption></figure>`;
+
+            // 1. Markdown image: ![alt](url)
+            const mdImg = trimmed.match(/^!\[(.*?)\]\((https?:\/\/[^\s)]+)\)$/);
+            if (mdImg) {
+              return `<figure class="reader-illustration" style="text-align: center; margin: 24px 0;"><img src="${mdImg[2]}" alt="${mdImg[1]}" style="max-width: 100%; max-height: 75vh; border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.35);"><figcaption style="font-size: 0.85rem; color: var(--v-text-muted); margin-top: 6px; font-style: italic;">${mdImg[1]}</figcaption></figure>`;
             }
-            return `<p>${trimmed}</p>`;
-          }).join("");
+
+            // 2. Hyperlink to image: [text](image_url)
+            const linkImg = trimmed.match(/^\[(.*?)\]\((https?:\/\/[^\s)]+\.(?:jpg|jpeg|png|webp|gif|svg|avif)(?:\?[^\s)]*)?)\)$/i) ||
+                            trimmed.match(/^\[(.*?)\]\((https?:\/\/cdn\.sanity\.io\/images\/[^\s)]+)\)$/i);
+            if (linkImg) {
+              return `<figure class="reader-illustration" style="text-align: center; margin: 24px 0;"><img src="${linkImg[2]}" alt="${linkImg[1]}" style="max-width: 100%; max-height: 75vh; border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.35);"><figcaption style="font-size: 0.85rem; color: var(--v-text-muted); margin-top: 6px; font-style: italic;">${linkImg[1]}</figcaption></figure>`;
+            }
+
+            // 3. Raw image URL or Sanity CDN
+            if (/^https?:\/\/[^\s]+(?:\.(?:jpg|jpeg|png|webp|gif|svg|avif)(?:\?[^\s]*)?|cdn\.sanity\.io\/images\/[^\s]+)$/i.test(trimmed)) {
+              return `<figure class="reader-illustration" style="text-align: center; margin: 24px 0;"><img src="${trimmed}" alt="Görsel" style="max-width: 100%; max-height: 75vh; border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.35);"></figure>`;
+            }
+
+            // 4. Markdown headers
+            if (trimmed.startsWith("# ")) {
+              return `<h1 style="font-size: 1.8rem; font-weight: 800; margin: 28px 0 16px 0; color: var(--v-text-primary); text-align: center;">${trimmed.substring(2)}</h1>`;
+            }
+            if (trimmed.startsWith("## ")) {
+              return `<h2 style="font-size: 1.4rem; font-weight: 700; margin: 24px 0 14px 0; color: var(--v-text-primary);">${trimmed.substring(3)}</h2>`;
+            }
+            if (trimmed.startsWith("### ")) {
+              return `<h3 style="font-size: 1.15rem; font-weight: 600; margin: 20px 0 10px 0; color: var(--v-text-primary);">${trimmed.substring(4)}</h3>`;
+            }
+
+            // 5. Blockquote
+            if (trimmed.startsWith("> ")) {
+              return `<blockquote style="border-left: 3px solid var(--v-accent-primary); padding-left: 14px; margin: 16px 0; font-style: italic; color: var(--v-text-secondary);">${trimmed.substring(2)}</blockquote>`;
+            }
+
+            // 6. Regular formatted paragraph with inline image link replacement
+            let html = trimmed
+              .replace(/\[(.*?)\]\((https?:\/\/[^\s)]+\.(?:jpg|jpeg|png|webp|gif|svg|avif)(?:\?[^\s)]*)?)\)/gi, '<figure class="reader-illustration" style="text-align: center; margin: 20px 0;"><img src="$2" alt="$1" style="max-width: 100%; max-height: 60vh; border-radius: 8px;"><figcaption style="font-size: 0.8rem; color: var(--v-text-muted); margin-top: 4px;">$1</figcaption></figure>')
+              .replace(/\[(.*?)\]\((https?:\/\/cdn\.sanity\.io\/images\/[^\s)]+)\)/gi, '<figure class="reader-illustration" style="text-align: center; margin: 20px 0;"><img src="$2" alt="$1" style="max-width: 100%; max-height: 60vh; border-radius: 8px;"><figcaption style="font-size: 0.8rem; color: var(--v-text-muted); margin-top: 4px;">$1</figcaption></figure>')
+              .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+              .replace(/\*(.*?)\*/g, '<em>$1</em>');
+
+            return `<p style="line-height: 1.85; margin-bottom: 18px; color: var(--v-text-primary); font-size: 1.05rem;">${html}</p>`;
+          };
+
+          const paragraphs = content.text_content.split(/\n\n+/).map(formatTextParagraph).join("");
 
           bodyRender.innerHTML = `
             <div class="reader-text-content" id="reader-text-body" style="max-width: 800px; margin: 0 auto; padding: 24px 16px;">
-              <h2 style="font-size: 1.6rem; font-weight: 800; margin-bottom: 24px; text-align: center;">${content.title || `${this.t("chapter")} ${chapterNum}`}</h2>
+              <h2 style="font-size: 1.6rem; font-weight: 800; margin-bottom: 24px; text-align: center; color: var(--v-text-primary);">${content.title || `${this.t("chapter")} ${chapterNum}`}</h2>
               ${paragraphs}
             </div>
           `;
         }
       };
-
-      renderReaderMode();
 
       // Scroll progress tracking for Webtoon and Continuous
       const updateScrollProgress = () => {
@@ -4707,10 +5171,95 @@ class VesselApp {
       poster_url: item.poster_url,
       chapters: [{ id: dl.chapter_id, chapter_number: dl.chapter_number, title: dl.title }]
     };
-    this.openDetailsView(item);
-    setTimeout(() => {
-      this.openInlineChapter(item, details, dl.chapter_number, dl.chapter_id, details.chapters);
-    }, 120);
+
+    // Hide other views
+    document.getElementById("main-view").classList.add("hidden");
+    document.getElementById("resume-section").classList.add("hidden");
+    document.getElementById("library-view").classList.add("hidden");
+    document.getElementById("plugins-view").classList.add("hidden");
+    document.getElementById("settings-view").classList.add("hidden");
+    const searchView = document.getElementById("search-view");
+    if (searchView) searchView.classList.add("hidden");
+
+    const detailsView = document.getElementById("details-view");
+    detailsView.classList.remove("hidden");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+
+    this.currentDetailsItem = item;
+    this.renderReadingDetails(item, details);
+    this.openInlineChapter(item, details, dl.chapter_number, dl.chapter_id, details.chapters);
+  }
+
+  openLocalBookDialog() {
+    let input = document.getElementById("vessel-local-book-input");
+    if (!input) {
+      input = document.createElement("input");
+      input.type = "file";
+      input.id = "vessel-local-book-input";
+      input.accept = ".pdf,.cbz,.cbr,.zip,.rar,.7z,.docx,.txt,.md";
+      input.style.display = "none";
+      document.body.appendChild(input);
+    }
+    input.value = "";
+    input.onchange = async (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      this.showToast(`Dosya hazırlanıyor: ${file.name}...`, "info");
+      try {
+        const formData = new FormData();
+        formData.append("file", file);
+        const res = await fetch("/api/reading/local/open", {
+          method: "POST",
+          body: formData
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || "Dosya açılamadı");
+        }
+        const session = await res.json();
+        this.openLocalReaderSession(session);
+        this.showToast(`Başarıyla açıldı: ${session.title || file.name}`, "success");
+      } catch (err) {
+        this.showToast(`Hata: ${err.message}`, "error");
+      }
+    };
+    input.click();
+  }
+
+  openLocalReaderSession(session) {
+    const item = {
+      id: session.session_id,
+      provider_id: "com.vessel.reading.local",
+      title: session.title || session.file_name || "Yerel Dosya",
+      poster_url: (session.pages && session.pages.length > 0) ? session.pages[0].url : "assets/icons/book-placeholder.svg",
+      type: 4,
+      isLocal: true,
+      localSession: session
+    };
+
+    const details = {
+      title: item.title,
+      poster_url: item.poster_url,
+      overview: `Format: ${(session.format || 'Belge').toUpperCase()} • ${session.total_pages > 0 ? session.total_pages + ' sayfa' : 'Metin belgesi'}`,
+      chapters: [{ id: session.session_id, chapter_number: 1, title: item.title }]
+    };
+
+    // Hide other views
+    document.getElementById("main-view").classList.add("hidden");
+    document.getElementById("resume-section").classList.add("hidden");
+    document.getElementById("library-view").classList.add("hidden");
+    document.getElementById("plugins-view").classList.add("hidden");
+    document.getElementById("settings-view").classList.add("hidden");
+    const searchView = document.getElementById("search-view");
+    if (searchView) searchView.classList.add("hidden");
+
+    const detailsView = document.getElementById("details-view");
+    detailsView.classList.remove("hidden");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+
+    this.currentDetailsItem = item;
+    this.renderReadingDetails(item, details);
+    this.openInlineChapter(item, details, 1, session.session_id, details.chapters);
   }
 
   // --- Multi-Device LAN Sync & Remote Control ---
@@ -4920,6 +5469,7 @@ class VesselApp {
         "#locale-select",
         "#quick-theme-toggle",
         "#quick-lan-toggle",
+        "#quick-open-book-btn",
         ".domain-pills .pill",
         ".library-tabs .tab",
         ".plugins-nav-tabs .tab",

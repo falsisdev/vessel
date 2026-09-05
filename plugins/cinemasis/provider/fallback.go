@@ -287,14 +287,246 @@ var curatedEntries = []CuratedEntry{
 			},
 		},
 	},
+	{
+		Item: &pluginv1.MediaItem{
+			Id:        "tv:13916",
+			Title:     "Death Note",
+			Type:      pluginv1.MediaType_MEDIA_TYPE_ANIME,
+			Year:      2006,
+			PosterUrl: "https://image.tmdb.org/t/p/w500/t7q9vvdBfy7E5C0fU0rE9C88Ika.jpg",
+			Overview:  "Light Yagami finds a notebook with deadly power, leading into a genius psychological battle of wits with detective L, packed with mind-bending plot twists and intense mystery.",
+			ExternalIds: &pluginv1.ExternalIDs{
+				TmdbId: "13916",
+				ImdbId: "tt0877057",
+			},
+		},
+		Details: &pluginv1.MediaDetails{
+			Id:        "tv:13916",
+			Title:     "Death Note",
+			Type:      pluginv1.MediaType_MEDIA_TYPE_ANIME,
+			Year:      2006,
+			PosterUrl: "https://image.tmdb.org/t/p/w500/t7q9vvdBfy7E5C0fU0rE9C88Ika.jpg",
+			Overview:  "Light Yagami finds a notebook with deadly power, leading into a genius psychological battle of wits with detective L, packed with mind-bending plot twists and intense mystery.",
+			Genres:    []string{"Animation", "Mystery", "Psychological", "Thriller"},
+			ExternalIds: &pluginv1.ExternalIDs{
+				TmdbId: "13916",
+				ImdbId: "tt0877057",
+			},
+		},
+	},
+	{
+		Item: &pluginv1.MediaItem{
+			Id:        "tv:42635",
+			Title:     "Steins;Gate",
+			Type:      pluginv1.MediaType_MEDIA_TYPE_ANIME,
+			Year:      2011,
+			PosterUrl: "https://image.tmdb.org/t/p/w500/5ibLbbLq6d6aMh7P7z5vE2kK6r6.jpg",
+			Overview:  "Self-proclaimed mad scientist Rintaro Okabe accidentally discovers time-travel. A dark, mind-bending psychological thriller with time loops, conspiracy, and unexpected plot twists.",
+			ExternalIds: &pluginv1.ExternalIDs{
+				TmdbId: "42635",
+				ImdbId: "tt1910272",
+			},
+		},
+		Details: &pluginv1.MediaDetails{
+			Id:        "tv:42635",
+			Title:     "Steins;Gate",
+			Type:      pluginv1.MediaType_MEDIA_TYPE_ANIME,
+			Year:      2011,
+			PosterUrl: "https://image.tmdb.org/t/p/w500/5ibLbbLq6d6aMh7P7z5vE2kK6r6.jpg",
+			Overview:  "Self-proclaimed mad scientist Rintaro Okabe accidentally discovers time-travel. A dark, mind-bending psychological thriller with time loops, conspiracy, and unexpected plot twists.",
+			Genres:    []string{"Animation", "Sci-Fi", "Psychological", "Thriller"},
+			ExternalIds: &pluginv1.ExternalIDs{
+				TmdbId: "42635",
+				ImdbId: "tt1910272",
+			},
+		},
+	},
+	{
+		Item: &pluginv1.MediaItem{
+			Id:        "movie:278",
+			Title:     "The Shawshank Redemption",
+			Type:      pluginv1.MediaType_MEDIA_TYPE_MOVIE,
+			Year:      1994,
+			PosterUrl: "https://image.tmdb.org/t/p/w500/9cqNxx0GxF0bflZmeSMuL5tnGzr.jpg",
+			Overview:  "Imprisoned in the 1940s for the double murder of his wife and her lover, upstanding banker Andy Dufresne begins a new life at the Shawshank prison.",
+			ExternalIds: &pluginv1.ExternalIDs{
+				TmdbId: "278",
+				ImdbId: "tt0111161",
+			},
+		},
+		Details: &pluginv1.MediaDetails{
+			Id:        "movie:278",
+			Title:     "The Shawshank Redemption",
+			Type:      pluginv1.MediaType_MEDIA_TYPE_MOVIE,
+			Year:      1994,
+			PosterUrl: "https://image.tmdb.org/t/p/w500/9cqNxx0GxF0bflZmeSMuL5tnGzr.jpg",
+			Overview:  "Imprisoned in the 1940s for the double murder of his wife and her lover, upstanding banker Andy Dufresne begins a new life at the Shawshank prison.",
+			Genres:    []string{"Drama", "Crime"},
+			ExternalIds: &pluginv1.ExternalIDs{
+				TmdbId: "278",
+				ImdbId: "tt0111161",
+			},
+		},
+	},
+	{
+		Item: &pluginv1.MediaItem{
+			Id:        "movie:238",
+			Title:     "The Godfather",
+			Type:      pluginv1.MediaType_MEDIA_TYPE_MOVIE,
+			Year:      1972,
+			PosterUrl: "https://image.tmdb.org/t/p/w500/3bhkrj58Vtu7enYsRolD1fZdja1.jpg",
+			Overview:  "Spanning the years 1945 to 1955, a chronicle of the fictional Italian-American Corleone crime family. When organized crime family patriarch, Vito Corleone barely survives an attempt on his life, his youngest son, Michael steps in to take care of the would-be killers.",
+			ExternalIds: &pluginv1.ExternalIDs{
+				TmdbId: "238",
+				ImdbId: "tt0068646",
+			},
+		},
+		Details: &pluginv1.MediaDetails{
+			Id:        "movie:238",
+			Title:     "The Godfather",
+			Type:      pluginv1.MediaType_MEDIA_TYPE_MOVIE,
+			Year:      1972,
+			PosterUrl: "https://image.tmdb.org/t/p/w500/3bhkrj58Vtu7enYsRolD1fZdja1.jpg",
+			Overview:  "Spanning the years 1945 to 1955, a chronicle of the fictional Italian-American Corleone crime family.",
+			Genres:    []string{"Drama", "Crime"},
+			ExternalIds: &pluginv1.ExternalIDs{
+				TmdbId: "238",
+				ImdbId: "tt0068646",
+			},
+		},
+	},
+	{
+		Item: &pluginv1.MediaItem{
+			Id:        "movie:680",
+			Title:     "Pulp Fiction",
+			Type:      pluginv1.MediaType_MEDIA_TYPE_MOVIE,
+			Year:      1994,
+			PosterUrl: "https://image.tmdb.org/t/p/w500/vQWk5YBFWF4bZaofAbv0tShwBvQ.jpg",
+			Overview:  "A burger-loving hit man, his philosophical partner, a drug-addled gangster's moll and a washed-up boxer converge in this sprawling, comedic crime caper.",
+			ExternalIds: &pluginv1.ExternalIDs{
+				TmdbId: "680",
+				ImdbId: "tt0110912",
+			},
+		},
+		Details: &pluginv1.MediaDetails{
+			Id:        "movie:680",
+			Title:     "Pulp Fiction",
+			Type:      pluginv1.MediaType_MEDIA_TYPE_MOVIE,
+			Year:      1994,
+			PosterUrl: "https://image.tmdb.org/t/p/w500/vQWk5YBFWF4bZaofAbv0tShwBvQ.jpg",
+			Overview:  "A burger-loving hit man, his philosophical partner, a drug-addled gangster's moll and a washed-up boxer converge.",
+			Genres:    []string{"Thriller", "Crime"},
+			ExternalIds: &pluginv1.ExternalIDs{
+				TmdbId: "680",
+				ImdbId: "tt0110912",
+			},
+		},
+	},
+	{
+		Item: &pluginv1.MediaItem{
+			Id:        "movie:68718",
+			Title:     "Django Unchained",
+			Type:      pluginv1.MediaType_MEDIA_TYPE_MOVIE,
+			Year:      2012,
+			PosterUrl: "https://image.tmdb.org/t/p/w500/7oWY8vd27zHzGh9V6R1aNiZmuqq.jpg",
+			Overview:  "With the help of a German bounty-hunter, a freed slave sets out to rescue his wife from a brutal Mississippi plantation owner.",
+			ExternalIds: &pluginv1.ExternalIDs{
+				TmdbId: "68718",
+				ImdbId: "tt1853728",
+			},
+		},
+		Details: &pluginv1.MediaDetails{
+			Id:        "movie:68718",
+			Title:     "Django Unchained",
+			Type:      pluginv1.MediaType_MEDIA_TYPE_MOVIE,
+			Year:      2012,
+			PosterUrl: "https://image.tmdb.org/t/p/w500/7oWY8vd27zHzGh9V6R1aNiZmuqq.jpg",
+			Overview:  "With the help of a German bounty-hunter, a freed slave sets out to rescue his wife from a brutal Mississippi plantation owner in the Wild West.",
+			Genres:    []string{"Drama", "Western", "Action"},
+			ExternalIds: &pluginv1.ExternalIDs{
+				TmdbId: "68718",
+				ImdbId: "tt1853728",
+			},
+		},
+	},
+	{
+		Item: &pluginv1.MediaItem{
+			Id:        "movie:429",
+			Title:     "The Good, the Bad and the Ugly",
+			Type:      pluginv1.MediaType_MEDIA_TYPE_MOVIE,
+			Year:      1966,
+			PosterUrl: "https://image.tmdb.org/t/p/w500/bX2xnavhMYjWDoZp1VM6VnU1xwe.jpg",
+			Overview:  "While the Civil War rages between the Union and a Confederacy, three gunslingers and cowboy outlaws race to find a fortune in buried Confederate gold.",
+			ExternalIds: &pluginv1.ExternalIDs{
+				TmdbId: "429",
+				ImdbId: "tt0060196",
+			},
+		},
+		Details: &pluginv1.MediaDetails{
+			Id:        "movie:429",
+			Title:     "The Good, the Bad and the Ugly",
+			Type:      pluginv1.MediaType_MEDIA_TYPE_MOVIE,
+			Year:      1966,
+			PosterUrl: "https://image.tmdb.org/t/p/w500/bX2xnavhMYjWDoZp1VM6VnU1xwe.jpg",
+			Overview:  "While the Civil War rages, three cowboy gunslingers search for buried gold in Sergio Leone's definitive western.",
+			Genres:    []string{"Western", "Adventure"},
+			ExternalIds: &pluginv1.ExternalIDs{
+				TmdbId: "429",
+				ImdbId: "tt0060196",
+			},
+		},
+	},
 }
 
 func getFallbackSearch(query string) []*pluginv1.MediaItem {
 	q := strings.ToLower(strings.TrimSpace(query))
-	if q == "" || q == "popular" || q == "trending" || q == "all" || q == "batman" {
+
+	// Western / Cowboy queries
+	if strings.Contains(q, "western") || strings.Contains(q, "kovboy") || strings.Contains(q, "cowboy") || strings.Contains(q, "django") {
 		var list []*pluginv1.MediaItem
 		for _, e := range curatedEntries {
-			list = append(list, e.Item)
+			if e.Item.Id == "movie:68718" || e.Item.Id == "movie:429" {
+				list = append(list, e.Item)
+			}
+		}
+		if len(list) > 0 {
+			return list
+		}
+	}
+
+	// Psychological / Plot Twist / Anime queries
+	if strings.Contains(q, "death note") || strings.Contains(q, "steins") || strings.Contains(q, "ters köşe") || strings.Contains(q, "plot twist") || strings.Contains(q, "psychological") || strings.Contains(q, "mind bending") || strings.Contains(q, "zihin yakan") {
+		var list []*pluginv1.MediaItem
+		for _, e := range curatedEntries {
+			if e.Item.Id == "tv:13916" || e.Item.Id == "tv:42635" || e.Item.Id == "tv:1429" || e.Item.Id == "movie:99" {
+				list = append(list, e.Item)
+			}
+		}
+		if len(list) > 0 {
+			return list
+		}
+	}
+
+	// Top rated queries
+	if q == "top_rated" || q == "toprated" || q == "en çok oy alanlar" {
+		var list []*pluginv1.MediaItem
+		// Shawshank, Godfather, Pulp Fiction, Spirited Away, Dark Knight
+		for _, e := range curatedEntries {
+			if e.Item.Id == "movie:278" || e.Item.Id == "movie:238" || e.Item.Id == "movie:680" || e.Item.Id == "movie:129" || e.Item.Id == "movie:155" {
+				list = append(list, e.Item)
+			}
+		}
+		return list
+	}
+
+	// Popular / Trending queries
+	if q == "" || q == "popular" || q == "trending" || q == "all" || q == "featured" {
+		var list []*pluginv1.MediaItem
+		// Oppenheimer, Dune 2, Spider-man, Batman, Cyberpunk
+		for _, e := range curatedEntries {
+			if e.Item.Id == "movie:872585" || e.Item.Id == "movie:693134" || e.Item.Id == "movie:569094" || e.Item.Id == "movie:414906" || e.Item.Id == "series:105248" || e.Item.Id == "series:1399" {
+				list = append(list, e.Item)
+			}
 		}
 		return list
 	}

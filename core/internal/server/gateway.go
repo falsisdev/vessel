@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -42,6 +43,7 @@ type GatewayServer struct {
 	proxy         *streaming.Proxy
 	torrentEngine *streaming.TorrentEngine
 	downloadSvc   *service.DownloadService
+	localReaderSvc *service.LocalReaderService
 	lanSyncSvc    *vesselsync.LANSyncService
 	aiEngine      *discovery.AIEngine
 	startTime     time.Time
@@ -85,6 +87,7 @@ func NewGatewayServer(
 		proxy:         proxy,
 		torrentEngine: torrentEng,
 		downloadSvc:   dlSvc,
+		localReaderSvc: service.NewLocalReaderService(""),
 		lanSyncSvc:    lanSvc,
 		aiEngine:      aiEng,
 		startTime:     time.Now(),
@@ -197,6 +200,8 @@ func (g *GatewayServer) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/reading/downloads", g.handleReadingDownloadsList)
 	mux.HandleFunc("/api/reading/offline/content", g.handleReadingOfflineContent)
 	mux.HandleFunc("/api/reading/offline/page", g.handleReadingOfflinePage)
+	mux.HandleFunc("/api/reading/local/open", g.handleReadingLocalOpen)
+	mux.HandleFunc("/api/reading/local/file", g.handleReadingLocalFile)
 
 	// Multi-Device LAN Sync & Remote Control
 	mux.HandleFunc("/api/sync/devices", g.handleSyncDevices)
@@ -1356,6 +1361,87 @@ func (g *GatewayServer) handleReadingOfflinePage(w http.ResponseWriter, r *http.
 	g.downloadSvc.ServeOfflinePage(w, r, provider, media, chapter, pageNum)
 }
 
+func (g *GatewayServer) handleReadingLocalOpen(w http.ResponseWriter, r *http.Request) {
+	if g.localReaderSvc == nil {
+		g.writeError(w, http.StatusServiceUnavailable, "local reader service unavailable")
+		return
+	}
+
+	var filePath string
+	contentType := r.Header.Get("Content-Type")
+
+	if strings.HasPrefix(contentType, "multipart/form-data") {
+		// File upload mode
+		if err := r.ParseMultipartForm(128 << 20); err != nil { // 128 MB max
+			g.writeError(w, http.StatusBadRequest, "failed to parse uploaded file: "+err.Error())
+			return
+		}
+		file, header, err := r.FormFile("file")
+		if err != nil {
+			g.writeError(w, http.StatusBadRequest, "missing 'file' in upload form: "+err.Error())
+			return
+		}
+		defer file.Close()
+
+		tempFile, err := os.CreateTemp("", "vessel_upload_*"+filepath.Ext(header.Filename))
+		if err != nil {
+			g.writeError(w, http.StatusInternalServerError, "failed to create temp file: "+err.Error())
+			return
+		}
+		defer tempFile.Close()
+
+		if _, err := io.Copy(tempFile, file); err != nil {
+			g.writeError(w, http.StatusInternalServerError, "failed to save uploaded file: "+err.Error())
+			return
+		}
+		filePath = tempFile.Name()
+	} else {
+		// JSON path mode
+		var req struct {
+			Path string `json:"path"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			g.writeError(w, http.StatusBadRequest, "invalid json payload")
+			return
+		}
+		filePath = req.Path
+	}
+
+	if filePath == "" {
+		g.writeError(w, http.StatusBadRequest, "file path or upload is required")
+		return
+	}
+
+	sess, err := g.localReaderSvc.OpenFile(filePath)
+	if err != nil {
+		g.writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	g.writeJSON(w, http.StatusOK, map[string]any{
+		"session_id":   sess.ID,
+		"title":        sess.Title,
+		"file_name":    sess.FileName,
+		"format":       sess.Format,
+		"total_pages":  sess.TotalPages,
+		"pages":        sess.Pages,
+		"text_content": sess.TextContent,
+		"pdf_url":      sess.PDFURL,
+	})
+}
+
+func (g *GatewayServer) handleReadingLocalFile(w http.ResponseWriter, r *http.Request) {
+	if g.localReaderSvc == nil {
+		g.writeError(w, http.StatusServiceUnavailable, "local reader service unavailable")
+		return
+	}
+
+	sessionID := r.URL.Query().Get("id")
+	pageNum, _ := strconv.Atoi(r.URL.Query().Get("page"))
+
+	g.localReaderSvc.ServeFile(w, r, sessionID, pageNum)
+}
+
 // --- Multi-Device LAN Sync & Remote Control Handlers ---
 
 func (g *GatewayServer) handleSyncDevices(w http.ResponseWriter, r *http.Request) {
@@ -1450,9 +1536,10 @@ func (g *GatewayServer) handleAIDiscover(w http.ResponseWriter, r *http.Request)
 	}
 
 	var req struct {
-		Query string `json:"query"`
-		Mood  string `json:"mood"`
-		Limit int    `json:"limit"`
+		Query  string `json:"query"`
+		Mood   string `json:"mood"`
+		Domain string `json:"domain"`
+		Limit  int    `json:"limit"`
 	}
 
 	if r.Method == http.MethodPost {
@@ -1460,6 +1547,7 @@ func (g *GatewayServer) handleAIDiscover(w http.ResponseWriter, r *http.Request)
 	} else {
 		req.Query = r.URL.Query().Get("query")
 		req.Mood = r.URL.Query().Get("mood")
+		req.Domain = r.URL.Query().Get("domain")
 		if l, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil && l > 0 {
 			req.Limit = l
 		}
@@ -1469,7 +1557,7 @@ func (g *GatewayServer) handleAIDiscover(w http.ResponseWriter, r *http.Request)
 		req.Limit = 15
 	}
 
-	items, err := g.aiEngine.DiscoverByMood(r.Context(), req.Query, req.Mood, req.Limit)
+	items, err := g.aiEngine.DiscoverByMood(r.Context(), req.Query, req.Mood, req.Limit, req.Domain)
 	if err != nil {
 		g.writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -1478,6 +1566,7 @@ func (g *GatewayServer) handleAIDiscover(w http.ResponseWriter, r *http.Request)
 	g.writeJSON(w, http.StatusOK, map[string]any{
 		"query":           req.Query,
 		"mood":            req.Mood,
+		"domain":          req.Domain,
 		"recommendations": items,
 		"count":           len(items),
 	})

@@ -99,6 +99,7 @@ type MoodPreset struct {
 }
 
 type TasteProfile struct {
+	ActiveTraitIDs  []string       `json:"active_trait_ids"`
 	ActiveTraitsTR  []string       `json:"active_traits_tr"`
 	ActiveTraitsEN  []string       `json:"active_traits_en"`
 	TopKeywords     []string       `json:"top_keywords"`
@@ -296,6 +297,21 @@ func (e *AIEngine) initLexicon() {
 	e.addKeyword("80'ler", m(DimRetro, 0.9))
 	e.addKeyword("nostalji", m(DimRetro, 0.8), m(DimWholesome, 0.4))
 	e.addKeyword("nostalgic", m(DimRetro, 0.8))
+
+	// Western, Cowboy & Frontier
+	e.addKeyword("kovboy", m(DimWestern, 1.0), m(DimAction, 0.7), m(DimAdventure, 0.6))
+	e.addKeyword("cowboy", m(DimWestern, 1.0), m(DimAction, 0.7), m(DimAdventure, 0.6))
+	e.addKeyword("western", m(DimWestern, 1.0), m(DimAtmospheric, 0.6))
+	e.addKeyword("vahşi batı", m(DimWestern, 1.0), m(DimAdventure, 0.8), m(DimAction, 0.6))
+	e.addKeyword("wild west", m(DimWestern, 1.0), m(DimAdventure, 0.8))
+	e.addKeyword("şerif", m(DimWestern, 0.9), m(DimCrime, 0.7))
+	e.addKeyword("sheriff", m(DimWestern, 0.9), m(DimCrime, 0.7))
+	e.addKeyword("outlaw", m(DimWestern, 0.9), m(DimCrime, 0.8))
+	e.addKeyword("silahşör", m(DimWestern, 0.8), m(DimAction, 0.8))
+	e.addKeyword("gunslinger", m(DimWestern, 0.9), m(DimAction, 0.8))
+	e.addKeyword("django", m(DimWestern, 1.0), m(DimAction, 0.8))
+	e.addKeyword("bounty hunter", m(DimWestern, 0.8), m(DimAction, 0.8))
+	e.addKeyword("ödül avcısı", m(DimWestern, 0.8), m(DimAction, 0.8))
 }
 
 func (e *AIEngine) initMoodPresets() {
@@ -523,20 +539,21 @@ func (e *AIEngine) BuildTasteProfile(ctx context.Context, forceRefresh bool) (*T
 
 	// Compute top traits
 	type traitScore struct {
+		id     string
 		nameTR string
 		nameEN string
 		score  float32
 	}
 
 	traits := []traitScore{
-		{"Zihin Yakan & Ters Köşe", "Mind-Bending & Plot Twists", normalizedTaste[DimPlotTwist] + normalizedTaste[DimMindBending] + normalizedTaste[DimPsychological]},
-		{"Karanlık Atmosfer & Siberpunk", "Dark Atmosphere & Cyberpunk", normalizedTaste[DimDark] + normalizedTaste[DimCyberpunk] + normalizedTaste[DimDystopian]},
-		{"Derin Gizem & Polisiye", "Deep Mystery & Detective", normalizedTaste[DimMystery] + normalizedTaste[DimDetective] + normalizedTaste[DimNoir]},
-		{"Epik Macera & Aksiyon", "Epic Adventure & Action", normalizedTaste[DimAction] + normalizedTaste[DimEpic] + normalizedTaste[DimAdventure]},
-		{"Kafa Dağıtmalık & Huzurlu", "Cozy, Wholesome & Chill", normalizedTaste[DimWholesome] + normalizedTaste[DimCozy] + normalizedTaste[DimSliceOfLife]},
-		{"Bilim Kurgu & Uzay", "Sci-Fi & Cosmic Space", normalizedTaste[DimSciFi] + normalizedTaste[DimSpace] + normalizedTaste[DimTimeTravel]},
-		{"Korku & Gerilim", "Horror & Psychological Thriller", normalizedTaste[DimHorror] + normalizedTaste[DimThriller] + normalizedTaste[DimSuspense]},
-		{"Sürükleyici Şonen / Seinen Anime", "Immersive Anime & Manga", normalizedTaste[DimShonen] + normalizedTaste[DimSeinen] + normalizedTaste[DimAnimation]},
+		{"mind_bending", "Zihin Yakan & Ters Köşe", "Mind-Bending & Plot Twists", normalizedTaste[DimPlotTwist] + normalizedTaste[DimMindBending] + normalizedTaste[DimPsychological]},
+		{"dark_cyberpunk", "Karanlık Atmosfer & Siberpunk", "Dark Atmosphere & Cyberpunk", normalizedTaste[DimDark] + normalizedTaste[DimCyberpunk] + normalizedTaste[DimDystopian]},
+		{"deep_mystery", "Derin Gizem & Polisiye", "Deep Mystery & Detective", normalizedTaste[DimMystery] + normalizedTaste[DimDetective] + normalizedTaste[DimNoir]},
+		{"epic_action", "Epik Macera & Aksiyon", "Epic Adventure & Action", normalizedTaste[DimAction] + normalizedTaste[DimEpic] + normalizedTaste[DimAdventure]},
+		{"cozy_wholesome", "Kafa Dağıtmalık & Huzurlu", "Cozy, Wholesome & Chill", normalizedTaste[DimWholesome] + normalizedTaste[DimCozy] + normalizedTaste[DimSliceOfLife]},
+		{"scifi_space", "Bilim Kurgu & Uzay", "Sci-Fi & Cosmic Space", normalizedTaste[DimSciFi] + normalizedTaste[DimSpace] + normalizedTaste[DimTimeTravel]},
+		{"horror_thriller", "Korku & Gerilim", "Horror & Psychological Thriller", normalizedTaste[DimHorror] + normalizedTaste[DimThriller] + normalizedTaste[DimSuspense]},
+		{"anime_manga", "Sürükleyici Şonen / Seinen Anime", "Immersive Anime & Manga", normalizedTaste[DimShonen] + normalizedTaste[DimSeinen] + normalizedTaste[DimAnimation]},
 	}
 
 	sort.Slice(traits, func(i, j int) bool {
@@ -545,7 +562,9 @@ func (e *AIEngine) BuildTasteProfile(ctx context.Context, forceRefresh bool) (*T
 
 	var traitsTR []string
 	var traitsEN []string
+	var traitIDs []string
 	for i := 0; i < 3 && i < len(traits); i++ {
+		traitIDs = append(traitIDs, traits[i].id)
 		traitsTR = append(traitsTR, traits[i].nameTR)
 		traitsEN = append(traitsEN, traits[i].nameEN)
 	}
@@ -559,6 +578,7 @@ func (e *AIEngine) BuildTasteProfile(ctx context.Context, forceRefresh bool) (*T
 	affinityMap["scifi"] = MatchPercent(normalizedTaste[DimSciFi])
 
 	profile := &TasteProfile{
+		ActiveTraitIDs:  traitIDs,
 		ActiveTraitsTR:  traitsTR,
 		ActiveTraitsEN:  traitsEN,
 		TopKeywords:     historyTitles,
@@ -576,8 +596,140 @@ func (e *AIEngine) BuildTasteProfile(ctx context.Context, forceRefresh bool) (*T
 	return profile, normalizedTaste, nil
 }
 
-// DiscoverByMood finds content matching a mood prompt or preset
-func (e *AIEngine) DiscoverByMood(ctx context.Context, query string, moodKey string, limit int) ([]RecommendationItem, error) {
+func cleanQueryIntent(query string) string {
+	low := strings.ToLower(strings.TrimSpace(query))
+	filler := []string{
+		"filmi", "filmleri", "film", "dizisi", "dizileri", "dizi", "izle", "izlemek", "istiyorum",
+		"öner", "önerisi", "tavsiyesi", "tavsiye", "bana", "bir", "en", "iyi",
+		"movie", "movies", "show", "shows", "series", "watch", "recommend", "recommendation",
+		"best", "top", "good", "gibi", "tarzı", "tarzında",
+	}
+	words := strings.Fields(low)
+	var kept []string
+	for _, w := range words {
+		isFiller := false
+		for _, f := range filler {
+			if w == f {
+				isFiller = true
+				break
+			}
+		}
+		if !isFiller {
+			kept = append(kept, w)
+		}
+	}
+	cleaned := strings.Join(kept, " ")
+	if cleaned == "" {
+		return low
+	}
+	return cleaned
+}
+
+type SemanticQueryPlan struct {
+	IsAnime      bool
+	IsMovie      bool
+	IsSeries     bool
+	IsManga      bool
+	CleanedQuery string
+	SeedQueries  []string
+}
+
+func (e *AIEngine) parseSemanticIntent(query string, targetVec Vector) SemanticQueryPlan {
+	low := strings.ToLower(strings.TrimSpace(query))
+	plan := SemanticQueryPlan{
+		CleanedQuery: cleanQueryIntent(query),
+	}
+
+	// Format / Media Type Detection
+	if strings.Contains(low, "anime") || strings.Contains(low, "animeler") || strings.Contains(low, "animesi") ||
+		strings.Contains(low, "japon animasyon") || targetVec[DimAnimation] > 0.40 {
+		plan.IsAnime = true
+	}
+	if strings.Contains(low, "manga") || strings.Contains(low, "manhwa") || strings.Contains(low, "webtoon") ||
+		strings.Contains(low, "kitap") || strings.Contains(low, "roman") || strings.Contains(low, "novel") {
+		plan.IsManga = true
+	}
+	if strings.Contains(low, "dizi") || strings.Contains(low, "dizisi") || strings.Contains(low, "dizileri") ||
+		strings.Contains(low, "series") || strings.Contains(low, "tv show") {
+		plan.IsSeries = true
+	}
+	if strings.Contains(low, "film") || strings.Contains(low, "filmi") || strings.Contains(low, "filmleri") ||
+		strings.Contains(low, "movie") || strings.Contains(low, "sinema") {
+		plan.IsMovie = true
+	}
+
+	hasPlotTwist := targetVec[DimPlotTwist] > 0.12 || targetVec[DimMindBending] > 0.12 || targetVec[DimPsychological] > 0.12 ||
+		strings.Contains(low, "ters köşe") || strings.Contains(low, "plot twist") || strings.Contains(low, "beyin yakan") || strings.Contains(low, "psikolojik")
+	hasCyberpunk := targetVec[DimCyberpunk] > 0.15 || targetVec[DimSciFi] > 0.25 || strings.Contains(low, "siberpunk") || strings.Contains(low, "cyberpunk")
+	hasWestern := targetVec[DimWestern] > 0.15 || strings.Contains(low, "kovboy") || strings.Contains(low, "western") || strings.Contains(low, "cowboy") || strings.Contains(low, "django")
+	hasHorror := targetVec[DimHorror] > 0.2 || strings.Contains(low, "korku") || strings.Contains(low, "horror")
+	hasMystery := targetVec[DimMystery] > 0.2 || targetVec[DimDetective] > 0.2 || strings.Contains(low, "gizem") || strings.Contains(low, "polisiye")
+	hasAction := targetVec[DimAction] > 0.25 || targetVec[DimFastPaced] > 0.25 || strings.Contains(low, "aksiyon") || strings.Contains(low, "adrenalin")
+	hasComedy := targetVec[DimComedy] > 0.2 || targetVec[DimCozy] > 0.2 || strings.Contains(low, "komedi") || strings.Contains(low, "kafa dağıtmalık")
+
+	if plan.IsAnime {
+		if hasPlotTwist {
+			plan.SeedQueries = append(plan.SeedQueries, "Death Note", "Steins Gate", "Monster", "Attack on Titan", "Erased", "Neon Genesis Evangelion", "Paprika", "Perfect Blue", "Psycho-Pass", "The Promised Neverland", "Code Geass", "psychological")
+		} else if hasCyberpunk {
+			plan.SeedQueries = append(plan.SeedQueries, "Cyberpunk Edgerunners", "Ghost in the Shell", "Akira", "Psycho-Pass", "Ergo Proxy")
+		} else if hasHorror {
+			plan.SeedQueries = append(plan.SeedQueries, "Parasyte", "Another", "Tokyo Ghoul", "Shiki", "Hellsing")
+		} else if hasAction {
+			plan.SeedQueries = append(plan.SeedQueries, "Jujutsu Kaisen", "Demon Slayer", "Hunter x Hunter", "Fullmetal Alchemist", "Solo Leveling", "Chainsaw Man")
+		} else if hasComedy {
+			plan.SeedQueries = append(plan.SeedQueries, "Spy x Family", "Kaguya-sama", "Bocchi the Rock", "Spirited Away")
+		} else {
+			plan.SeedQueries = append(plan.SeedQueries, "Attack on Titan", "Death Note", "Spirited Away", "Arcane", "Cyberpunk Edgerunners", "Fullmetal Alchemist", "Steins Gate")
+		}
+	} else if hasWestern {
+		plan.SeedQueries = append(plan.SeedQueries, "Django Unchained", "The Good, the Bad and the Ugly", "For a Few Dollars More", "Unforgiven", "Tombstone", "True Grit", "western", "cowboy")
+	} else if hasPlotTwist {
+		plan.SeedQueries = append(plan.SeedQueries, "Shutter Island", "Fight Club", "Inception", "The Prestige", "Memento", "Gone Girl", "Seven", "Interstellar", "The Sixth Sense", "Prisoners", "The Usual Suspects", "Oldboy", "psychological thriller")
+	} else if hasCyberpunk {
+		plan.SeedQueries = append(plan.SeedQueries, "Blade Runner", "Cyberpunk", "The Matrix", "Ghost in the Shell", "Altered Carbon")
+	} else if hasHorror {
+		plan.SeedQueries = append(plan.SeedQueries, "The Shining", "Hereditary", "A Quiet Place", "The Conjuring", "Get Out", "horror")
+	} else if hasMystery {
+		plan.SeedQueries = append(plan.SeedQueries, "Knives Out", "Sherlock Holmes", "Zodiac", "Se7en", "Prisoners", "mystery")
+	} else if hasAction {
+		plan.SeedQueries = append(plan.SeedQueries, "John Wick", "Mad Max", "Gladiator", "The Dark Knight", "action")
+	}
+
+	cleanCore := plan.CleanedQuery
+	cleanCore = strings.ReplaceAll(cleanCore, "anime", "")
+	cleanCore = strings.ReplaceAll(cleanCore, "manga", "")
+	cleanCore = strings.TrimSpace(cleanCore)
+	if cleanCore != "" && cleanCore != "ters köşe" && cleanCore != "plot twist" {
+		plan.SeedQueries = append([]string{cleanCore}, plan.SeedQueries...)
+	}
+
+	if len(plan.SeedQueries) == 0 {
+		plan.SeedQueries = append(plan.SeedQueries, "popular", "top", "trending")
+	}
+
+	return plan
+}
+
+func isAnimeCandidate(cItem *RecommendationItem, it *cinema.MediaItem) bool {
+	if cItem.Type == "anime" {
+		return true
+	}
+	lowTitle := strings.ToLower(cItem.Title)
+	lowOver := strings.ToLower(cItem.Overview)
+	if strings.Contains(lowOver, "anime") || strings.Contains(lowOver, "manga") || strings.Contains(lowOver, "japanese animation") {
+		return true
+	}
+	famousAnime := []string{"death note", "steins", "attack on titan", "shingeki", "monster", "erased", "evangelion", "paprika", "perfect blue", "psycho-pass", "arcane", "spirited away", "cyberpunk: edgerunners", "jujutsu", "demon slayer", "fullmetal", "chainsaw", "frieren", "hunter x hunter", "code geass"}
+	for _, a := range famousAnime {
+		if strings.Contains(lowTitle, a) {
+			return true
+		}
+	}
+	return false
+}
+
+// DiscoverByMood finds content matching a mood prompt or preset, optionally scoped to a domain
+func (e *AIEngine) DiscoverByMood(ctx context.Context, query string, moodKey string, limit int, domain string) ([]RecommendationItem, error) {
 	if limit <= 0 {
 		limit = 15
 	}
@@ -606,7 +758,7 @@ func (e *AIEngine) DiscoverByMood(ctx context.Context, query string, moodKey str
 		targetVec = tasteVec
 	}
 
-	return e.rankCatalogCandidates(ctx, targetVec, "", limit, query)
+	return e.rankCatalogCandidates(ctx, targetVec, domain, limit, query)
 }
 
 // GetTasteRecommendations returns personalized suggestions tailored to user's Taste DNA
@@ -633,16 +785,15 @@ func (e *AIEngine) rankCatalogCandidates(ctx context.Context, targetVec Vector, 
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 
+	plan := e.parseSemanticIntent(queryHint, targetVec)
+
 	// Fetch Cinema items
 	if (domainFilter == "" || domainFilter == "cinema" || domainFilter == "all") && e.cinemaSvc != nil {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			searchTerms := []string{"popular", "top", "trending", "movie", "action", "mystery"}
-			if queryHint != "" {
-				searchTerms = append([]string{queryHint}, searchTerms...)
-			}
-			for _, term := range searchTerms[:3] {
+
+			for _, term := range plan.SeedQueries {
 				items, err := e.cinemaSvc.Search(ctx, term)
 				if err != nil {
 					continue
@@ -650,15 +801,31 @@ func (e *AIEngine) rankCatalogCandidates(ctx context.Context, targetVec Vector, 
 				mu.Lock()
 				for _, it := range items {
 					cItem := e.toRecommendationFromCinema(&it)
+
+					// If user specifically requested anime, filter out non-anime and junk titles
+					if plan.IsAnime {
+						cleanTitle := strings.ToLower(strings.TrimSpace(cItem.Title))
+						if cleanTitle == "anime" || strings.Contains(cleanTitle, "anime awards") || cleanTitle == "the anime studio" || strings.Contains(cleanTitle, "anime de training") {
+							continue
+						}
+						if !isAnimeCandidate(&cItem, &it) {
+							continue
+						}
+						cItem.Type = "anime"
+					}
+
 					itemVec := e.EmbedText(cItem.Title + " " + cItem.Overview)
 					sim := targetVec.CosineSimilarity(itemVec)
+					if plan.IsAnime {
+						sim += 0.15
+					}
 					cItem.MatchScore = MatchPercent(sim)
 					cItem.ReasonTR = fmt.Sprintf("Zevk profiline göre %% %d atmosfer ve tema eşleşmesi.", cItem.MatchScore)
 					cItem.ReasonEN = fmt.Sprintf("%d%% vibe match based on your taste profile.", cItem.MatchScore)
 					candidates = append(candidates, candidate{item: cItem, sim: sim})
 				}
 				mu.Unlock()
-				if len(items) > 0 {
+				if len(items) > 0 && len(candidates) >= limit*2 {
 					break
 				}
 			}
@@ -670,7 +837,11 @@ func (e *AIEngine) rankCatalogCandidates(ctx context.Context, targetVec Vector, 
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			items, err := e.readingSvc.Search(ctx, pluginv1.Domain_DOMAIN_MANGA, "popular")
+			readingQuery := "popular"
+			if queryHint != "" {
+				readingQuery = plan.CleanedQuery
+			}
+			items, err := e.readingSvc.Search(ctx, pluginv1.Domain_DOMAIN_MANGA, readingQuery)
 			if err != nil {
 				return
 			}

@@ -126,8 +126,8 @@ func TestThemeAndLocaleOverIPC(t *testing.T) {
 	if len(listResp.Themes) < 6 {
 		t.Fatalf("expected at least 6 themes, got %d", len(listResp.Themes))
 	}
-	if listResp.ActiveThemeId != "vessel-dark" {
-		t.Errorf("expected active theme vessel-dark, got %s", listResp.ActiveThemeId)
+	if listResp.ActiveThemeId != "catppuccin" {
+		t.Errorf("expected active theme catppuccin, got %s", listResp.ActiveThemeId)
 	}
 
 	// Verify custom theme was discovered
@@ -150,10 +150,10 @@ func TestThemeAndLocaleOverIPC(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetActiveTheme error: %v", err)
 	}
-	if activeResp.Theme.Id != "vessel-dark" {
-		t.Errorf("expected vessel-dark, got %s", activeResp.Theme.Id)
+	if activeResp.Theme.Id != "catppuccin" {
+		t.Errorf("expected catppuccin, got %s", activeResp.Theme.Id)
 	}
-	if !strings.Contains(activeResp.Css, "--v-bg-base: #0b0f17;") {
+	if !strings.Contains(activeResp.Css, "--v-bg-base: #1e1e2e;") {
 		t.Errorf("expected compiled CSS with --v-bg-base, got %s", activeResp.Css)
 	}
 

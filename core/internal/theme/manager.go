@@ -26,8 +26,8 @@ type Manager struct {
 func NewManager(customDirs ...string) *Manager {
 	m := &Manager{
 		themes:          make(map[string]*Theme),
-		activeThemeID:   "vessel-dark",
-		activeVariantID: "slate-indigo",
+		activeThemeID:   "catppuccin",
+		activeVariantID: "mocha",
 		customDirs:      customDirs,
 	}
 
@@ -136,7 +136,7 @@ func (m *Manager) GetActive() (*ActiveTheme, error) {
 
 	themeID := m.activeThemeID
 	if themeID == "" {
-		themeID = "vessel-dark"
+		themeID = "catppuccin"
 	}
 
 	t, ok := m.themes[themeID]

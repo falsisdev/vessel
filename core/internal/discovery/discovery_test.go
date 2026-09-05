@@ -62,3 +62,45 @@ func TestMoodPresets(t *testing.T) {
 		}
 	}
 }
+
+func TestWesternQuery(t *testing.T) {
+	engine := NewAIEngine(nil, nil, nil, nil)
+	cleaned := cleanQueryIntent("kovboy filmi izlemek istiyorum")
+	if cleaned != "kovboy" {
+		t.Fatalf("Expected cleaned query to be 'kovboy', got '%s'", cleaned)
+	}
+
+	vecTR := engine.EmbedText("kovboy filmi")
+	vecEN := engine.EmbedText("western cowboy gunslinger")
+	sim := vecTR.CosineSimilarity(vecEN)
+	if sim < 0.5 {
+		t.Fatalf("Expected high similarity between 'kovboy filmi' and 'western cowboy gunslinger', got %v", sim)
+	}
+}
+
+func TestPlotTwistAnimeQuery(t *testing.T) {
+	engine := NewAIEngine(nil, nil, nil, nil)
+	targetVec := engine.EmbedText("ters köşe anime")
+
+	plan := engine.parseSemanticIntent("ters köşe anime", targetVec)
+	if !plan.IsAnime {
+		t.Fatalf("Expected plan.IsAnime to be true for 'ters köşe anime'")
+	}
+
+	foundPsychAnime := false
+	for _, seed := range plan.SeedQueries {
+		if seed == "Death Note" || seed == "Steins Gate" || seed == "Monster" {
+			foundPsychAnime = true
+			break
+		}
+	}
+	if !foundPsychAnime {
+		t.Fatalf("Expected plan.SeedQueries to include top psychological anime, got %+v", plan.SeedQueries)
+	}
+
+	dnVec := engine.EmbedText("Death Note genius psychological mind game battle with detective L and plot twists")
+	sim := targetVec.CosineSimilarity(dnVec)
+	if sim < 0.5 {
+		t.Fatalf("Expected high similarity between 'ters köşe anime' and Death Note description, got %v", sim)
+	}
+}

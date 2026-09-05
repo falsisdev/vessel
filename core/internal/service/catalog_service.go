@@ -85,12 +85,6 @@ func (s *CatalogService) GetCatalogs(ctx context.Context, domain pluginv1.Domain
 					catalogType: catalog.CatalogTypeTopRated,
 					query:       "top_rated",
 				},
-				{
-					id:          fmt.Sprintf("%s-featured", pID),
-					title:       fmt.Sprintf("%s • Öne Çıkanlar", pName),
-					catalogType: catalog.CatalogTypeFeatured,
-					query:       "featured",
-				},
 			}
 		} else if pDomain == pluginv1.Domain_DOMAIN_MANGA {
 			queries = []catalogQueryDef{
