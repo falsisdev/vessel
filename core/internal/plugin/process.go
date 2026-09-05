@@ -226,6 +226,14 @@ func (p *Process) streamLogs(reader io.Reader, pipeName string) {
 			)
 		}
 	}
+
+	if err := scanner.Err(); err != nil && !errors.Is(err, io.EOF) {
+		slog.Debug("Error reading plugin log stream",
+			"plugin_id", p.cfg.ID,
+			"pipe", pipeName,
+			"error", err,
+		)
+	}
 }
 
 func allocateFreePort() (int, error) {
