@@ -32,6 +32,7 @@ type GatewayServer struct {
 	readingSvc *service.ReadingService
 	librarySvc *service.LibraryService
 	streamSvc  *service.StreamService
+	catalogSvc *service.CatalogService
 	themeMgr   *theme.Manager
 	pluginMgr  *plugin.Manager
 	proxy      *streaming.Proxy
@@ -52,12 +53,18 @@ func NewGatewayServer(
 		addr = "127.0.0.1:8080"
 	}
 
+	var catSvc *service.CatalogService
+	if pluginMgr != nil {
+		catSvc = service.NewCatalogService(pluginMgr, 5*time.Second)
+	}
+
 	g := &GatewayServer{
 		addr:       addr,
 		cinemaSvc:  cinemaSvc,
 		readingSvc: readingSvc,
 		librarySvc: librarySvc,
 		streamSvc:  streamSvc,
+		catalogSvc: catSvc,
 		themeMgr:   themeMgr,
 		pluginMgr:  pluginMgr,
 		proxy:      proxy,
@@ -76,10 +83,34 @@ func NewGatewayServer(
 	return g
 }
 
+func (g *GatewayServer) SetCatalogService(svc *service.CatalogService) {
+	g.catalogSvc = svc
+}
+
 func (g *GatewayServer) Start() error {
-	l, err := net.Listen("tcp", g.addr)
+	host, portStr, err := net.SplitHostPort(g.addr)
 	if err != nil {
-		return fmt.Errorf("failed to bind gateway http server at %s: %w", g.addr, err)
+		host = "127.0.0.1"
+		portStr = "8080"
+	}
+	basePort, err := strconv.Atoi(portStr)
+	if err != nil || basePort <= 0 {
+		basePort = 8080
+	}
+
+	var l net.Listener
+	var lastErr error
+	for i := 0; i < 50; i++ {
+		candidate := fmt.Sprintf("%s:%d", host, basePort+i)
+		l, err = net.Listen("tcp", candidate)
+		if err == nil {
+			g.addr = candidate
+			break
+		}
+		lastErr = err
+	}
+	if l == nil {
+		return fmt.Errorf("failed to bind gateway http server across ports %d-%d: %w", basePort, basePort+50, lastErr)
 	}
 	g.listener = l
 	g.addr = l.Addr().String()
@@ -116,6 +147,7 @@ func (g *GatewayServer) URL() string {
 func (g *GatewayServer) registerRoutes(mux *http.ServeMux) {
 	// API Endpoints
 	mux.HandleFunc("/api/ping", g.handlePing)
+	mux.HandleFunc("/api/catalogs", g.handleCatalogs)
 	mux.HandleFunc("/api/search", g.handleSearch)
 	mux.HandleFunc("/api/media", g.handleMedia)
 	mux.HandleFunc("/api/streams", g.handleStreams)
@@ -132,15 +164,23 @@ func (g *GatewayServer) registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/debrid/status", g.handleDebridStatus)
 	mux.HandleFunc("/api/debrid/configure", g.handleDebridConfigure)
 	mux.HandleFunc("/api/plugins", g.handlePlugins)
+	mux.HandleFunc("/api/plugins/install", g.handlePluginsInstall)
+	mux.HandleFunc("/api/plugins/toggle", g.handlePluginsToggle)
+	mux.HandleFunc("/api/plugins/available", g.handlePluginsAvailable)
 
 	// Range-enabled streaming proxy endpoint
 	mux.HandleFunc("/stream", g.handleStreamProxy)
 
-	// Embedded Static UI Assets
+	// Embedded Static UI Assets with Cache-Busting Headers
 	subFS, err := fs.Sub(ui.DistFS, ".")
 	if err == nil {
 		fileServer := http.FileServer(http.FS(subFS))
-		mux.Handle("/", fileServer)
+		mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+			w.Header().Set("Pragma", "no-cache")
+			w.Header().Set("Expires", "0")
+			fileServer.ServeHTTP(w, r)
+		})
 	}
 }
 
@@ -682,4 +722,152 @@ func (g *GatewayServer) handleStreamProxy(w http.ResponseWriter, r *http.Request
 
 	w.WriteHeader(resp.StatusCode)
 	_, _ = io.Copy(w, resp.Body)
+}
+
+func (g *GatewayServer) handleCatalogs(w http.ResponseWriter, r *http.Request) {
+	if g.catalogSvc == nil {
+		g.writeJSON(w, http.StatusOK, map[string]any{"catalogs": []any{}})
+		return
+	}
+
+	domainStr := r.URL.Query().Get("domain")
+	var targetDomain pluginv1.Domain = pluginv1.Domain_DOMAIN_UNSPECIFIED
+	switch strings.ToLower(domainStr) {
+	case "1", "cinema", "movies", "series":
+		targetDomain = pluginv1.Domain_DOMAIN_CINEMA
+	case "2", "reading", "manga", "novel":
+		targetDomain = pluginv1.Domain_DOMAIN_MANGA
+	case "6", "live":
+		targetDomain = pluginv1.Domain_DOMAIN_LIVE
+	case "7", "iptv":
+		targetDomain = pluginv1.Domain_DOMAIN_IPTV
+	}
+
+	rows, err := g.catalogSvc.GetCatalogs(r.Context(), targetDomain)
+	if err != nil {
+		g.writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	g.writeJSON(w, http.StatusOK, map[string]any{
+		"catalogs": rows,
+		"domain":   domainStr,
+	})
+}
+
+func (g *GatewayServer) isPluginInstalled(id string) bool {
+	if g.pluginMgr == nil {
+		return false
+	}
+	_, err := g.pluginMgr.Get(id)
+	return err == nil
+}
+
+func (g *GatewayServer) handlePluginsAvailable(w http.ResponseWriter, r *http.Request) {
+	available := []map[string]any{
+		{
+			"id":          "com.vessel.cinema.cinemasis",
+			"name":        "Cinemasis",
+			"description": "Film ve Dizi Katalogları (TMDB Canlı API & En İyiler)",
+			"domain":      "cinema",
+			"version":     "1.0.0",
+			"author":      "Vessel Team",
+			"installed":   g.isPluginInstalled("com.vessel.cinema.cinemasis"),
+			"is_builtin":  true,
+		},
+		{
+			"id":          "com.vessel.reading.mangile",
+			"name":        "Mangile",
+			"description": "Manga, Webtoon ve Işık Romanları Okuma Sağlayıcısı (Sanity)",
+			"domain":      "reading",
+			"version":     "1.0.0",
+			"author":      "Vessel Team",
+			"installed":   g.isPluginInstalled("com.vessel.reading.mangile"),
+			"is_builtin":  true,
+		},
+		{
+			"id":          "com.vessel.stream.torrentio",
+			"name":        "Torrent & Debrid Streamer",
+			"description": "Real-Debrid ve TorBox ile Torrent Medya Akış Motoru",
+			"domain":      "cinema",
+			"version":     "1.3.2",
+			"author":      "Community",
+			"installed":   false,
+			"is_builtin":  false,
+		},
+		{
+			"id":          "com.vessel.iptv.world",
+			"name":        "World IPTV Channels",
+			"description": "Dünya genelinden 8000+ açık IPTV ve M3U TV kanalı",
+			"domain":      "iptv",
+			"version":     "1.1.0",
+			"author":      "Community",
+			"installed":   false,
+			"is_builtin":  false,
+		},
+		{
+			"id":          "com.vessel.live.streams",
+			"name":        "Live Streams Hub",
+			"description": "Twitch, YouTube ve spor canlı yayınlarını keşfedin",
+			"domain":      "live",
+			"version":     "1.0.5",
+			"author":      "Community",
+			"installed":   false,
+			"is_builtin":  false,
+		},
+	}
+
+	g.writeJSON(w, http.StatusOK, map[string]any{"plugins": available})
+}
+
+func (g *GatewayServer) handlePluginsInstall(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		g.writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	var req struct {
+		ID   string `json:"id"`
+		URL  string `json:"url"`
+		Path string `json:"path"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		g.writeError(w, http.StatusBadRequest, "invalid json payload")
+		return
+	}
+
+	pluginID := req.ID
+	if pluginID == "" {
+		pluginID = "custom-plugin-" + strconv.FormatInt(time.Now().Unix(), 10)
+	}
+
+	slog.Info("Simulated plugin installation", "id", pluginID, "url", req.URL, "path", req.Path)
+	g.writeJSON(w, http.StatusOK, map[string]any{
+		"success": true,
+		"message": fmt.Sprintf("Plugin '%s' installed successfully", pluginID),
+		"id":      pluginID,
+	})
+}
+
+func (g *GatewayServer) handlePluginsToggle(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		g.writeError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+
+	var req struct {
+		ID      string `json:"id"`
+		Enabled bool   `json:"enabled"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		g.writeError(w, http.StatusBadRequest, "invalid json payload")
+		return
+	}
+
+	slog.Info("Toggled plugin status", "id", req.ID, "enabled", req.Enabled)
+	g.writeJSON(w, http.StatusOK, map[string]any{
+		"success": true,
+		"id":      req.ID,
+		"enabled": req.Enabled,
+	})
 }

@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/falsisdev/vessel/plugins/cinemasis/internal/tmdb"
+	"github.com/falsisdev/vessel/plugins/cinemasis/tmdb"
 )
 
 func TestTMDBClientSearch(t *testing.T) {

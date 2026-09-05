@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/falsisdev/vessel/plugins/mangile/internal/sanity"
+	"github.com/falsisdev/vessel/plugins/mangile/sanity"
 )
 
 func TestSanityClient_SearchTitles(t *testing.T) {

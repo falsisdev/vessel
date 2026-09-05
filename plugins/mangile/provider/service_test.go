@@ -7,8 +7,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/falsisdev/vessel/plugins/mangile/internal/provider"
-	"github.com/falsisdev/vessel/plugins/mangile/internal/sanity"
+	"github.com/falsisdev/vessel/plugins/mangile/provider"
+	"github.com/falsisdev/vessel/plugins/mangile/sanity"
 	pluginv1 "github.com/falsisdev/vessel/proto/gen/go/plugin/v1"
 )
 

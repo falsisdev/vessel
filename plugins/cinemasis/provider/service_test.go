@@ -6,8 +6,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/falsisdev/vessel/plugins/cinemasis/internal/provider"
-	"github.com/falsisdev/vessel/plugins/cinemasis/internal/tmdb"
+	"github.com/falsisdev/vessel/plugins/cinemasis/provider"
+	"github.com/falsisdev/vessel/plugins/cinemasis/tmdb"
 	pluginv1 "github.com/falsisdev/vessel/proto/gen/go/plugin/v1"
 )
 

@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/falsisdev/vessel/plugins/mangile/internal/sanity"
+	"github.com/falsisdev/vessel/plugins/mangile/sanity"
 	pluginv1 "github.com/falsisdev/vessel/proto/gen/go/plugin/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -58,7 +58,7 @@ func (s *MangileService) Search(ctx context.Context, req *pluginv1.SearchRequest
 	}
 
 	q := strings.TrimSpace(req.Query)
-	if strings.EqualFold(q, "popular") || strings.EqualFold(q, "trending") || strings.EqualFold(q, "all") {
+	if strings.EqualFold(q, "popular") || strings.EqualFold(q, "trending") || strings.EqualFold(q, "latest") || strings.EqualFold(q, "all") {
 		q = ""
 	}
 

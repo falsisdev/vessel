@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/falsisdev/vessel/plugins/cinemasis/internal/tmdb"
+	"github.com/falsisdev/vessel/plugins/cinemasis/tmdb"
 	pluginv1 "github.com/falsisdev/vessel/proto/gen/go/plugin/v1"
 )
 

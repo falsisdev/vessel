@@ -23,6 +23,10 @@ import (
 	"github.com/falsisdev/vessel/core/internal/streaming"
 	"github.com/falsisdev/vessel/core/internal/theme"
 	"github.com/falsisdev/vessel/pkg/config"
+	cinemasisProvider "github.com/falsisdev/vessel/plugins/cinemasis/provider"
+	cinemasisTMDB "github.com/falsisdev/vessel/plugins/cinemasis/tmdb"
+	mangileProvider "github.com/falsisdev/vessel/plugins/mangile/provider"
+	mangileSanity "github.com/falsisdev/vessel/plugins/mangile/sanity"
 )
 
 // RunServer runs the core daemon server, background IPC, and web/desktop gateway.
@@ -46,7 +50,7 @@ func RunServer(args []string) error {
 
 	host := fs.String("host", "", "Host to bind Web UI (e.g. 127.0.0.1 or 0.0.0.0 for LAN access)")
 	port := fs.Int("port", 0, "Port to bind Web UI (e.g. 8080)")
-	openBrowser := fs.Bool("open", false, "Automatically open Web UI in default browser upon start")
+	openBrowser := fs.Bool("open", true, "Automatically open Web UI in default browser upon start")
 	headless := fs.Bool("headless", false, "Run in headless mode (never open browser)")
 
 	if err := fs.Parse(args); err != nil {
@@ -79,6 +83,45 @@ func RunServer(args []string) error {
 
 	libraryService := service.NewLibraryService(sqliteStorage)
 	pluginManager := plugin.NewManager()
+
+	// Register official bundled in-process plugins (Cinemasis & Mangile)
+	cinemasisKey := os.Getenv("TMDB_API_KEY")
+	if cinemasisKey == "" {
+		cinemasisKey = os.Getenv("VESSEL_TMDB_API_KEY")
+	}
+	if cinemasisKey == "" {
+		cinemasisKey = "eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiI4YTYwMWVhZTc2Y2JiN2QwMjU3M2RhYjJlYzM2MTRmYSIsIm5iZiI6MTY1ODc0MzM0Ny40MzcsInN1YiI6IjYyZGU2YTMzZTlkYTY5MTQ5NTQwZWU5MSIsInNjb3BlcyI6WyJhcGlfcmVhZCJdLCJ2ZXJzaW9uIjoxfQ.4vJx9fRhAtiUGNNcVm-CK9VCPhXTuG0gn-nHfwYqwqY"
+	}
+	cinemasisClient := cinemasisTMDB.NewClient(cinemasisKey)
+	cinemasisSvc := cinemasisProvider.NewCinemasisService(cinemasisClient)
+	if inProcClient, err := plugin.NewInProcessClient(cinemasisSvc); err == nil {
+		if err := pluginManager.Register(inProcClient); err == nil {
+			slog.Info("Registered bundled in-process plugin", "id", inProcClient.Manifest().Id, "name", inProcClient.Manifest().Name)
+		}
+	}
+
+	sanityPID := os.Getenv("SANITY_PROJECT_ID")
+	if sanityPID == "" {
+		sanityPID = "1yge7tlr"
+	}
+	sanityDS := os.Getenv("SANITY_DATASET")
+	if sanityDS == "" {
+		sanityDS = "production"
+	}
+	sanityTok := os.Getenv("SANITY_TOKEN")
+	var sanityOpts []mangileSanity.Option
+	if sanityDS != "" {
+		sanityOpts = append(sanityOpts, mangileSanity.WithDataset(sanityDS))
+	}
+	sanityClient := mangileSanity.NewClient(sanityPID, sanityTok, sanityOpts...)
+	mangileSvc := mangileProvider.NewMangileService(sanityClient)
+	if inProcClient, err := plugin.NewInProcessClient(mangileSvc); err == nil {
+		if err := pluginManager.Register(inProcClient); err == nil {
+			slog.Info("Registered bundled in-process plugin", "id", inProcClient.Manifest().Id, "name", inProcClient.Manifest().Name)
+		}
+	}
+
+	catalogService := service.NewCatalogService(pluginManager, 5*time.Second)
 	supervisor := plugin.NewSupervisor(pluginManager)
 
 	defer func() {
@@ -138,6 +181,7 @@ func RunServer(args []string) error {
 	var uiServerURL string
 	if !*noUI && !*oneshot {
 		uiServer := server.NewGatewayServer(resolvedUIAddr, cinemaService, readingService, libraryService, streamService, pluginManager, themeManager, streamingProxy)
+		uiServer.SetCatalogService(catalogService)
 		if err := uiServer.Start(); err != nil {
 			slog.Warn("Failed to start Native UI Gateway server", "addr", resolvedUIAddr, "error", err)
 		} else {
@@ -218,7 +262,7 @@ func RunServer(args []string) error {
 				slog.Info("Skipping disabled plugin", "id", desc.ID)
 				continue
 			}
-			if !desc.Enabled || launchedPlugins[desc.ID] {
+			if !desc.Enabled || launchedPlugins[desc.ID] || pluginManager.Has(desc.ID) {
 				continue
 			}
 			if _, err := supervisor.LaunchDescriptor(ctx, desc); err != nil {

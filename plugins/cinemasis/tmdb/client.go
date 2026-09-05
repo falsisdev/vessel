@@ -144,6 +144,10 @@ func (c *Client) Search(ctx context.Context, query string, page int32) (*MultiSe
 
 	if qTrim == "" || strings.EqualFold(qTrim, "popular") || strings.EqualFold(qTrim, "trending") {
 		endpoint = fmt.Sprintf("%s/trending/all/week", c.baseURL)
+	} else if strings.EqualFold(qTrim, "top_rated") {
+		endpoint = fmt.Sprintf("%s/movie/top_rated", c.baseURL)
+	} else if strings.EqualFold(qTrim, "featured") || strings.EqualFold(qTrim, "now_playing") {
+		endpoint = fmt.Sprintf("%s/movie/now_playing", c.baseURL)
 	} else {
 		endpoint = fmt.Sprintf("%s/search/multi", c.baseURL)
 		params.Set("query", qTrim)

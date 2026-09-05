@@ -8,8 +8,8 @@ import (
 	"os"
 
 	"github.com/falsisdev/vessel/pkg/config"
-	"github.com/falsisdev/vessel/plugins/cinemasis/internal/provider"
-	"github.com/falsisdev/vessel/plugins/cinemasis/internal/tmdb"
+	"github.com/falsisdev/vessel/plugins/cinemasis/provider"
+	"github.com/falsisdev/vessel/plugins/cinemasis/tmdb"
 	pluginv1 "github.com/falsisdev/vessel/proto/gen/go/plugin/v1"
 	"google.golang.org/grpc"
 )
