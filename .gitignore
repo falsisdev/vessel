@@ -25,3 +25,8 @@ Thumbs.db
 *.db
 *.db-*
 .env
+
+# Swift Package Manager
+.build/
+*.xcodeproj
+*.xcworkspace

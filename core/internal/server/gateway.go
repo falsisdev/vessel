@@ -371,7 +371,13 @@ func (g *GatewayServer) handleSearch(w http.ResponseWriter, r *http.Request) {
 func (g *GatewayServer) handleMedia(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	providerID := r.URL.Query().Get("provider")
+	if providerID == "" {
+		providerID = r.URL.Query().Get("provider_id")
+	}
 	mediaID := r.URL.Query().Get("id")
+	if mediaID == "" {
+		mediaID = r.URL.Query().Get("media")
+	}
 	domainStr := r.URL.Query().Get("domain")
 
 	if mediaID == "" {
@@ -444,7 +450,13 @@ func (g *GatewayServer) handleMedia(w http.ResponseWriter, r *http.Request) {
 func (g *GatewayServer) handleStreams(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	providerID := r.URL.Query().Get("provider")
+	if providerID == "" {
+		providerID = r.URL.Query().Get("provider_id")
+	}
 	mediaID := r.URL.Query().Get("media")
+	if mediaID == "" {
+		mediaID = r.URL.Query().Get("id")
+	}
 	season, _ := strconv.Atoi(r.URL.Query().Get("season"))
 	episode, _ := strconv.Atoi(r.URL.Query().Get("episode"))
 
