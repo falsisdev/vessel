@@ -38,6 +38,8 @@ func run() error {
 	dbPath := flag.String("db-path", "vessel.db", "Path to SQLite database file")
 	listenAddr := flag.String("listen-addr", "127.0.0.1:50050", "Address for Core IPC gRPC server (TCP or unix:///path)")
 	noServer := flag.Bool("no-server", false, "Disable Core IPC gRPC server")
+	uiAddr := flag.String("ui-addr", "127.0.0.1:8080", "Address for Native Web/Desktop UI Gateway HTTP server")
+	noUI := flag.Bool("no-ui", false, "Disable Native UI Gateway HTTP server")
 	testQuery := flag.String("search", "", "Query to search on connected plugins")
 	oneshot := flag.Bool("oneshot", false, "Exit immediately after executing operations")
 	flag.Parse()
@@ -96,6 +98,16 @@ func run() error {
 			return fmt.Errorf("failed to start core IPC server at %s: %w", *listenAddr, err)
 		}
 		defer coreServer.Stop()
+	}
+
+	if !*noUI && !*oneshot {
+		uiServer := server.NewGatewayServer(*uiAddr, cinemaService, readingService, libraryService, streamService, pluginManager, themeManager, streamingProxy)
+		if err := uiServer.Start(); err != nil {
+			slog.Warn("Failed to start Native UI Gateway server", "addr", *uiAddr, "error", err)
+		} else {
+			defer uiServer.Stop()
+			slog.Info("Vessel Native UI running", "url", uiServer.URL())
+		}
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

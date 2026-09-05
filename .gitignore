@@ -17,7 +17,9 @@ Thumbs.db
 # IDEs
 .idea/
 .vscode/
-*.swp
-*~
-
 .gemini/
+
+# Local databases and environment
+*.db
+*.db-*
+.env
