@@ -950,6 +950,634 @@ func (x *GetChapterContentResponse) GetTextContent() string {
 	return ""
 }
 
+type ThemeVariantInfo struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	IsDark        bool                   `protobuf:"varint,3,opt,name=is_dark,json=isDark,proto3" json:"is_dark,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ThemeVariantInfo) Reset() {
+	*x = ThemeVariantInfo{}
+	mi := &file_core_v1_core_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ThemeVariantInfo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ThemeVariantInfo) ProtoMessage() {}
+
+func (x *ThemeVariantInfo) ProtoReflect() protoreflect.Message {
+	mi := &file_core_v1_core_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ThemeVariantInfo.ProtoReflect.Descriptor instead.
+func (*ThemeVariantInfo) Descriptor() ([]byte, []int) {
+	return file_core_v1_core_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *ThemeVariantInfo) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *ThemeVariantInfo) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *ThemeVariantInfo) GetIsDark() bool {
+	if x != nil {
+		return x.IsDark
+	}
+	return false
+}
+
+type ThemeSummary struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Version       string                 `protobuf:"bytes,3,opt,name=version,proto3" json:"version,omitempty"`
+	Description   string                 `protobuf:"bytes,4,opt,name=description,proto3" json:"description,omitempty"`
+	Author        string                 `protobuf:"bytes,5,opt,name=author,proto3" json:"author,omitempty"`
+	IsBuiltin     bool                   `protobuf:"varint,6,opt,name=is_builtin,json=isBuiltin,proto3" json:"is_builtin,omitempty"`
+	ActiveVariant string                 `protobuf:"bytes,7,opt,name=active_variant,json=activeVariant,proto3" json:"active_variant,omitempty"`
+	Variants      []*ThemeVariantInfo    `protobuf:"bytes,8,rep,name=variants,proto3" json:"variants,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ThemeSummary) Reset() {
+	*x = ThemeSummary{}
+	mi := &file_core_v1_core_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ThemeSummary) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ThemeSummary) ProtoMessage() {}
+
+func (x *ThemeSummary) ProtoReflect() protoreflect.Message {
+	mi := &file_core_v1_core_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ThemeSummary.ProtoReflect.Descriptor instead.
+func (*ThemeSummary) Descriptor() ([]byte, []int) {
+	return file_core_v1_core_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *ThemeSummary) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *ThemeSummary) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *ThemeSummary) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
+}
+
+func (x *ThemeSummary) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *ThemeSummary) GetAuthor() string {
+	if x != nil {
+		return x.Author
+	}
+	return ""
+}
+
+func (x *ThemeSummary) GetIsBuiltin() bool {
+	if x != nil {
+		return x.IsBuiltin
+	}
+	return false
+}
+
+func (x *ThemeSummary) GetActiveVariant() string {
+	if x != nil {
+		return x.ActiveVariant
+	}
+	return ""
+}
+
+func (x *ThemeSummary) GetVariants() []*ThemeVariantInfo {
+	if x != nil {
+		return x.Variants
+	}
+	return nil
+}
+
+type ListThemesRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListThemesRequest) Reset() {
+	*x = ListThemesRequest{}
+	mi := &file_core_v1_core_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListThemesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListThemesRequest) ProtoMessage() {}
+
+func (x *ListThemesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_core_v1_core_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListThemesRequest.ProtoReflect.Descriptor instead.
+func (*ListThemesRequest) Descriptor() ([]byte, []int) {
+	return file_core_v1_core_proto_rawDescGZIP(), []int{16}
+}
+
+type ListThemesResponse struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Themes          []*ThemeSummary        `protobuf:"bytes,1,rep,name=themes,proto3" json:"themes,omitempty"`
+	ActiveThemeId   string                 `protobuf:"bytes,2,opt,name=active_theme_id,json=activeThemeId,proto3" json:"active_theme_id,omitempty"`
+	ActiveVariantId string                 `protobuf:"bytes,3,opt,name=active_variant_id,json=activeVariantId,proto3" json:"active_variant_id,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *ListThemesResponse) Reset() {
+	*x = ListThemesResponse{}
+	mi := &file_core_v1_core_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListThemesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListThemesResponse) ProtoMessage() {}
+
+func (x *ListThemesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_core_v1_core_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListThemesResponse.ProtoReflect.Descriptor instead.
+func (*ListThemesResponse) Descriptor() ([]byte, []int) {
+	return file_core_v1_core_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *ListThemesResponse) GetThemes() []*ThemeSummary {
+	if x != nil {
+		return x.Themes
+	}
+	return nil
+}
+
+func (x *ListThemesResponse) GetActiveThemeId() string {
+	if x != nil {
+		return x.ActiveThemeId
+	}
+	return ""
+}
+
+func (x *ListThemesResponse) GetActiveVariantId() string {
+	if x != nil {
+		return x.ActiveVariantId
+	}
+	return ""
+}
+
+type GetActiveThemeRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetActiveThemeRequest) Reset() {
+	*x = GetActiveThemeRequest{}
+	mi := &file_core_v1_core_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetActiveThemeRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetActiveThemeRequest) ProtoMessage() {}
+
+func (x *GetActiveThemeRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_core_v1_core_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetActiveThemeRequest.ProtoReflect.Descriptor instead.
+func (*GetActiveThemeRequest) Descriptor() ([]byte, []int) {
+	return file_core_v1_core_proto_rawDescGZIP(), []int{18}
+}
+
+type GetActiveThemeResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Theme         *ThemeSummary          `protobuf:"bytes,1,opt,name=theme,proto3" json:"theme,omitempty"`
+	VariantId     string                 `protobuf:"bytes,2,opt,name=variant_id,json=variantId,proto3" json:"variant_id,omitempty"`
+	IsDark        bool                   `protobuf:"varint,3,opt,name=is_dark,json=isDark,proto3" json:"is_dark,omitempty"`
+	Tokens        map[string]string      `protobuf:"bytes,4,rep,name=tokens,proto3" json:"tokens,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Css           string                 `protobuf:"bytes,5,opt,name=css,proto3" json:"css,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetActiveThemeResponse) Reset() {
+	*x = GetActiveThemeResponse{}
+	mi := &file_core_v1_core_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetActiveThemeResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetActiveThemeResponse) ProtoMessage() {}
+
+func (x *GetActiveThemeResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_core_v1_core_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetActiveThemeResponse.ProtoReflect.Descriptor instead.
+func (*GetActiveThemeResponse) Descriptor() ([]byte, []int) {
+	return file_core_v1_core_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *GetActiveThemeResponse) GetTheme() *ThemeSummary {
+	if x != nil {
+		return x.Theme
+	}
+	return nil
+}
+
+func (x *GetActiveThemeResponse) GetVariantId() string {
+	if x != nil {
+		return x.VariantId
+	}
+	return ""
+}
+
+func (x *GetActiveThemeResponse) GetIsDark() bool {
+	if x != nil {
+		return x.IsDark
+	}
+	return false
+}
+
+func (x *GetActiveThemeResponse) GetTokens() map[string]string {
+	if x != nil {
+		return x.Tokens
+	}
+	return nil
+}
+
+func (x *GetActiveThemeResponse) GetCss() string {
+	if x != nil {
+		return x.Css
+	}
+	return ""
+}
+
+type SetActiveThemeRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ThemeId       string                 `protobuf:"bytes,1,opt,name=theme_id,json=themeId,proto3" json:"theme_id,omitempty"`
+	VariantId     string                 `protobuf:"bytes,2,opt,name=variant_id,json=variantId,proto3" json:"variant_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetActiveThemeRequest) Reset() {
+	*x = SetActiveThemeRequest{}
+	mi := &file_core_v1_core_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetActiveThemeRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetActiveThemeRequest) ProtoMessage() {}
+
+func (x *SetActiveThemeRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_core_v1_core_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetActiveThemeRequest.ProtoReflect.Descriptor instead.
+func (*SetActiveThemeRequest) Descriptor() ([]byte, []int) {
+	return file_core_v1_core_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *SetActiveThemeRequest) GetThemeId() string {
+	if x != nil {
+		return x.ThemeId
+	}
+	return ""
+}
+
+func (x *SetActiveThemeRequest) GetVariantId() string {
+	if x != nil {
+		return x.VariantId
+	}
+	return ""
+}
+
+type SetActiveThemeResponse struct {
+	state         protoimpl.MessageState  `protogen:"open.v1"`
+	Success       bool                    `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	ActiveTheme   *GetActiveThemeResponse `protobuf:"bytes,2,opt,name=active_theme,json=activeTheme,proto3" json:"active_theme,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetActiveThemeResponse) Reset() {
+	*x = SetActiveThemeResponse{}
+	mi := &file_core_v1_core_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetActiveThemeResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetActiveThemeResponse) ProtoMessage() {}
+
+func (x *SetActiveThemeResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_core_v1_core_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetActiveThemeResponse.ProtoReflect.Descriptor instead.
+func (*SetActiveThemeResponse) Descriptor() ([]byte, []int) {
+	return file_core_v1_core_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *SetActiveThemeResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *SetActiveThemeResponse) GetActiveTheme() *GetActiveThemeResponse {
+	if x != nil {
+		return x.ActiveTheme
+	}
+	return nil
+}
+
+type LocaleInfo struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Code          string                 `protobuf:"bytes,1,opt,name=code,proto3" json:"code,omitempty"`
+	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	NativeName    string                 `protobuf:"bytes,3,opt,name=native_name,json=nativeName,proto3" json:"native_name,omitempty"`
+	IsRtl         bool                   `protobuf:"varint,4,opt,name=is_rtl,json=isRtl,proto3" json:"is_rtl,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LocaleInfo) Reset() {
+	*x = LocaleInfo{}
+	mi := &file_core_v1_core_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LocaleInfo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LocaleInfo) ProtoMessage() {}
+
+func (x *LocaleInfo) ProtoReflect() protoreflect.Message {
+	mi := &file_core_v1_core_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LocaleInfo.ProtoReflect.Descriptor instead.
+func (*LocaleInfo) Descriptor() ([]byte, []int) {
+	return file_core_v1_core_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *LocaleInfo) GetCode() string {
+	if x != nil {
+		return x.Code
+	}
+	return ""
+}
+
+func (x *LocaleInfo) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *LocaleInfo) GetNativeName() string {
+	if x != nil {
+		return x.NativeName
+	}
+	return ""
+}
+
+func (x *LocaleInfo) GetIsRtl() bool {
+	if x != nil {
+		return x.IsRtl
+	}
+	return false
+}
+
+type GetSupportedLocalesRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetSupportedLocalesRequest) Reset() {
+	*x = GetSupportedLocalesRequest{}
+	mi := &file_core_v1_core_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetSupportedLocalesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetSupportedLocalesRequest) ProtoMessage() {}
+
+func (x *GetSupportedLocalesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_core_v1_core_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetSupportedLocalesRequest.ProtoReflect.Descriptor instead.
+func (*GetSupportedLocalesRequest) Descriptor() ([]byte, []int) {
+	return file_core_v1_core_proto_rawDescGZIP(), []int{23}
+}
+
+type GetSupportedLocalesResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Locales       []*LocaleInfo          `protobuf:"bytes,1,rep,name=locales,proto3" json:"locales,omitempty"`
+	DefaultLocale string                 `protobuf:"bytes,2,opt,name=default_locale,json=defaultLocale,proto3" json:"default_locale,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetSupportedLocalesResponse) Reset() {
+	*x = GetSupportedLocalesResponse{}
+	mi := &file_core_v1_core_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetSupportedLocalesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetSupportedLocalesResponse) ProtoMessage() {}
+
+func (x *GetSupportedLocalesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_core_v1_core_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetSupportedLocalesResponse.ProtoReflect.Descriptor instead.
+func (*GetSupportedLocalesResponse) Descriptor() ([]byte, []int) {
+	return file_core_v1_core_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *GetSupportedLocalesResponse) GetLocales() []*LocaleInfo {
+	if x != nil {
+		return x.Locales
+	}
+	return nil
+}
+
+func (x *GetSupportedLocalesResponse) GetDefaultLocale() string {
+	if x != nil {
+		return x.DefaultLocale
+	}
+	return ""
+}
+
 var File_core_v1_core_proto protoreflect.FileDescriptor
 
 const file_core_v1_core_proto_rawDesc = "" +
@@ -1033,7 +1661,55 @@ const file_core_v1_core_proto_rawDesc = "" +
 	"\x05title\x18\x02 \x01(\tR\x05title\x12%\n" +
 	"\x0echapter_number\x18\x03 \x01(\x02R\rchapterNumber\x12)\n" +
 	"\x05pages\x18\x04 \x03(\v2\x13.plugin.v1.PageItemR\x05pages\x12!\n" +
-	"\ftext_content\x18\x05 \x01(\tR\vtextContent2\xcf\x03\n" +
+	"\ftext_content\x18\x05 \x01(\tR\vtextContent\"O\n" +
+	"\x10ThemeVariantInfo\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12\x17\n" +
+	"\ais_dark\x18\x03 \x01(\bR\x06isDark\"\x83\x02\n" +
+	"\fThemeSummary\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12\x18\n" +
+	"\aversion\x18\x03 \x01(\tR\aversion\x12 \n" +
+	"\vdescription\x18\x04 \x01(\tR\vdescription\x12\x16\n" +
+	"\x06author\x18\x05 \x01(\tR\x06author\x12\x1d\n" +
+	"\n" +
+	"is_builtin\x18\x06 \x01(\bR\tisBuiltin\x12%\n" +
+	"\x0eactive_variant\x18\a \x01(\tR\ractiveVariant\x125\n" +
+	"\bvariants\x18\b \x03(\v2\x19.core.v1.ThemeVariantInfoR\bvariants\"\x13\n" +
+	"\x11ListThemesRequest\"\x97\x01\n" +
+	"\x12ListThemesResponse\x12-\n" +
+	"\x06themes\x18\x01 \x03(\v2\x15.core.v1.ThemeSummaryR\x06themes\x12&\n" +
+	"\x0factive_theme_id\x18\x02 \x01(\tR\ractiveThemeId\x12*\n" +
+	"\x11active_variant_id\x18\x03 \x01(\tR\x0factiveVariantId\"\x17\n" +
+	"\x15GetActiveThemeRequest\"\x8f\x02\n" +
+	"\x16GetActiveThemeResponse\x12+\n" +
+	"\x05theme\x18\x01 \x01(\v2\x15.core.v1.ThemeSummaryR\x05theme\x12\x1d\n" +
+	"\n" +
+	"variant_id\x18\x02 \x01(\tR\tvariantId\x12\x17\n" +
+	"\ais_dark\x18\x03 \x01(\bR\x06isDark\x12C\n" +
+	"\x06tokens\x18\x04 \x03(\v2+.core.v1.GetActiveThemeResponse.TokensEntryR\x06tokens\x12\x10\n" +
+	"\x03css\x18\x05 \x01(\tR\x03css\x1a9\n" +
+	"\vTokensEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"Q\n" +
+	"\x15SetActiveThemeRequest\x12\x19\n" +
+	"\btheme_id\x18\x01 \x01(\tR\athemeId\x12\x1d\n" +
+	"\n" +
+	"variant_id\x18\x02 \x01(\tR\tvariantId\"v\n" +
+	"\x16SetActiveThemeResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x12B\n" +
+	"\factive_theme\x18\x02 \x01(\v2\x1f.core.v1.GetActiveThemeResponseR\vactiveTheme\"l\n" +
+	"\n" +
+	"LocaleInfo\x12\x12\n" +
+	"\x04code\x18\x01 \x01(\tR\x04code\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1f\n" +
+	"\vnative_name\x18\x03 \x01(\tR\n" +
+	"nativeName\x12\x15\n" +
+	"\x06is_rtl\x18\x04 \x01(\bR\x05isRtl\"\x1c\n" +
+	"\x1aGetSupportedLocalesRequest\"s\n" +
+	"\x1bGetSupportedLocalesResponse\x12-\n" +
+	"\alocales\x18\x01 \x03(\v2\x13.core.v1.LocaleInfoR\alocales\x12%\n" +
+	"\x0edefault_locale\x18\x02 \x01(\tR\rdefaultLocale2\x9e\x06\n" +
 	"\vCoreService\x123\n" +
 	"\x04Ping\x12\x14.core.v1.PingRequest\x1a\x15.core.v1.PingResponse\x12H\n" +
 	"\vSearchMedia\x12\x1b.core.v1.SearchMediaRequest\x1a\x1c.core.v1.SearchMediaResponse\x12T\n" +
@@ -1041,7 +1717,12 @@ const file_core_v1_core_proto_rawDesc = "" +
 	"\n" +
 	"GetStreams\x12\x1a.core.v1.GetStreamsRequest\x1a\x1b.core.v1.GetStreamsResponse\x12Z\n" +
 	"\x11GetChapterContent\x12!.core.v1.GetChapterContentRequest\x1a\".core.v1.GetChapterContentResponse\x12H\n" +
-	"\vListPlugins\x12\x1b.core.v1.ListPluginsRequest\x1a\x1c.core.v1.ListPluginsResponseB9Z7github.com/falsisdev/vessel/proto/gen/go/core/v1;corev1b\x06proto3"
+	"\vListPlugins\x12\x1b.core.v1.ListPluginsRequest\x1a\x1c.core.v1.ListPluginsResponse\x12E\n" +
+	"\n" +
+	"ListThemes\x12\x1a.core.v1.ListThemesRequest\x1a\x1b.core.v1.ListThemesResponse\x12Q\n" +
+	"\x0eGetActiveTheme\x12\x1e.core.v1.GetActiveThemeRequest\x1a\x1f.core.v1.GetActiveThemeResponse\x12Q\n" +
+	"\x0eSetActiveTheme\x12\x1e.core.v1.SetActiveThemeRequest\x1a\x1f.core.v1.SetActiveThemeResponse\x12`\n" +
+	"\x13GetSupportedLocales\x12#.core.v1.GetSupportedLocalesRequest\x1a$.core.v1.GetSupportedLocalesResponseB9Z7github.com/falsisdev/vessel/proto/gen/go/core/v1;corev1b\x06proto3"
 
 var (
 	file_core_v1_core_proto_rawDescOnce sync.Once
@@ -1055,63 +1736,89 @@ func file_core_v1_core_proto_rawDescGZIP() []byte {
 	return file_core_v1_core_proto_rawDescData
 }
 
-var file_core_v1_core_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
+var file_core_v1_core_proto_msgTypes = make([]protoimpl.MessageInfo, 26)
 var file_core_v1_core_proto_goTypes = []any{
-	(*PingRequest)(nil),               // 0: core.v1.PingRequest
-	(*PingResponse)(nil),              // 1: core.v1.PingResponse
-	(*SearchMediaRequest)(nil),        // 2: core.v1.SearchMediaRequest
-	(*CoreMediaItem)(nil),             // 3: core.v1.CoreMediaItem
-	(*SearchMediaResponse)(nil),       // 4: core.v1.SearchMediaResponse
-	(*GetMediaDetailsRequest)(nil),    // 5: core.v1.GetMediaDetailsRequest
-	(*GetMediaDetailsResponse)(nil),   // 6: core.v1.GetMediaDetailsResponse
-	(*GetStreamsRequest)(nil),         // 7: core.v1.GetStreamsRequest
-	(*GetStreamsResponse)(nil),        // 8: core.v1.GetStreamsResponse
-	(*PluginInfo)(nil),                // 9: core.v1.PluginInfo
-	(*ListPluginsRequest)(nil),        // 10: core.v1.ListPluginsRequest
-	(*ListPluginsResponse)(nil),       // 11: core.v1.ListPluginsResponse
-	(*GetChapterContentRequest)(nil),  // 12: core.v1.GetChapterContentRequest
-	(*GetChapterContentResponse)(nil), // 13: core.v1.GetChapterContentResponse
-	(v1.Domain)(0),                    // 14: plugin.v1.Domain
-	(v1.MediaType)(0),                 // 15: plugin.v1.MediaType
-	(*v1.ExternalIDs)(nil),            // 16: plugin.v1.ExternalIDs
-	(*v1.Season)(nil),                 // 17: plugin.v1.Season
-	(*v1.StreamSource)(nil),           // 18: plugin.v1.StreamSource
-	(*v1.Subtitle)(nil),               // 19: plugin.v1.Subtitle
-	(v1.Capability)(0),                // 20: plugin.v1.Capability
-	(*v1.PageItem)(nil),               // 21: plugin.v1.PageItem
+	(*PingRequest)(nil),                 // 0: core.v1.PingRequest
+	(*PingResponse)(nil),                // 1: core.v1.PingResponse
+	(*SearchMediaRequest)(nil),          // 2: core.v1.SearchMediaRequest
+	(*CoreMediaItem)(nil),               // 3: core.v1.CoreMediaItem
+	(*SearchMediaResponse)(nil),         // 4: core.v1.SearchMediaResponse
+	(*GetMediaDetailsRequest)(nil),      // 5: core.v1.GetMediaDetailsRequest
+	(*GetMediaDetailsResponse)(nil),     // 6: core.v1.GetMediaDetailsResponse
+	(*GetStreamsRequest)(nil),           // 7: core.v1.GetStreamsRequest
+	(*GetStreamsResponse)(nil),          // 8: core.v1.GetStreamsResponse
+	(*PluginInfo)(nil),                  // 9: core.v1.PluginInfo
+	(*ListPluginsRequest)(nil),          // 10: core.v1.ListPluginsRequest
+	(*ListPluginsResponse)(nil),         // 11: core.v1.ListPluginsResponse
+	(*GetChapterContentRequest)(nil),    // 12: core.v1.GetChapterContentRequest
+	(*GetChapterContentResponse)(nil),   // 13: core.v1.GetChapterContentResponse
+	(*ThemeVariantInfo)(nil),            // 14: core.v1.ThemeVariantInfo
+	(*ThemeSummary)(nil),                // 15: core.v1.ThemeSummary
+	(*ListThemesRequest)(nil),           // 16: core.v1.ListThemesRequest
+	(*ListThemesResponse)(nil),          // 17: core.v1.ListThemesResponse
+	(*GetActiveThemeRequest)(nil),       // 18: core.v1.GetActiveThemeRequest
+	(*GetActiveThemeResponse)(nil),      // 19: core.v1.GetActiveThemeResponse
+	(*SetActiveThemeRequest)(nil),       // 20: core.v1.SetActiveThemeRequest
+	(*SetActiveThemeResponse)(nil),      // 21: core.v1.SetActiveThemeResponse
+	(*LocaleInfo)(nil),                  // 22: core.v1.LocaleInfo
+	(*GetSupportedLocalesRequest)(nil),  // 23: core.v1.GetSupportedLocalesRequest
+	(*GetSupportedLocalesResponse)(nil), // 24: core.v1.GetSupportedLocalesResponse
+	nil,                                 // 25: core.v1.GetActiveThemeResponse.TokensEntry
+	(v1.Domain)(0),                      // 26: plugin.v1.Domain
+	(v1.MediaType)(0),                   // 27: plugin.v1.MediaType
+	(*v1.ExternalIDs)(nil),              // 28: plugin.v1.ExternalIDs
+	(*v1.Season)(nil),                   // 29: plugin.v1.Season
+	(*v1.StreamSource)(nil),             // 30: plugin.v1.StreamSource
+	(*v1.Subtitle)(nil),                 // 31: plugin.v1.Subtitle
+	(v1.Capability)(0),                  // 32: plugin.v1.Capability
+	(*v1.PageItem)(nil),                 // 33: plugin.v1.PageItem
 }
 var file_core_v1_core_proto_depIdxs = []int32{
-	14, // 0: core.v1.SearchMediaRequest.domain:type_name -> plugin.v1.Domain
-	15, // 1: core.v1.CoreMediaItem.type:type_name -> plugin.v1.MediaType
-	16, // 2: core.v1.CoreMediaItem.external_ids:type_name -> plugin.v1.ExternalIDs
+	26, // 0: core.v1.SearchMediaRequest.domain:type_name -> plugin.v1.Domain
+	27, // 1: core.v1.CoreMediaItem.type:type_name -> plugin.v1.MediaType
+	28, // 2: core.v1.CoreMediaItem.external_ids:type_name -> plugin.v1.ExternalIDs
 	3,  // 3: core.v1.SearchMediaResponse.items:type_name -> core.v1.CoreMediaItem
-	14, // 4: core.v1.GetMediaDetailsRequest.domain:type_name -> plugin.v1.Domain
-	15, // 5: core.v1.GetMediaDetailsResponse.type:type_name -> plugin.v1.MediaType
-	17, // 6: core.v1.GetMediaDetailsResponse.seasons:type_name -> plugin.v1.Season
-	16, // 7: core.v1.GetMediaDetailsResponse.external_ids:type_name -> plugin.v1.ExternalIDs
-	18, // 8: core.v1.GetStreamsResponse.streams:type_name -> plugin.v1.StreamSource
-	19, // 9: core.v1.GetStreamsResponse.subtitles:type_name -> plugin.v1.Subtitle
-	14, // 10: core.v1.PluginInfo.domain:type_name -> plugin.v1.Domain
-	20, // 11: core.v1.PluginInfo.capabilities:type_name -> plugin.v1.Capability
+	26, // 4: core.v1.GetMediaDetailsRequest.domain:type_name -> plugin.v1.Domain
+	27, // 5: core.v1.GetMediaDetailsResponse.type:type_name -> plugin.v1.MediaType
+	29, // 6: core.v1.GetMediaDetailsResponse.seasons:type_name -> plugin.v1.Season
+	28, // 7: core.v1.GetMediaDetailsResponse.external_ids:type_name -> plugin.v1.ExternalIDs
+	30, // 8: core.v1.GetStreamsResponse.streams:type_name -> plugin.v1.StreamSource
+	31, // 9: core.v1.GetStreamsResponse.subtitles:type_name -> plugin.v1.Subtitle
+	26, // 10: core.v1.PluginInfo.domain:type_name -> plugin.v1.Domain
+	32, // 11: core.v1.PluginInfo.capabilities:type_name -> plugin.v1.Capability
 	9,  // 12: core.v1.ListPluginsResponse.plugins:type_name -> core.v1.PluginInfo
-	21, // 13: core.v1.GetChapterContentResponse.pages:type_name -> plugin.v1.PageItem
-	0,  // 14: core.v1.CoreService.Ping:input_type -> core.v1.PingRequest
-	2,  // 15: core.v1.CoreService.SearchMedia:input_type -> core.v1.SearchMediaRequest
-	5,  // 16: core.v1.CoreService.GetMediaDetails:input_type -> core.v1.GetMediaDetailsRequest
-	7,  // 17: core.v1.CoreService.GetStreams:input_type -> core.v1.GetStreamsRequest
-	12, // 18: core.v1.CoreService.GetChapterContent:input_type -> core.v1.GetChapterContentRequest
-	10, // 19: core.v1.CoreService.ListPlugins:input_type -> core.v1.ListPluginsRequest
-	1,  // 20: core.v1.CoreService.Ping:output_type -> core.v1.PingResponse
-	4,  // 21: core.v1.CoreService.SearchMedia:output_type -> core.v1.SearchMediaResponse
-	6,  // 22: core.v1.CoreService.GetMediaDetails:output_type -> core.v1.GetMediaDetailsResponse
-	8,  // 23: core.v1.CoreService.GetStreams:output_type -> core.v1.GetStreamsResponse
-	13, // 24: core.v1.CoreService.GetChapterContent:output_type -> core.v1.GetChapterContentResponse
-	11, // 25: core.v1.CoreService.ListPlugins:output_type -> core.v1.ListPluginsResponse
-	20, // [20:26] is the sub-list for method output_type
-	14, // [14:20] is the sub-list for method input_type
-	14, // [14:14] is the sub-list for extension type_name
-	14, // [14:14] is the sub-list for extension extendee
-	0,  // [0:14] is the sub-list for field type_name
+	33, // 13: core.v1.GetChapterContentResponse.pages:type_name -> plugin.v1.PageItem
+	14, // 14: core.v1.ThemeSummary.variants:type_name -> core.v1.ThemeVariantInfo
+	15, // 15: core.v1.ListThemesResponse.themes:type_name -> core.v1.ThemeSummary
+	15, // 16: core.v1.GetActiveThemeResponse.theme:type_name -> core.v1.ThemeSummary
+	25, // 17: core.v1.GetActiveThemeResponse.tokens:type_name -> core.v1.GetActiveThemeResponse.TokensEntry
+	19, // 18: core.v1.SetActiveThemeResponse.active_theme:type_name -> core.v1.GetActiveThemeResponse
+	22, // 19: core.v1.GetSupportedLocalesResponse.locales:type_name -> core.v1.LocaleInfo
+	0,  // 20: core.v1.CoreService.Ping:input_type -> core.v1.PingRequest
+	2,  // 21: core.v1.CoreService.SearchMedia:input_type -> core.v1.SearchMediaRequest
+	5,  // 22: core.v1.CoreService.GetMediaDetails:input_type -> core.v1.GetMediaDetailsRequest
+	7,  // 23: core.v1.CoreService.GetStreams:input_type -> core.v1.GetStreamsRequest
+	12, // 24: core.v1.CoreService.GetChapterContent:input_type -> core.v1.GetChapterContentRequest
+	10, // 25: core.v1.CoreService.ListPlugins:input_type -> core.v1.ListPluginsRequest
+	16, // 26: core.v1.CoreService.ListThemes:input_type -> core.v1.ListThemesRequest
+	18, // 27: core.v1.CoreService.GetActiveTheme:input_type -> core.v1.GetActiveThemeRequest
+	20, // 28: core.v1.CoreService.SetActiveTheme:input_type -> core.v1.SetActiveThemeRequest
+	23, // 29: core.v1.CoreService.GetSupportedLocales:input_type -> core.v1.GetSupportedLocalesRequest
+	1,  // 30: core.v1.CoreService.Ping:output_type -> core.v1.PingResponse
+	4,  // 31: core.v1.CoreService.SearchMedia:output_type -> core.v1.SearchMediaResponse
+	6,  // 32: core.v1.CoreService.GetMediaDetails:output_type -> core.v1.GetMediaDetailsResponse
+	8,  // 33: core.v1.CoreService.GetStreams:output_type -> core.v1.GetStreamsResponse
+	13, // 34: core.v1.CoreService.GetChapterContent:output_type -> core.v1.GetChapterContentResponse
+	11, // 35: core.v1.CoreService.ListPlugins:output_type -> core.v1.ListPluginsResponse
+	17, // 36: core.v1.CoreService.ListThemes:output_type -> core.v1.ListThemesResponse
+	19, // 37: core.v1.CoreService.GetActiveTheme:output_type -> core.v1.GetActiveThemeResponse
+	21, // 38: core.v1.CoreService.SetActiveTheme:output_type -> core.v1.SetActiveThemeResponse
+	24, // 39: core.v1.CoreService.GetSupportedLocales:output_type -> core.v1.GetSupportedLocalesResponse
+	30, // [30:40] is the sub-list for method output_type
+	20, // [20:30] is the sub-list for method input_type
+	20, // [20:20] is the sub-list for extension type_name
+	20, // [20:20] is the sub-list for extension extendee
+	0,  // [0:20] is the sub-list for field type_name
 }
 
 func init() { file_core_v1_core_proto_init() }
@@ -1125,7 +1832,7 @@ func file_core_v1_core_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_core_v1_core_proto_rawDesc), len(file_core_v1_core_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   14,
+			NumMessages:   26,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

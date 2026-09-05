@@ -99,6 +99,65 @@ message GetChapterContentResponse {
   string text_content = 5;
 }
 
+message ThemeVariantInfo {
+  string id = 1;
+  string name = 2;
+  bool is_dark = 3;
+}
+
+message ThemeSummary {
+  string id = 1;
+  string name = 2;
+  string version = 3;
+  string description = 4;
+  string author = 5;
+  bool is_builtin = 6;
+  string active_variant = 7;
+  repeated ThemeVariantInfo variants = 8;
+}
+
+message ListThemesRequest {}
+
+message ListThemesResponse {
+  repeated ThemeSummary themes = 1;
+  string active_theme_id = 2;
+  string active_variant_id = 3;
+}
+
+message GetActiveThemeRequest {}
+
+message GetActiveThemeResponse {
+  ThemeSummary theme = 1;
+  string variant_id = 2;
+  bool is_dark = 3;
+  map<string, string> tokens = 4;
+  string css = 5;
+}
+
+message SetActiveThemeRequest {
+  string theme_id = 1;
+  string variant_id = 2;
+}
+
+message SetActiveThemeResponse {
+  bool success = 1;
+  GetActiveThemeResponse active_theme = 2;
+}
+
+message LocaleInfo {
+  string code = 1;
+  string name = 2;
+  string native_name = 3;
+  bool is_rtl = 4;
+}
+
+message GetSupportedLocalesRequest {}
+
+message GetSupportedLocalesResponse {
+  repeated LocaleInfo locales = 1;
+  string default_locale = 2;
+}
+
 service CoreService {
   rpc Ping(PingRequest) returns (PingResponse);
   rpc SearchMedia(SearchMediaRequest) returns (SearchMediaResponse);
@@ -106,4 +165,9 @@ service CoreService {
   rpc GetStreams(GetStreamsRequest) returns (GetStreamsResponse);
   rpc GetChapterContent(GetChapterContentRequest) returns (GetChapterContentResponse);
   rpc ListPlugins(ListPluginsRequest) returns (ListPluginsResponse);
+  rpc ListThemes(ListThemesRequest) returns (ListThemesResponse);
+  rpc GetActiveTheme(GetActiveThemeRequest) returns (GetActiveThemeResponse);
+  rpc SetActiveTheme(SetActiveThemeRequest) returns (SetActiveThemeResponse);
+  rpc GetSupportedLocales(GetSupportedLocalesRequest) returns (GetSupportedLocalesResponse);
 }
+

@@ -93,6 +93,25 @@ func (c *Client) ListPlugins(ctx context.Context) (*corev1.ListPluginsResponse, 
 	return c.service.ListPlugins(ctx, &corev1.ListPluginsRequest{})
 }
 
+func (c *Client) ListThemes(ctx context.Context) (*corev1.ListThemesResponse, error) {
+	return c.service.ListThemes(ctx, &corev1.ListThemesRequest{})
+}
+
+func (c *Client) GetActiveTheme(ctx context.Context) (*corev1.GetActiveThemeResponse, error) {
+	return c.service.GetActiveTheme(ctx, &corev1.GetActiveThemeRequest{})
+}
+
+func (c *Client) SetActiveTheme(ctx context.Context, themeID, variantID string) (*corev1.SetActiveThemeResponse, error) {
+	return c.service.SetActiveTheme(ctx, &corev1.SetActiveThemeRequest{
+		ThemeId:   themeID,
+		VariantId: variantID,
+	})
+}
+
+func (c *Client) GetSupportedLocales(ctx context.Context) (*corev1.GetSupportedLocalesResponse, error) {
+	return c.service.GetSupportedLocales(ctx, &corev1.GetSupportedLocalesRequest{})
+}
+
 func (c *Client) Close() error {
 	if c.conn != nil {
 		return c.conn.Close()

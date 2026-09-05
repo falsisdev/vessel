@@ -16,6 +16,7 @@ import (
 	"github.com/falsisdev/vessel/core/internal/plugin"
 	coreserver "github.com/falsisdev/vessel/core/internal/server"
 	"github.com/falsisdev/vessel/core/internal/service"
+	"github.com/falsisdev/vessel/core/internal/theme"
 	pluginv1 "github.com/falsisdev/vessel/proto/gen/go/plugin/v1"
 )
 
@@ -200,10 +201,11 @@ func TestMangileIntegrationWithCoreAndIPC(t *testing.T) {
 	tcpAddr := l.Addr().String()
 	_ = l.Close()
 
+	themeMgr := theme.NewManager()
 	srv := coreserver.NewServer(coreserver.ServerConfig{
 		ListenAddr: tcpAddr,
 		Version:    "1.0.0-mangile-test",
-	}, cinemaSvc, readingSvc, mgr)
+	}, cinemaSvc, readingSvc, mgr, themeMgr)
 
 	if err := srv.Start(); err != nil {
 		t.Fatalf("failed to start core IPC server: %v", err)

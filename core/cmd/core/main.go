@@ -13,6 +13,7 @@ import (
 	"github.com/falsisdev/vessel/core/internal/plugin"
 	"github.com/falsisdev/vessel/core/internal/server"
 	"github.com/falsisdev/vessel/core/internal/service"
+	"github.com/falsisdev/vessel/core/internal/theme"
 )
 
 func main() {
@@ -27,6 +28,7 @@ func run() error {
 	pluginBin := flag.String("plugin-bin", "", "Path to plugin executable to launch as managed subprocess")
 	pluginID := flag.String("plugin-id", "plugin-local", "Identifier for managed plugin binary")
 	pluginsDir := flag.String("plugins-dir", "", "Directory containing plugins to discover")
+	themesDir := flag.String("themes-dir", "", "Directory containing custom themes to discover")
 	listenAddr := flag.String("listen-addr", "127.0.0.1:50050", "Address for Core IPC gRPC server (TCP or unix:///path)")
 	noServer := flag.Bool("no-server", false, "Disable Core IPC gRPC server")
 	testQuery := flag.String("search", "", "Query to search on connected plugins")
@@ -55,11 +57,17 @@ func run() error {
 	cinemaService := service.NewCinemaService(pluginManager, 5*time.Second)
 	readingService := service.NewReadingService(pluginManager, 5*time.Second)
 
+	var customThemeDirs []string
+	if *themesDir != "" {
+		customThemeDirs = append(customThemeDirs, *themesDir)
+	}
+	themeManager := theme.NewManager(customThemeDirs...)
+
 	if !*noServer && !*oneshot {
 		coreServer := server.NewServer(server.ServerConfig{
 			ListenAddr: *listenAddr,
 			Version:    "1.0.0",
-		}, cinemaService, readingService, pluginManager)
+		}, cinemaService, readingService, pluginManager, themeManager)
 
 		if err := coreServer.Start(); err != nil {
 			return fmt.Errorf("failed to start core IPC server at %s: %w", *listenAddr, err)

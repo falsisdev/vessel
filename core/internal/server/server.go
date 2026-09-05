@@ -12,9 +12,11 @@ import (
 	"time"
 
 	"github.com/falsisdev/vessel/core/internal/domain/cinema"
+	"github.com/falsisdev/vessel/core/internal/domain/locale"
 	"github.com/falsisdev/vessel/core/internal/domain/reading"
 	"github.com/falsisdev/vessel/core/internal/plugin"
 	"github.com/falsisdev/vessel/core/internal/service"
+	"github.com/falsisdev/vessel/core/internal/theme"
 	corev1 "github.com/falsisdev/vessel/proto/gen/go/core/v1"
 	pluginv1 "github.com/falsisdev/vessel/proto/gen/go/plugin/v1"
 	"google.golang.org/grpc"
@@ -34,20 +36,25 @@ type Server struct {
 	cinemaService  *service.CinemaService
 	readingService *service.ReadingService
 	pluginManager  *plugin.Manager
+	themeManager   *theme.Manager
 	startTime      time.Time
 	isUnixSocket   bool
 	socketPath     string
 }
 
-func NewServer(cfg ServerConfig, cinemaSvc *service.CinemaService, readingSvc *service.ReadingService, pluginMgr *plugin.Manager) *Server {
+func NewServer(cfg ServerConfig, cinemaSvc *service.CinemaService, readingSvc *service.ReadingService, pluginMgr *plugin.Manager, themeMgr *theme.Manager) *Server {
 	if cfg.Version == "" {
 		cfg.Version = "1.0.0"
+	}
+	if themeMgr == nil {
+		themeMgr = theme.NewManager()
 	}
 	return &Server{
 		cfg:            cfg,
 		cinemaService:  cinemaSvc,
 		readingService: readingSvc,
 		pluginManager:  pluginMgr,
+		themeManager:   themeMgr,
 		startTime:      time.Now(),
 	}
 }
@@ -361,6 +368,147 @@ func (s *Server) ListPlugins(ctx context.Context, req *corev1.ListPluginsRequest
 	}
 
 	return &corev1.ListPluginsResponse{Plugins: plugins}, nil
+}
+
+func (s *Server) ListThemes(ctx context.Context, req *corev1.ListThemesRequest) (*corev1.ListThemesResponse, error) {
+	if s.themeManager == nil {
+		return nil, errors.New("theme manager not initialized")
+	}
+
+	themes := s.themeManager.List()
+	active, _ := s.themeManager.GetActive()
+
+	var activeThemeID, activeVariantID string
+	if active != nil {
+		activeThemeID = active.Theme.Manifest.ID
+		activeVariantID = active.Variant.ID
+	}
+
+	var protoThemes []*corev1.ThemeSummary
+	for _, th := range themes {
+		var variants []*corev1.ThemeVariantInfo
+		for _, v := range th.Manifest.Variants {
+			variants = append(variants, &corev1.ThemeVariantInfo{
+				Id:     v.ID,
+				Name:   v.Name,
+				IsDark: v.IsDark,
+			})
+		}
+		activeVariant := th.Manifest.DefaultVariant
+		if active != nil && active.Theme.Manifest.ID == th.Manifest.ID {
+			activeVariant = active.Variant.ID
+		}
+
+		protoThemes = append(protoThemes, &corev1.ThemeSummary{
+			Id:            th.Manifest.ID,
+			Name:          th.Manifest.Name,
+			Version:       th.Manifest.Version,
+			Description:   th.Manifest.Description,
+			Author:        th.Manifest.Author,
+			IsBuiltin:     th.IsBuiltin,
+			ActiveVariant: activeVariant,
+			Variants:      variants,
+		})
+	}
+
+	return &corev1.ListThemesResponse{
+		Themes:          protoThemes,
+		ActiveThemeId:   activeThemeID,
+		ActiveVariantId: activeVariantID,
+	}, nil
+}
+
+func (s *Server) GetActiveTheme(ctx context.Context, req *corev1.GetActiveThemeRequest) (*corev1.GetActiveThemeResponse, error) {
+	if s.themeManager == nil {
+		return nil, errors.New("theme manager not initialized")
+	}
+
+	active, err := s.themeManager.GetActive()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get active theme: %w", err)
+	}
+
+	var variants []*corev1.ThemeVariantInfo
+	for _, v := range active.Theme.Manifest.Variants {
+		variants = append(variants, &corev1.ThemeVariantInfo{
+			Id:     v.ID,
+			Name:   v.Name,
+			IsDark: v.IsDark,
+		})
+	}
+
+	return &corev1.GetActiveThemeResponse{
+		Theme: &corev1.ThemeSummary{
+			Id:            active.Theme.Manifest.ID,
+			Name:          active.Theme.Manifest.Name,
+			Version:       active.Theme.Manifest.Version,
+			Description:   active.Theme.Manifest.Description,
+			Author:        active.Theme.Manifest.Author,
+			IsBuiltin:     active.Theme.IsBuiltin,
+			ActiveVariant: active.Variant.ID,
+			Variants:      variants,
+		},
+		VariantId: active.Variant.ID,
+		IsDark:    active.Variant.IsDark,
+		Tokens:    active.Tokens,
+		Css:       active.CompiledCSS,
+	}, nil
+}
+
+func (s *Server) SetActiveTheme(ctx context.Context, req *corev1.SetActiveThemeRequest) (*corev1.SetActiveThemeResponse, error) {
+	if s.themeManager == nil {
+		return nil, errors.New("theme manager not initialized")
+	}
+
+	active, err := s.themeManager.SetActive(req.ThemeId, req.VariantId)
+	if err != nil {
+		return nil, fmt.Errorf("failed to set active theme: %w", err)
+	}
+
+	var variants []*corev1.ThemeVariantInfo
+	for _, v := range active.Theme.Manifest.Variants {
+		variants = append(variants, &corev1.ThemeVariantInfo{
+			Id:     v.ID,
+			Name:   v.Name,
+			IsDark: v.IsDark,
+		})
+	}
+
+	return &corev1.SetActiveThemeResponse{
+		Success: true,
+		ActiveTheme: &corev1.GetActiveThemeResponse{
+			Theme: &corev1.ThemeSummary{
+				Id:            active.Theme.Manifest.ID,
+				Name:          active.Theme.Manifest.Name,
+				Version:       active.Theme.Manifest.Version,
+				Description:   active.Theme.Manifest.Description,
+				Author:        active.Theme.Manifest.Author,
+				IsBuiltin:     active.Theme.IsBuiltin,
+				ActiveVariant: active.Variant.ID,
+				Variants:      variants,
+			},
+			VariantId: active.Variant.ID,
+			IsDark:    active.Variant.IsDark,
+			Tokens:    active.Tokens,
+			Css:       active.CompiledCSS,
+		},
+	}, nil
+}
+
+func (s *Server) GetSupportedLocales(ctx context.Context, req *corev1.GetSupportedLocalesRequest) (*corev1.GetSupportedLocalesResponse, error) {
+	var locales []*corev1.LocaleInfo
+	for _, l := range locale.SupportedLocales {
+		locales = append(locales, &corev1.LocaleInfo{
+			Code:       l.Code,
+			Name:       l.Name,
+			NativeName: l.NativeName,
+			IsRtl:      l.IsRTL,
+		})
+	}
+	return &corev1.GetSupportedLocalesResponse{
+		Locales:       locales,
+		DefaultLocale: locale.DefaultLocale,
+	}, nil
 }
 
 func parseListenAddr(addr string) (network string, address string, err error) {

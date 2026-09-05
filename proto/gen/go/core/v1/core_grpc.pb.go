@@ -19,12 +19,16 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	CoreService_Ping_FullMethodName              = "/core.v1.CoreService/Ping"
-	CoreService_SearchMedia_FullMethodName       = "/core.v1.CoreService/SearchMedia"
-	CoreService_GetMediaDetails_FullMethodName   = "/core.v1.CoreService/GetMediaDetails"
-	CoreService_GetStreams_FullMethodName        = "/core.v1.CoreService/GetStreams"
-	CoreService_GetChapterContent_FullMethodName = "/core.v1.CoreService/GetChapterContent"
-	CoreService_ListPlugins_FullMethodName       = "/core.v1.CoreService/ListPlugins"
+	CoreService_Ping_FullMethodName                = "/core.v1.CoreService/Ping"
+	CoreService_SearchMedia_FullMethodName         = "/core.v1.CoreService/SearchMedia"
+	CoreService_GetMediaDetails_FullMethodName     = "/core.v1.CoreService/GetMediaDetails"
+	CoreService_GetStreams_FullMethodName          = "/core.v1.CoreService/GetStreams"
+	CoreService_GetChapterContent_FullMethodName   = "/core.v1.CoreService/GetChapterContent"
+	CoreService_ListPlugins_FullMethodName         = "/core.v1.CoreService/ListPlugins"
+	CoreService_ListThemes_FullMethodName          = "/core.v1.CoreService/ListThemes"
+	CoreService_GetActiveTheme_FullMethodName      = "/core.v1.CoreService/GetActiveTheme"
+	CoreService_SetActiveTheme_FullMethodName      = "/core.v1.CoreService/SetActiveTheme"
+	CoreService_GetSupportedLocales_FullMethodName = "/core.v1.CoreService/GetSupportedLocales"
 )
 
 // CoreServiceClient is the client API for CoreService service.
@@ -37,6 +41,10 @@ type CoreServiceClient interface {
 	GetStreams(ctx context.Context, in *GetStreamsRequest, opts ...grpc.CallOption) (*GetStreamsResponse, error)
 	GetChapterContent(ctx context.Context, in *GetChapterContentRequest, opts ...grpc.CallOption) (*GetChapterContentResponse, error)
 	ListPlugins(ctx context.Context, in *ListPluginsRequest, opts ...grpc.CallOption) (*ListPluginsResponse, error)
+	ListThemes(ctx context.Context, in *ListThemesRequest, opts ...grpc.CallOption) (*ListThemesResponse, error)
+	GetActiveTheme(ctx context.Context, in *GetActiveThemeRequest, opts ...grpc.CallOption) (*GetActiveThemeResponse, error)
+	SetActiveTheme(ctx context.Context, in *SetActiveThemeRequest, opts ...grpc.CallOption) (*SetActiveThemeResponse, error)
+	GetSupportedLocales(ctx context.Context, in *GetSupportedLocalesRequest, opts ...grpc.CallOption) (*GetSupportedLocalesResponse, error)
 }
 
 type coreServiceClient struct {
@@ -107,6 +115,46 @@ func (c *coreServiceClient) ListPlugins(ctx context.Context, in *ListPluginsRequ
 	return out, nil
 }
 
+func (c *coreServiceClient) ListThemes(ctx context.Context, in *ListThemesRequest, opts ...grpc.CallOption) (*ListThemesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListThemesResponse)
+	err := c.cc.Invoke(ctx, CoreService_ListThemes_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *coreServiceClient) GetActiveTheme(ctx context.Context, in *GetActiveThemeRequest, opts ...grpc.CallOption) (*GetActiveThemeResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetActiveThemeResponse)
+	err := c.cc.Invoke(ctx, CoreService_GetActiveTheme_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *coreServiceClient) SetActiveTheme(ctx context.Context, in *SetActiveThemeRequest, opts ...grpc.CallOption) (*SetActiveThemeResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SetActiveThemeResponse)
+	err := c.cc.Invoke(ctx, CoreService_SetActiveTheme_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *coreServiceClient) GetSupportedLocales(ctx context.Context, in *GetSupportedLocalesRequest, opts ...grpc.CallOption) (*GetSupportedLocalesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetSupportedLocalesResponse)
+	err := c.cc.Invoke(ctx, CoreService_GetSupportedLocales_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // CoreServiceServer is the server API for CoreService service.
 // All implementations must embed UnimplementedCoreServiceServer
 // for forward compatibility.
@@ -117,6 +165,10 @@ type CoreServiceServer interface {
 	GetStreams(context.Context, *GetStreamsRequest) (*GetStreamsResponse, error)
 	GetChapterContent(context.Context, *GetChapterContentRequest) (*GetChapterContentResponse, error)
 	ListPlugins(context.Context, *ListPluginsRequest) (*ListPluginsResponse, error)
+	ListThemes(context.Context, *ListThemesRequest) (*ListThemesResponse, error)
+	GetActiveTheme(context.Context, *GetActiveThemeRequest) (*GetActiveThemeResponse, error)
+	SetActiveTheme(context.Context, *SetActiveThemeRequest) (*SetActiveThemeResponse, error)
+	GetSupportedLocales(context.Context, *GetSupportedLocalesRequest) (*GetSupportedLocalesResponse, error)
 	mustEmbedUnimplementedCoreServiceServer()
 }
 
@@ -144,6 +196,18 @@ func (UnimplementedCoreServiceServer) GetChapterContent(context.Context, *GetCha
 }
 func (UnimplementedCoreServiceServer) ListPlugins(context.Context, *ListPluginsRequest) (*ListPluginsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListPlugins not implemented")
+}
+func (UnimplementedCoreServiceServer) ListThemes(context.Context, *ListThemesRequest) (*ListThemesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListThemes not implemented")
+}
+func (UnimplementedCoreServiceServer) GetActiveTheme(context.Context, *GetActiveThemeRequest) (*GetActiveThemeResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetActiveTheme not implemented")
+}
+func (UnimplementedCoreServiceServer) SetActiveTheme(context.Context, *SetActiveThemeRequest) (*SetActiveThemeResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetActiveTheme not implemented")
+}
+func (UnimplementedCoreServiceServer) GetSupportedLocales(context.Context, *GetSupportedLocalesRequest) (*GetSupportedLocalesResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetSupportedLocales not implemented")
 }
 func (UnimplementedCoreServiceServer) mustEmbedUnimplementedCoreServiceServer() {}
 func (UnimplementedCoreServiceServer) testEmbeddedByValue()                     {}
@@ -274,6 +338,78 @@ func _CoreService_ListPlugins_Handler(srv interface{}, ctx context.Context, dec 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _CoreService_ListThemes_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListThemesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CoreServiceServer).ListThemes(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CoreService_ListThemes_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CoreServiceServer).ListThemes(ctx, req.(*ListThemesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _CoreService_GetActiveTheme_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetActiveThemeRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CoreServiceServer).GetActiveTheme(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CoreService_GetActiveTheme_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CoreServiceServer).GetActiveTheme(ctx, req.(*GetActiveThemeRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _CoreService_SetActiveTheme_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetActiveThemeRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CoreServiceServer).SetActiveTheme(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CoreService_SetActiveTheme_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CoreServiceServer).SetActiveTheme(ctx, req.(*SetActiveThemeRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _CoreService_GetSupportedLocales_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetSupportedLocalesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CoreServiceServer).GetSupportedLocales(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CoreService_GetSupportedLocales_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CoreServiceServer).GetSupportedLocales(ctx, req.(*GetSupportedLocalesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // CoreService_ServiceDesc is the grpc.ServiceDesc for CoreService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -304,6 +440,22 @@ var CoreService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListPlugins",
 			Handler:    _CoreService_ListPlugins_Handler,
+		},
+		{
+			MethodName: "ListThemes",
+			Handler:    _CoreService_ListThemes_Handler,
+		},
+		{
+			MethodName: "GetActiveTheme",
+			Handler:    _CoreService_GetActiveTheme_Handler,
+		},
+		{
+			MethodName: "SetActiveTheme",
+			Handler:    _CoreService_SetActiveTheme_Handler,
+		},
+		{
+			MethodName: "GetSupportedLocales",
+			Handler:    _CoreService_GetSupportedLocales_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
