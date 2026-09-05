@@ -90,3 +90,41 @@ func TestManagerLifecycle(t *testing.T) {
 		t.Fatal("expected manager to be empty after close")
 	}
 }
+
+func TestManagerUnregisterAndHas(t *testing.T) {
+	mgr := plugin.NewManager()
+
+	c1 := &dummyClient{
+		manifest: &pluginv1.PluginManifest{
+			Id: "test-plugin",
+		},
+	}
+
+	if mgr.Has("test-plugin") {
+		t.Fatal("expected Has to be false before register")
+	}
+
+	if err := mgr.Register(c1); err != nil {
+		t.Fatalf("unexpected register error: %v", err)
+	}
+
+	if !mgr.Has("test-plugin") {
+		t.Fatal("expected Has to be true after register")
+	}
+
+	if err := mgr.Unregister("test-plugin"); err != nil {
+		t.Fatalf("unexpected unregister error: %v", err)
+	}
+
+	if !c1.closed {
+		t.Fatal("expected unregister to close client")
+	}
+
+	if mgr.Has("test-plugin") {
+		t.Fatal("expected Has to be false after unregister")
+	}
+
+	if err := mgr.Unregister("test-plugin"); err == nil {
+		t.Fatal("expected error unregistering non-existent plugin")
+	}
+}

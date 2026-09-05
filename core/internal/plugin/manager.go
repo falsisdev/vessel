@@ -57,6 +57,26 @@ func (m *Manager) Get(id string) (Client, error) {
 	return client, nil
 }
 
+func (m *Manager) Unregister(id string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	client, exists := m.plugins[id]
+	if !exists {
+		return fmt.Errorf("%w: %s", ErrPluginNotFound, id)
+	}
+
+	delete(m.plugins, id)
+	return client.Close()
+}
+
+func (m *Manager) Has(id string) bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	_, exists := m.plugins[id]
+	return exists
+}
+
 func (m *Manager) ListByDomainAndCapability(domain pluginv1.Domain, cap pluginv1.Capability) []Client {
 	m.mu.RLock()
 	defer m.mu.RUnlock()

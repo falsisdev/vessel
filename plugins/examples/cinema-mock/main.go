@@ -31,6 +31,7 @@ func (p *MockCinemaPlugin) GetManifest(ctx context.Context, req *pluginv1.GetMan
 				pluginv1.Capability_CAPABILITY_STREAMS,
 			},
 			ProtocolVersion: "1.0.0",
+			IsBuiltin:       false,
 		},
 	}, nil
 }

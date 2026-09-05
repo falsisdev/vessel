@@ -1,0 +1,8 @@
+{
+  "id": "com.vessel.cinema.mock",
+  "name": "Mock Cinema Provider",
+  "executable_path": "./cinema-mock",
+  "args": [],
+  "is_builtin": false,
+  "enabled": true
+}

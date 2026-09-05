@@ -52,6 +52,7 @@ message PluginManifest {
   Domain domain = 6;
   repeated Capability capabilities = 7;
   string protocol_version = 8;
+  bool is_builtin = 9;
 }
 
 message GetManifestRequest {}

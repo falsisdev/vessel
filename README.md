@@ -46,15 +46,27 @@ Vessel is an umbrella, local-first, modular digital media consumption platform.
 ./scripts/test.sh
 ```
 
-### 3. Run Example Cinema Plugin
+### 3. Run with Managed Subprocess (Recommended)
+
+Build the mock plugin once:
+```bash
+go build -o ./bin/cinema-mock ./plugins/examples/cinema-mock
+```
+
+Query with Vessel Core (Core automatically allocates a dynamic port, launches the subprocess, handshakes over gRPC, executes queries, and gracefully stops):
+```bash
+go run ./core/cmd/core -plugin-bin ./bin/cinema-mock -plugin-id com.vessel.cinema.mock -search Batman -oneshot
+```
+
+### 4. Alternative: Standalone Remote Plugin
 
 In a separate terminal:
 ```bash
 go run ./plugins/examples/cinema-mock -port 50051
 ```
 
-### 4. Query with Vessel Core
-
+Query with Vessel Core:
 ```bash
 go run ./core/cmd/core -plugin-addr 127.0.0.1:50051 -search Batman
 ```
+

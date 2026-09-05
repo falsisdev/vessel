@@ -303,6 +303,7 @@ type PluginManifest struct {
 	Domain          Domain                 `protobuf:"varint,6,opt,name=domain,proto3,enum=plugin.v1.Domain" json:"domain,omitempty"`
 	Capabilities    []Capability           `protobuf:"varint,7,rep,packed,name=capabilities,proto3,enum=plugin.v1.Capability" json:"capabilities,omitempty"`
 	ProtocolVersion string                 `protobuf:"bytes,8,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
+	IsBuiltin       bool                   `protobuf:"varint,9,opt,name=is_builtin,json=isBuiltin,proto3" json:"is_builtin,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -391,6 +392,13 @@ func (x *PluginManifest) GetProtocolVersion() string {
 		return x.ProtocolVersion
 	}
 	return ""
+}
+
+func (x *PluginManifest) GetIsBuiltin() bool {
+	if x != nil {
+		return x.IsBuiltin
+	}
+	return false
 }
 
 type GetManifestRequest struct {
@@ -1253,7 +1261,7 @@ var File_plugin_v1_plugin_proto protoreflect.FileDescriptor
 
 const file_plugin_v1_plugin_proto_rawDesc = "" +
 	"\n" +
-	"\x16plugin/v1/plugin.proto\x12\tplugin.v1\"\x99\x02\n" +
+	"\x16plugin/v1/plugin.proto\x12\tplugin.v1\"\xb8\x02\n" +
 	"\x0ePluginManifest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x18\n" +
@@ -1262,7 +1270,9 @@ const file_plugin_v1_plugin_proto_rawDesc = "" +
 	"\x06author\x18\x05 \x01(\tR\x06author\x12)\n" +
 	"\x06domain\x18\x06 \x01(\x0e2\x11.plugin.v1.DomainR\x06domain\x129\n" +
 	"\fcapabilities\x18\a \x03(\x0e2\x15.plugin.v1.CapabilityR\fcapabilities\x12)\n" +
-	"\x10protocol_version\x18\b \x01(\tR\x0fprotocolVersion\"\x14\n" +
+	"\x10protocol_version\x18\b \x01(\tR\x0fprotocolVersion\x12\x1d\n" +
+	"\n" +
+	"is_builtin\x18\t \x01(\bR\tisBuiltin\"\x14\n" +
 	"\x12GetManifestRequest\"L\n" +
 	"\x13GetManifestResponse\x125\n" +
 	"\bmanifest\x18\x01 \x01(\v2\x19.plugin.v1.PluginManifestR\bmanifest\"9\n" +
