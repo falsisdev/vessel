@@ -96,15 +96,36 @@ func (s *CatalogService) GetCatalogs(ctx context.Context, domain pluginv1.Domain
 			queries = []catalogQueryDef{
 				{
 					id:          fmt.Sprintf("%s-popular", pID),
-					title:       fmt.Sprintf("%s • Popüler Manga & Webtoon", pName),
+					title:       fmt.Sprintf("%s • Popüler İçerikler", pName),
 					catalogType: catalog.CatalogTypePopular,
 					query:       "popular",
 				},
 				{
 					id:          fmt.Sprintf("%s-latest", pID),
-					title:       fmt.Sprintf("%s • Yeni Çıkanlar & Trendler", pName),
+					title:       fmt.Sprintf("%s • Son Oluşturulan İçerikler", pName),
 					catalogType: catalog.CatalogTypeLatest,
 					query:       "latest",
+				},
+			}
+		} else if pDomain == pluginv1.Domain_DOMAIN_IPTV {
+			queries = []catalogQueryDef{
+				{
+					id:          fmt.Sprintf("%s-popular", pID),
+					title:       fmt.Sprintf("%s • Popüler Kanallar", pName),
+					catalogType: catalog.CatalogTypePopular,
+					query:       "popular",
+				},
+				{
+					id:          fmt.Sprintf("%s-news", pID),
+					title:       fmt.Sprintf("%s • Haber & Bilgi", pName),
+					catalogType: catalog.CatalogTypeFeatured,
+					query:       "news",
+				},
+				{
+					id:          fmt.Sprintf("%s-sports", pID),
+					title:       fmt.Sprintf("%s • Spor & Eğlence", pName),
+					catalogType: catalog.CatalogTypeLatest,
+					query:       "sports",
 				},
 			}
 		} else {

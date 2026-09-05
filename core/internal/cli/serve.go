@@ -25,6 +25,7 @@ import (
 	"github.com/falsisdev/vessel/pkg/config"
 	cinemasisProvider "github.com/falsisdev/vessel/plugins/cinemasis/provider"
 	cinemasisTMDB "github.com/falsisdev/vessel/plugins/cinemasis/tmdb"
+	iptvProvider "github.com/falsisdev/vessel/plugins/iptv/provider"
 	mangileProvider "github.com/falsisdev/vessel/plugins/mangile/provider"
 	mangileSanity "github.com/falsisdev/vessel/plugins/mangile/sanity"
 )
@@ -116,6 +117,13 @@ func RunServer(args []string) error {
 	sanityClient := mangileSanity.NewClient(sanityPID, sanityTok, sanityOpts...)
 	mangileSvc := mangileProvider.NewMangileService(sanityClient)
 	if inProcClient, err := plugin.NewInProcessClient(mangileSvc); err == nil {
+		if err := pluginManager.Register(inProcClient); err == nil {
+			slog.Info("Registered bundled in-process plugin", "id", inProcClient.Manifest().Id, "name", inProcClient.Manifest().Name)
+		}
+	}
+
+	iptvSvc := iptvProvider.NewIPTVService()
+	if inProcClient, err := plugin.NewInProcessClient(iptvSvc); err == nil {
 		if err := pluginManager.Register(inProcClient); err == nil {
 			slog.Info("Registered bundled in-process plugin", "id", inProcClient.Manifest().Id, "name", inProcClient.Manifest().Name)
 		}

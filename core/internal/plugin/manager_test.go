@@ -132,3 +132,48 @@ func TestManagerUnregisterAndHas(t *testing.T) {
 		t.Fatal("expected error unregistering non-existent plugin")
 	}
 }
+
+func TestManagerEnableDisable(t *testing.T) {
+	mgr := plugin.NewManager()
+	c1 := &dummyClient{
+		manifest: &pluginv1.PluginManifest{
+			Id:           "p-toggle",
+			Domain:       pluginv1.Domain_DOMAIN_CINEMA,
+			Capabilities: []pluginv1.Capability{pluginv1.Capability_CAPABILITY_SEARCH},
+		},
+	}
+
+	if err := mgr.Register(c1); err != nil {
+		t.Fatalf("unexpected register error: %v", err)
+	}
+
+	if !mgr.IsEnabled("p-toggle") {
+		t.Fatal("expected plugin to be enabled by default")
+	}
+
+	// Disable
+	if err := mgr.SetEnabled("p-toggle", false); err != nil {
+		t.Fatalf("unexpected SetEnabled false error: %v", err)
+	}
+	if mgr.IsEnabled("p-toggle") {
+		t.Fatal("expected plugin to be disabled")
+	}
+
+	list := mgr.ListByDomainAndCapability(pluginv1.Domain_DOMAIN_CINEMA, pluginv1.Capability_CAPABILITY_SEARCH)
+	if len(list) != 0 {
+		t.Fatalf("expected 0 items for disabled plugin, got %d", len(list))
+	}
+
+	// Re-enable
+	if err := mgr.SetEnabled("p-toggle", true); err != nil {
+		t.Fatalf("unexpected SetEnabled true error: %v", err)
+	}
+	if !mgr.IsEnabled("p-toggle") {
+		t.Fatal("expected plugin to be enabled again")
+	}
+
+	list = mgr.ListByDomainAndCapability(pluginv1.Domain_DOMAIN_CINEMA, pluginv1.Capability_CAPABILITY_SEARCH)
+	if len(list) != 1 {
+		t.Fatalf("expected 1 item for re-enabled plugin, got %d", len(list))
+	}
+}

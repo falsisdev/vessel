@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -129,6 +130,42 @@ func (s *CinemasisService) GetMetadata(ctx context.Context, req *pluginv1.GetMet
 			genreIDs = append(genreIDs, g.ID)
 		}
 
+		extra := map[string]string{
+			"backdrop_url": s.client.BuildBackdropURL(movie.BackdropPath),
+			"tagline":      movie.Tagline,
+			"rating":       fmt.Sprintf("%.1f", movie.VoteAverage),
+			"vote_count":   strconv.Itoa(movie.VoteCount),
+			"runtime":      strconv.Itoa(movie.Runtime),
+			"status":       movie.Status,
+			"trailer_key":  extractTrailerKey(movie.Videos.Results),
+			"directors":    extractDirectors(movie.Credits.Crew),
+		}
+		if len(movie.Credits.Cast) > 0 {
+			var castList []map[string]string
+			limit := len(movie.Credits.Cast)
+			if limit > 12 {
+				limit = 12
+			}
+			for i := 0; i < limit; i++ {
+				c := movie.Credits.Cast[i]
+				castList = append(castList, map[string]string{
+					"name":        c.Name,
+					"character":   c.Character,
+					"profile_url": s.client.BuildPosterURL(c.ProfilePath),
+				})
+			}
+			if castJSON, err := json.Marshal(castList); err == nil {
+				extra["cast_json"] = string(castJSON)
+			}
+		}
+		if len(movie.ProductionCompanies) > 0 {
+			var comps []string
+			for _, pc := range movie.ProductionCompanies {
+				comps = append(comps, pc.Name)
+			}
+			extra["production_companies"] = strings.Join(comps, ", ")
+		}
+
 		details := &pluginv1.MediaDetails{
 			Id:        req.MediaId,
 			Title:     movie.Title,
@@ -140,6 +177,7 @@ func (s *CinemasisService) GetMetadata(ctx context.Context, req *pluginv1.GetMet
 			ExternalIds: &pluginv1.ExternalIDs{
 				TmdbId: strconv.Itoa(movie.ID),
 				ImdbId: movie.ExternalIDs.IMDbID,
+				Extra:  extra,
 			},
 		}
 		return &pluginv1.GetMetadataResponse{Details: details}, nil
@@ -160,6 +198,44 @@ func (s *CinemasisService) GetMetadata(ctx context.Context, req *pluginv1.GetMet
 			genreIDs = append(genreIDs, g.ID)
 		}
 
+		extra := map[string]string{
+			"backdrop_url": s.client.BuildBackdropURL(tv.BackdropPath),
+			"tagline":      tv.Tagline,
+			"rating":       fmt.Sprintf("%.1f", tv.VoteAverage),
+			"vote_count":   strconv.Itoa(tv.VoteCount),
+			"status":       tv.Status,
+			"trailer_key":  extractTrailerKey(tv.Videos.Results),
+			"directors":    extractDirectors(tv.Credits.Crew),
+		}
+		if len(tv.EpisodeRunTime) > 0 {
+			extra["runtime"] = strconv.Itoa(tv.EpisodeRunTime[0])
+		}
+		if len(tv.Credits.Cast) > 0 {
+			var castList []map[string]string
+			limit := len(tv.Credits.Cast)
+			if limit > 12 {
+				limit = 12
+			}
+			for i := 0; i < limit; i++ {
+				c := tv.Credits.Cast[i]
+				castList = append(castList, map[string]string{
+					"name":        c.Name,
+					"character":   c.Character,
+					"profile_url": s.client.BuildPosterURL(c.ProfilePath),
+				})
+			}
+			if castJSON, err := json.Marshal(castList); err == nil {
+				extra["cast_json"] = string(castJSON)
+			}
+		}
+		if len(tv.ProductionCompanies) > 0 {
+			var comps []string
+			for _, pc := range tv.ProductionCompanies {
+				comps = append(comps, pc.Name)
+			}
+			extra["production_companies"] = strings.Join(comps, ", ")
+		}
+
 		details := &pluginv1.MediaDetails{
 			Id:        req.MediaId,
 			Title:     tv.Name,
@@ -171,9 +247,11 @@ func (s *CinemasisService) GetMetadata(ctx context.Context, req *pluginv1.GetMet
 			ExternalIds: &pluginv1.ExternalIDs{
 				TmdbId: strconv.Itoa(tv.ID),
 				ImdbId: tv.ExternalIDs.IMDbID,
+				Extra:  extra,
 			},
 		}
 
+		var uiSeasons []map[string]any
 		for _, sOverview := range tv.Seasons {
 			if sOverview.SeasonNumber <= 0 {
 				continue // skip specials season 0 by default
@@ -187,6 +265,7 @@ func (s *CinemasisService) GetMetadata(ctx context.Context, req *pluginv1.GetMet
 				SeasonNumber: int32(seasonDetails.SeasonNumber),
 				Title:        seasonDetails.Name,
 			}
+			var uiEpisodes []map[string]any
 			for _, ep := range seasonDetails.Episodes {
 				season.Episodes = append(season.Episodes, &pluginv1.Episode{
 					EpisodeNumber:   int32(ep.EpisodeNumber),
@@ -194,8 +273,26 @@ func (s *CinemasisService) GetMetadata(ctx context.Context, req *pluginv1.GetMet
 					Overview:        ep.Overview,
 					DurationSeconds: int64(ep.Runtime * 60),
 				})
+				uiEpisodes = append(uiEpisodes, map[string]any{
+					"episode_number":   ep.EpisodeNumber,
+					"season_number":    seasonDetails.SeasonNumber,
+					"title":            ep.Name,
+					"overview":         ep.Overview,
+					"still_url":        s.client.BuildStillURL(ep.StillPath),
+					"air_date":         ep.AirDate,
+					"vote_average":     ep.VoteAverage,
+					"duration_seconds": ep.Runtime * 60,
+				})
 			}
 			details.Seasons = append(details.Seasons, season)
+			uiSeasons = append(uiSeasons, map[string]any{
+				"season_number": seasonDetails.SeasonNumber,
+				"title":         seasonDetails.Name,
+				"episodes":      uiEpisodes,
+			})
+		}
+		if seasonsJSON, err := json.Marshal(uiSeasons); err == nil {
+			extra["seasons_json"] = string(seasonsJSON)
 		}
 
 		return &pluginv1.GetMetadataResponse{Details: details}, nil
@@ -239,3 +336,26 @@ func parseYear(dateStr string) int32 {
 	}
 	return int32(year)
 }
+
+func extractDirectors(crew []tmdb.CrewMember) string {
+	var dirs []string
+	for _, c := range crew {
+		if strings.EqualFold(c.Job, "Director") {
+			dirs = append(dirs, c.Name)
+		}
+	}
+	return strings.Join(dirs, ", ")
+}
+
+func extractTrailerKey(videos []tmdb.VideoResult) string {
+	for _, v := range videos {
+		if strings.EqualFold(v.Site, "YouTube") && (strings.EqualFold(v.Type, "Trailer") || strings.EqualFold(v.Type, "Teaser")) {
+			return v.Key
+		}
+	}
+	if len(videos) > 0 && strings.EqualFold(videos[0].Site, "YouTube") {
+		return videos[0].Key
+	}
+	return ""
+}
+

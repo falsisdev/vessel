@@ -4,7 +4,7 @@
 const I18N_STRINGS = {
   en: {
     nav_cinema: "Cinema",
-    nav_reading: "Manga & Comics",
+    nav_reading: "Manga & E-Books",
     nav_live: "Live TV",
     nav_iptv: "IPTV",
     nav_library: "My Library",
@@ -12,7 +12,7 @@ const I18N_STRINGS = {
     nav_settings: "Settings",
     section_continue: "Continue Where You Left Off",
     section_discover: "Discover Media",
-    search_placeholder: "Search movies, series, manga, anime...",
+    search_placeholder: "Search movies, series, manga, anime, IPTV...",
     search_results_title: "Search Results",
     btn_back: "Back",
     btn_play: "Play Now",
@@ -27,6 +27,11 @@ const I18N_STRINGS = {
     btn_enable: "Enable",
     btn_disable: "Disable",
     btn_active: "Active",
+    btn_retry: "Retry",
+    btn_watch_trailer: "Watch Trailer",
+    cast: "Top Cast",
+    directors: "Director",
+    start_live: "Start Live Stream",
     pill_all: "All",
     pill_movies: "Movies",
     pill_series: "Series",
@@ -56,7 +61,7 @@ const I18N_STRINGS = {
     plugins_install_local_title: "Install from Local Directory",
     plugins_install_local_desc: "Specify a local plugin binary or manifest path on your device.",
     plugins_curated_title: "Curated Directory",
-    plugins_curated_desc: "Discover verified official and community extensions for Vessel.",
+    plugins_curated_desc: "Discover verified official extensions for Vessel.",
     plugin_builtin: "Built-in",
     plugin_external: "External Process",
     empty_domain_title: "No plugins active for this domain",
@@ -70,27 +75,29 @@ const I18N_STRINGS = {
     chapters: "Chapters",
     chapter: "Chapter",
     streams_title: "Available Streams & Torrents",
-    streams_loading: "Resolving highest quality stream...",
+    streams_loading: "Searching available stream sources...",
     no_streams: "No streams currently found.",
+    no_episode_streams: "No streams found for this episode.",
     synopsis: "Overview",
-    theme_mangile: "Default Dark",
-    theme_mangile_mauve: "Mauve Theme",
-    theme_mangile_stone: "Stone Theme",
-    theme_mangile_slate: "Slate Theme",
-    theme_mangile_neutral: "Neutral Theme",
-    theme_mangile_zinc: "Zinc Theme",
-    theme_mangile_sunset: "Sunset Theme",
-    theme_mangile_desert: "Desert Theme",
-    theme_mangile_ice: "Ice Theme",
-    theme_midnight_blue: "Midnight Blue",
-    theme_ember: "Ember Warm",
-    theme_amethyst: "Amethyst Purple",
-    theme_forest: "Forest Emerald",
-    theme_light_clean: "Light Clean"
+    theme_vessel_dark: "Vessel Dark (Default)",
+    theme_vessel_light: "Vessel Light",
+    theme_midnight_oled: "Midnight OLED",
+    theme_catppuccin: "Catppuccin",
+    theme_nord: "Nord",
+    theme_dracula: "Dracula",
+    theme_mangile: "Mangile Duman",
+    theme_mangile_mauve: "Mangile Leylak",
+    theme_mangile_stone: "Mangile Kaya",
+    theme_mangile_zinc: "Mangile Çinko",
+    theme_mangile_slate: "Mangile Arduvaz",
+    theme_mangile_olive: "Mangile Zeytin",
+    theme_mangile_taupe: "Mangile Boz",
+    theme_mangile_gray: "Mangile Kır",
+    theme_mangile_neutral: "Mangile Yavan"
   },
   tr: {
     nav_cinema: "Sinema",
-    nav_reading: "Manga & Çizgi Roman",
+    nav_reading: "Manga & E-Kitap",
     nav_live: "Canlı Yayın",
     nav_iptv: "IPTV",
     nav_library: "Kütüphanem",
@@ -98,7 +105,7 @@ const I18N_STRINGS = {
     nav_settings: "Ayarlar",
     section_continue: "Kaldığın Yerden Devam Et",
     section_discover: "Medya Keşfet",
-    search_placeholder: "Film, dizi, manga, anime ara...",
+    search_placeholder: "Film, dizi, manga, anime, IPTV ara...",
     search_results_title: "Arama Sonuçları",
     btn_back: "Geri",
     btn_play: "Hemen İzle",
@@ -113,6 +120,11 @@ const I18N_STRINGS = {
     btn_enable: "Etkinleştir",
     btn_disable: "Devre Dışı",
     btn_active: "Aktif",
+    btn_retry: "Tekrar Dene",
+    btn_watch_trailer: "Fragman İzle",
+    cast: "Oyuncular",
+    directors: "Yönetmen",
+    start_live: "Canlı Yayını Başlat",
     pill_all: "Tümü",
     pill_movies: "Filmler",
     pill_series: "Diziler",
@@ -128,7 +140,7 @@ const I18N_STRINGS = {
     status_favorites: "Favoriler",
     settings_title: "Platform Ayarları",
     settings_theme_title: "Tema Motoru",
-    settings_theme_desc: "Dahili nötr paletlerden seçin veya topluluk CSS temalarını uygulayın.",
+    settings_theme_desc: "Dahili 15 zengin temadan birini seçin veya renkleri anında değiştirin.",
     settings_debrid_title: "Torrent & Debrid Akış Motoru",
     settings_debrid_desc: "Yüksek hızlı bulut torrent akışı için Real-Debrid veya TorBox bağlayın.",
     settings_plugins_title: "Bağlı Eklentiler",
@@ -142,7 +154,7 @@ const I18N_STRINGS = {
     plugins_install_local_title: "Yerel Dizinden Yükle",
     plugins_install_local_desc: "Cihazınızdaki yerel eklenti ikili dosyasını veya manifest yolunu belirtin.",
     plugins_curated_title: "Önerilen Eklenti Kataloğu",
-    plugins_curated_desc: "Vessel için doğrulanmış resmi ve topluluk eklentilerini keşfedin.",
+    plugins_curated_desc: "Vessel için doğrulanmış resmi eklentileri keşfedin.",
     plugin_builtin: "Dahili (Gömülü)",
     plugin_external: "Harici Süreç",
     empty_domain_title: "Bu alan için henüz aktif bir eklenti yok",
@@ -156,27 +168,29 @@ const I18N_STRINGS = {
     chapters: "Bölümler",
     chapter: "Bölüm",
     streams_title: "Mevcut Akış Kaynakları & Torrentler",
-    streams_loading: "En yüksek kaliteli akış çözümleniyor...",
+    streams_loading: "Kullanılabilir akış kaynakları aranıyor...",
     no_streams: "Şu anda uygun akış kaynağı bulunamadı.",
+    no_episode_streams: "Bu bölüm için akış kaynağı bulunamadı.",
     synopsis: "Özet",
-    theme_mangile: "Varsayılan Koyu",
-    theme_mangile_mauve: "Leylak Teması",
-    theme_mangile_stone: "Taş Teması",
-    theme_mangile_slate: "Kayrak Teması",
-    theme_mangile_neutral: "Nötr Teması",
-    theme_mangile_zinc: "Çinko Teması",
-    theme_mangile_sunset: "Gün Batımı Teması",
-    theme_mangile_desert: "Çöl Teması",
-    theme_mangile_ice: "Buz Teması",
-    theme_midnight_blue: "Gece Mavisi",
-    theme_ember: "Sıcak Kor",
-    theme_amethyst: "Ametist Moru",
-    theme_forest: "Zümrüt Orman",
-    theme_light_clean: "Temiz Açık"
+    theme_vessel_dark: "Vessel Dark (Varsayılan)",
+    theme_vessel_light: "Vessel Light",
+    theme_midnight_oled: "Midnight OLED",
+    theme_catppuccin: "Catppuccin",
+    theme_nord: "Nord",
+    theme_dracula: "Dracula",
+    theme_mangile: "Mangile Duman",
+    theme_mangile_mauve: "Mangile Leylak",
+    theme_mangile_stone: "Mangile Kaya",
+    theme_mangile_zinc: "Mangile Çinko",
+    theme_mangile_slate: "Mangile Arduvaz",
+    theme_mangile_olive: "Mangile Zeytin",
+    theme_mangile_taupe: "Mangile Boz",
+    theme_mangile_gray: "Mangile Kır",
+    theme_mangile_neutral: "Mangile Yavan"
   },
   de: {
     nav_cinema: "Kino",
-    nav_reading: "Manga & Comics",
+    nav_reading: "Manga & E-Books",
     nav_live: "Live-TV",
     nav_iptv: "IPTV",
     nav_library: "Meine Bibliothek",
@@ -262,7 +276,7 @@ const I18N_STRINGS = {
   },
   fr: {
     nav_cinema: "Cinéma",
-    nav_reading: "Manga & Bandes dessinées",
+    nav_reading: "Manga & E-Books",
     nav_live: "TV en direct",
     nav_iptv: "IPTV",
     nav_library: "Ma Bibliothèque",
@@ -348,7 +362,7 @@ const I18N_STRINGS = {
   },
   es: {
     nav_cinema: "Cine",
-    nav_reading: "Manga y Cómics",
+    nav_reading: "Manga y Libros",
     nav_live: "TV en Vivo",
     nav_iptv: "IPTV",
     nav_library: "Mi Biblioteca",
@@ -434,7 +448,7 @@ const I18N_STRINGS = {
   },
   pt: {
     nav_cinema: "Cinema",
-    nav_reading: "Mangás e HQs",
+    nav_reading: "Mangás e E-books",
     nav_live: "TV ao Vivo",
     nav_iptv: "IPTV",
     nav_library: "Minha Biblioteca",
@@ -520,7 +534,7 @@ const I18N_STRINGS = {
   },
   ru: {
     nav_cinema: "Кино",
-    nav_reading: "Манга и Комиксы",
+    nav_reading: "Манга и Электронные книги",
     nav_live: "ТВ онлайн",
     nav_iptv: "IPTV",
     nav_library: "Моя Библиотека",
@@ -606,7 +620,7 @@ const I18N_STRINGS = {
   },
   ja: {
     nav_cinema: "映画",
-    nav_reading: "マンガ & コミック",
+    nav_reading: "マンガ & 電子書籍",
     nav_live: "ライブ配信",
     nav_iptv: "IPTV",
     nav_library: "マイライブラリ",
@@ -692,7 +706,7 @@ const I18N_STRINGS = {
   },
   zh: {
     nav_cinema: "电影",
-    nav_reading: "漫画与绘本",
+    nav_reading: "漫画与电子书",
     nav_live: "电视直播",
     nav_iptv: "IPTV",
     nav_library: "我的媒体库",
@@ -778,7 +792,7 @@ const I18N_STRINGS = {
   },
   ar: {
     nav_cinema: "السينما",
-    nav_reading: "المانغا والقصص",
+    nav_reading: "المانغا والكتب الإلكترونية",
     nav_live: "البث المباشر",
     nav_iptv: "IPTV",
     nav_library: "مكتبتي",
@@ -864,7 +878,7 @@ const I18N_STRINGS = {
   },
   fa: {
     nav_cinema: "سینما",
-    nav_reading: "مانگا و کمیک",
+    nav_reading: "مانگا و کتاب الکترونیکی",
     nav_live: "پخش زنده",
     nav_iptv: "IPTV",
     nav_library: "کتابخانه من",
@@ -992,7 +1006,7 @@ class VesselApp {
       });
     }
 
-    // Search input
+    // Search input (Full-page multi-domain search)
     const searchInput = document.getElementById("search-input");
     const clearBtn = document.getElementById("clear-search");
 
@@ -1003,17 +1017,60 @@ class VesselApp {
       clearTimeout(this.searchDebounceTimer);
       this.searchDebounceTimer = setTimeout(() => {
         if (q === "") {
-          this.clearSearch();
+          this.closeSearchView();
         } else {
-          this.performSearch(q);
+          this.openSearchView(q);
         }
       }, 350);
+    });
+
+    searchInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        const q = searchInput.value.trim();
+        if (q) {
+          clearTimeout(this.searchDebounceTimer);
+          this.openSearchView(q);
+        }
+      } else if (e.key === "Escape") {
+        this.closeSearchView();
+      }
     });
 
     clearBtn.addEventListener("click", () => {
       searchInput.value = "";
       clearBtn.classList.add("hidden");
-      this.clearSearch();
+      this.closeSearchView();
+    });
+
+    // Search back button
+    document.getElementById("search-back-btn")?.addEventListener("click", () => {
+      this.closeSearchView();
+    });
+
+    // Search domain filter buttons
+    document.querySelectorAll("#search-domain-filters .tab").forEach(tab => {
+      tab.addEventListener("click", () => {
+        document.querySelectorAll("#search-domain-filters .tab").forEach(t => t.classList.remove("active"));
+        tab.classList.add("active");
+        this.searchDomainFilter = tab.dataset.searchDomain || "all";
+        this.renderSearchResults();
+      });
+    });
+
+    // Global keyboard shortcuts
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "/" && document.activeElement !== searchInput) {
+        e.preventDefault();
+        searchInput.focus();
+      } else if (e.key === "Escape") {
+        const searchView = document.getElementById("search-view");
+        const detailsView = document.getElementById("details-view");
+        if (searchView && !searchView.classList.contains("hidden")) {
+          this.closeSearchView();
+        } else if (detailsView && !detailsView.classList.contains("hidden")) {
+          this.closeDetailsView();
+        }
+      }
     });
 
     // Details Back Button
@@ -1180,20 +1237,23 @@ class VesselApp {
     try {
       const res = await fetch("/api/themes");
       if (!res.ok) return;
-      const themes = await res.json();
+      const data = await res.json();
+      const themes = data.themes || (Array.isArray(data) ? data : []);
 
       container.innerHTML = "";
       themes.forEach(t => {
+        const isCurrent = this.activeTheme && (this.activeTheme.theme?.id === t.id || this.activeTheme.id === t.id);
         const item = document.createElement("div");
-        item.className = `theme-item ${this.activeTheme && this.activeTheme.id === t.id ? "active" : ""}`;
+        item.className = `theme-item ${isCurrent ? "active" : ""}`;
 
         // Localized theme name
         const transKey = "theme_" + t.id.replace(/-/g, "_");
         const displayName = this.t(transKey) !== transKey ? this.t(transKey) : (t.display_name || t.name);
 
-        const primaryColor = this.getThemeColor(t.id, "primary");
-        const surfaceColor = this.getThemeColor(t.id, "surface");
-        const baseColor = this.getThemeColor(t.id, "base");
+        const tokens = t.variants?.[0]?.tokens || {};
+        const primaryColor = tokens["accent-primary"] || this.getThemeColor(t.id, "primary");
+        const surfaceColor = tokens["bg-surface"] || this.getThemeColor(t.id, "surface");
+        const baseColor = tokens["bg-base"] || this.getThemeColor(t.id, "base");
 
         item.innerHTML = `
           <div class="theme-palette">
@@ -1217,20 +1277,21 @@ class VesselApp {
 
   getThemeColor(themeId, type) {
     const swatches = {
-      "mangile": { base: "#09090b", surface: "#18181b", primary: "#ffffff" },
-      "mangile-mauve": { base: "#120e16", surface: "#1e1824", primary: "#ffffff" },
-      "mangile-stone": { base: "#0c0a09", surface: "#1c1917", primary: "#ffffff" },
-      "mangile-slate": { base: "#020617", surface: "#0f172a", primary: "#ffffff" },
+      "vessel-dark": { base: "#0b0f17", surface: "#131a26", primary: "#6366f1" },
+      "vessel-light": { base: "#f8fafc", surface: "#ffffff", primary: "#4f46e5" },
+      "midnight-oled": { base: "#000000", surface: "#050505", primary: "#06b6d4" },
+      "catppuccin": { base: "#1e1e2e", surface: "#181825", primary: "#cba6f7" },
+      "nord": { base: "#2e3440", surface: "#3b4252", primary: "#88c0d0" },
+      "dracula": { base: "#282a36", surface: "#343746", primary: "#ff79c6" },
+      "mangile": { base: "#0c1017", surface: "#131a24", primary: "#ffffff" },
+      "mangile-mauve": { base: "#131118", surface: "#1a1722", primary: "#ffffff" },
+      "mangile-stone": { base: "#141210", surface: "#1c1917", primary: "#ffffff" },
+      "mangile-zinc": { base: "#09090b", surface: "#141417", primary: "#ffffff" },
+      "mangile-slate": { base: "#0b1120", surface: "#141d2f", primary: "#ffffff" },
+      "mangile-olive": { base: "#0f120e", surface: "#161c15", primary: "#ffffff" },
+      "mangile-taupe": { base: "#141211", surface: "#1d1a19", primary: "#ffffff" },
+      "mangile-gray": { base: "#111827", surface: "#1f2937", primary: "#ffffff" },
       "mangile-neutral": { base: "#0a0a0a", surface: "#171717", primary: "#ffffff" },
-      "mangile-zinc": { base: "#09090b", surface: "#18181b", primary: "#ffffff" },
-      "mangile-sunset": { base: "#160b12", surface: "#271420", primary: "#ffffff" },
-      "mangile-desert": { base: "#140e0b", surface: "#261b15", primary: "#ffffff" },
-      "mangile-ice": { base: "#06131a", surface: "#0e2430", primary: "#ffffff" },
-      "midnight-blue": { base: "#0b0f19", surface: "#111827", primary: "#38bdf8" },
-      "ember": { base: "#18100e", surface: "#241613", primary: "#f97316" },
-      "amethyst": { base: "#140e1b", surface: "#1f152b", primary: "#a855f7" },
-      "forest": { base: "#0d1712", surface: "#13231c", primary: "#10b981" },
-      "light-clean": { base: "#f8fafc", surface: "#ffffff", primary: "#0f172a" },
     };
     return swatches[themeId]?.[type] || (type === "primary" ? "#ffffff" : "#171b24");
   }
@@ -1474,49 +1535,105 @@ class VesselApp {
     });
   }
 
-  // --- Search System ---
-  async performSearch(query) {
-    const searchSection = document.getElementById("search-results-section");
-    const grid = document.getElementById("search-media-grid");
-    const catalogsContainer = document.getElementById("catalogs-container");
+  // --- Dedicated Full-Page Multi-Domain Search System ---
+  async openSearchView(query) {
+    if (!query) return;
+    this.currentSearchQuery = query;
+    this.searchDomainFilter = this.searchDomainFilter || "all";
+
+    const searchView = document.getElementById("search-view");
+    const mainView = document.getElementById("main-view");
     const resumeSection = document.getElementById("resume-section");
+    const libraryView = document.getElementById("library-view");
+    const pluginsView = document.getElementById("plugins-view");
+    const settingsView = document.getElementById("settings-view");
+    const detailsView = document.getElementById("details-view");
 
-    searchSection.classList.remove("hidden");
-    catalogsContainer.classList.add("hidden");
-    resumeSection.classList.add("hidden");
+    if (mainView) mainView.classList.add("hidden");
+    if (resumeSection) resumeSection.classList.add("hidden");
+    if (libraryView) libraryView.classList.add("hidden");
+    if (pluginsView) pluginsView.classList.add("hidden");
+    if (settingsView) settingsView.classList.add("hidden");
+    if (detailsView) detailsView.classList.add("hidden");
+    if (searchView) searchView.classList.remove("hidden");
 
-    grid.innerHTML = `
-      <div style="grid-column: 1/-1; text-align: center; padding: 40px; color: var(--v-text-muted);">
-        <div style="font-size: 1.5rem; margin-bottom: 8px;">⏳</div>
-        <div>Searching...</div>
-      </div>
-    `;
+    window.scrollTo({ top: 0, behavior: "smooth" });
+
+    const queryTitle = document.getElementById("search-view-query-title");
+    const countEl = document.getElementById("search-view-count");
+    const grid = document.getElementById("search-full-grid");
+    const emptyNotice = document.getElementById("search-empty-notice");
+
+    if (queryTitle) queryTitle.textContent = `${this.t("search_results_title")}: "${query}"`;
+    if (countEl) countEl.textContent = "Tüm aktif eklentiler taranıyor (Sinema, Manga, IPTV)...";
+    if (emptyNotice) emptyNotice.classList.add("hidden");
+
+    if (grid) {
+      grid.innerHTML = `
+        <div style="grid-column: 1/-1; text-align: center; padding: 60px; color: var(--v-text-muted);">
+          <div style="font-size: 2rem; margin-bottom: 12px; animation: pulse-online 1.5s infinite;">⏳</div>
+          <div style="font-size: 1rem;">Tüm sağlayıcılarda aranıyor...</div>
+        </div>
+      `;
+    }
 
     try {
-      const domainNum = this.currentDomain === "reading" ? 2 : 1;
-      const res = await fetch(`/api/search?domain=${domainNum}&query=${encodeURIComponent(query)}`);
-      if (!res.ok) throw new Error("Search query failed");
+      // Query multi-domain search concurrently across all active providers (Cinema, Reading, IPTV)
+      const res = await fetch(`/api/search?domain=all&query=${encodeURIComponent(query)}`);
+      if (!res.ok) throw new Error("Arama sorgusu başarısız oldu");
       const data = await res.json();
-      const items = data.items || [];
-
-      grid.innerHTML = "";
-      if (items.length === 0) {
-        grid.innerHTML = `<div style="grid-column: 1/-1; text-align: center; padding: 40px; color: var(--v-text-muted);">${this.t("no_results")}</div>`;
-        return;
-      }
-
-      items.forEach(it => {
-        grid.appendChild(this.createMediaCard(it));
-      });
+      this.allSearchResults = data.items || [];
+      this.renderSearchResults();
     } catch (e) {
-      grid.innerHTML = `<div style="grid-column: 1/-1; text-align: center; color: var(--v-status-error); padding: 30px;">${e.message}</div>`;
+      if (grid) grid.innerHTML = `<div style="grid-column: 1/-1; text-align: center; color: var(--v-status-error); padding: 40px;">${e.message}</div>`;
+      if (countEl) countEl.textContent = "Arama hatası";
     }
   }
 
-  clearSearch() {
-    document.getElementById("search-results-section").classList.add("hidden");
-    document.getElementById("catalogs-container").classList.remove("hidden");
-    document.getElementById("resume-section").classList.remove("hidden");
+  renderSearchResults() {
+    const grid = document.getElementById("search-full-grid");
+    const countEl = document.getElementById("search-view-count");
+    const emptyNotice = document.getElementById("search-empty-notice");
+    if (!grid) return;
+
+    const all = this.allSearchResults || [];
+    const filter = this.searchDomainFilter || "all";
+
+    let filtered = all;
+    if (filter === "cinema") {
+      filtered = all.filter(it => it.domain === 1 || it.type === 1 || it.type === 2 || it.type === 3 || it.type_name === "Movie" || it.type_name === "Series" || it.type_name === "Anime");
+    } else if (filter === "reading") {
+      filtered = all.filter(it => it.domain === 2 || it.type === 4 || it.type === 5 || it.type === 6 || it.type_name === "Manga" || it.type_name === "Webtoon" || it.type_name === "Novel");
+    } else if (filter === "iptv") {
+      filtered = all.filter(it => it.domain === 7 || it.type === 7 || it.type_name === "IPTV" || (it.id && (it.id.startsWith("tr-") || it.id.startsWith("intl-"))));
+    }
+
+    grid.innerHTML = "";
+    if (countEl) {
+      countEl.textContent = `${filtered.length} sonuç bulundu (${all.length} toplam)`;
+    }
+
+    if (filtered.length === 0) {
+      if (emptyNotice) emptyNotice.classList.remove("hidden");
+      return;
+    }
+
+    if (emptyNotice) emptyNotice.classList.add("hidden");
+    filtered.forEach(it => {
+      const card = this.createMediaCard(it);
+      grid.appendChild(card);
+    });
+  }
+
+  closeSearchView() {
+    const searchView = document.getElementById("search-view");
+    if (searchView) searchView.classList.add("hidden");
+    const searchInput = document.getElementById("search-input");
+    const clearBtn = document.getElementById("clear-search");
+    if (searchInput) searchInput.value = "";
+    if (clearBtn) clearBtn.classList.add("hidden");
+
+    this.switchRoute(this.currentRoute || "cinema");
   }
 
   // --- Media Card Component ---
@@ -1537,23 +1654,26 @@ class VesselApp {
 
     const typeVal = item.type !== undefined ? item.type : (item.Type !== undefined ? item.Type : 1);
     const typeLabel = item.type_name || this.mapMediaType(typeVal);
-    const year = item.year || item.Year || (typeVal >= 4 ? "" : "2024");
-    const rating = item.rating || 8.5;
-    const isReading = this.currentDomain === "reading" || typeVal >= 4;
+    const isIPTV = typeVal === 7 || item.domain === 7 || item.type_name === "IPTV" || (item.id && (item.id.startsWith("tr-") || item.id.startsWith("intl-")));
+    const isReading = !isIPTV && (this.currentDomain === "reading" || (typeVal >= 4 && typeVal <= 6));
+    const year = item.year || item.Year || (isReading || isIPTV ? "" : "2024");
+    const rating = item.rating || (isIPTV ? "HD" : 8.5);
 
     card.dataset.type = typeLabel;
 
+    const overlayIcon = isIPTV ? "📡" : (isReading ? "📖" : "▶");
+
     card.innerHTML = `
       <div class="poster-wrapper">
-        <img src="${poster}" alt="${rawTitle}" class="poster-img" loading="lazy" onerror="this.src='https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=400'">
-        <span class="card-badge">${typeLabel}</span>
-        <div class="poster-overlay-btn">${isReading ? "📖" : "▶"}</div>
+        <img src="${poster}" alt="${rawTitle}" class="poster-img" loading="lazy" style="${isIPTV ? 'object-fit: contain; background: #000; padding: 12px;' : ''}" onerror="this.src='https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=400'">
+        <span class="card-badge" style="${isIPTV ? 'background: rgba(239, 68, 68, 0.9); color: #fff;' : ''}">${typeLabel}</span>
+        <div class="poster-overlay-btn">${overlayIcon}</div>
       </div>
       <div class="card-details">
         <div class="card-title" title="${rawTitle}">${rawTitle}</div>
         <div class="card-meta">
-          <span>${year}</span>
-          <span class="rating-badge">★ ${rating}</span>
+          <span>${year || (isIPTV ? "Canlı TV" : "")}</span>
+          <span class="rating-badge">${isIPTV ? "🔴 CANLI" : `★ ${rating}`}</span>
         </div>
       </div>
     `;
@@ -1566,7 +1686,10 @@ class VesselApp {
         poster_url: poster,
         year: year,
         type: typeVal,
-        overview: item.overview || item.Overview || ""
+        type_name: typeLabel,
+        domain: item.domain || (isIPTV ? 7 : (isReading ? 2 : 1)),
+        overview: item.overview || item.Overview || "",
+        external_ids: item.external_ids || item.ExternalIDs
       });
     });
 
@@ -1581,7 +1704,7 @@ class VesselApp {
       4: "Manga",
       5: "Webtoon",
       6: "Novel",
-      7: "Book"
+      7: "IPTV"
     };
     return map[type] || "Media";
   }
@@ -1598,6 +1721,8 @@ class VesselApp {
     document.getElementById("library-view").classList.add("hidden");
     document.getElementById("plugins-view").classList.add("hidden");
     document.getElementById("settings-view").classList.add("hidden");
+    const searchView = document.getElementById("search-view");
+    if (searchView) searchView.classList.add("hidden");
 
     detailsView.classList.remove("hidden");
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -1610,12 +1735,19 @@ class VesselApp {
     `;
 
     try {
-      const isReading = this.currentDomain === "reading" || item.type >= 4;
-      const domainNum = isReading ? 2 : 1;
+      const isIPTV = item.domain === 7 || item.type === 7 || item.type_name === "IPTV" || (item.id && (item.id.startsWith("tr-") || item.id.startsWith("intl-"))) || (item.provider_id === "com.vessel.iptv");
+      const isReading = !isIPTV && (this.currentDomain === "reading" || (item.type >= 4 && item.type <= 6));
+
+      let domainNum = 1;
+      if (isIPTV) domainNum = 7;
+      else if (isReading) domainNum = 2;
+
       const res = await fetch(`/api/media?domain=${domainNum}&provider=${encodeURIComponent(item.provider_id || "")}&id=${encodeURIComponent(item.id)}`);
       const details = res.ok ? (await res.json()) : item;
 
-      if (isReading) {
+      if (isIPTV) {
+        this.renderIPTVDetails(item, details);
+      } else if (isReading) {
         this.renderReadingDetails(item, details);
       } else {
         this.renderCinemaDetails(item, details);
@@ -1627,6 +1759,21 @@ class VesselApp {
 
   closeDetailsView() {
     document.getElementById("details-view").classList.add("hidden");
+    const video = document.getElementById("vessel-video-player");
+    if (video) {
+      video.pause();
+      video.src = "";
+    }
+    if (this.currentHlsInstance) {
+      this.currentHlsInstance.destroy();
+      this.currentHlsInstance = null;
+    }
+    const trailerBox = document.getElementById("inline-trailer-box");
+    const iframe = document.getElementById("trailer-iframe");
+    if (trailerBox && iframe) {
+      iframe.src = "";
+      trailerBox.classList.add("hidden");
+    }
     this.switchRoute(this.previousRoute || "cinema");
   }
 
@@ -1636,12 +1783,43 @@ class VesselApp {
     const poster = details.poster_url || item.poster_url;
     const year = details.year || item.year || 2024;
     const genres = details.genres || ["Cinema", "Drama"];
-    const seasons = details.seasons || [];
-    const isSeries = seasons.length > 0 || item.type === 2 || item.type === 3;
+
+    const extra = (details.external_ids && details.external_ids.extra) || (item.external_ids && item.external_ids.extra) || {};
+    const backdrop = extra.backdrop_url || details.backdrop_url || poster;
+    const tagline = extra.tagline || "";
+    const rating = extra.rating ? extra.rating : (details.vote_average ? details.vote_average.toFixed(1) : "8.5");
+    const voteCount = extra.vote_count ? `(${Number(extra.vote_count).toLocaleString()} oy)` : "";
+    const runtime = extra.runtime ? `${extra.runtime} dk` : "";
+    const status = extra.status || "";
+    const directors = extra.directors || "";
+    const trailerKey = extra.trailer_key || "";
+
+    let castList = [];
+    if (extra.cast_json) {
+      try {
+        castList = JSON.parse(extra.cast_json);
+      } catch (e) {
+        console.warn("Failed to parse cast_json", e);
+      }
+    }
+
+    let seasons = [];
+    if (extra.seasons_json) {
+      try {
+        seasons = JSON.parse(extra.seasons_json);
+      } catch (e) {
+        console.warn("Failed to parse seasons_json", e);
+      }
+    }
+    if (!seasons || seasons.length === 0) {
+      seasons = details.seasons || [];
+    }
+
+    const isSeries = seasons.length > 0 || item.type === 2 || item.type === 3 || details.type === 2 || details.type === 3;
 
     content.innerHTML = `
       <div class="details-hero">
-        <div class="details-hero-backdrop" style="background-image: url('${poster}')"></div>
+        <div class="details-hero-backdrop" style="background-image: url('${backdrop}')"></div>
         <div class="details-poster-col">
           <img class="details-poster-img" src="${poster}" alt="${title}">
           <button class="btn btn-secondary" id="details-lib-btn" style="width: 100%;">
@@ -1653,28 +1831,65 @@ class VesselApp {
             <span class="badge-subtle" style="background: rgba(var(--v-accent-primary-rgb, 255,255,255), 0.15); color: var(--v-accent-primary); font-weight: 700;">
               ${this.mapMediaType(item.type)}
             </span>
-            <span class="badge-subtle">★ 8.5</span>
+            <span class="badge-subtle">★ ${rating} ${voteCount}</span>
             <span class="badge-subtle">${year}</span>
+            ${runtime ? `<span class="badge-subtle">${runtime}</span>` : ""}
+            ${status ? `<span class="badge-subtle">${status}</span>` : ""}
             ${genres.map(g => `<span class="badge-subtle">${g}</span>`).join("")}
           </div>
           <h1 class="details-title">${title}</h1>
+          ${tagline ? `<p class="details-tagline" style="font-style: italic; color: var(--v-text-muted); font-size: 1.05rem; margin-bottom: 10px;">"${tagline}"</p>` : ""}
           <p class="details-overview">${details.overview || item.overview || "No overview available."}</p>
-          <div class="details-actions">
+          ${directors ? `<div class="details-crew" style="margin-top: 10px; font-size: 0.9rem; color: var(--v-text-secondary);"><span class="crew-item"><strong>${this.t("directors")}:</strong> ${directors}</span></div>` : ""}
+          <div class="details-actions" style="margin-top: 18px; display: flex; gap: 12px; flex-wrap: wrap;">
             <button class="btn btn-primary" id="details-watch-now-btn" style="font-size: 1rem; padding: 10px 24px;">
               ▶ ${this.t("btn_play")}
             </button>
+            ${trailerKey ? `
+              <button class="btn btn-secondary" id="details-trailer-btn" style="font-size: 1rem; padding: 10px 20px;">
+                🎬 ${this.t("btn_watch_trailer")}
+              </button>
+            ` : ""}
           </div>
         </div>
       </div>
 
       <div class="details-subsections">
-        <!-- Interactive Player Container (embedded directly on page when played) -->
-        <div id="inline-player-box" class="details-section-box hidden">
-          <div class="player-container">
-            <video id="vessel-video-player" controls autoplay style="width: 100%; height: 100%; border-radius: 8px;"></video>
+        <!-- Embedded Trailer Container -->
+        <div id="inline-trailer-box" class="details-section-box hidden">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+            <h3 class="details-section-title" style="margin: 0;">🎬 ${this.t("btn_watch_trailer")}</h3>
+            <button class="btn btn-secondary" id="close-trailer-btn" style="padding: 4px 12px;">✕ Kapat</button>
+          </div>
+          <div style="position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden; border-radius: 8px; background: #000;">
+            <iframe id="trailer-iframe" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0;" allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
           </div>
         </div>
 
+        <!-- Interactive Player Container -->
+        <div id="inline-player-box" class="details-section-box hidden">
+          <div class="player-container">
+            <video id="vessel-video-player" controls autoplay style="width: 100%; height: 500px; max-height: 70vh; background: #000; border-radius: 8px;"></video>
+          </div>
+        </div>
+
+        <!-- Cast Carousel -->
+        ${castList.length > 0 ? `
+          <div class="details-section-box">
+            <h3 class="details-section-title">${this.t("cast")}</h3>
+            <div class="cast-carousel">
+              ${castList.map(c => `
+                <div class="cast-card">
+                  <img class="cast-avatar" src="${c.profile_url || '/assets/vessel_primary.png'}" alt="${c.name}" onerror="this.src='/assets/vessel_primary.png'">
+                  <div class="cast-name" title="${c.name}">${c.name}</div>
+                  <div class="cast-character" title="${c.character}">${c.character || ""}</div>
+                </div>
+              `).join("")}
+            </div>
+          </div>
+        ` : ""}
+
+        <!-- Episodes List for Series -->
         ${isSeries && seasons.length > 0 ? `
           <div class="details-section-box">
             <h3 class="details-section-title">${this.t("episodes")}</h3>
@@ -1685,7 +1900,7 @@ class VesselApp {
                 </button>
               `).join("")}
             </div>
-            <div class="episodes-grid" id="details-episodes-grid">
+            <div class="episodes-detailed-list" id="details-episodes-grid">
               <!-- Rendered for current season -->
             </div>
           </div>
@@ -1701,17 +1916,43 @@ class VesselApp {
       </div>
     `;
 
-    // Library toggle action
+    // Library toggle
     document.getElementById("details-lib-btn").addEventListener("click", () => {
       this.toggleLibrary(item, details);
     });
 
+    // Trailer toggle
+    if (trailerKey) {
+      document.getElementById("details-trailer-btn")?.addEventListener("click", () => {
+        const trailerBox = document.getElementById("inline-trailer-box");
+        const iframe = document.getElementById("trailer-iframe");
+        if (trailerBox && iframe) {
+          iframe.src = `https://www.youtube-nocookie.com/embed/${trailerKey}?autoplay=1`;
+          trailerBox.classList.remove("hidden");
+          trailerBox.scrollIntoView({ behavior: "smooth" });
+        }
+      });
+
+      document.getElementById("close-trailer-btn")?.addEventListener("click", () => {
+        const trailerBox = document.getElementById("inline-trailer-box");
+        const iframe = document.getElementById("trailer-iframe");
+        if (trailerBox && iframe) {
+          iframe.src = "";
+          trailerBox.classList.add("hidden");
+        }
+      });
+    }
+
+    // Default season & episode
+    this.selectedSeason = isSeries && seasons.length > 0 ? (seasons[0].season_number || 1) : 1;
+    this.selectedEpisode = isSeries && seasons.length > 0 && seasons[0].episodes?.length > 0 ? (seasons[0].episodes[0].episode_number || 1) : 1;
+
     // Watch Now button
     document.getElementById("details-watch-now-btn").addEventListener("click", () => {
-      this.playMediaStream(item, 1, 1);
+      this.playMediaStream(item, this.selectedSeason, this.selectedEpisode);
     });
 
-    // If series, setup season tabs
+    // If series, setup season tabs & detailed episode cards
     if (isSeries && seasons.length > 0) {
       const renderSeasonEpisodes = (sIdx) => {
         const grid = document.getElementById("details-episodes-grid");
@@ -1719,20 +1960,41 @@ class VesselApp {
         if (!curSeason || !grid) return;
         const eps = curSeason.episodes || [];
 
-        grid.innerHTML = eps.length > 0 ? eps.map(ep => `
-          <div class="episode-card" data-ep="${ep.episode_number || 1}">
-            <div class="episode-card-header">
-              <span>${this.t("episode")} ${ep.episode_number || 1}: ${ep.title || "Episode " + (ep.episode_number || 1)}</span>
-              <button class="btn btn-secondary" style="padding: 4px 12px; font-size: 0.8rem;">▶</button>
-            </div>
-            <div class="episode-card-overview">${ep.overview || "No episode synopsis available."}</div>
-          </div>
-        `).join("") : `<div style="padding: 20px; color: var(--v-text-muted);">No episodes found.</div>`;
+        grid.innerHTML = eps.length > 0 ? eps.map((ep, epIdx) => {
+          const epNum = ep.episode_number || (epIdx + 1);
+          const epTitle = ep.title || `Bölüm ${epNum}`;
+          const still = ep.still_url || poster;
+          const airDate = ep.air_date ? `Yayın: ${ep.air_date}` : "";
+          const dur = ep.duration_seconds ? `${Math.round(ep.duration_seconds / 60)} dk` : (runtime ? runtime : "");
+          const epOverview = ep.overview || "Bu bölüm için henüz detaylı özet girilmedi.";
+          const isActive = curSeason.season_number === this.selectedSeason && epNum === this.selectedEpisode;
 
-        grid.querySelectorAll(".episode-card").forEach(c => {
-          c.addEventListener("click", () => {
-            const epNum = parseInt(c.dataset.ep, 10);
-            this.playMediaStream(item, curSeason.season_number || (sIdx + 1), epNum);
+          return `
+            <div class="episode-card-detailed ${isActive ? 'active' : ''}" data-ep="${epNum}" data-season="${curSeason.season_number || (sIdx + 1)}">
+              <div class="episode-thumb-wrap">
+                <img src="${still}" alt="${epTitle}" class="episode-thumb-img" loading="lazy" onerror="this.src='${poster}'">
+                ${dur ? `<div class="episode-thumb-badge">${dur}</div>` : ""}
+              </div>
+              <div class="episode-info-wrap">
+                <div class="episode-title-row">
+                  <div class="episode-title-text">${epNum}. ${epTitle}</div>
+                  ${airDate ? `<span class="episode-air-date">${airDate}</span>` : ""}
+                </div>
+                <div class="episode-synopsis">${epOverview}</div>
+              </div>
+            </div>
+          `;
+        }).join("") : `<div style="padding: 20px; color: var(--v-text-muted);">No episodes found.</div>`;
+
+        grid.querySelectorAll(".episode-card-detailed").forEach(card => {
+          card.addEventListener("click", () => {
+            grid.querySelectorAll(".episode-card-detailed").forEach(c => c.classList.remove("active"));
+            card.classList.add("active");
+            const epNum = parseInt(card.dataset.ep, 10);
+            const sNum = parseInt(card.dataset.season, 10);
+            this.selectedSeason = sNum;
+            this.selectedEpisode = epNum;
+            this.loadStreamsList(item, sNum, epNum);
           });
         });
       };
@@ -1743,13 +2005,138 @@ class VesselApp {
         tab.addEventListener("click", () => {
           document.querySelectorAll("#details-season-tabs .tab").forEach(t => t.classList.remove("active"));
           tab.classList.add("active");
-          renderSeasonEpisodes(parseInt(tab.dataset.seasonIdx, 10));
+          const sIdx = parseInt(tab.dataset.seasonIdx, 10);
+          this.selectedSeason = seasons[sIdx]?.season_number || (sIdx + 1);
+          renderSeasonEpisodes(sIdx);
         });
       });
     }
 
-    // Load available streams
-    this.loadStreamsList(item, 1, 1);
+    // Load available streams for initial season & episode
+    this.loadStreamsList(item, this.selectedSeason, this.selectedEpisode);
+  }
+
+  renderIPTVDetails(item, details) {
+    const content = document.getElementById("details-content");
+    const title = details.title || item.title || "IPTV Kanalı";
+    const poster = details.poster_url || item.poster_url || "/assets/vessel_primary.png";
+    const extra = (details.external_ids && details.external_ids.extra) || (item.external_ids && item.external_ids.extra) || {};
+    const category = extra.category || "Canlı TV";
+    const country = extra.country || "Global";
+    const quality = extra.quality || "HD";
+    const streamURL = extra.stream_url || "";
+
+    content.innerHTML = `
+      <div class="details-hero">
+        <div class="details-hero-backdrop" style="background-image: url('${poster}')"></div>
+        <div class="details-poster-col">
+          <img class="details-poster-img" src="${poster}" alt="${title}" style="object-fit: contain; background: #000; padding: 12px;">
+          <button class="btn btn-secondary" id="details-lib-btn" style="width: 100%;">
+            ${this.t("btn_add_library")}
+          </button>
+        </div>
+        <div class="details-info-col">
+          <div class="details-meta-tags">
+            <span class="badge-subtle" style="background: rgba(239, 68, 68, 0.18); color: #ef4444; font-weight: 700;">
+              🔴 CANLI IPTV
+            </span>
+            <span class="badge-subtle">${quality}</span>
+            <span class="badge-subtle">${country}</span>
+            <span class="badge-subtle">${category}</span>
+          </div>
+          <h1 class="details-title">${title}</h1>
+          <p class="details-overview">${details.overview || item.overview || `${title} canlı televizyon yayını.`}</p>
+          <div class="details-actions">
+            <button class="btn btn-primary" id="details-watch-live-btn" style="font-size: 1rem; padding: 10px 24px;">
+              ▶ ${this.t("start_live")}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="details-subsections">
+        <!-- Interactive Player Container -->
+        <div id="inline-player-box" class="details-section-box hidden">
+          <div class="player-container">
+            <video id="vessel-video-player" controls autoplay style="width: 100%; height: 500px; max-height: 70vh; background: #000; border-radius: 8px;"></video>
+          </div>
+        </div>
+
+        <div class="details-section-box">
+          <h3 class="details-section-title">${this.t("streams_title")}</h3>
+          <div class="streams-grid" id="details-streams-grid">
+            <div class="stream-card-row">
+              <div>
+                <span style="font-weight: 700; margin-right: 8px;">${quality}</span>
+                <span>${title} (Doğrudan HLS Akışı)</span>
+              </div>
+              <button class="btn btn-primary stream-play-btn" style="padding: 6px 16px; font-size: 0.85rem;">▶ ${this.t("start_live")}</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    document.getElementById("details-lib-btn").addEventListener("click", () => {
+      this.toggleLibrary(item, details);
+    });
+
+    const playHandler = () => {
+      this.playDirectHlsStream(streamURL || `/api/streams?provider=com.vessel.iptv&media=${encodeURIComponent(item.id)}`, title);
+    };
+
+    document.getElementById("details-watch-live-btn").addEventListener("click", playHandler);
+    const streamBtn = content.querySelector(".stream-play-btn");
+    if (streamBtn) streamBtn.addEventListener("click", playHandler);
+  }
+
+  async playDirectHlsStream(streamUrl, title) {
+    const playerBox = document.getElementById("inline-player-box");
+    const video = document.getElementById("vessel-video-player");
+    if (!playerBox || !video) return;
+
+    playerBox.classList.remove("hidden");
+    playerBox.scrollIntoView({ behavior: "smooth" });
+
+    let finalUrl = streamUrl;
+    if (streamUrl.startsWith("/api/streams")) {
+      try {
+        const res = await fetch(streamUrl);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.streams && data.streams.length > 0) {
+            finalUrl = data.streams[0].url;
+          }
+        }
+      } catch (e) {
+        console.warn("Could not fetch stream url:", e);
+      }
+    }
+
+    if (window.Hls && window.Hls.isSupported()) {
+      if (this.currentHlsInstance) {
+        this.currentHlsInstance.destroy();
+      }
+      const hls = new window.Hls({ enableWorker: true });
+      this.currentHlsInstance = hls;
+      hls.loadSource(finalUrl);
+      hls.attachMedia(video);
+      hls.on(window.Hls.Events.MANIFEST_PARSED, () => {
+        video.play().catch(e => console.log("Autoplay blocked:", e));
+      });
+      hls.on(window.Hls.Events.ERROR, (event, data) => {
+        if (data.fatal) {
+          console.warn("HLS fatal error, falling back to direct video src:", data);
+          video.src = finalUrl;
+          video.play().catch(() => {});
+        }
+      });
+    } else {
+      video.src = finalUrl;
+      video.play().catch(() => {});
+    }
+
+    this.showToast(`${title} başlatılıyor...`);
   }
 
   renderReadingDetails(item, details) {
@@ -1890,34 +2277,58 @@ class VesselApp {
     }
   }
 
-  async playMediaStream(item, season, episode) {
+  async playMediaStream(item, season, episode, streamObj = null) {
     const playerBox = document.getElementById("inline-player-box");
     const video = document.getElementById("vessel-video-player");
     playerBox.classList.remove("hidden");
     playerBox.scrollIntoView({ behavior: "smooth" });
 
     try {
-      const res = await fetch(`/api/streams?provider=${encodeURIComponent(item.provider_id || "")}&media=${encodeURIComponent(item.id)}&season=${season}&episode=${episode}`);
-      if (!res.ok) throw new Error("Could not fetch stream sources");
-      const data = await res.json();
-      const streams = data.streams || [];
+      let targetStream = streamObj;
+      if (!targetStream) {
+        const res = await fetch(`/api/streams?provider=${encodeURIComponent(item.provider_id || "")}&media=${encodeURIComponent(item.id)}&season=${season}&episode=${episode}`);
+        if (!res.ok) throw new Error("Could not fetch stream sources");
+        const data = await res.json();
+        const streams = data.streams || [];
 
-      if (streams.length === 0) {
-        this.showToast("No active stream found for this item.", "warning");
-        return;
+        if (streams.length === 0) {
+          this.showToast("Bu içerik için aktif akış kaynağı bulunamadı.", "warning");
+          return;
+        }
+        targetStream = streams[0];
       }
 
-      // Resolve best stream
-      const best = streams[0];
-      const resolveRes = await fetch("/api/stream/resolve", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: best.url, media_id: item.id, season, episode })
-      });
-      const resolved = resolveRes.ok ? (await resolveRes.json()) : { url: best.url };
+      // Resolve stream
+      let streamUrl = targetStream.url;
+      try {
+        const resolveRes = await fetch("/api/stream/resolve", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url: targetStream.url, media_id: item.id, season, episode })
+        });
+        if (resolveRes.ok) {
+          const resolved = await resolveRes.json();
+          if (resolved.url) streamUrl = resolved.url;
+        }
+      } catch (err) {
+        console.warn("Stream resolve error:", err);
+      }
 
-      video.src = resolved.url;
-      video.play();
+      if (window.Hls && window.Hls.isSupported() && (streamUrl.includes(".m3u8") || targetStream.format === 2)) {
+        if (this.currentHlsInstance) {
+          this.currentHlsInstance.destroy();
+        }
+        const hls = new window.Hls({ enableWorker: true });
+        this.currentHlsInstance = hls;
+        hls.loadSource(streamUrl);
+        hls.attachMedia(video);
+        hls.on(window.Hls.Events.MANIFEST_PARSED, () => {
+          video.play().catch(e => console.log("Autoplay blocked:", e));
+        });
+      } else {
+        video.src = streamUrl;
+        video.play().catch(e => console.log("Autoplay blocked:", e));
+      }
 
       // Record playback progress
       video.ontimeupdate = () => {
@@ -1948,6 +2359,13 @@ class VesselApp {
     const grid = document.getElementById("details-streams-grid");
     if (!grid) return;
 
+    grid.innerHTML = `
+      <div style="padding: 20px; color: var(--v-text-muted); display: flex; align-items: center; gap: 10px;">
+        <div style="font-size: 1.2rem; animation: pulse-online 1.5s infinite;">⏳</div>
+        <div>${this.t("streams_loading")} (Sezon ${season}, Bölüm ${episode})</div>
+      </div>
+    `;
+
     try {
       const res = await fetch(`/api/streams?provider=${encodeURIComponent(item.provider_id || "")}&media=${encodeURIComponent(item.id)}&season=${season}&episode=${episode}`);
       if (!res.ok) throw new Error("Could not load streams");
@@ -1955,27 +2373,56 @@ class VesselApp {
       const streams = data.streams || [];
 
       if (streams.length === 0) {
-        grid.innerHTML = `<div style="padding: 12px; color: var(--v-text-muted);">${this.t("no_streams")}</div>`;
+        grid.innerHTML = `
+          <div class="streams-empty-banner">
+            <div class="empty-banner-icon">📡</div>
+            <div style="flex: 1;">
+              <div class="empty-banner-title">${this.t("no_episode_streams")}</div>
+              <div class="empty-banner-desc">Sezon ${season}, Bölüm ${episode} için şu anda aktif eşler veya akış sağlayıcısı bulunamadı. Torrent / Debrid bağlantılarınızı kontrol edebilir veya yeniden deneyebilirsiniz.</div>
+            </div>
+            <button class="btn btn-secondary" id="retry-streams-btn" style="white-space: nowrap;">
+              🔄 ${this.t("btn_retry")}
+            </button>
+          </div>
+        `;
+        document.getElementById("retry-streams-btn")?.addEventListener("click", () => {
+          this.loadStreamsList(item, season, episode);
+        });
         return;
       }
 
-      grid.innerHTML = streams.map(st => `
+      grid.innerHTML = streams.map((st, idx) => `
         <div class="stream-card-row">
           <div>
             <span style="font-weight: 700; margin-right: 8px;">${st.quality || "1080p"}</span>
             <span>${st.title || "Stream Source"}</span>
           </div>
-          <button class="btn btn-secondary stream-play-btn" style="padding: 4px 14px; font-size: 0.8rem;">▶ Stream</button>
+          <button class="btn btn-secondary stream-play-btn" data-idx="${idx}" style="padding: 4px 14px; font-size: 0.8rem;">▶ Stream</button>
         </div>
       `).join("");
 
-      grid.querySelectorAll(".stream-play-btn").forEach((btn, idx) => {
+      grid.querySelectorAll(".stream-play-btn").forEach(btn => {
         btn.addEventListener("click", () => {
-          this.playMediaStream(item, season, episode);
+          const idx = parseInt(btn.dataset.idx, 10);
+          this.playMediaStream(item, season, episode, streams[idx]);
         });
       });
     } catch (e) {
-      grid.innerHTML = `<div style="padding: 12px; color: var(--v-text-muted);">${this.t("no_streams")}</div>`;
+      grid.innerHTML = `
+        <div class="streams-empty-banner">
+          <div class="empty-banner-icon">📡</div>
+          <div style="flex: 1;">
+            <div class="empty-banner-title">${this.t("no_episode_streams")}</div>
+            <div class="empty-banner-desc">Hata: ${e.message}</div>
+          </div>
+          <button class="btn btn-secondary" id="retry-streams-btn" style="white-space: nowrap;">
+            🔄 ${this.t("btn_retry")}
+          </button>
+        </div>
+      `;
+      document.getElementById("retry-streams-btn")?.addEventListener("click", () => {
+        this.loadStreamsList(item, season, episode);
+      });
     }
   }
 
@@ -1999,22 +2446,31 @@ class VesselApp {
         installed.forEach(p => {
           const card = document.createElement("div");
           card.className = "plugin-card";
+          const isEnabled = p.enabled !== false;
           card.innerHTML = `
             <div class="plugin-card-header">
               <div>
                 <h4 class="plugin-card-title">${p.name || p.id}</h4>
                 <div style="font-size: 0.8rem; color: var(--v-text-muted); margin-top: 4px;">v${p.version || "1.0.0"} • ${p.author || "Vessel"}</div>
               </div>
-              <span class="badge-subtle" style="background: rgba(var(--v-status-success-rgb, 16, 185, 129), 0.15); color: var(--v-status-success);">
-                ${this.t("btn_active")}
+              <span class="badge-subtle" style="background: ${isEnabled ? "rgba(var(--v-status-success-rgb, 16, 185, 129), 0.15)" : "rgba(156, 163, 175, 0.15)"}; color: ${isEnabled ? "var(--v-status-success)" : "var(--v-text-muted)"};">
+                ${isEnabled ? this.t("btn_active") : "Devre Dışı"}
               </span>
             </div>
             <p class="plugin-card-desc">${p.description || "Media & catalog provider extension."}</p>
             <div class="plugin-card-footer">
               <span style="font-size: 0.8rem; color: var(--v-text-muted);">${p.is_builtin ? this.t("plugin_builtin") : this.t("plugin_external")}</span>
-              <button class="btn btn-secondary" style="font-size: 0.8rem; padding: 4px 12px;">${this.t("btn_disable")}</button>
+              <button class="btn btn-secondary toggle-plugin-btn" style="font-size: 0.8rem; padding: 4px 12px;">
+                ${isEnabled ? this.t("btn_disable") : this.t("btn_enable")}
+              </button>
             </div>
           `;
+
+          const toggleBtn = card.querySelector(".toggle-plugin-btn");
+          toggleBtn.addEventListener("click", async () => {
+            await this.togglePlugin(p.id, !isEnabled);
+          });
+
           installedList.appendChild(card);
         });
       }
@@ -2074,6 +2530,22 @@ class VesselApp {
       this.loadPluginsView();
     } catch (e) {
       this.showToast(`Installation error: ${e.message}`, "error");
+    }
+  }
+
+  async togglePlugin(id, enabled) {
+    try {
+      const res = await fetch("/api/plugins/toggle", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, enabled })
+      });
+      if (!res.ok) throw new Error("Eklenti durumu değiştirilemedi");
+      const data = await res.json();
+      this.showToast(enabled ? "Eklenti etkinleştirildi" : "Eklenti devre dışı bırakıldı");
+      this.loadPluginsView();
+    } catch (e) {
+      this.showToast(`Hata: ${e.message}`, "error");
     }
   }
 

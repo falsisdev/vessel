@@ -16,13 +16,15 @@ var (
 )
 
 type Manager struct {
-	mu      sync.RWMutex
-	plugins map[string]Client
+	mu       sync.RWMutex
+	plugins  map[string]Client
+	disabled map[string]bool
 }
 
 func NewManager() *Manager {
 	return &Manager{
-		plugins: make(map[string]Client),
+		plugins:  make(map[string]Client),
+		disabled: make(map[string]bool),
 	}
 }
 
@@ -67,6 +69,7 @@ func (m *Manager) Unregister(id string) error {
 	}
 
 	delete(m.plugins, id)
+	delete(m.disabled, id)
 	return client.Close()
 }
 
@@ -77,6 +80,32 @@ func (m *Manager) Has(id string) bool {
 	return exists
 }
 
+func (m *Manager) SetEnabled(id string, enabled bool) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if _, exists := m.plugins[id]; !exists {
+		return fmt.Errorf("%w: %s", ErrPluginNotFound, id)
+	}
+
+	if enabled {
+		delete(m.disabled, id)
+	} else {
+		m.disabled[id] = true
+	}
+	return nil
+}
+
+func (m *Manager) IsEnabled(id string) bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	if _, exists := m.plugins[id]; !exists {
+		return false
+	}
+	return !m.disabled[id]
+}
+
 func (m *Manager) ListByDomainAndCapability(domain pluginv1.Domain, cap pluginv1.Capability) []Client {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -84,6 +113,9 @@ func (m *Manager) ListByDomainAndCapability(domain pluginv1.Domain, cap pluginv1
 	var result []Client
 	for _, client := range m.plugins {
 		manifest := client.Manifest()
+		if m.disabled[manifest.Id] {
+			continue
+		}
 		if manifest.Domain != domain {
 			continue
 		}

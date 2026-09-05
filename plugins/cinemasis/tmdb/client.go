@@ -55,15 +55,61 @@ type ExternalIDs struct {
 	TVDBID     int    `json:"tvdb_id"`
 }
 
+type CastMember struct {
+	ID          int    `json:"id"`
+	Name        string `json:"name"`
+	Character   string `json:"character"`
+	ProfilePath string `json:"profile_path"`
+}
+
+type CrewMember struct {
+	ID         int    `json:"id"`
+	Name       string `json:"name"`
+	Job        string `json:"job"`
+	Department string `json:"department"`
+}
+
+type Credits struct {
+	Cast []CastMember `json:"cast"`
+	Crew []CrewMember `json:"crew"`
+}
+
+type VideoResult struct {
+	ID   string `json:"id"`
+	Key  string `json:"key"`
+	Name string `json:"name"`
+	Site string `json:"site"`
+	Type string `json:"type"`
+}
+
+type VideoContainer struct {
+	Results []VideoResult `json:"results"`
+}
+
+type ProductionCompany struct {
+	ID       int    `json:"id"`
+	Name     string `json:"name"`
+	LogoPath string `json:"logo_path"`
+}
+
 type MovieDetails struct {
-	ID               int         `json:"id"`
-	Title            string      `json:"title"`
-	Overview         string      `json:"overview"`
-	PosterPath       string      `json:"poster_path"`
-	ReleaseDate      string      `json:"release_date"`
-	OriginalLanguage string      `json:"original_language"`
-	Genres           []Genre     `json:"genres"`
-	ExternalIDs      ExternalIDs `json:"external_ids"`
+	ID                  int                 `json:"id"`
+	Title               string              `json:"title"`
+	Tagline             string              `json:"tagline"`
+	Overview            string              `json:"overview"`
+	PosterPath          string              `json:"poster_path"`
+	BackdropPath        string              `json:"backdrop_path"`
+	ReleaseDate         string              `json:"release_date"`
+	Runtime             int                 `json:"runtime"`
+	VoteAverage         float64             `json:"vote_average"`
+	VoteCount           int                 `json:"vote_count"`
+	Status              string              `json:"status"`
+	OriginalLanguage    string              `json:"original_language"`
+	Genres              []Genre             `json:"genres"`
+	ProductionCompanies []ProductionCompany `json:"production_companies"`
+	ExternalIDs         ExternalIDs         `json:"external_ids"`
+	Credits             Credits             `json:"credits"`
+	Videos              VideoContainer      `json:"videos"`
 }
 
 type TVSeasonOverview struct {
@@ -74,23 +120,36 @@ type TVSeasonOverview struct {
 }
 
 type TVDetails struct {
-	ID               int                `json:"id"`
-	Name             string             `json:"name"`
-	Overview         string             `json:"overview"`
-	PosterPath       string             `json:"poster_path"`
-	FirstAirDate     string             `json:"first_air_date"`
-	OriginalLanguage string             `json:"original_language"`
-	Genres           []Genre            `json:"genres"`
-	Seasons          []TVSeasonOverview `json:"seasons"`
-	ExternalIDs      ExternalIDs        `json:"external_ids"`
+	ID                  int                 `json:"id"`
+	Name                string              `json:"name"`
+	Tagline             string              `json:"tagline"`
+	Overview            string              `json:"overview"`
+	PosterPath          string              `json:"poster_path"`
+	BackdropPath        string              `json:"backdrop_path"`
+	FirstAirDate        string              `json:"first_air_date"`
+	EpisodeRunTime      []int               `json:"episode_run_time"`
+	VoteAverage         float64             `json:"vote_average"`
+	VoteCount           int                 `json:"vote_count"`
+	Status              string              `json:"status"`
+	OriginalLanguage    string              `json:"original_language"`
+	Genres              []Genre             `json:"genres"`
+	ProductionCompanies []ProductionCompany `json:"production_companies"`
+	Seasons             []TVSeasonOverview  `json:"seasons"`
+	ExternalIDs         ExternalIDs         `json:"external_ids"`
+	Credits             Credits             `json:"credits"`
+	Videos              VideoContainer      `json:"videos"`
 }
 
 type TVEpisode struct {
-	ID            int    `json:"id"`
-	EpisodeNumber int    `json:"episode_number"`
-	Name          string `json:"name"`
-	Overview      string `json:"overview"`
-	Runtime       int    `json:"runtime"`
+	ID            int     `json:"id"`
+	EpisodeNumber int     `json:"episode_number"`
+	SeasonNumber  int     `json:"season_number"`
+	Name          string  `json:"name"`
+	Overview      string  `json:"overview"`
+	StillPath     string  `json:"still_path"`
+	AirDate       string  `json:"air_date"`
+	VoteAverage   float64 `json:"vote_average"`
+	Runtime       int     `json:"runtime"`
 }
 
 type TVSeasonDetails struct {
@@ -163,7 +222,7 @@ func (c *Client) Search(ctx context.Context, query string, page int32) (*MultiSe
 func (c *Client) GetMovie(ctx context.Context, id int) (*MovieDetails, error) {
 	endpoint := fmt.Sprintf("%s/movie/%d", c.baseURL, id)
 	params := url.Values{}
-	params.Set("append_to_response", "external_ids")
+	params.Set("append_to_response", "external_ids,credits,videos")
 
 	var movie MovieDetails
 	if err := c.doGet(ctx, endpoint, params, &movie); err != nil {
@@ -175,7 +234,7 @@ func (c *Client) GetMovie(ctx context.Context, id int) (*MovieDetails, error) {
 func (c *Client) GetTV(ctx context.Context, id int) (*TVDetails, error) {
 	endpoint := fmt.Sprintf("%s/tv/%d", c.baseURL, id)
 	params := url.Values{}
-	params.Set("append_to_response", "external_ids")
+	params.Set("append_to_response", "external_ids,credits,videos")
 
 	var tv TVDetails
 	if err := c.doGet(ctx, endpoint, params, &tv); err != nil {
@@ -201,6 +260,26 @@ func (c *Client) BuildPosterURL(posterPath string) string {
 		return posterPath
 	}
 	return DefaultPosterURL + "/" + strings.TrimLeft(posterPath, "/")
+}
+
+func (c *Client) BuildBackdropURL(backdropPath string) string {
+	if backdropPath == "" {
+		return ""
+	}
+	if strings.HasPrefix(backdropPath, "http://") || strings.HasPrefix(backdropPath, "https://") {
+		return backdropPath
+	}
+	return "https://image.tmdb.org/t/p/w1280/" + strings.TrimLeft(backdropPath, "/")
+}
+
+func (c *Client) BuildStillURL(stillPath string) string {
+	if stillPath == "" {
+		return ""
+	}
+	if strings.HasPrefix(stillPath, "http://") || strings.HasPrefix(stillPath, "https://") {
+		return stillPath
+	}
+	return "https://image.tmdb.org/t/p/w500/" + strings.TrimLeft(stillPath, "/")
 }
 
 func (c *Client) doGet(ctx context.Context, endpoint string, params url.Values, out any) error {

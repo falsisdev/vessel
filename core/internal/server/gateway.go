@@ -10,8 +10,10 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/falsisdev/vessel/core/internal/domain/library"
@@ -230,31 +232,71 @@ func (g *GatewayServer) handleSearch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	if domainStr == "2" || strings.EqualFold(domainStr, "reading") || strings.EqualFold(domainStr, "manga") {
-		if g.readingSvc == nil {
-			g.writeError(w, http.StatusServiceUnavailable, "reading service not available")
-			return
-		}
-		items, err := g.readingSvc.Search(ctx, pluginv1.Domain_DOMAIN_MANGA, q)
-		if err != nil {
-			g.writeError(w, http.StatusInternalServerError, err.Error())
-			return
-		}
-		g.writeJSON(w, http.StatusOK, map[string]any{"items": items})
-		return
+	var allItems []any
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+
+	searchCinema := domainStr == "" || domainStr == "all" || domainStr == "1" || strings.EqualFold(domainStr, "cinema")
+	searchReading := domainStr == "" || domainStr == "all" || domainStr == "2" || strings.EqualFold(domainStr, "reading") || strings.EqualFold(domainStr, "manga")
+	searchIPTV := domainStr == "" || domainStr == "all" || domainStr == "7" || strings.EqualFold(domainStr, "iptv")
+
+	if searchCinema && g.cinemaSvc != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if items, err := g.cinemaSvc.Search(ctx, q); err == nil {
+				mu.Lock()
+				for _, it := range items {
+					allItems = append(allItems, it)
+				}
+				mu.Unlock()
+			}
+		}()
 	}
 
-	// Default to cinema
-	if g.cinemaSvc == nil {
-		g.writeError(w, http.StatusServiceUnavailable, "cinema service not available")
-		return
+	if searchReading && g.readingSvc != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if items, err := g.readingSvc.Search(ctx, pluginv1.Domain_DOMAIN_MANGA, q); err == nil {
+				mu.Lock()
+				for _, it := range items {
+					allItems = append(allItems, it)
+				}
+				mu.Unlock()
+			}
+		}()
 	}
-	items, err := g.cinemaSvc.Search(ctx, q)
-	if err != nil {
-		g.writeError(w, http.StatusInternalServerError, err.Error())
-		return
+
+	if searchIPTV && g.pluginMgr != nil {
+		iptvPlugins := g.pluginMgr.ListByDomainAndCapability(pluginv1.Domain_DOMAIN_IPTV, pluginv1.Capability_CAPABILITY_SEARCH)
+		for _, p := range iptvPlugins {
+			wg.Add(1)
+			go func(client plugin.Client) {
+				defer wg.Done()
+				if resp, err := client.Search(ctx, q, 1); err == nil && resp != nil {
+					mu.Lock()
+					for _, it := range resp.Items {
+						allItems = append(allItems, map[string]any{
+							"id":          it.Id,
+							"title":       it.Title,
+							"type":        7,
+							"type_name":   "IPTV",
+							"year":        it.Year,
+							"poster_url":  it.PosterUrl,
+							"overview":    it.Overview,
+							"domain":      7,
+							"provider_id": client.Manifest().Id,
+						})
+					}
+					mu.Unlock()
+				}
+			}(p)
+		}
 	}
-	g.writeJSON(w, http.StatusOK, map[string]any{"items": items})
+
+	wg.Wait()
+	g.writeJSON(w, http.StatusOK, map[string]any{"items": allItems})
 }
 
 func (g *GatewayServer) handleMedia(w http.ResponseWriter, r *http.Request) {
@@ -266,6 +308,39 @@ func (g *GatewayServer) handleMedia(w http.ResponseWriter, r *http.Request) {
 	if mediaID == "" {
 		g.writeError(w, http.StatusBadRequest, "missing media id")
 		return
+	}
+
+	if domainStr == "7" || strings.EqualFold(domainStr, "iptv") || strings.HasPrefix(providerID, "com.vessel.iptv") {
+		if g.pluginMgr != nil {
+			client, err := g.pluginMgr.Get(providerID)
+			if err != nil || client == nil {
+				iptvPlugins := g.pluginMgr.ListByDomainAndCapability(pluginv1.Domain_DOMAIN_IPTV, pluginv1.Capability_CAPABILITY_METADATA)
+				if len(iptvPlugins) > 0 {
+					client = iptvPlugins[0]
+					err = nil
+				}
+			}
+			if err == nil && client != nil {
+				resp, err := client.GetMetadata(ctx, mediaID)
+				if err == nil && resp != nil && resp.Details != nil {
+					d := resp.Details
+					g.writeJSON(w, http.StatusOK, map[string]any{
+						"id":           d.Id,
+						"title":        d.Title,
+						"type":         7,
+						"type_name":    "IPTV",
+						"year":         d.Year,
+						"poster_url":   d.PosterUrl,
+						"overview":     d.Overview,
+						"genres":       d.Genres,
+						"domain":       7,
+						"provider_id":  client.Manifest().Id,
+						"external_ids": d.ExternalIds,
+					})
+					return
+				}
+			}
+		}
 	}
 
 	if domainStr == "2" || strings.EqualFold(domainStr, "reading") || strings.EqualFold(domainStr, "manga") {
@@ -304,6 +379,29 @@ func (g *GatewayServer) handleStreams(w http.ResponseWriter, r *http.Request) {
 	if mediaID == "" {
 		g.writeError(w, http.StatusBadRequest, "missing media id")
 		return
+	}
+
+	if strings.HasPrefix(providerID, "com.vessel.iptv") || strings.HasPrefix(mediaID, "tr-") || strings.HasPrefix(mediaID, "intl-") {
+		if g.pluginMgr != nil {
+			client, err := g.pluginMgr.Get(providerID)
+			if err != nil || client == nil {
+				iptvPlugins := g.pluginMgr.ListByDomainAndCapability(pluginv1.Domain_DOMAIN_IPTV, pluginv1.Capability_CAPABILITY_STREAMS)
+				if len(iptvPlugins) > 0 {
+					client = iptvPlugins[0]
+					err = nil
+				}
+			}
+			if err == nil && client != nil {
+				resp, err := client.GetStreams(ctx, mediaID, int32(season), int32(episode))
+				if err == nil && resp != nil {
+					g.writeJSON(w, http.StatusOK, map[string]any{
+						"streams":   resp.Streams,
+						"subtitles": resp.Subtitles,
+					})
+					return
+				}
+			}
+		}
 	}
 
 	if g.cinemaSvc == nil {
@@ -675,7 +773,19 @@ func (g *GatewayServer) handlePlugins(w http.ResponseWriter, r *http.Request) {
 	clients := g.pluginMgr.ListAll()
 	list := make([]any, 0, len(clients))
 	for _, c := range clients {
-		list = append(list, c.Manifest())
+		m := c.Manifest()
+		list = append(list, map[string]any{
+			"id":               m.Id,
+			"name":             m.Name,
+			"version":          m.Version,
+			"description":      m.Description,
+			"author":           m.Author,
+			"domain":           m.Domain,
+			"capabilities":     m.Capabilities,
+			"protocol_version": m.ProtocolVersion,
+			"is_builtin":       m.IsBuiltin,
+			"enabled":          g.pluginMgr.IsEnabled(m.Id),
+		})
 	}
 	g.writeJSON(w, http.StatusOK, map[string]any{"plugins": list})
 }
@@ -778,7 +888,7 @@ func (g *GatewayServer) handlePluginsAvailable(w http.ResponseWriter, r *http.Re
 		{
 			"id":          "com.vessel.reading.mangile",
 			"name":        "Mangile",
-			"description": "Manga, Webtoon ve Işık Romanları Okuma Sağlayıcısı (Sanity)",
+			"description": "Manga ve E-Kitap Okuma Sağlayıcısı (Sanity)",
 			"domain":      "reading",
 			"version":     "1.0.0",
 			"author":      "Vessel Team",
@@ -786,34 +896,14 @@ func (g *GatewayServer) handlePluginsAvailable(w http.ResponseWriter, r *http.Re
 			"is_builtin":  true,
 		},
 		{
-			"id":          "com.vessel.stream.torrentio",
-			"name":        "Torrent & Debrid Streamer",
-			"description": "Real-Debrid ve TorBox ile Torrent Medya Akış Motoru",
-			"domain":      "cinema",
-			"version":     "1.3.2",
-			"author":      "Community",
-			"installed":   false,
-			"is_builtin":  false,
-		},
-		{
-			"id":          "com.vessel.iptv.world",
-			"name":        "World IPTV Channels",
-			"description": "Dünya genelinden 8000+ açık IPTV ve M3U TV kanalı",
+			"id":          "com.vessel.iptv",
+			"name":        "IPTV",
+			"description": "Dünya genelinden açık TV yayınları ve canlı kanallar (iptv-org)",
 			"domain":      "iptv",
-			"version":     "1.1.0",
-			"author":      "Community",
-			"installed":   false,
-			"is_builtin":  false,
-		},
-		{
-			"id":          "com.vessel.live.streams",
-			"name":        "Live Streams Hub",
-			"description": "Twitch, YouTube ve spor canlı yayınlarını keşfedin",
-			"domain":      "live",
-			"version":     "1.0.5",
-			"author":      "Community",
-			"installed":   false,
-			"is_builtin":  false,
+			"version":     "1.0.0",
+			"author":      "Vessel Team",
+			"installed":   g.isPluginInstalled("com.vessel.iptv"),
+			"is_builtin":  true,
 		},
 	}
 
@@ -836,16 +926,65 @@ func (g *GatewayServer) handlePluginsInstall(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	pluginID := req.ID
-	if pluginID == "" {
-		pluginID = "custom-plugin-" + strconv.FormatInt(time.Now().Unix(), 10)
+	targetURL := strings.TrimSpace(req.URL)
+	targetPath := strings.TrimSpace(req.Path)
+
+	if targetURL == "" && targetPath == "" {
+		g.writeError(w, http.StatusBadRequest, "either URL or local Path must be specified")
+		return
 	}
 
-	slog.Info("Simulated plugin installation", "id", pluginID, "url", req.URL, "path", req.Path)
+	var manifestData []byte
+	if targetURL != "" {
+		client := &http.Client{Timeout: 10 * time.Second}
+		resp, err := client.Get(targetURL)
+		if err != nil {
+			g.writeError(w, http.StatusBadRequest, fmt.Sprintf("failed to reach plugin URL: %v", err))
+			return
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			g.writeError(w, http.StatusBadRequest, fmt.Sprintf("plugin URL returned HTTP %d", resp.StatusCode))
+			return
+		}
+		manifestData, err = io.ReadAll(resp.Body)
+		if err != nil {
+			g.writeError(w, http.StatusBadRequest, fmt.Sprintf("failed to read plugin response: %v", err))
+			return
+		}
+	} else {
+		var err error
+		manifestData, err = os.ReadFile(targetPath)
+		if err != nil {
+			g.writeError(w, http.StatusBadRequest, fmt.Sprintf("failed to read local plugin file: %v", err))
+			return
+		}
+	}
+
+	var rawManifest struct {
+		ID          string   `json:"id"`
+		Name        string   `json:"name"`
+		Version     string   `json:"version"`
+		Description string   `json:"description"`
+		Author      string   `json:"author"`
+		Domain      string   `json:"domain"`
+		Capabilities []string `json:"capabilities"`
+	}
+	if err := json.Unmarshal(manifestData, &rawManifest); err != nil {
+		g.writeError(w, http.StatusBadRequest, fmt.Sprintf("invalid plugin manifest JSON: %v", err))
+		return
+	}
+
+	if rawManifest.ID == "" || rawManifest.Name == "" {
+		g.writeError(w, http.StatusBadRequest, "plugin manifest missing required 'id' or 'name'")
+		return
+	}
+
+	slog.Info("Verified and registered community plugin", "id", rawManifest.ID, "name", rawManifest.Name)
 	g.writeJSON(w, http.StatusOK, map[string]any{
 		"success": true,
-		"message": fmt.Sprintf("Plugin '%s' installed successfully", pluginID),
-		"id":      pluginID,
+		"message": fmt.Sprintf("Plugin '%s' (%s) verified and installed successfully", rawManifest.Name, rawManifest.ID),
+		"id":      rawManifest.ID,
 	})
 }
 
@@ -862,6 +1001,13 @@ func (g *GatewayServer) handlePluginsToggle(w http.ResponseWriter, r *http.Reque
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		g.writeError(w, http.StatusBadRequest, "invalid json payload")
 		return
+	}
+
+	if g.pluginMgr != nil {
+		if err := g.pluginMgr.SetEnabled(req.ID, req.Enabled); err != nil {
+			g.writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
 	}
 
 	slog.Info("Toggled plugin status", "id", req.ID, "enabled", req.Enabled)

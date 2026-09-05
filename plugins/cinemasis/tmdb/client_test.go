@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/falsisdev/vessel/plugins/cinemasis/tmdb"
@@ -75,8 +76,8 @@ func TestTMDBClientGetMovieDetails(t *testing.T) {
 		if r.URL.Path != "/movie/272" {
 			t.Errorf("unexpected path: %s", r.URL.Path)
 		}
-		if r.URL.Query().Get("append_to_response") != "external_ids" {
-			t.Errorf("expected append_to_response=external_ids")
+		if !strings.Contains(r.URL.Query().Get("append_to_response"), "external_ids") {
+			t.Errorf("expected append_to_response to contain external_ids, got %s", r.URL.Query().Get("append_to_response"))
 		}
 
 		w.Header().Set("Content-Type", "application/json")
