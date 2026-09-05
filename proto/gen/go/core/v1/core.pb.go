@@ -2971,6 +2971,534 @@ func (x *ListRecentReadingProgressResponse) GetItems() []*ReadingProgress {
 	return nil
 }
 
+type DebridAccountStatus struct {
+	state               protoimpl.MessageState `protogen:"open.v1"`
+	Provider            string                 `protobuf:"bytes,1,opt,name=provider,proto3" json:"provider,omitempty"`
+	Username            string                 `protobuf:"bytes,2,opt,name=username,proto3" json:"username,omitempty"`
+	Email               string                 `protobuf:"bytes,3,opt,name=email,proto3" json:"email,omitempty"`
+	ExpirationTimestamp int64                  `protobuf:"varint,4,opt,name=expiration_timestamp,json=expirationTimestamp,proto3" json:"expiration_timestamp,omitempty"`
+	IsPremium           bool                   `protobuf:"varint,5,opt,name=is_premium,json=isPremium,proto3" json:"is_premium,omitempty"`
+	Points              int32                  `protobuf:"varint,6,opt,name=points,proto3" json:"points,omitempty"`
+	Status              string                 `protobuf:"bytes,7,opt,name=status,proto3" json:"status,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
+}
+
+func (x *DebridAccountStatus) Reset() {
+	*x = DebridAccountStatus{}
+	mi := &file_core_v1_core_proto_msgTypes[48]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DebridAccountStatus) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DebridAccountStatus) ProtoMessage() {}
+
+func (x *DebridAccountStatus) ProtoReflect() protoreflect.Message {
+	mi := &file_core_v1_core_proto_msgTypes[48]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DebridAccountStatus.ProtoReflect.Descriptor instead.
+func (*DebridAccountStatus) Descriptor() ([]byte, []int) {
+	return file_core_v1_core_proto_rawDescGZIP(), []int{48}
+}
+
+func (x *DebridAccountStatus) GetProvider() string {
+	if x != nil {
+		return x.Provider
+	}
+	return ""
+}
+
+func (x *DebridAccountStatus) GetUsername() string {
+	if x != nil {
+		return x.Username
+	}
+	return ""
+}
+
+func (x *DebridAccountStatus) GetEmail() string {
+	if x != nil {
+		return x.Email
+	}
+	return ""
+}
+
+func (x *DebridAccountStatus) GetExpirationTimestamp() int64 {
+	if x != nil {
+		return x.ExpirationTimestamp
+	}
+	return 0
+}
+
+func (x *DebridAccountStatus) GetIsPremium() bool {
+	if x != nil {
+		return x.IsPremium
+	}
+	return false
+}
+
+func (x *DebridAccountStatus) GetPoints() int32 {
+	if x != nil {
+		return x.Points
+	}
+	return 0
+}
+
+func (x *DebridAccountStatus) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
+type GetDebridStatusRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Provider      string                 `protobuf:"bytes,1,opt,name=provider,proto3" json:"provider,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetDebridStatusRequest) Reset() {
+	*x = GetDebridStatusRequest{}
+	mi := &file_core_v1_core_proto_msgTypes[49]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetDebridStatusRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetDebridStatusRequest) ProtoMessage() {}
+
+func (x *GetDebridStatusRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_core_v1_core_proto_msgTypes[49]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetDebridStatusRequest.ProtoReflect.Descriptor instead.
+func (*GetDebridStatusRequest) Descriptor() ([]byte, []int) {
+	return file_core_v1_core_proto_rawDescGZIP(), []int{49}
+}
+
+func (x *GetDebridStatusRequest) GetProvider() string {
+	if x != nil {
+		return x.Provider
+	}
+	return ""
+}
+
+type GetDebridStatusResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Accounts      []*DebridAccountStatus `protobuf:"bytes,1,rep,name=accounts,proto3" json:"accounts,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetDebridStatusResponse) Reset() {
+	*x = GetDebridStatusResponse{}
+	mi := &file_core_v1_core_proto_msgTypes[50]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetDebridStatusResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetDebridStatusResponse) ProtoMessage() {}
+
+func (x *GetDebridStatusResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_core_v1_core_proto_msgTypes[50]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetDebridStatusResponse.ProtoReflect.Descriptor instead.
+func (*GetDebridStatusResponse) Descriptor() ([]byte, []int) {
+	return file_core_v1_core_proto_rawDescGZIP(), []int{50}
+}
+
+func (x *GetDebridStatusResponse) GetAccounts() []*DebridAccountStatus {
+	if x != nil {
+		return x.Accounts
+	}
+	return nil
+}
+
+type ConfigureDebridRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Provider      string                 `protobuf:"bytes,1,opt,name=provider,proto3" json:"provider,omitempty"`
+	ApiKey        string                 `protobuf:"bytes,2,opt,name=api_key,json=apiKey,proto3" json:"api_key,omitempty"`
+	Enabled       bool                   `protobuf:"varint,3,opt,name=enabled,proto3" json:"enabled,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ConfigureDebridRequest) Reset() {
+	*x = ConfigureDebridRequest{}
+	mi := &file_core_v1_core_proto_msgTypes[51]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ConfigureDebridRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ConfigureDebridRequest) ProtoMessage() {}
+
+func (x *ConfigureDebridRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_core_v1_core_proto_msgTypes[51]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ConfigureDebridRequest.ProtoReflect.Descriptor instead.
+func (*ConfigureDebridRequest) Descriptor() ([]byte, []int) {
+	return file_core_v1_core_proto_rawDescGZIP(), []int{51}
+}
+
+func (x *ConfigureDebridRequest) GetProvider() string {
+	if x != nil {
+		return x.Provider
+	}
+	return ""
+}
+
+func (x *ConfigureDebridRequest) GetApiKey() string {
+	if x != nil {
+		return x.ApiKey
+	}
+	return ""
+}
+
+func (x *ConfigureDebridRequest) GetEnabled() bool {
+	if x != nil {
+		return x.Enabled
+	}
+	return false
+}
+
+type ConfigureDebridResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	Message       string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	Status        *DebridAccountStatus   `protobuf:"bytes,3,opt,name=status,proto3" json:"status,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ConfigureDebridResponse) Reset() {
+	*x = ConfigureDebridResponse{}
+	mi := &file_core_v1_core_proto_msgTypes[52]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ConfigureDebridResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ConfigureDebridResponse) ProtoMessage() {}
+
+func (x *ConfigureDebridResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_core_v1_core_proto_msgTypes[52]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ConfigureDebridResponse.ProtoReflect.Descriptor instead.
+func (*ConfigureDebridResponse) Descriptor() ([]byte, []int) {
+	return file_core_v1_core_proto_rawDescGZIP(), []int{52}
+}
+
+func (x *ConfigureDebridResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *ConfigureDebridResponse) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
+func (x *ConfigureDebridResponse) GetStatus() *DebridAccountStatus {
+	if x != nil {
+		return x.Status
+	}
+	return nil
+}
+
+type ResolveStreamRequest struct {
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	StreamUrl         string                 `protobuf:"bytes,1,opt,name=stream_url,json=streamUrl,proto3" json:"stream_url,omitempty"`
+	Title             string                 `protobuf:"bytes,2,opt,name=title,proto3" json:"title,omitempty"`
+	SeasonNumber      int32                  `protobuf:"varint,3,opt,name=season_number,json=seasonNumber,proto3" json:"season_number,omitempty"`
+	EpisodeNumber     int32                  `protobuf:"varint,4,opt,name=episode_number,json=episodeNumber,proto3" json:"episode_number,omitempty"`
+	PreferredProvider string                 `protobuf:"bytes,5,opt,name=preferred_provider,json=preferredProvider,proto3" json:"preferred_provider,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *ResolveStreamRequest) Reset() {
+	*x = ResolveStreamRequest{}
+	mi := &file_core_v1_core_proto_msgTypes[53]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ResolveStreamRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ResolveStreamRequest) ProtoMessage() {}
+
+func (x *ResolveStreamRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_core_v1_core_proto_msgTypes[53]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ResolveStreamRequest.ProtoReflect.Descriptor instead.
+func (*ResolveStreamRequest) Descriptor() ([]byte, []int) {
+	return file_core_v1_core_proto_rawDescGZIP(), []int{53}
+}
+
+func (x *ResolveStreamRequest) GetStreamUrl() string {
+	if x != nil {
+		return x.StreamUrl
+	}
+	return ""
+}
+
+func (x *ResolveStreamRequest) GetTitle() string {
+	if x != nil {
+		return x.Title
+	}
+	return ""
+}
+
+func (x *ResolveStreamRequest) GetSeasonNumber() int32 {
+	if x != nil {
+		return x.SeasonNumber
+	}
+	return 0
+}
+
+func (x *ResolveStreamRequest) GetEpisodeNumber() int32 {
+	if x != nil {
+		return x.EpisodeNumber
+	}
+	return 0
+}
+
+func (x *ResolveStreamRequest) GetPreferredProvider() string {
+	if x != nil {
+		return x.PreferredProvider
+	}
+	return ""
+}
+
+type ResolvedStream struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	OriginalUrl   string                 `protobuf:"bytes,1,opt,name=original_url,json=originalUrl,proto3" json:"original_url,omitempty"`
+	PlaybackUrl   string                 `protobuf:"bytes,2,opt,name=playback_url,json=playbackUrl,proto3" json:"playback_url,omitempty"`
+	StreamType    string                 `protobuf:"bytes,3,opt,name=stream_type,json=streamType,proto3" json:"stream_type,omitempty"`
+	Provider      string                 `protobuf:"bytes,4,opt,name=provider,proto3" json:"provider,omitempty"`
+	Quality       string                 `protobuf:"bytes,5,opt,name=quality,proto3" json:"quality,omitempty"`
+	FileSize      int64                  `protobuf:"varint,6,opt,name=file_size,json=fileSize,proto3" json:"file_size,omitempty"`
+	Filename      string                 `protobuf:"bytes,7,opt,name=filename,proto3" json:"filename,omitempty"`
+	Headers       map[string]string      `protobuf:"bytes,8,rep,name=headers,proto3" json:"headers,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	IsCached      bool                   `protobuf:"varint,9,opt,name=is_cached,json=isCached,proto3" json:"is_cached,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ResolvedStream) Reset() {
+	*x = ResolvedStream{}
+	mi := &file_core_v1_core_proto_msgTypes[54]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ResolvedStream) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ResolvedStream) ProtoMessage() {}
+
+func (x *ResolvedStream) ProtoReflect() protoreflect.Message {
+	mi := &file_core_v1_core_proto_msgTypes[54]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ResolvedStream.ProtoReflect.Descriptor instead.
+func (*ResolvedStream) Descriptor() ([]byte, []int) {
+	return file_core_v1_core_proto_rawDescGZIP(), []int{54}
+}
+
+func (x *ResolvedStream) GetOriginalUrl() string {
+	if x != nil {
+		return x.OriginalUrl
+	}
+	return ""
+}
+
+func (x *ResolvedStream) GetPlaybackUrl() string {
+	if x != nil {
+		return x.PlaybackUrl
+	}
+	return ""
+}
+
+func (x *ResolvedStream) GetStreamType() string {
+	if x != nil {
+		return x.StreamType
+	}
+	return ""
+}
+
+func (x *ResolvedStream) GetProvider() string {
+	if x != nil {
+		return x.Provider
+	}
+	return ""
+}
+
+func (x *ResolvedStream) GetQuality() string {
+	if x != nil {
+		return x.Quality
+	}
+	return ""
+}
+
+func (x *ResolvedStream) GetFileSize() int64 {
+	if x != nil {
+		return x.FileSize
+	}
+	return 0
+}
+
+func (x *ResolvedStream) GetFilename() string {
+	if x != nil {
+		return x.Filename
+	}
+	return ""
+}
+
+func (x *ResolvedStream) GetHeaders() map[string]string {
+	if x != nil {
+		return x.Headers
+	}
+	return nil
+}
+
+func (x *ResolvedStream) GetIsCached() bool {
+	if x != nil {
+		return x.IsCached
+	}
+	return false
+}
+
+type ResolveStreamResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Stream        *ResolvedStream        `protobuf:"bytes,1,opt,name=stream,proto3" json:"stream,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ResolveStreamResponse) Reset() {
+	*x = ResolveStreamResponse{}
+	mi := &file_core_v1_core_proto_msgTypes[55]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ResolveStreamResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ResolveStreamResponse) ProtoMessage() {}
+
+func (x *ResolveStreamResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_core_v1_core_proto_msgTypes[55]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ResolveStreamResponse.ProtoReflect.Descriptor instead.
+func (*ResolveStreamResponse) Descriptor() ([]byte, []int) {
+	return file_core_v1_core_proto_rawDescGZIP(), []int{55}
+}
+
+func (x *ResolveStreamResponse) GetStream() *ResolvedStream {
+	if x != nil {
+		return x.Stream
+	}
+	return nil
+}
+
 var File_core_v1_core_proto protoreflect.FileDescriptor
 
 const file_core_v1_core_proto_rawDesc = "" +
@@ -3208,7 +3736,51 @@ const file_core_v1_core_proto_rawDesc = "" +
 	" ListRecentReadingProgressRequest\x12\x14\n" +
 	"\x05limit\x18\x01 \x01(\x05R\x05limit\"S\n" +
 	"!ListRecentReadingProgressResponse\x12.\n" +
-	"\x05items\x18\x01 \x03(\v2\x18.core.v1.ReadingProgressR\x05items*\xe1\x01\n" +
+	"\x05items\x18\x01 \x03(\v2\x18.core.v1.ReadingProgressR\x05items\"\xe5\x01\n" +
+	"\x13DebridAccountStatus\x12\x1a\n" +
+	"\bprovider\x18\x01 \x01(\tR\bprovider\x12\x1a\n" +
+	"\busername\x18\x02 \x01(\tR\busername\x12\x14\n" +
+	"\x05email\x18\x03 \x01(\tR\x05email\x121\n" +
+	"\x14expiration_timestamp\x18\x04 \x01(\x03R\x13expirationTimestamp\x12\x1d\n" +
+	"\n" +
+	"is_premium\x18\x05 \x01(\bR\tisPremium\x12\x16\n" +
+	"\x06points\x18\x06 \x01(\x05R\x06points\x12\x16\n" +
+	"\x06status\x18\a \x01(\tR\x06status\"4\n" +
+	"\x16GetDebridStatusRequest\x12\x1a\n" +
+	"\bprovider\x18\x01 \x01(\tR\bprovider\"S\n" +
+	"\x17GetDebridStatusResponse\x128\n" +
+	"\baccounts\x18\x01 \x03(\v2\x1c.core.v1.DebridAccountStatusR\baccounts\"g\n" +
+	"\x16ConfigureDebridRequest\x12\x1a\n" +
+	"\bprovider\x18\x01 \x01(\tR\bprovider\x12\x17\n" +
+	"\aapi_key\x18\x02 \x01(\tR\x06apiKey\x12\x18\n" +
+	"\aenabled\x18\x03 \x01(\bR\aenabled\"\x83\x01\n" +
+	"\x17ConfigureDebridResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\x124\n" +
+	"\x06status\x18\x03 \x01(\v2\x1c.core.v1.DebridAccountStatusR\x06status\"\xc6\x01\n" +
+	"\x14ResolveStreamRequest\x12\x1d\n" +
+	"\n" +
+	"stream_url\x18\x01 \x01(\tR\tstreamUrl\x12\x14\n" +
+	"\x05title\x18\x02 \x01(\tR\x05title\x12#\n" +
+	"\rseason_number\x18\x03 \x01(\x05R\fseasonNumber\x12%\n" +
+	"\x0eepisode_number\x18\x04 \x01(\x05R\repisodeNumber\x12-\n" +
+	"\x12preferred_provider\x18\x05 \x01(\tR\x11preferredProvider\"\xff\x02\n" +
+	"\x0eResolvedStream\x12!\n" +
+	"\foriginal_url\x18\x01 \x01(\tR\voriginalUrl\x12!\n" +
+	"\fplayback_url\x18\x02 \x01(\tR\vplaybackUrl\x12\x1f\n" +
+	"\vstream_type\x18\x03 \x01(\tR\n" +
+	"streamType\x12\x1a\n" +
+	"\bprovider\x18\x04 \x01(\tR\bprovider\x12\x18\n" +
+	"\aquality\x18\x05 \x01(\tR\aquality\x12\x1b\n" +
+	"\tfile_size\x18\x06 \x01(\x03R\bfileSize\x12\x1a\n" +
+	"\bfilename\x18\a \x01(\tR\bfilename\x12>\n" +
+	"\aheaders\x18\b \x03(\v2$.core.v1.ResolvedStream.HeadersEntryR\aheaders\x12\x1b\n" +
+	"\tis_cached\x18\t \x01(\bR\bisCached\x1a:\n" +
+	"\fHeadersEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"H\n" +
+	"\x15ResolveStreamResponse\x12/\n" +
+	"\x06stream\x18\x01 \x01(\v2\x17.core.v1.ResolvedStreamR\x06stream*\xe1\x01\n" +
 	"\rLibraryStatus\x12\x1e\n" +
 	"\x1aLIBRARY_STATUS_UNSPECIFIED\x10\x00\x12 \n" +
 	"\x1cLIBRARY_STATUS_PLAN_TO_WATCH\x10\x01\x12\x1b\n" +
@@ -3216,7 +3788,7 @@ const file_core_v1_core_proto_rawDesc = "" +
 	"\x18LIBRARY_STATUS_COMPLETED\x10\x03\x12\x1a\n" +
 	"\x16LIBRARY_STATUS_ON_HOLD\x10\x04\x12\x1a\n" +
 	"\x16LIBRARY_STATUS_DROPPED\x10\x05\x12\x1b\n" +
-	"\x17LIBRARY_STATUS_FAVORITE\x10\x062\xef\r\n" +
+	"\x17LIBRARY_STATUS_FAVORITE\x10\x062\xeb\x0f\n" +
 	"\vCoreService\x123\n" +
 	"\x04Ping\x12\x14.core.v1.PingRequest\x1a\x15.core.v1.PingResponse\x12H\n" +
 	"\vSearchMedia\x12\x1b.core.v1.SearchMediaRequest\x1a\x1c.core.v1.SearchMediaResponse\x12T\n" +
@@ -3239,7 +3811,10 @@ const file_core_v1_core_proto_rawDesc = "" +
 	"\x1aListRecentPlaybackProgress\x12*.core.v1.ListRecentPlaybackProgressRequest\x1a+.core.v1.ListRecentPlaybackProgressResponse\x12`\n" +
 	"\x13SaveReadingProgress\x12#.core.v1.SaveReadingProgressRequest\x1a$.core.v1.SaveReadingProgressResponse\x12]\n" +
 	"\x12GetReadingProgress\x12\".core.v1.GetReadingProgressRequest\x1a#.core.v1.GetReadingProgressResponse\x12r\n" +
-	"\x19ListRecentReadingProgress\x12).core.v1.ListRecentReadingProgressRequest\x1a*.core.v1.ListRecentReadingProgressResponseB9Z7github.com/falsisdev/vessel/proto/gen/go/core/v1;corev1b\x06proto3"
+	"\x19ListRecentReadingProgress\x12).core.v1.ListRecentReadingProgressRequest\x1a*.core.v1.ListRecentReadingProgressResponse\x12N\n" +
+	"\rResolveStream\x12\x1d.core.v1.ResolveStreamRequest\x1a\x1e.core.v1.ResolveStreamResponse\x12T\n" +
+	"\x0fGetDebridStatus\x12\x1f.core.v1.GetDebridStatusRequest\x1a .core.v1.GetDebridStatusResponse\x12T\n" +
+	"\x0fConfigureDebrid\x12\x1f.core.v1.ConfigureDebridRequest\x1a .core.v1.ConfigureDebridResponseB9Z7github.com/falsisdev/vessel/proto/gen/go/core/v1;corev1b\x06proto3"
 
 var (
 	file_core_v1_core_proto_rawDescOnce sync.Once
@@ -3254,7 +3829,7 @@ func file_core_v1_core_proto_rawDescGZIP() []byte {
 }
 
 var file_core_v1_core_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_core_v1_core_proto_msgTypes = make([]protoimpl.MessageInfo, 49)
+var file_core_v1_core_proto_msgTypes = make([]protoimpl.MessageInfo, 58)
 var file_core_v1_core_proto_goTypes = []any{
 	(LibraryStatus)(0),                         // 0: core.v1.LibraryStatus
 	(*PingRequest)(nil),                        // 1: core.v1.PingRequest
@@ -3305,101 +3880,120 @@ var file_core_v1_core_proto_goTypes = []any{
 	(*GetReadingProgressResponse)(nil),         // 46: core.v1.GetReadingProgressResponse
 	(*ListRecentReadingProgressRequest)(nil),   // 47: core.v1.ListRecentReadingProgressRequest
 	(*ListRecentReadingProgressResponse)(nil),  // 48: core.v1.ListRecentReadingProgressResponse
-	nil,                     // 49: core.v1.GetActiveThemeResponse.TokensEntry
-	(v1.Domain)(0),          // 50: plugin.v1.Domain
-	(v1.MediaType)(0),       // 51: plugin.v1.MediaType
-	(*v1.ExternalIDs)(nil),  // 52: plugin.v1.ExternalIDs
-	(*v1.Season)(nil),       // 53: plugin.v1.Season
-	(*v1.StreamSource)(nil), // 54: plugin.v1.StreamSource
-	(*v1.Subtitle)(nil),     // 55: plugin.v1.Subtitle
-	(v1.Capability)(0),      // 56: plugin.v1.Capability
-	(*v1.PageItem)(nil),     // 57: plugin.v1.PageItem
+	(*DebridAccountStatus)(nil),                // 49: core.v1.DebridAccountStatus
+	(*GetDebridStatusRequest)(nil),             // 50: core.v1.GetDebridStatusRequest
+	(*GetDebridStatusResponse)(nil),            // 51: core.v1.GetDebridStatusResponse
+	(*ConfigureDebridRequest)(nil),             // 52: core.v1.ConfigureDebridRequest
+	(*ConfigureDebridResponse)(nil),            // 53: core.v1.ConfigureDebridResponse
+	(*ResolveStreamRequest)(nil),               // 54: core.v1.ResolveStreamRequest
+	(*ResolvedStream)(nil),                     // 55: core.v1.ResolvedStream
+	(*ResolveStreamResponse)(nil),              // 56: core.v1.ResolveStreamResponse
+	nil,                                        // 57: core.v1.GetActiveThemeResponse.TokensEntry
+	nil,                                        // 58: core.v1.ResolvedStream.HeadersEntry
+	(v1.Domain)(0),                             // 59: plugin.v1.Domain
+	(v1.MediaType)(0),                          // 60: plugin.v1.MediaType
+	(*v1.ExternalIDs)(nil),                     // 61: plugin.v1.ExternalIDs
+	(*v1.Season)(nil),                          // 62: plugin.v1.Season
+	(*v1.StreamSource)(nil),                    // 63: plugin.v1.StreamSource
+	(*v1.Subtitle)(nil),                        // 64: plugin.v1.Subtitle
+	(v1.Capability)(0),                         // 65: plugin.v1.Capability
+	(*v1.PageItem)(nil),                        // 66: plugin.v1.PageItem
 }
 var file_core_v1_core_proto_depIdxs = []int32{
-	50, // 0: core.v1.SearchMediaRequest.domain:type_name -> plugin.v1.Domain
-	51, // 1: core.v1.CoreMediaItem.type:type_name -> plugin.v1.MediaType
-	52, // 2: core.v1.CoreMediaItem.external_ids:type_name -> plugin.v1.ExternalIDs
+	59, // 0: core.v1.SearchMediaRequest.domain:type_name -> plugin.v1.Domain
+	60, // 1: core.v1.CoreMediaItem.type:type_name -> plugin.v1.MediaType
+	61, // 2: core.v1.CoreMediaItem.external_ids:type_name -> plugin.v1.ExternalIDs
 	4,  // 3: core.v1.SearchMediaResponse.items:type_name -> core.v1.CoreMediaItem
-	50, // 4: core.v1.GetMediaDetailsRequest.domain:type_name -> plugin.v1.Domain
-	51, // 5: core.v1.GetMediaDetailsResponse.type:type_name -> plugin.v1.MediaType
-	53, // 6: core.v1.GetMediaDetailsResponse.seasons:type_name -> plugin.v1.Season
-	52, // 7: core.v1.GetMediaDetailsResponse.external_ids:type_name -> plugin.v1.ExternalIDs
-	54, // 8: core.v1.GetStreamsResponse.streams:type_name -> plugin.v1.StreamSource
-	55, // 9: core.v1.GetStreamsResponse.subtitles:type_name -> plugin.v1.Subtitle
-	50, // 10: core.v1.PluginInfo.domain:type_name -> plugin.v1.Domain
-	56, // 11: core.v1.PluginInfo.capabilities:type_name -> plugin.v1.Capability
+	59, // 4: core.v1.GetMediaDetailsRequest.domain:type_name -> plugin.v1.Domain
+	60, // 5: core.v1.GetMediaDetailsResponse.type:type_name -> plugin.v1.MediaType
+	62, // 6: core.v1.GetMediaDetailsResponse.seasons:type_name -> plugin.v1.Season
+	61, // 7: core.v1.GetMediaDetailsResponse.external_ids:type_name -> plugin.v1.ExternalIDs
+	63, // 8: core.v1.GetStreamsResponse.streams:type_name -> plugin.v1.StreamSource
+	64, // 9: core.v1.GetStreamsResponse.subtitles:type_name -> plugin.v1.Subtitle
+	59, // 10: core.v1.PluginInfo.domain:type_name -> plugin.v1.Domain
+	65, // 11: core.v1.PluginInfo.capabilities:type_name -> plugin.v1.Capability
 	10, // 12: core.v1.ListPluginsResponse.plugins:type_name -> core.v1.PluginInfo
-	57, // 13: core.v1.GetChapterContentResponse.pages:type_name -> plugin.v1.PageItem
+	66, // 13: core.v1.GetChapterContentResponse.pages:type_name -> plugin.v1.PageItem
 	15, // 14: core.v1.ThemeSummary.variants:type_name -> core.v1.ThemeVariantInfo
 	16, // 15: core.v1.ListThemesResponse.themes:type_name -> core.v1.ThemeSummary
 	16, // 16: core.v1.GetActiveThemeResponse.theme:type_name -> core.v1.ThemeSummary
-	49, // 17: core.v1.GetActiveThemeResponse.tokens:type_name -> core.v1.GetActiveThemeResponse.TokensEntry
+	57, // 17: core.v1.GetActiveThemeResponse.tokens:type_name -> core.v1.GetActiveThemeResponse.TokensEntry
 	20, // 18: core.v1.SetActiveThemeResponse.active_theme:type_name -> core.v1.GetActiveThemeResponse
 	23, // 19: core.v1.GetSupportedLocalesResponse.locales:type_name -> core.v1.LocaleInfo
-	50, // 20: core.v1.LibraryItem.domain:type_name -> plugin.v1.Domain
-	51, // 21: core.v1.LibraryItem.type:type_name -> plugin.v1.MediaType
+	59, // 20: core.v1.LibraryItem.domain:type_name -> plugin.v1.Domain
+	60, // 21: core.v1.LibraryItem.type:type_name -> plugin.v1.MediaType
 	0,  // 22: core.v1.LibraryItem.status:type_name -> core.v1.LibraryStatus
 	26, // 23: core.v1.SaveLibraryItemRequest.item:type_name -> core.v1.LibraryItem
 	26, // 24: core.v1.SaveLibraryItemResponse.item:type_name -> core.v1.LibraryItem
 	26, // 25: core.v1.GetLibraryItemResponse.item:type_name -> core.v1.LibraryItem
-	50, // 26: core.v1.ListLibraryItemsRequest.domain:type_name -> plugin.v1.Domain
+	59, // 26: core.v1.ListLibraryItemsRequest.domain:type_name -> plugin.v1.Domain
 	0,  // 27: core.v1.ListLibraryItemsRequest.status:type_name -> core.v1.LibraryStatus
 	26, // 28: core.v1.ListLibraryItemsResponse.items:type_name -> core.v1.LibraryItem
-	50, // 29: core.v1.PlaybackProgress.domain:type_name -> plugin.v1.Domain
+	59, // 29: core.v1.PlaybackProgress.domain:type_name -> plugin.v1.Domain
 	35, // 30: core.v1.SavePlaybackProgressRequest.progress:type_name -> core.v1.PlaybackProgress
 	35, // 31: core.v1.SavePlaybackProgressResponse.progress:type_name -> core.v1.PlaybackProgress
 	35, // 32: core.v1.GetPlaybackProgressResponse.progress:type_name -> core.v1.PlaybackProgress
 	35, // 33: core.v1.ListRecentPlaybackProgressResponse.items:type_name -> core.v1.PlaybackProgress
-	50, // 34: core.v1.ReadingProgress.domain:type_name -> plugin.v1.Domain
+	59, // 34: core.v1.ReadingProgress.domain:type_name -> plugin.v1.Domain
 	42, // 35: core.v1.SaveReadingProgressRequest.progress:type_name -> core.v1.ReadingProgress
 	42, // 36: core.v1.SaveReadingProgressResponse.progress:type_name -> core.v1.ReadingProgress
 	42, // 37: core.v1.GetReadingProgressResponse.progress:type_name -> core.v1.ReadingProgress
 	42, // 38: core.v1.ListRecentReadingProgressResponse.items:type_name -> core.v1.ReadingProgress
-	1,  // 39: core.v1.CoreService.Ping:input_type -> core.v1.PingRequest
-	3,  // 40: core.v1.CoreService.SearchMedia:input_type -> core.v1.SearchMediaRequest
-	6,  // 41: core.v1.CoreService.GetMediaDetails:input_type -> core.v1.GetMediaDetailsRequest
-	8,  // 42: core.v1.CoreService.GetStreams:input_type -> core.v1.GetStreamsRequest
-	13, // 43: core.v1.CoreService.GetChapterContent:input_type -> core.v1.GetChapterContentRequest
-	11, // 44: core.v1.CoreService.ListPlugins:input_type -> core.v1.ListPluginsRequest
-	17, // 45: core.v1.CoreService.ListThemes:input_type -> core.v1.ListThemesRequest
-	19, // 46: core.v1.CoreService.GetActiveTheme:input_type -> core.v1.GetActiveThemeRequest
-	21, // 47: core.v1.CoreService.SetActiveTheme:input_type -> core.v1.SetActiveThemeRequest
-	24, // 48: core.v1.CoreService.GetSupportedLocales:input_type -> core.v1.GetSupportedLocalesRequest
-	27, // 49: core.v1.CoreService.SaveLibraryItem:input_type -> core.v1.SaveLibraryItemRequest
-	29, // 50: core.v1.CoreService.GetLibraryItem:input_type -> core.v1.GetLibraryItemRequest
-	31, // 51: core.v1.CoreService.ListLibraryItems:input_type -> core.v1.ListLibraryItemsRequest
-	33, // 52: core.v1.CoreService.DeleteLibraryItem:input_type -> core.v1.DeleteLibraryItemRequest
-	36, // 53: core.v1.CoreService.SavePlaybackProgress:input_type -> core.v1.SavePlaybackProgressRequest
-	38, // 54: core.v1.CoreService.GetPlaybackProgress:input_type -> core.v1.GetPlaybackProgressRequest
-	40, // 55: core.v1.CoreService.ListRecentPlaybackProgress:input_type -> core.v1.ListRecentPlaybackProgressRequest
-	43, // 56: core.v1.CoreService.SaveReadingProgress:input_type -> core.v1.SaveReadingProgressRequest
-	45, // 57: core.v1.CoreService.GetReadingProgress:input_type -> core.v1.GetReadingProgressRequest
-	47, // 58: core.v1.CoreService.ListRecentReadingProgress:input_type -> core.v1.ListRecentReadingProgressRequest
-	2,  // 59: core.v1.CoreService.Ping:output_type -> core.v1.PingResponse
-	5,  // 60: core.v1.CoreService.SearchMedia:output_type -> core.v1.SearchMediaResponse
-	7,  // 61: core.v1.CoreService.GetMediaDetails:output_type -> core.v1.GetMediaDetailsResponse
-	9,  // 62: core.v1.CoreService.GetStreams:output_type -> core.v1.GetStreamsResponse
-	14, // 63: core.v1.CoreService.GetChapterContent:output_type -> core.v1.GetChapterContentResponse
-	12, // 64: core.v1.CoreService.ListPlugins:output_type -> core.v1.ListPluginsResponse
-	18, // 65: core.v1.CoreService.ListThemes:output_type -> core.v1.ListThemesResponse
-	20, // 66: core.v1.CoreService.GetActiveTheme:output_type -> core.v1.GetActiveThemeResponse
-	22, // 67: core.v1.CoreService.SetActiveTheme:output_type -> core.v1.SetActiveThemeResponse
-	25, // 68: core.v1.CoreService.GetSupportedLocales:output_type -> core.v1.GetSupportedLocalesResponse
-	28, // 69: core.v1.CoreService.SaveLibraryItem:output_type -> core.v1.SaveLibraryItemResponse
-	30, // 70: core.v1.CoreService.GetLibraryItem:output_type -> core.v1.GetLibraryItemResponse
-	32, // 71: core.v1.CoreService.ListLibraryItems:output_type -> core.v1.ListLibraryItemsResponse
-	34, // 72: core.v1.CoreService.DeleteLibraryItem:output_type -> core.v1.DeleteLibraryItemResponse
-	37, // 73: core.v1.CoreService.SavePlaybackProgress:output_type -> core.v1.SavePlaybackProgressResponse
-	39, // 74: core.v1.CoreService.GetPlaybackProgress:output_type -> core.v1.GetPlaybackProgressResponse
-	41, // 75: core.v1.CoreService.ListRecentPlaybackProgress:output_type -> core.v1.ListRecentPlaybackProgressResponse
-	44, // 76: core.v1.CoreService.SaveReadingProgress:output_type -> core.v1.SaveReadingProgressResponse
-	46, // 77: core.v1.CoreService.GetReadingProgress:output_type -> core.v1.GetReadingProgressResponse
-	48, // 78: core.v1.CoreService.ListRecentReadingProgress:output_type -> core.v1.ListRecentReadingProgressResponse
-	59, // [59:79] is the sub-list for method output_type
-	39, // [39:59] is the sub-list for method input_type
-	39, // [39:39] is the sub-list for extension type_name
-	39, // [39:39] is the sub-list for extension extendee
-	0,  // [0:39] is the sub-list for field type_name
+	49, // 39: core.v1.GetDebridStatusResponse.accounts:type_name -> core.v1.DebridAccountStatus
+	49, // 40: core.v1.ConfigureDebridResponse.status:type_name -> core.v1.DebridAccountStatus
+	58, // 41: core.v1.ResolvedStream.headers:type_name -> core.v1.ResolvedStream.HeadersEntry
+	55, // 42: core.v1.ResolveStreamResponse.stream:type_name -> core.v1.ResolvedStream
+	1,  // 43: core.v1.CoreService.Ping:input_type -> core.v1.PingRequest
+	3,  // 44: core.v1.CoreService.SearchMedia:input_type -> core.v1.SearchMediaRequest
+	6,  // 45: core.v1.CoreService.GetMediaDetails:input_type -> core.v1.GetMediaDetailsRequest
+	8,  // 46: core.v1.CoreService.GetStreams:input_type -> core.v1.GetStreamsRequest
+	13, // 47: core.v1.CoreService.GetChapterContent:input_type -> core.v1.GetChapterContentRequest
+	11, // 48: core.v1.CoreService.ListPlugins:input_type -> core.v1.ListPluginsRequest
+	17, // 49: core.v1.CoreService.ListThemes:input_type -> core.v1.ListThemesRequest
+	19, // 50: core.v1.CoreService.GetActiveTheme:input_type -> core.v1.GetActiveThemeRequest
+	21, // 51: core.v1.CoreService.SetActiveTheme:input_type -> core.v1.SetActiveThemeRequest
+	24, // 52: core.v1.CoreService.GetSupportedLocales:input_type -> core.v1.GetSupportedLocalesRequest
+	27, // 53: core.v1.CoreService.SaveLibraryItem:input_type -> core.v1.SaveLibraryItemRequest
+	29, // 54: core.v1.CoreService.GetLibraryItem:input_type -> core.v1.GetLibraryItemRequest
+	31, // 55: core.v1.CoreService.ListLibraryItems:input_type -> core.v1.ListLibraryItemsRequest
+	33, // 56: core.v1.CoreService.DeleteLibraryItem:input_type -> core.v1.DeleteLibraryItemRequest
+	36, // 57: core.v1.CoreService.SavePlaybackProgress:input_type -> core.v1.SavePlaybackProgressRequest
+	38, // 58: core.v1.CoreService.GetPlaybackProgress:input_type -> core.v1.GetPlaybackProgressRequest
+	40, // 59: core.v1.CoreService.ListRecentPlaybackProgress:input_type -> core.v1.ListRecentPlaybackProgressRequest
+	43, // 60: core.v1.CoreService.SaveReadingProgress:input_type -> core.v1.SaveReadingProgressRequest
+	45, // 61: core.v1.CoreService.GetReadingProgress:input_type -> core.v1.GetReadingProgressRequest
+	47, // 62: core.v1.CoreService.ListRecentReadingProgress:input_type -> core.v1.ListRecentReadingProgressRequest
+	54, // 63: core.v1.CoreService.ResolveStream:input_type -> core.v1.ResolveStreamRequest
+	50, // 64: core.v1.CoreService.GetDebridStatus:input_type -> core.v1.GetDebridStatusRequest
+	52, // 65: core.v1.CoreService.ConfigureDebrid:input_type -> core.v1.ConfigureDebridRequest
+	2,  // 66: core.v1.CoreService.Ping:output_type -> core.v1.PingResponse
+	5,  // 67: core.v1.CoreService.SearchMedia:output_type -> core.v1.SearchMediaResponse
+	7,  // 68: core.v1.CoreService.GetMediaDetails:output_type -> core.v1.GetMediaDetailsResponse
+	9,  // 69: core.v1.CoreService.GetStreams:output_type -> core.v1.GetStreamsResponse
+	14, // 70: core.v1.CoreService.GetChapterContent:output_type -> core.v1.GetChapterContentResponse
+	12, // 71: core.v1.CoreService.ListPlugins:output_type -> core.v1.ListPluginsResponse
+	18, // 72: core.v1.CoreService.ListThemes:output_type -> core.v1.ListThemesResponse
+	20, // 73: core.v1.CoreService.GetActiveTheme:output_type -> core.v1.GetActiveThemeResponse
+	22, // 74: core.v1.CoreService.SetActiveTheme:output_type -> core.v1.SetActiveThemeResponse
+	25, // 75: core.v1.CoreService.GetSupportedLocales:output_type -> core.v1.GetSupportedLocalesResponse
+	28, // 76: core.v1.CoreService.SaveLibraryItem:output_type -> core.v1.SaveLibraryItemResponse
+	30, // 77: core.v1.CoreService.GetLibraryItem:output_type -> core.v1.GetLibraryItemResponse
+	32, // 78: core.v1.CoreService.ListLibraryItems:output_type -> core.v1.ListLibraryItemsResponse
+	34, // 79: core.v1.CoreService.DeleteLibraryItem:output_type -> core.v1.DeleteLibraryItemResponse
+	37, // 80: core.v1.CoreService.SavePlaybackProgress:output_type -> core.v1.SavePlaybackProgressResponse
+	39, // 81: core.v1.CoreService.GetPlaybackProgress:output_type -> core.v1.GetPlaybackProgressResponse
+	41, // 82: core.v1.CoreService.ListRecentPlaybackProgress:output_type -> core.v1.ListRecentPlaybackProgressResponse
+	44, // 83: core.v1.CoreService.SaveReadingProgress:output_type -> core.v1.SaveReadingProgressResponse
+	46, // 84: core.v1.CoreService.GetReadingProgress:output_type -> core.v1.GetReadingProgressResponse
+	48, // 85: core.v1.CoreService.ListRecentReadingProgress:output_type -> core.v1.ListRecentReadingProgressResponse
+	56, // 86: core.v1.CoreService.ResolveStream:output_type -> core.v1.ResolveStreamResponse
+	51, // 87: core.v1.CoreService.GetDebridStatus:output_type -> core.v1.GetDebridStatusResponse
+	53, // 88: core.v1.CoreService.ConfigureDebrid:output_type -> core.v1.ConfigureDebridResponse
+	66, // [66:89] is the sub-list for method output_type
+	43, // [43:66] is the sub-list for method input_type
+	43, // [43:43] is the sub-list for extension type_name
+	43, // [43:43] is the sub-list for extension extendee
+	0,  // [0:43] is the sub-list for field type_name
 }
 
 func init() { file_core_v1_core_proto_init() }
@@ -3413,7 +4007,7 @@ func file_core_v1_core_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_core_v1_core_proto_rawDesc), len(file_core_v1_core_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   49,
+			NumMessages:   58,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

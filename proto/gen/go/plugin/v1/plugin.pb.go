@@ -212,6 +212,8 @@ const (
 	StreamFormat_STREAM_FORMAT_DASH        StreamFormat = 2
 	StreamFormat_STREAM_FORMAT_MP4         StreamFormat = 3
 	StreamFormat_STREAM_FORMAT_MKV         StreamFormat = 4
+	StreamFormat_STREAM_FORMAT_TORRENT     StreamFormat = 5
+	StreamFormat_STREAM_FORMAT_MAGNET      StreamFormat = 6
 )
 
 // Enum value maps for StreamFormat.
@@ -222,6 +224,8 @@ var (
 		2: "STREAM_FORMAT_DASH",
 		3: "STREAM_FORMAT_MP4",
 		4: "STREAM_FORMAT_MKV",
+		5: "STREAM_FORMAT_TORRENT",
+		6: "STREAM_FORMAT_MAGNET",
 	}
 	StreamFormat_value = map[string]int32{
 		"STREAM_FORMAT_UNSPECIFIED": 0,
@@ -229,6 +233,8 @@ var (
 		"STREAM_FORMAT_DASH":        2,
 		"STREAM_FORMAT_MP4":         3,
 		"STREAM_FORMAT_MKV":         4,
+		"STREAM_FORMAT_TORRENT":     5,
+		"STREAM_FORMAT_MAGNET":      6,
 	}
 )
 
@@ -1724,13 +1730,15 @@ const file_plugin_v1_plugin_proto_rawDesc = "" +
 	"\x10MEDIA_TYPE_MANGA\x10\x04\x12\x16\n" +
 	"\x12MEDIA_TYPE_WEBTOON\x10\x05\x12\x15\n" +
 	"\x11MEDIA_TYPE_WEBOOK\x10\x06\x12\x13\n" +
-	"\x0fMEDIA_TYPE_BOOK\x10\a*\x8a\x01\n" +
+	"\x0fMEDIA_TYPE_BOOK\x10\a*\xbf\x01\n" +
 	"\fStreamFormat\x12\x1d\n" +
 	"\x19STREAM_FORMAT_UNSPECIFIED\x10\x00\x12\x15\n" +
 	"\x11STREAM_FORMAT_HLS\x10\x01\x12\x16\n" +
 	"\x12STREAM_FORMAT_DASH\x10\x02\x12\x15\n" +
 	"\x11STREAM_FORMAT_MP4\x10\x03\x12\x15\n" +
-	"\x11STREAM_FORMAT_MKV\x10\x04*c\n" +
+	"\x11STREAM_FORMAT_MKV\x10\x04\x12\x19\n" +
+	"\x15STREAM_FORMAT_TORRENT\x10\x05\x12\x18\n" +
+	"\x14STREAM_FORMAT_MAGNET\x10\x06*c\n" +
 	"\x0eSubtitleFormat\x12\x1f\n" +
 	"\x1bSUBTITLE_FORMAT_UNSPECIFIED\x10\x00\x12\x17\n" +
 	"\x13SUBTITLE_FORMAT_VTT\x10\x01\x12\x17\n" +

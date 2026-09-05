@@ -41,7 +41,7 @@ func TestLibraryAndProgressOverIPC(t *testing.T) {
 	srv := coreserver.NewServer(coreserver.ServerConfig{
 		ListenAddr: tcpAddr,
 		Version:    "1.0.0-library-test",
-	}, cinemaSvc, readingSvc, librarySvc, mgr, themeMgr)
+	}, cinemaSvc, readingSvc, librarySvc, nil, mgr, themeMgr)
 
 	if err := srv.Start(); err != nil {
 		t.Fatalf("failed to start server: %v", err)

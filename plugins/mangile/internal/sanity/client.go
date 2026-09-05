@@ -83,7 +83,11 @@ func (c *Client) Query(ctx context.Context, groq string, params map[string]any, 
 
 	values := url.Values{}
 	values.Set("query", groq)
-	values.Set("perspective", "drafts")
+	if c.token != "" {
+		values.Set("perspective", "drafts")
+	} else {
+		values.Set("perspective", "published")
+	}
 	for key, value := range params {
 		encoded, err := json.Marshal(value)
 		if err != nil {

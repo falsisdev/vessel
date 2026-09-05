@@ -300,6 +300,60 @@ message ListRecentReadingProgressResponse {
   repeated ReadingProgress items = 1;
 }
 
+message DebridAccountStatus {
+  string provider = 1;
+  string username = 2;
+  string email = 3;
+  int64 expiration_timestamp = 4;
+  bool is_premium = 5;
+  int32 points = 6;
+  string status = 7;
+}
+
+message GetDebridStatusRequest {
+  string provider = 1;
+}
+
+message GetDebridStatusResponse {
+  repeated DebridAccountStatus accounts = 1;
+}
+
+message ConfigureDebridRequest {
+  string provider = 1;
+  string api_key = 2;
+  bool enabled = 3;
+}
+
+message ConfigureDebridResponse {
+  bool success = 1;
+  string message = 2;
+  DebridAccountStatus status = 3;
+}
+
+message ResolveStreamRequest {
+  string stream_url = 1;
+  string title = 2;
+  int32 season_number = 3;
+  int32 episode_number = 4;
+  string preferred_provider = 5;
+}
+
+message ResolvedStream {
+  string original_url = 1;
+  string playback_url = 2;
+  string stream_type = 3;
+  string provider = 4;
+  string quality = 5;
+  int64 file_size = 6;
+  string filename = 7;
+  map<string, string> headers = 8;
+  bool is_cached = 9;
+}
+
+message ResolveStreamResponse {
+  ResolvedStream stream = 1;
+}
+
 service CoreService {
   rpc Ping(PingRequest) returns (PingResponse);
   rpc SearchMedia(SearchMediaRequest) returns (SearchMediaResponse);
@@ -321,5 +375,9 @@ service CoreService {
   rpc SaveReadingProgress(SaveReadingProgressRequest) returns (SaveReadingProgressResponse);
   rpc GetReadingProgress(GetReadingProgressRequest) returns (GetReadingProgressResponse);
   rpc ListRecentReadingProgress(ListRecentReadingProgressRequest) returns (ListRecentReadingProgressResponse);
+  rpc ResolveStream(ResolveStreamRequest) returns (ResolveStreamResponse);
+  rpc GetDebridStatus(GetDebridStatusRequest) returns (GetDebridStatusResponse);
+  rpc ConfigureDebrid(ConfigureDebridRequest) returns (ConfigureDebridResponse);
 }
+
 

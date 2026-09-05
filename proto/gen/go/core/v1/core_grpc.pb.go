@@ -39,6 +39,9 @@ const (
 	CoreService_SaveReadingProgress_FullMethodName        = "/core.v1.CoreService/SaveReadingProgress"
 	CoreService_GetReadingProgress_FullMethodName         = "/core.v1.CoreService/GetReadingProgress"
 	CoreService_ListRecentReadingProgress_FullMethodName  = "/core.v1.CoreService/ListRecentReadingProgress"
+	CoreService_ResolveStream_FullMethodName              = "/core.v1.CoreService/ResolveStream"
+	CoreService_GetDebridStatus_FullMethodName            = "/core.v1.CoreService/GetDebridStatus"
+	CoreService_ConfigureDebrid_FullMethodName            = "/core.v1.CoreService/ConfigureDebrid"
 )
 
 // CoreServiceClient is the client API for CoreService service.
@@ -65,6 +68,9 @@ type CoreServiceClient interface {
 	SaveReadingProgress(ctx context.Context, in *SaveReadingProgressRequest, opts ...grpc.CallOption) (*SaveReadingProgressResponse, error)
 	GetReadingProgress(ctx context.Context, in *GetReadingProgressRequest, opts ...grpc.CallOption) (*GetReadingProgressResponse, error)
 	ListRecentReadingProgress(ctx context.Context, in *ListRecentReadingProgressRequest, opts ...grpc.CallOption) (*ListRecentReadingProgressResponse, error)
+	ResolveStream(ctx context.Context, in *ResolveStreamRequest, opts ...grpc.CallOption) (*ResolveStreamResponse, error)
+	GetDebridStatus(ctx context.Context, in *GetDebridStatusRequest, opts ...grpc.CallOption) (*GetDebridStatusResponse, error)
+	ConfigureDebrid(ctx context.Context, in *ConfigureDebridRequest, opts ...grpc.CallOption) (*ConfigureDebridResponse, error)
 }
 
 type coreServiceClient struct {
@@ -275,6 +281,36 @@ func (c *coreServiceClient) ListRecentReadingProgress(ctx context.Context, in *L
 	return out, nil
 }
 
+func (c *coreServiceClient) ResolveStream(ctx context.Context, in *ResolveStreamRequest, opts ...grpc.CallOption) (*ResolveStreamResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ResolveStreamResponse)
+	err := c.cc.Invoke(ctx, CoreService_ResolveStream_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *coreServiceClient) GetDebridStatus(ctx context.Context, in *GetDebridStatusRequest, opts ...grpc.CallOption) (*GetDebridStatusResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetDebridStatusResponse)
+	err := c.cc.Invoke(ctx, CoreService_GetDebridStatus_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *coreServiceClient) ConfigureDebrid(ctx context.Context, in *ConfigureDebridRequest, opts ...grpc.CallOption) (*ConfigureDebridResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ConfigureDebridResponse)
+	err := c.cc.Invoke(ctx, CoreService_ConfigureDebrid_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // CoreServiceServer is the server API for CoreService service.
 // All implementations must embed UnimplementedCoreServiceServer
 // for forward compatibility.
@@ -299,6 +335,9 @@ type CoreServiceServer interface {
 	SaveReadingProgress(context.Context, *SaveReadingProgressRequest) (*SaveReadingProgressResponse, error)
 	GetReadingProgress(context.Context, *GetReadingProgressRequest) (*GetReadingProgressResponse, error)
 	ListRecentReadingProgress(context.Context, *ListRecentReadingProgressRequest) (*ListRecentReadingProgressResponse, error)
+	ResolveStream(context.Context, *ResolveStreamRequest) (*ResolveStreamResponse, error)
+	GetDebridStatus(context.Context, *GetDebridStatusRequest) (*GetDebridStatusResponse, error)
+	ConfigureDebrid(context.Context, *ConfigureDebridRequest) (*ConfigureDebridResponse, error)
 	mustEmbedUnimplementedCoreServiceServer()
 }
 
@@ -368,6 +407,15 @@ func (UnimplementedCoreServiceServer) GetReadingProgress(context.Context, *GetRe
 }
 func (UnimplementedCoreServiceServer) ListRecentReadingProgress(context.Context, *ListRecentReadingProgressRequest) (*ListRecentReadingProgressResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListRecentReadingProgress not implemented")
+}
+func (UnimplementedCoreServiceServer) ResolveStream(context.Context, *ResolveStreamRequest) (*ResolveStreamResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ResolveStream not implemented")
+}
+func (UnimplementedCoreServiceServer) GetDebridStatus(context.Context, *GetDebridStatusRequest) (*GetDebridStatusResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetDebridStatus not implemented")
+}
+func (UnimplementedCoreServiceServer) ConfigureDebrid(context.Context, *ConfigureDebridRequest) (*ConfigureDebridResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ConfigureDebrid not implemented")
 }
 func (UnimplementedCoreServiceServer) mustEmbedUnimplementedCoreServiceServer() {}
 func (UnimplementedCoreServiceServer) testEmbeddedByValue()                     {}
@@ -750,6 +798,60 @@ func _CoreService_ListRecentReadingProgress_Handler(srv interface{}, ctx context
 	return interceptor(ctx, in, info, handler)
 }
 
+func _CoreService_ResolveStream_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ResolveStreamRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CoreServiceServer).ResolveStream(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CoreService_ResolveStream_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CoreServiceServer).ResolveStream(ctx, req.(*ResolveStreamRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _CoreService_GetDebridStatus_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetDebridStatusRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CoreServiceServer).GetDebridStatus(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CoreService_GetDebridStatus_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CoreServiceServer).GetDebridStatus(ctx, req.(*GetDebridStatusRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _CoreService_ConfigureDebrid_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ConfigureDebridRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CoreServiceServer).ConfigureDebrid(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CoreService_ConfigureDebrid_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CoreServiceServer).ConfigureDebrid(ctx, req.(*ConfigureDebridRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // CoreService_ServiceDesc is the grpc.ServiceDesc for CoreService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -836,6 +938,18 @@ var CoreService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListRecentReadingProgress",
 			Handler:    _CoreService_ListRecentReadingProgress_Handler,
+		},
+		{
+			MethodName: "ResolveStream",
+			Handler:    _CoreService_ResolveStream_Handler,
+		},
+		{
+			MethodName: "GetDebridStatus",
+			Handler:    _CoreService_GetDebridStatus_Handler,
+		},
+		{
+			MethodName: "ConfigureDebrid",
+			Handler:    _CoreService_ConfigureDebrid_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

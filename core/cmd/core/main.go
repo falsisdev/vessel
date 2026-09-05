@@ -10,12 +10,14 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/falsisdev/vessel/pkg/config"
+	"github.com/falsisdev/vessel/core/internal/debrid"
 	"github.com/falsisdev/vessel/core/internal/plugin"
 	"github.com/falsisdev/vessel/core/internal/server"
 	"github.com/falsisdev/vessel/core/internal/service"
 	"github.com/falsisdev/vessel/core/internal/storage"
+	"github.com/falsisdev/vessel/core/internal/streaming"
 	"github.com/falsisdev/vessel/core/internal/theme"
+	"github.com/falsisdev/vessel/pkg/config"
 )
 
 func main() {
@@ -69,6 +71,15 @@ func run() error {
 	cinemaService := service.NewCinemaService(pluginManager, 5*time.Second)
 	readingService := service.NewReadingService(pluginManager, 5*time.Second)
 
+	debridManager := debrid.NewManager(sqliteStorage)
+	streamingProxy, err := streaming.NewProxy()
+	if err != nil {
+		slog.Warn("Failed to start local streaming proxy", "error", err)
+	} else {
+		defer streamingProxy.Close()
+	}
+	streamService := service.NewStreamService(debridManager, streamingProxy)
+
 	var customThemeDirs []string
 	if *themesDir != "" {
 		customThemeDirs = append(customThemeDirs, *themesDir)
@@ -79,7 +90,7 @@ func run() error {
 		coreServer := server.NewServer(server.ServerConfig{
 			ListenAddr: *listenAddr,
 			Version:    "1.0.0",
-		}, cinemaService, readingService, libraryService, pluginManager, themeManager)
+		}, cinemaService, readingService, libraryService, streamService, pluginManager, themeManager)
 
 		if err := coreServer.Start(); err != nil {
 			return fmt.Errorf("failed to start core IPC server at %s: %w", *listenAddr, err)

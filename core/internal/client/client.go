@@ -172,6 +172,28 @@ func (c *Client) ListRecentReadingProgress(ctx context.Context, limit int32) (*c
 	return c.service.ListRecentReadingProgress(ctx, &corev1.ListRecentReadingProgressRequest{Limit: limit})
 }
 
+func (c *Client) ResolveStream(ctx context.Context, streamURL, title string, season, episode int32, preferredProvider string) (*corev1.ResolveStreamResponse, error) {
+	return c.service.ResolveStream(ctx, &corev1.ResolveStreamRequest{
+		StreamUrl:         streamURL,
+		Title:             title,
+		SeasonNumber:      season,
+		EpisodeNumber:     episode,
+		PreferredProvider: preferredProvider,
+	})
+}
+
+func (c *Client) GetDebridStatus(ctx context.Context, provider string) (*corev1.GetDebridStatusResponse, error) {
+	return c.service.GetDebridStatus(ctx, &corev1.GetDebridStatusRequest{Provider: provider})
+}
+
+func (c *Client) ConfigureDebrid(ctx context.Context, provider, apiKey string, enabled bool) (*corev1.ConfigureDebridResponse, error) {
+	return c.service.ConfigureDebrid(ctx, &corev1.ConfigureDebridRequest{
+		Provider: provider,
+		ApiKey:   apiKey,
+		Enabled:  enabled,
+	})
+}
+
 func (c *Client) Close() error {
 	if c.conn != nil {
 		return c.conn.Close()

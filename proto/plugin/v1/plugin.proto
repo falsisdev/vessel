@@ -40,6 +40,8 @@ enum StreamFormat {
   STREAM_FORMAT_DASH = 2;
   STREAM_FORMAT_MP4 = 3;
   STREAM_FORMAT_MKV = 4;
+  STREAM_FORMAT_TORRENT = 5;
+  STREAM_FORMAT_MAGNET = 6;
 }
 
 enum SubtitleFormat {

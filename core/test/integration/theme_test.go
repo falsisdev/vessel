@@ -71,7 +71,7 @@ func TestThemeAndLocaleOverIPC(t *testing.T) {
 	srv := coreserver.NewServer(coreserver.ServerConfig{
 		ListenAddr: tcpAddr,
 		Version:    "1.0.0-theme-test",
-	}, cinemaSvc, readingSvc, nil, mgr, themeMgr)
+	}, cinemaSvc, readingSvc, nil, nil, mgr, themeMgr)
 
 	if err := srv.Start(); err != nil {
 		t.Fatalf("failed to start core IPC server: %v", err)

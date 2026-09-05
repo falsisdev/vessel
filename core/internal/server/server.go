@@ -37,6 +37,7 @@ type Server struct {
 	cinemaService  *service.CinemaService
 	readingService *service.ReadingService
 	libraryService *service.LibraryService
+	streamService  *service.StreamService
 	pluginManager  *plugin.Manager
 	themeManager   *theme.Manager
 	startTime      time.Time
@@ -44,7 +45,15 @@ type Server struct {
 	socketPath     string
 }
 
-func NewServer(cfg ServerConfig, cinemaSvc *service.CinemaService, readingSvc *service.ReadingService, librarySvc *service.LibraryService, pluginMgr *plugin.Manager, themeMgr *theme.Manager) *Server {
+func NewServer(
+	cfg ServerConfig,
+	cinemaSvc *service.CinemaService,
+	readingSvc *service.ReadingService,
+	librarySvc *service.LibraryService,
+	streamSvc *service.StreamService,
+	pluginMgr *plugin.Manager,
+	themeMgr *theme.Manager,
+) *Server {
 	if cfg.Version == "" {
 		cfg.Version = "1.0.0"
 	}
@@ -56,6 +65,7 @@ func NewServer(cfg ServerConfig, cinemaSvc *service.CinemaService, readingSvc *s
 		cinemaService:  cinemaSvc,
 		readingService: readingSvc,
 		libraryService: librarySvc,
+		streamService:  streamSvc,
 		pluginManager:  pluginMgr,
 		themeManager:   themeMgr,
 		startTime:      time.Now(),
@@ -690,6 +700,50 @@ func (s *Server) ListRecentReadingProgress(ctx context.Context, req *corev1.List
 	}
 
 	return &corev1.ListRecentReadingProgressResponse{Items: protoList}, nil
+}
+
+func (s *Server) ResolveStream(ctx context.Context, req *corev1.ResolveStreamRequest) (*corev1.ResolveStreamResponse, error) {
+	if s.streamService == nil {
+		return nil, errors.New("stream service not available")
+	}
+
+	res, err := s.streamService.ResolveStream(ctx, req.StreamUrl, req.Title, int(req.SeasonNumber), int(req.EpisodeNumber), req.PreferredProvider)
+	if err != nil {
+		return nil, err
+	}
+	return &corev1.ResolveStreamResponse{Stream: res}, nil
+}
+
+func (s *Server) GetDebridStatus(ctx context.Context, req *corev1.GetDebridStatusRequest) (*corev1.GetDebridStatusResponse, error) {
+	if s.streamService == nil {
+		return &corev1.GetDebridStatusResponse{}, nil
+	}
+
+	statuses, err := s.streamService.GetDebridStatus(ctx, req.Provider)
+	if err != nil {
+		return nil, err
+	}
+	return &corev1.GetDebridStatusResponse{Accounts: statuses}, nil
+}
+
+func (s *Server) ConfigureDebrid(ctx context.Context, req *corev1.ConfigureDebridRequest) (*corev1.ConfigureDebridResponse, error) {
+	if s.streamService == nil {
+		return nil, errors.New("stream service not available")
+	}
+
+	status, err := s.streamService.ConfigureDebrid(ctx, req.Provider, req.ApiKey, req.Enabled)
+	if err != nil {
+		return &corev1.ConfigureDebridResponse{
+			Success: false,
+			Message: err.Error(),
+		}, nil
+	}
+
+	return &corev1.ConfigureDebridResponse{
+		Success: true,
+		Message: "debrid provider configured successfully",
+		Status:  status,
+	}, nil
 }
 
 func mapLibraryItemToProto(it *library.Item) *corev1.LibraryItem {

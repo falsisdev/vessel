@@ -150,3 +150,48 @@ func TestSQLiteStorage_PlaybackAndReadingProgress(t *testing.T) {
 		t.Fatalf("ListRecentReadingProgress error: %v, count: %d", err, len(recentRead))
 	}
 }
+
+func TestSQLiteStorage_Settings(t *testing.T) {
+	s, err := storage.NewSQLiteStorage(":memory:")
+	if err != nil {
+		t.Fatalf("failed to create memory sqlite: %v", err)
+	}
+	defer s.Close()
+
+	ctx := context.Background()
+
+	// Setting non-existent
+	_, err = s.GetSetting(ctx, "debrid:realdebrid:token")
+	if err != storage.ErrNotFound {
+		t.Fatalf("expected ErrNotFound, got %v", err)
+	}
+
+	// Set and get
+	if err := s.SetSetting(ctx, "debrid:realdebrid:token", "secret123"); err != nil {
+		t.Fatalf("SetSetting failed: %v", err)
+	}
+
+	val, err := s.GetSetting(ctx, "debrid:realdebrid:token")
+	if err != nil || val != "secret123" {
+		t.Fatalf("unexpected setting value: %s, err: %v", val, err)
+	}
+
+	// Update
+	if err := s.SetSetting(ctx, "debrid:realdebrid:token", "updated456"); err != nil {
+		t.Fatalf("SetSetting update failed: %v", err)
+	}
+	val, err = s.GetSetting(ctx, "debrid:realdebrid:token")
+	if err != nil || val != "updated456" {
+		t.Fatalf("unexpected updated value: %s, err: %v", val, err)
+	}
+
+	// Delete
+	if err := s.DeleteSetting(ctx, "debrid:realdebrid:token"); err != nil {
+		t.Fatalf("DeleteSetting failed: %v", err)
+	}
+	_, err = s.GetSetting(ctx, "debrid:realdebrid:token")
+	if err != storage.ErrNotFound {
+		t.Fatalf("expected ErrNotFound after delete, got %v", err)
+	}
+}
+

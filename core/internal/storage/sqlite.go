@@ -96,6 +96,12 @@ func (s *SQLiteStorage) migrate(ctx context.Context) error {
 			UNIQUE(provider_id, media_id, chapter_id)
 		);`,
 		`CREATE INDEX IF NOT EXISTS idx_reading_updated ON reading_progress(updated_at DESC);`,
+
+		`CREATE TABLE IF NOT EXISTS settings (
+			key TEXT PRIMARY KEY,
+			value TEXT NOT NULL,
+			updated_at DATETIME
+		);`,
 	}
 
 	for _, q := range queries {
@@ -489,4 +495,27 @@ func (s *SQLiteStorage) ListRecentReadingProgress(ctx context.Context, limit int
 	}
 
 	return list, rows.Err()
+}
+
+func (s *SQLiteStorage) SetSetting(ctx context.Context, key, value string) error {
+	query := `INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?)
+		ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at;`
+	_, err := s.db.ExecContext(ctx, query, key, value, time.Now().UTC())
+	return err
+}
+
+func (s *SQLiteStorage) GetSetting(ctx context.Context, key string) (string, error) {
+	query := `SELECT value FROM settings WHERE key = ?;`
+	var val string
+	err := s.db.QueryRowContext(ctx, query, key).Scan(&val)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", ErrNotFound
+	}
+	return val, err
+}
+
+func (s *SQLiteStorage) DeleteSetting(ctx context.Context, key string) error {
+	query := `DELETE FROM settings WHERE key = ?;`
+	_, err := s.db.ExecContext(ctx, query, key)
+	return err
 }
