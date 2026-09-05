@@ -7,7 +7,7 @@ const I18N_STRINGS = {
     nav_reading: "Manga & Novels",
     nav_library: "My Library",
     nav_settings: "Settings",
-    section_continue: "Continue Watching & Reading",
+    section_continue: "Continue Where You Left Off",
     section_discover: "Discover Media",
     pill_all: "All",
     pill_movies: "Movies",
@@ -39,7 +39,7 @@ const I18N_STRINGS = {
     nav_reading: "Manga & Roman",
     nav_library: "Kütüphanem",
     nav_settings: "Ayarlar",
-    section_continue: "İzlemeye & Okumaya Devam Et",
+    section_continue: "Kaldığın Yerden Devam Et",
     section_discover: "Medya Keşfet",
     pill_all: "Tümü",
     pill_movies: "Filmler",
@@ -71,7 +71,7 @@ const I18N_STRINGS = {
     nav_reading: "Manga & Romane",
     nav_library: "Meine Bibliothek",
     nav_settings: "Einstellungen",
-    section_continue: "Weiterschauen & Lesen",
+    section_continue: "Weitermachen, wo du aufgehört hast",
     section_discover: "Medien entdecken",
     pill_all: "Alle",
     pill_movies: "Filme",
@@ -103,7 +103,7 @@ const I18N_STRINGS = {
     nav_reading: "Manga & Romans",
     nav_library: "Ma Bibliothèque",
     nav_settings: "Paramètres",
-    section_continue: "Reprendre la lecture",
+    section_continue: "Reprendre là où vous vous êtes arrêté",
     section_discover: "Découvrir",
     pill_all: "Tous",
     pill_movies: "Films",
@@ -135,7 +135,7 @@ const I18N_STRINGS = {
     nav_reading: "Manga y Novelas",
     nav_library: "Mi Biblioteca",
     nav_settings: "Ajustes",
-    section_continue: "Continuar viendo y leyendo",
+    section_continue: "Continuar donde lo dejaste",
     section_discover: "Descubrir",
     pill_all: "Todo",
     pill_movies: "Películas",
@@ -167,7 +167,7 @@ const I18N_STRINGS = {
     nav_reading: "Mangás e Romances",
     nav_library: "Minha Biblioteca",
     nav_settings: "Configurações",
-    section_continue: "Continuar Assistindo e Lendo",
+    section_continue: "Continuar de onde você parou",
     section_discover: "Descobrir",
     pill_all: "Tudo",
     pill_movies: "Filmes",
@@ -199,7 +199,7 @@ const I18N_STRINGS = {
     nav_reading: "Манга и Новеллы",
     nav_library: "Моя Библиотека",
     nav_settings: "Настройки",
-    section_continue: "Продолжить просмотр и чтение",
+    section_continue: "Продолжить с места остановки",
     section_discover: "Обзор",
     pill_all: "Все",
     pill_movies: "Фильмы",
@@ -231,7 +231,7 @@ const I18N_STRINGS = {
     nav_reading: "マンガ & ノベル",
     nav_library: "マイライブラリ",
     nav_settings: "設定",
-    section_continue: "続きから再生・読書",
+    section_continue: "続きから再開",
     section_discover: "メディアを探す",
     pill_all: "すべて",
     pill_movies: "映画",
@@ -263,7 +263,7 @@ const I18N_STRINGS = {
     nav_reading: "漫画与小说",
     nav_library: "我的媒体库",
     nav_settings: "设置",
-    section_continue: "继续观看与阅读",
+    section_continue: "从上次离开的地方继续",
     section_discover: "探索媒体",
     pill_all: "全部",
     pill_movies: "电影",
@@ -295,7 +295,7 @@ const I18N_STRINGS = {
     nav_reading: "المانغا والروايات",
     nav_library: "مكتبتي",
     nav_settings: "الإعدادات",
-    section_continue: "متابعة المشاهدة والقراءة",
+    section_continue: "المتابعة من حيث توقفت",
     section_discover: "استكشاف الوسائط",
     pill_all: "الكل",
     pill_movies: "أفلام",
@@ -327,7 +327,7 @@ const I18N_STRINGS = {
     nav_reading: "مانگا و رمان",
     nav_library: "کتابخانه من",
     nav_settings: "تنظیمات",
-    section_continue: "ادامه تماشا و خواندن",
+    section_continue: "ادامه از جایی که متوقف شدید",
     section_discover: "کاوش رسانه",
     pill_all: "همه",
     pill_movies: "فیلم‌ها",
@@ -371,6 +371,7 @@ class VesselApp {
   }
 
   async init() {
+    this.initSidebar();
     this.bindEvents();
     await this.loadLocalePreference();
     await this.checkCoreStatus();
@@ -378,6 +379,31 @@ class VesselApp {
     await this.loadResumeProgress();
     await this.loadInitialMedia();
     await this.loadDebridStatus();
+  }
+
+  initSidebar() {
+    const sidebar = document.getElementById("app-sidebar");
+    const toggleBtn = document.getElementById("sidebar-toggle-btn");
+    const isCollapsed = localStorage.getItem("vessel_sidebar_collapsed") === "true";
+
+    if (sidebar && isCollapsed) {
+      sidebar.classList.add("collapsed");
+    }
+
+    if (toggleBtn && sidebar) {
+      toggleBtn.addEventListener("click", () => {
+        const collapsed = sidebar.classList.toggle("collapsed");
+        localStorage.setItem("vessel_sidebar_collapsed", collapsed ? "true" : "false");
+      });
+    }
+
+    // Keyboard shortcut Cmd+B / Ctrl+B to toggle sidebar
+    document.addEventListener("keydown", (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "b") {
+        e.preventDefault();
+        toggleBtn?.click();
+      }
+    });
   }
 
   bindEvents() {
@@ -483,6 +509,14 @@ class VesselApp {
       }
     });
 
+    // Update nav-item tooltips for collapsed sidebar mode
+    document.querySelectorAll(".nav-item").forEach(btn => {
+      const span = btn.querySelector("[data-i18n]");
+      if (span && dict[span.dataset.i18n]) {
+        btn.setAttribute("data-tooltip", dict[span.dataset.i18n]);
+      }
+    });
+
     const searchInput = document.getElementById("search-input");
     if (searchInput) {
       searchInput.placeholder = target === "tr"
@@ -559,7 +593,7 @@ class VesselApp {
       "catppuccin": ["#1e1e2e", "#313244", "#cba6f7"],
       "nord": ["#2e3440", "#3b4252", "#88c0d0"],
       "dracula": ["#282a36", "#44475a", "#bd93f9"],
-      "mangile-amber": ["#140f07", "#2b1e0f", "#f59e0b"],
+      "mangile": ["#0c1017", "#1b2533", "#22c55e"],
     };
     return (map[id] && map[id][idx]) || "#4f46e5";
   }
@@ -581,10 +615,10 @@ class VesselApp {
   }
 
   async cycleTheme() {
-    const list = ["vessel-dark", "vessel-light", "midnight-oled", "dracula", "nord"];
+    const list = ["vessel-dark", "vessel-light", "mangile", "midnight-oled", "dracula", "nord", "catppuccin"];
     const current = this.activeTheme?.theme?.id || "vessel-dark";
     const nextIdx = (list.indexOf(current) + 1) % list.length;
-    await this.switchTheme(list[nextIdx], "dark");
+    await this.switchTheme(list[nextIdx], "");
   }
 
   // --- Routing & Views ---
