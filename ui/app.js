@@ -2066,6 +2066,7 @@ class VesselApp {
         setPlayState(true);
       };
     }
+  }
 
     // HUD Auto-hide
     let hudTimeout = null;
