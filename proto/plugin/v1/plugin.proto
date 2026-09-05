@@ -1,0 +1,147 @@
+syntax = "proto3";
+
+package plugin.v1;
+
+option go_package = "github.com/falsisdev/vessel/proto/gen/go/plugin/v1;pluginv1";
+
+enum Domain {
+  DOMAIN_UNSPECIFIED = 0;
+  DOMAIN_CINEMA = 1;
+  DOMAIN_MANGA = 2;
+  DOMAIN_WEBTOON = 3;
+  DOMAIN_WEBOOK = 4;
+  DOMAIN_BOOK = 5;
+  DOMAIN_LIVE = 6;
+  DOMAIN_IPTV = 7;
+}
+
+enum Capability {
+  CAPABILITY_UNSPECIFIED = 0;
+  CAPABILITY_SEARCH = 1;
+  CAPABILITY_METADATA = 2;
+  CAPABILITY_STREAMS = 3;
+}
+
+enum MediaType {
+  MEDIA_TYPE_UNSPECIFIED = 0;
+  MEDIA_TYPE_MOVIE = 1;
+  MEDIA_TYPE_SERIES = 2;
+  MEDIA_TYPE_ANIME = 3;
+}
+
+enum StreamFormat {
+  STREAM_FORMAT_UNSPECIFIED = 0;
+  STREAM_FORMAT_HLS = 1;
+  STREAM_FORMAT_DASH = 2;
+  STREAM_FORMAT_MP4 = 3;
+  STREAM_FORMAT_MKV = 4;
+}
+
+enum SubtitleFormat {
+  SUBTITLE_FORMAT_UNSPECIFIED = 0;
+  SUBTITLE_FORMAT_VTT = 1;
+  SUBTITLE_FORMAT_SRT = 2;
+}
+
+message PluginManifest {
+  string id = 1;
+  string name = 2;
+  string version = 3;
+  string description = 4;
+  string author = 5;
+  Domain domain = 6;
+  repeated Capability capabilities = 7;
+  string protocol_version = 8;
+}
+
+message GetManifestRequest {}
+
+message GetManifestResponse {
+  PluginManifest manifest = 1;
+}
+
+message SearchRequest {
+  string query = 1;
+  int32 page = 2;
+}
+
+message MediaItem {
+  string id = 1;
+  string title = 2;
+  MediaType type = 3;
+  int32 year = 4;
+  string poster_url = 5;
+  string overview = 6;
+}
+
+message SearchResponse {
+  repeated MediaItem items = 1;
+  bool has_more = 2;
+}
+
+message GetMetadataRequest {
+  string media_id = 1;
+}
+
+message Episode {
+  int32 episode_number = 1;
+  string title = 2;
+  string overview = 3;
+  int64 duration_seconds = 4;
+}
+
+message Season {
+  int32 season_number = 1;
+  string title = 2;
+  repeated Episode episodes = 3;
+}
+
+message MediaDetails {
+  string id = 1;
+  string title = 2;
+  MediaType type = 3;
+  int32 year = 4;
+  string poster_url = 5;
+  string overview = 6;
+  repeated string genres = 7;
+  repeated Season seasons = 8;
+}
+
+message GetMetadataResponse {
+  MediaDetails details = 1;
+}
+
+message GetStreamsRequest {
+  string media_id = 1;
+  int32 season_number = 2;
+  int32 episode_number = 3;
+}
+
+message StreamSource {
+  string id = 1;
+  string title = 2;
+  string url = 3;
+  StreamFormat format = 4;
+  string quality = 5;
+  map<string, string> headers = 6;
+}
+
+message Subtitle {
+  string language = 1;
+  string label = 2;
+  string url = 3;
+  SubtitleFormat format = 4;
+  bool is_default = 5;
+}
+
+message GetStreamsResponse {
+  repeated StreamSource streams = 1;
+  repeated Subtitle subtitles = 2;
+}
+
+service PluginService {
+  rpc GetManifest(GetManifestRequest) returns (GetManifestResponse);
+  rpc Search(SearchRequest) returns (SearchResponse);
+  rpc GetMetadata(GetMetadataRequest) returns (GetMetadataResponse);
+  rpc GetStreams(GetStreamsRequest) returns (GetStreamsResponse);
+}
