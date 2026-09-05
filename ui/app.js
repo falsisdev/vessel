@@ -44,7 +44,11 @@ const I18N_STRINGS = {
     status_watching: "In Progress",
     status_plan: "Plan to Watch",
     status_completed: "Completed",
+    status_dropped: "Dropped",
     status_favorites: "Favorites",
+    status_all: "All",
+    iptv_guide_title: "Live TV Guide",
+    iptv_guide_subtitle: "Browse global TV channels by country & category, watch live instantly.",
     settings_title: "Platform Settings",
     settings_theme_title: "Theme Engine",
     settings_theme_desc: "Choose from built-in curated palettes or install community CSS themes.",
@@ -137,7 +141,11 @@ const I18N_STRINGS = {
     status_watching: "Devam Edenler",
     status_plan: "İzlenecekler",
     status_completed: "Tamamlananlar",
+    status_dropped: "Bırakıldı",
     status_favorites: "Favoriler",
+    status_all: "Tümü",
+    iptv_guide_title: "Canlı TV / IPTV Rehberi",
+    iptv_guide_subtitle: "Ülkelere ve kategorilere göre TV kanallarını keşfedin, anında canlı izleyin.",
     settings_title: "Platform Ayarları",
     settings_theme_title: "Tema Motoru",
     settings_theme_desc: "Dahili 15 zengin temadan birini seçin veya renkleri anında değiştirin.",
@@ -222,10 +230,14 @@ const I18N_STRINGS = {
     pill_novel: "Romane",
     pill_channels: "Sender",
     library_title: "Ihre Sammlung",
+    status_all: "Alle",
     status_watching: "Wird geschaut",
     status_plan: "Geplant",
     status_completed: "Abgeschlossen",
+    status_dropped: "Abgebrochen",
     status_favorites: "Favoriten",
+    iptv_guide_title: "Live-TV-Programm",
+    iptv_guide_subtitle: "Internationale und nationale Live-Streams",
     settings_title: "Plattformeinstellungen",
     settings_theme_title: "Theme-Engine",
     settings_theme_desc: "Wählen Sie vorgefertigte Paletten oder Community-Themes.",
@@ -308,10 +320,14 @@ const I18N_STRINGS = {
     pill_novel: "Romans",
     pill_channels: "Chaînes",
     library_title: "Votre Collection",
+    status_all: "Tout",
     status_watching: "En cours",
     status_plan: "À voir",
     status_completed: "Terminé",
+    status_dropped: "Abandonné",
     status_favorites: "Favoris",
+    iptv_guide_title: "Guide TV en Direct",
+    iptv_guide_subtitle: "Chaînes et flux télévisés du monde entier",
     settings_title: "Paramètres",
     settings_theme_title: "Moteur de thèmes",
     settings_theme_desc: "Choisissez parmi les palettes intégrées ou installez des thèmes.",
@@ -394,10 +410,14 @@ const I18N_STRINGS = {
     pill_novel: "Novelas",
     pill_channels: "Canales",
     library_title: "Tu Colección",
+    status_all: "Todo",
     status_watching: "Viendo",
     status_plan: "Pendiente",
     status_completed: "Completado",
+    status_dropped: "Abandonado",
     status_favorites: "Favoritos",
+    iptv_guide_title: "Guía de TV en Vivo",
+    iptv_guide_subtitle: "Transmisiones de canales de televisión del mundo",
     settings_title: "Ajustes",
     settings_theme_title: "Motor de temas",
     settings_theme_desc: "Elige temas integrados o de la comunidad.",
@@ -480,10 +500,14 @@ const I18N_STRINGS = {
     pill_novel: "Livros/Novels",
     pill_channels: "Canais",
     library_title: "Sua Coleção",
+    status_all: "Todos",
     status_watching: "Assistindo",
     status_plan: "Quero Assistir",
     status_completed: "Concluído",
+    status_dropped: "Abandonado",
     status_favorites: "Favoritos",
+    iptv_guide_title: "Guia de TV ao Vivo",
+    iptv_guide_subtitle: "Canais e transmissões de TV ao vivo de todo o mundo",
     settings_title: "Configurações",
     settings_theme_title: "Motor de temas",
     settings_theme_desc: "Escolha temas internos ou da comunidade.",
@@ -566,10 +590,14 @@ const I18N_STRINGS = {
     pill_novel: "Новеллы",
     pill_channels: "Каналы",
     library_title: "Ваша коллекция",
+    status_all: "Все",
     status_watching: "Смотрю",
     status_plan: "В планах",
     status_completed: "Завершено",
+    status_dropped: "Брошено",
     status_favorites: "Избранное",
+    iptv_guide_title: "Телегид прямых трансляций",
+    iptv_guide_subtitle: "Мировые телеканалы и онлайн-трансляции",
     settings_title: "Настройки платформы",
     settings_theme_title: "Темы оформления",
     settings_theme_desc: "Встроенные темы и поддержка пользовательских стилей.",
@@ -652,10 +680,14 @@ const I18N_STRINGS = {
     pill_novel: "ノベル",
     pill_channels: "チャンネル",
     library_title: "コレクション",
+    status_all: "すべて",
     status_watching: "視聴中",
     status_plan: "見たい",
     status_completed: "完了",
+    status_dropped: "中断",
     status_favorites: "お気に入り",
+    iptv_guide_title: "ライブTV番組表",
+    iptv_guide_subtitle: "世界中のテレビチャンネルとライブ配信",
     settings_title: "プラットフォーム設定",
     settings_theme_title: "テーマエンジン",
     settings_theme_desc: "組み込みテーマやカスタムCSSを適用します。",
@@ -738,10 +770,14 @@ const I18N_STRINGS = {
     pill_novel: "小说",
     pill_channels: "频道",
     library_title: "你的收藏",
+    status_all: "全部",
     status_watching: "正在观看",
     status_plan: "想看",
     status_completed: "已看完",
+    status_dropped: "已放弃",
     status_favorites: "特别喜欢",
+    iptv_guide_title: "电视直播节目表",
+    iptv_guide_subtitle: "全球电视频道与网络在线直播",
     settings_title: "平台设置",
     settings_theme_title: "主题引擎",
     settings_theme_desc: "挑选内置主题或载入社区 CSS 主题。",
@@ -824,10 +860,14 @@ const I18N_STRINGS = {
     pill_novel: "روايات",
     pill_channels: "قنوات",
     library_title: "مجموعتك",
+    status_all: "الكل",
     status_watching: "قيد المشاهدة",
     status_plan: "في خطة المشاهدة",
     status_completed: "مكتمل",
+    status_dropped: "متروك",
     status_favorites: "المفضلة",
+    iptv_guide_title: "دليل القنوات التلفزيونية الحية",
+    iptv_guide_subtitle: "بثوث وقنوات تلفزيونية مباشرة من حول العالم",
     settings_title: "إعدادات المنصة",
     settings_theme_title: "محرك السمات",
     settings_theme_desc: "اختر من اللوحات المدمجة أو استخدم سمات مخصصة.",
@@ -910,10 +950,14 @@ const I18N_STRINGS = {
     pill_novel: "رمان",
     pill_channels: "کانال‌ها",
     library_title: "مجموعه شما",
+    status_all: "همه",
     status_watching: "در حال تماشا",
     status_plan: "برنامه تماشا",
     status_completed: "تکمیل شده",
+    status_dropped: "رها شده",
     status_favorites: "علاقه‌مندی‌ها",
+    iptv_guide_title: "راهنمای شبکه‌های زنده تلویزیونی",
+    iptv_guide_subtitle: "شبکه‌های تلویزیونی زنده سراسر جهان",
     settings_title: "تنظیمات پلتفرم",
     settings_theme_title: "موتور تم",
     settings_theme_desc: "از پوسته‌های پیش‌فرض انتخاب کنید یا تم CSS دلخواه اعمال کنید.",
@@ -961,6 +1005,133 @@ const I18N_STRINGS = {
     theme_amethyst: "یاقوت ارغوانی",
     theme_forest: "زمرد جنگل",
     theme_light_clean: "روشن شفاف"
+  },
+  az: {
+    nav_cinema: "Kino",
+    nav_reading: "Manqa & E-Kitab",
+    nav_live: "Canlı Yayım",
+    nav_iptv: "IPTV",
+    nav_library: "Kitabxanam",
+    nav_plugins: "Qoşmalar",
+    nav_settings: "Tənzimləmələr",
+    section_continue: "Qaldığınız Yerdən Davam Edin",
+    section_discover: "Kəşf Edin",
+    search_placeholder: "Film, serial, manqa, anime, IPTV axtar...",
+    search_results_title: "Axtarış Nəticələri",
+    btn_back: "Geri",
+    btn_play: "İzlə",
+    btn_read: "Oxu",
+    btn_resume: "Davam Et",
+    btn_add_library: "+ Kitabxanaya Əlavə Et",
+    btn_in_library: "✓ Kitabxanadadır",
+    btn_save: "Yadda Saxla",
+    btn_install: "Quraşdır",
+    btn_install_plugins: "Qoşmaları Kəşf Et",
+    btn_uninstall: "Sil",
+    btn_enable: "Aktivləşdir",
+    btn_disable: "Deaktiv Et",
+    btn_active: "Aktiv",
+    btn_retry: "Yenidən Yoxla",
+    btn_watch_trailer: "Treylerə Bax",
+    cast: "Aktyorlar",
+    directors: "Rejissor",
+    start_live: "Canlı Yayımı Başlat",
+    pill_all: "Hamısı",
+    pill_movies: "Filmlər",
+    pill_series: "Seriallar",
+    pill_anime: "Animelər",
+    pill_manga: "Manqa",
+    pill_webtoon: "Vebtun",
+    pill_novel: "Romanlar",
+    pill_channels: "Kanallar",
+    library_title: "Kolleksiyanız",
+    status_watching: "İzlənir / Oxunur",
+    status_plan: "Daha Sonra",
+    status_completed: "Tamamlandı",
+    status_dropped: "Dayandırıldı",
+    status_favorites: "Sevimlilər",
+    status_all: "Hamısı",
+    iptv_guide_title: "Canlı TV / IPTV Bələdçisi",
+    iptv_guide_subtitle: "Ölkələrə və kateqoriyalara görə TV kanallarını kəşf edin, anında canlı izləyin.",
+    settings_title: "Platforma Tənzimləmələri",
+    settings_theme_title: "Mövzu Mühərriki",
+    settings_theme_desc: "15 zəngin mövzudan birini seçin və ya rəngləri fərdiləşdirin.",
+    settings_debrid_title: "Torrent & Debrid Yayım Mühərriki",
+    settings_debrid_desc: "Yüksək sürətli bulud torrent axını üçün Real-Debrid və ya TorBox qoşun.",
+    settings_plugins_title: "Qoşulmuş Əlavələr",
+    settings_plugins_desc: "Quraşdırılmış kataloq və media təminatçı prosesləri.",
+    plugins_title: "Qoşma Mərkəzi",
+    plugins_subtitle: "Quraşdırılmış qoşmaları idarə edin və ya yeni kataloq mənbələri əlavə edin.",
+    plugins_tab_installed: "Quraşdırılmış Qoşmalar",
+    plugins_tab_discover: "Yeni Qoşma Əlavə Et",
+    plugins_install_url_title: "URL və ya Repozitoriyadan Quraşdır",
+    plugins_install_url_desc: "Quraşdırmaq üçün manifest və ya Git repozitoriya linkini yapışdırın.",
+    plugins_install_local_title: "Lokal Qovluqdan Quraşdır",
+    plugins_install_local_desc: "Cihazınızdakı lokal qoşma faylını və ya manifest yolunu qeyd edin.",
+    plugins_curated_title: "Tövsiyə Edilən Qoşmalar",
+    plugins_curated_desc: "Vessel üçün təsdiqlənmiş rəsmi qoşmaları kəşf edin.",
+    plugin_builtin: "Daxili (Gömülü)",
+    plugin_external: "Xarici Proses",
+    empty_domain_title: "Bu bölmə üçün aktiv qoşma yoxdur",
+    empty_domain_desc: "Bu bölmədə məzmun kəşf etmək üçün Qoşmalar səhifəsindən qoşma əlavə edin.",
+    no_results: "Nəticə tapılmadı.",
+    resume_empty: "Hələ heç nə izləməyə və ya oxumağa başlamamısınız.",
+    seasons: "Mövsümlər",
+    season: "Mövsüm",
+    episodes: "Seriyalar",
+    episode: "Seriya",
+    chapters: "Fəsillər",
+    chapter: "Fəsil",
+    streams_title: "Mövcud Yayım Mənbələri & Torrentlər",
+    streams_loading: "Yayım mənbələri axtarılır...",
+    no_streams: "Yayım mənbəyi tapılmadı.",
+    no_episode_streams: "Bu seriya üçün yayım mənbəyi tapılmadı.",
+    synopsis: "Xülasə"
+  }
+};
+
+const PLUGIN_I18N = {
+  "com.vessel.cinema.cinemasis": {
+    en: { name: "Cinemasis", desc: "Official TMDB-based cinema catalog and metadata provider" },
+    tr: { name: "Cinemasis", desc: "Resmi TMDB tabanlı sinema kataloğu ve medya sağlayıcısı" },
+    az: { name: "Cinemasis", desc: "Rəsmi TMDB əsaslı film və serial kataloqu təminatçısı" },
+    de: { name: "Cinemasis", desc: "Offizieller TMDB-basierter Kinokatalog und Metadaten-Anbieter" },
+    fr: { name: "Cinemasis", desc: "Fournisseur officiel de catalogue et métadonnées cinéma basé sur TMDB" },
+    es: { name: "Cinemasis", desc: "Proveedor oficial de catálogo de cine y metadatos basado en TMDB" },
+    ru: { name: "Cinemasis", desc: "Официальный поставщик каталога фильмов и сериалов на базе TMDB" },
+    ja: { name: "Cinemasis", desc: "TMDBベースの公式映画・ドラマカタログおよびメタデータプロバイダー" },
+    zh: { name: "Cinemasis", desc: "基于 TMDB 的官方影视目录与元数据提供程序" },
+    ar: { name: "Cinemasis", desc: "مزود كتالوج وبيانات الأفلام والمسلسلات الرسمي المستند إلى TMDB" },
+    pt: { name: "Cinemasis", desc: "Provedor oficial de catálogo de cinema e metadados baseado no TMDB" },
+    fa: { name: "Cinemasis", desc: "ارائه‌دهنده رسمی کاتالوگ و فراداده سینما بر پایه TMDB" },
+  },
+  "com.vessel.reading.mangile": {
+    en: { name: "Mangile", desc: "Official embedded reading provider for Manga, Webtoon, and Webook powered by Mangile" },
+    tr: { name: "Mangile", desc: "Mangile destekli Manga, Webtoon ve Webook için resmi gömülü okuma sağlayıcısı" },
+    az: { name: "Mangile", desc: "Manqa, Vebtun və Vebbuk üçün rəsmi daxili oxuma təminatçısı" },
+    de: { name: "Mangile", desc: "Offizieller Lese-Anbieter für Manga, Webtoon und Webook unterstützt von Mangile" },
+    fr: { name: "Mangile", desc: "Fournisseur officiel de lecture pour Manga, Webtoon et Webook propulsé par Mangile" },
+    es: { name: "Mangile", desc: "Proveedor oficial de lectura de Manga, Webtoon y Webook impulsado por Mangile" },
+    ru: { name: "Mangile", desc: "Официальный провайдер чтения манги, вебтунов и веббуков на базе Mangile" },
+    ja: { name: "Mangile", desc: "Mangile搭載のマンガ・ウェブトゥーン・ウェブブック公式リーダープロバイダー" },
+    zh: { name: "Mangile", desc: "由 Mangile 驱动的官方漫画、网络条漫及网络小说阅读提供程序" },
+    ar: { name: "Mangile", desc: "مزود قراءة المانجا والويبتون والكتب الإلكترونية الرسمي المدعوم من Mangile" },
+    pt: { name: "Mangile", desc: "Provedor oficial de leitura para Mangá, Webtoon e Webook desenvolvido por Mangile" },
+    fa: { name: "Mangile", desc: "ارائه‌دهنده رسمی خواندن مانگا، وبتون و رمان تحت قدرت Mangile" },
+  },
+  "com.vessel.iptv": {
+    en: { name: "IPTV", desc: "Open-source live television channels and streams worldwide (iptv-org)" },
+    tr: { name: "IPTV", desc: "Dünya genelinden açık TV yayınları ve kanalları (iptv-org)" },
+    az: { name: "IPTV", desc: "Dünya miqyasında açıq canlı televiziya kanalları və yayımları (iptv-org)" },
+    de: { name: "IPTV", desc: "Open-Source Live-Fernsehsender und Streams weltweit (iptv-org)" },
+    fr: { name: "IPTV", desc: "Chaînes de télévision en direct et flux mondiaux open-source (iptv-org)" },
+    es: { name: "IPTV", desc: "Canales de televisión en vivo y transmisiones mundiales de código abierto (iptv-org)" },
+    ru: { name: "IPTV", desc: "Открытые прямые трансляции телевизионных каналов со всего мира (iptv-org)" },
+    ja: { name: "IPTV", desc: "世界中のオープンソースライブTVチャンネルおよびストリーム（iptv-org）" },
+    zh: { name: "IPTV", desc: "全球开源电视频道与在线直播流（iptv-org）" },
+    ar: { name: "IPTV", desc: "قنوات تلفزيونية حية وبثوث مفتوحة المصدر من جميع أنحاء العالم (iptv-org)" },
+    pt: { name: "IPTV", desc: "Canais de televisão aberta e transmissões ao vivo do mundo todo (iptv-org)" },
+    fa: { name: "IPTV", desc: "شبکه‌های تلویزیونی زنده متن‌باز و پخش اینترنتی از سراسر جهان (iptv-org)" },
   }
 };
 
@@ -1199,6 +1370,28 @@ class VesselApp {
     return dict[key] || I18N_STRINGS.en[key] || key;
   }
 
+  getPluginLocalizedInfo(pluginId, fallbackName = "", fallbackDesc = "") {
+    const loc = this.getEffectiveLocale();
+    const pDict = PLUGIN_I18N[pluginId];
+    if (!pDict) return { title: fallbackName, description: fallbackDesc };
+    const exact = pDict[loc] || pDict["en"];
+    return {
+      title: exact?.name || fallbackName,
+      description: exact?.desc || pDict["en"]?.desc || fallbackDesc
+    };
+  }
+
+  formatTime(seconds) {
+    if (isNaN(seconds) || seconds < 0) return "00:00";
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = Math.floor(seconds % 60);
+    if (h > 0) {
+      return `${h}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
+    }
+    return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
+  }
+
   // --- Theme Engine ---
   async loadActiveTheme() {
     try {
@@ -1339,18 +1532,27 @@ class VesselApp {
     const mainView = document.getElementById("main-view");
     const resumeSection = document.getElementById("resume-section");
     const detailsView = document.getElementById("details-view");
+    const searchView = document.getElementById("search-view");
+    const iptvView = document.getElementById("iptv-view");
     const libraryView = document.getElementById("library-view");
     const pluginsView = document.getElementById("plugins-view");
     const settingsView = document.getElementById("settings-view");
 
     // Hide all views first
     mainView.classList.add("hidden");
+    if (searchView) searchView.classList.add("hidden");
+    if (iptvView) iptvView.classList.add("hidden");
     detailsView.classList.add("hidden");
     libraryView.classList.add("hidden");
     pluginsView.classList.add("hidden");
     settingsView.classList.add("hidden");
 
-    if (route === "cinema" || route === "reading" || route === "live" || route === "iptv") {
+    if (route === "iptv") {
+      this.currentDomain = "iptv";
+      if (iptvView) iptvView.classList.remove("hidden");
+      resumeSection.classList.add("hidden");
+      this.renderIPTVGuide();
+    } else if (route === "cinema" || route === "reading" || route === "live") {
       this.currentDomain = route;
       mainView.classList.remove("hidden");
       resumeSection.classList.remove("hidden");
@@ -1360,7 +1562,6 @@ class VesselApp {
         cinema: this.t("nav_cinema"),
         reading: this.t("nav_reading"),
         live: this.t("nav_live"),
-        iptv: this.t("nav_iptv"),
       };
       document.getElementById("view-title").textContent = titleMap[route] || this.t("section_discover");
 
@@ -1370,7 +1571,7 @@ class VesselApp {
     } else if (route === "library") {
       libraryView.classList.remove("hidden");
       resumeSection.classList.add("hidden");
-      this.loadLibraryItems("WATCHING");
+      this.loadLibraryItems("ALL");
     } else if (route === "plugins") {
       pluginsView.classList.remove("hidden");
       resumeSection.classList.add("hidden");
@@ -1382,6 +1583,629 @@ class VesselApp {
       this.renderThemeSelector();
     }
   }
+
+  // --- Live TV / IPTV Guide Controller ---
+  async renderIPTVGuide() {
+    if (!this.iptvState) {
+      this.iptvState = {
+        country: "ALL",
+        category: "ALL",
+        search: "",
+        channels: [],
+        activeChannel: null,
+      };
+      this.bindIPTVControls();
+    }
+    await this.fetchIPTVChannels();
+    this.renderIPTVChannelsList();
+  }
+
+  bindIPTVControls() {
+    // Country filter pills
+    document.querySelectorAll("#iptv-country-filters .filter-pill").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        document.querySelectorAll("#iptv-country-filters .filter-pill").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        this.iptvState.country = btn.dataset.country || "ALL";
+        await this.fetchIPTVChannels();
+        this.renderIPTVChannelsList();
+      });
+    });
+
+    // Category filter tabs
+    document.querySelectorAll("#iptv-category-filters .tab").forEach(tab => {
+      tab.addEventListener("click", () => {
+        document.querySelectorAll("#iptv-category-filters .tab").forEach(t => t.classList.remove("active"));
+        tab.classList.add("active");
+        this.iptvState.category = tab.dataset.category || "ALL";
+        this.renderIPTVChannelsList();
+      });
+    });
+
+    // Search input
+    const searchInput = document.getElementById("iptv-search-input");
+    if (searchInput) {
+      searchInput.addEventListener("input", (e) => {
+        this.iptvState.search = e.target.value.trim().toLowerCase();
+        this.renderIPTVChannelsList();
+      });
+    }
+
+    // Fullscreen button on IPTV player
+    const fsBtn = document.getElementById("iptv-player-fullscreen-btn");
+    if (fsBtn) {
+      fsBtn.addEventListener("click", () => {
+        const vid = document.getElementById("iptv-video-player");
+        if (!vid) return;
+        if (document.fullscreenElement) {
+          document.exitFullscreen?.().catch(() => {});
+        } else {
+          vid.requestFullscreen?.().catch(() => {});
+        }
+      });
+    }
+  }
+
+  async fetchIPTVChannels() {
+    const listElem = document.getElementById("iptv-channels-list");
+    if (listElem) {
+      listElem.innerHTML = `
+        <div style="text-align: center; padding: 40px; color: var(--v-text-muted);">
+          <div style="font-size: 1.5rem; animation: pulse-online 1.5s infinite; margin-bottom: 8px;">⏳</div>
+          <div>${this.t("streams_loading") || "Kanallar yükleniyor..."}</div>
+        </div>
+      `;
+    }
+
+    try {
+      let query = "popular";
+      if (this.iptvState.country !== "ALL") {
+        query = `country:${this.iptvState.country}`;
+      }
+      const res = await fetch(`/api/search?domain=7&q=${encodeURIComponent(query)}`);
+      if (!res.ok) throw new Error("Could not fetch IPTV channels");
+      const data = await res.json();
+      this.iptvState.channels = data.items || [];
+    } catch (e) {
+      if (listElem) listElem.innerHTML = `<div style="padding: 24px; color: var(--v-status-error); text-align: center;">${e.message}</div>`;
+    }
+  }
+
+  renderIPTVChannelsList() {
+    const listElem = document.getElementById("iptv-channels-list");
+    if (!listElem) return;
+
+    let list = this.iptvState.channels || [];
+    const cat = this.iptvState.category;
+    const search = this.iptvState.search;
+
+    if (cat !== "ALL") {
+      list = list.filter(ch => {
+        const extra = ch.extra || (ch.external_ids ? ch.external_ids.extra : {}) || {};
+        const chCat = (extra.category || ch.overview || "").toLowerCase();
+        return chCat.includes(cat.toLowerCase());
+      });
+    }
+
+    if (search) {
+      list = list.filter(ch => {
+        return (ch.title || "").toLowerCase().includes(search) ||
+          (ch.overview || "").toLowerCase().includes(search);
+      });
+    }
+
+    listElem.innerHTML = "";
+    if (list.length === 0) {
+      listElem.innerHTML = `
+        <div style="text-align: center; padding: 40px; color: var(--v-text-muted);">
+          Kriterlere uygun TV kanalı bulunamadı.
+        </div>
+      `;
+      return;
+    }
+
+    list.forEach(ch => {
+      const extra = ch.extra || (ch.external_ids ? ch.external_ids.extra : {}) || {};
+      const country = extra.country || "TV";
+      const category = extra.category || "General";
+      const quality = extra.quality || "HD";
+      const isActive = this.iptvState.activeChannel && this.iptvState.activeChannel.id === ch.id;
+
+      const item = document.createElement("div");
+      item.className = `iptv-channel-card ${isActive ? "active" : ""}`;
+      item.innerHTML = `
+        <img class="iptv-channel-logo" src="${ch.poster_url || '/assets/vessel_primary.png'}" alt="${ch.title}" onerror="this.src='/assets/vessel_primary.png'">
+        <div class="iptv-channel-meta">
+          <div class="iptv-channel-name">${ch.title}</div>
+          <div class="iptv-channel-sub">
+            <span class="iptv-tag">${country}</span>
+            <span class="iptv-tag">${category}</span>
+            <span class="iptv-tag">${quality}</span>
+          </div>
+        </div>
+      `;
+
+      item.addEventListener("click", () => {
+        this.playIPTVChannel(ch);
+      });
+
+      listElem.appendChild(item);
+    });
+  }
+
+  async playIPTVChannel(channel) {
+    this.iptvState.activeChannel = channel;
+    this.renderIPTVChannelsList();
+
+    const titleElem = document.getElementById("iptv-active-title");
+    const tagsElem = document.getElementById("iptv-active-tags");
+    const emptyElem = document.getElementById("iptv-player-empty");
+    const overlay = document.getElementById("iptv-player-overlay");
+    const video = document.getElementById("iptv-video-player");
+
+    if (titleElem) titleElem.textContent = channel.title;
+    const extra = channel.extra || (channel.external_ids ? channel.external_ids.extra : {}) || {};
+    if (tagsElem) {
+      tagsElem.innerHTML = `
+        <span class="iptv-tag">${extra.country || "TV"}</span>
+        <span class="iptv-tag">${extra.category || "General"}</span>
+        <span class="iptv-tag">${extra.quality || "HD"}</span>
+      `;
+    }
+
+    if (emptyElem) emptyElem.classList.add("hidden");
+    if (overlay) overlay.classList.remove("hidden");
+    const loadText = document.getElementById("iptv-loading-text");
+    if (loadText) loadText.textContent = `${channel.title} yayını bağlanıyor...`;
+
+    let streamUrl = extra.stream_url;
+    if (!streamUrl) {
+      try {
+        const res = await fetch(`/api/streams?provider=com.vessel.iptv&media=${encodeURIComponent(channel.id)}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.streams && data.streams.length > 0) {
+            streamUrl = data.streams[0].url;
+          }
+        }
+      } catch (e) {
+        console.warn("Could not fetch streams for IPTV channel:", e);
+      }
+    }
+
+    if (!streamUrl) {
+      if (overlay) overlay.classList.remove("hidden");
+      if (loadText) loadText.textContent = "Bu kanal için aktif akış adresi bulunamadı.";
+      return;
+    }
+
+    if (window.Hls && window.Hls.isSupported() && (streamUrl.includes(".m3u8") || streamUrl.includes("hls") || !streamUrl.endsWith(".mp4"))) {
+      if (this.iptvHlsInstance) {
+        this.iptvHlsInstance.destroy();
+        this.iptvHlsInstance = null;
+      }
+      const hls = new window.Hls({ enableWorker: true });
+      this.iptvHlsInstance = hls;
+      hls.loadSource(streamUrl);
+      hls.attachMedia(video);
+      hls.on(window.Hls.Events.MANIFEST_PARSED, () => {
+        if (overlay) overlay.classList.add("hidden");
+        video.play().catch(e => console.log("Autoplay:", e));
+      });
+      hls.on(window.Hls.Events.ERROR, (event, data) => {
+        if (data.fatal) {
+          if (overlay) overlay.classList.remove("hidden");
+          if (loadText) loadText.textContent = "Yayın bağlantısı kurulamadı. Lütfen başka bir kanal seçin.";
+        }
+      });
+    } else {
+      video.src = streamUrl;
+      video.play().catch(e => console.log("Autoplay:", e));
+      video.onloadeddata = () => { if (overlay) overlay.classList.add("hidden"); };
+      video.onerror = () => {
+        if (overlay) overlay.classList.remove("hidden");
+        if (loadText) loadText.textContent = "Yayın oynatılamadı.";
+      };
+    }
+  }
+
+  // --- Vessel Custom Engineered Video Player Modal ---
+  openVesselPlayer(streamUrl, meta = {}) {
+    const modal = document.getElementById("vessel-player-modal");
+    const video = document.getElementById("vessel-video-element");
+    const titleElem = document.getElementById("vessel-hud-title");
+    const subElem = document.getElementById("vessel-hud-subtitle");
+    const hud = document.getElementById("vessel-player-hud");
+    const scrubberContainer = document.getElementById("vessel-scrubber-container");
+    const scrubberTrack = scrubberContainer.querySelector(".vessel-scrubber-track");
+    const scrubberProgress = document.getElementById("vessel-scrubber-progress");
+    const scrubberBuffer = document.getElementById("vessel-scrubber-buffer");
+    const scrubberThumb = document.getElementById("vessel-scrubber-thumb");
+    const scrubberTooltip = document.getElementById("vessel-scrubber-tooltip");
+    const curTimeElem = document.getElementById("vessel-current-time");
+    const durTimeElem = document.getElementById("vessel-duration-time");
+    const playBtn = document.getElementById("vessel-play-btn");
+    const playIcon = document.getElementById("vessel-play-icon");
+    const pauseIcon = document.getElementById("vessel-pause-icon");
+    const centerPlay = document.getElementById("vessel-center-play");
+    const centerSpinner = document.getElementById("vessel-center-spinner");
+    const rewindBtn = document.getElementById("vessel-rewind-btn");
+    const forwardBtn = document.getElementById("vessel-forward-btn");
+    const volumeBtn = document.getElementById("vessel-volume-btn");
+    const volHigh = document.getElementById("vessel-vol-high");
+    const volMuted = document.getElementById("vessel-vol-muted");
+    const volSlider = document.getElementById("vessel-volume-slider");
+    const audioBtn = document.getElementById("vessel-audio-btn");
+    const audioMenu = document.getElementById("vessel-audio-menu");
+    const subBtn = document.getElementById("vessel-sub-btn");
+    const subMenu = document.getElementById("vessel-sub-menu");
+    const qualityBtn = document.getElementById("vessel-quality-btn");
+    const qualityMenu = document.getElementById("vessel-quality-menu");
+    const speedBtn = document.getElementById("vessel-speed-btn");
+    const speedMenu = document.getElementById("vessel-speed-menu");
+    const fsBtn = document.getElementById("vessel-fullscreen-btn");
+    const fsEnter = document.getElementById("vessel-fs-enter");
+    const fsExit = document.getElementById("vessel-fs-exit");
+    const pipBtn = document.getElementById("vessel-pip-btn");
+    const closeBtn = document.getElementById("vessel-close-player-btn");
+
+    const item = meta.item || {};
+    const title = item.title || meta.title || "Cinema";
+    const season = meta.season || 0;
+    const episode = meta.episode || 0;
+    if (titleElem) titleElem.textContent = title;
+    if (subElem) subElem.textContent = season > 0 ? `${this.t("season")} ${season} • ${this.t("episode")} ${episode}` : (item.year || "");
+
+    modal.classList.remove("hidden");
+    if (centerSpinner) centerSpinner.classList.remove("hidden");
+
+    if (this.vesselHlsInstance) {
+      this.vesselHlsInstance.destroy();
+      this.vesselHlsInstance = null;
+    }
+
+    const setPlayState = (playing) => {
+      if (playIcon) playIcon.classList.toggle("hidden", playing);
+      if (pauseIcon) pauseIcon.classList.toggle("hidden", !playing);
+      if (centerPlay) centerPlay.classList.toggle("hidden", playing);
+    };
+
+    if (window.Hls && window.Hls.isSupported() && (streamUrl.includes(".m3u8") || streamUrl.includes("hls") || !streamUrl.endsWith(".mp4"))) {
+      const hls = new window.Hls({ enableWorker: true });
+      this.vesselHlsInstance = hls;
+      hls.loadSource(streamUrl);
+      hls.attachMedia(video);
+
+      hls.on(window.Hls.Events.MANIFEST_PARSED, () => {
+        if (centerSpinner) centerSpinner.classList.add("hidden");
+        video.play().catch(e => console.log("Autoplay:", e));
+        setPlayState(true);
+
+        // Audio Tracks
+        if (hls.audioTracks && hls.audioTracks.length > 0 && audioMenu) {
+          audioMenu.innerHTML = hls.audioTracks.map((tr, i) => `
+            <button class="hud-menu-item ${hls.audioTrack === i ? "active" : ""}" data-track="${i}">
+              ${tr.name || tr.lang || `Track ${i + 1}`}
+            </button>
+          `).join("");
+          audioMenu.querySelectorAll(".hud-menu-item").forEach(itemBtn => {
+            itemBtn.onclick = (e) => {
+              e.stopPropagation();
+              const idx = parseInt(itemBtn.dataset.track);
+              hls.audioTrack = idx;
+              document.getElementById("vessel-audio-label").textContent = itemBtn.textContent.trim();
+              audioMenu.querySelectorAll(".hud-menu-item").forEach(b => b.classList.remove("active"));
+              itemBtn.classList.add("active");
+              audioMenu.classList.add("hidden");
+            };
+          });
+        }
+
+        // Subtitles Tracks
+        if (subMenu) {
+          let subs = (hls.subtitleTracks || []).map((tr, i) => ({ id: i, label: tr.name || tr.lang || `Sub ${i + 1}`, type: "hls" }));
+          if (meta.subtitles && meta.subtitles.length > 0) {
+            meta.subtitles.forEach((s, idx) => {
+              subs.push({ id: `ext-${idx}`, label: s.title || s.language || `Ext ${idx + 1}`, url: s.url, type: "ext" });
+            });
+          }
+
+          subMenu.innerHTML = `<button class="hud-menu-item ${hls.subtitleTrack === -1 ? "active" : ""}" data-sub="-1">Off (Kapalı)</button>` +
+            subs.map(s => `<button class="hud-menu-item" data-sub="${s.id}">${s.label}</button>`).join("");
+
+          subMenu.querySelectorAll(".hud-menu-item").forEach(itemBtn => {
+            itemBtn.onclick = (e) => {
+              e.stopPropagation();
+              const sid = itemBtn.dataset.sub;
+              if (sid === "-1") {
+                hls.subtitleTrack = -1;
+                document.getElementById("vessel-sub-label").textContent = "Subs";
+              } else if (sid.startsWith("ext-")) {
+                const extSub = subs.find(s => String(s.id) === sid);
+                if (extSub && extSub.url) {
+                  const track = document.createElement("track");
+                  track.kind = "subtitles";
+                  track.label = extSub.label;
+                  track.src = extSub.url;
+                  track.default = true;
+                  video.appendChild(track);
+                }
+                document.getElementById("vessel-sub-label").textContent = itemBtn.textContent.trim();
+              } else {
+                hls.subtitleTrack = parseInt(sid);
+                document.getElementById("vessel-sub-label").textContent = itemBtn.textContent.trim();
+              }
+              subMenu.querySelectorAll(".hud-menu-item").forEach(b => b.classList.remove("active"));
+              itemBtn.classList.add("active");
+              subMenu.classList.add("hidden");
+            };
+          });
+        }
+
+        // Quality Levels
+        if (hls.levels && hls.levels.length > 0 && qualityMenu) {
+          qualityMenu.innerHTML = `<button class="hud-menu-item active" data-level="-1">Auto</button>` +
+            hls.levels.map((lvl, idx) => `<button class="hud-menu-item" data-level="${idx}">${lvl.height ? lvl.height + "p" : `Level ${idx}`}</button>`).join("");
+          qualityMenu.querySelectorAll(".hud-menu-item").forEach(itemBtn => {
+            itemBtn.onclick = (e) => {
+              e.stopPropagation();
+              const l = parseInt(itemBtn.dataset.level);
+              hls.currentLevel = l;
+              document.getElementById("vessel-quality-label").textContent = itemBtn.textContent.trim();
+              qualityMenu.querySelectorAll(".hud-menu-item").forEach(b => b.classList.remove("active"));
+              itemBtn.classList.add("active");
+              qualityMenu.classList.add("hidden");
+            };
+          });
+        }
+      });
+
+      hls.on(window.Hls.Events.WAITING, () => { if (centerSpinner) centerSpinner.classList.remove("hidden"); });
+      hls.on(window.Hls.Events.PLAYING, () => { if (centerSpinner) centerSpinner.classList.add("hidden"); });
+    } else {
+      video.src = streamUrl;
+      video.play().catch(e => console.log("Autoplay:", e));
+      video.onloadeddata = () => {
+        if (centerSpinner) centerSpinner.classList.add("hidden");
+        setPlayState(true);
+      };
+    }
+
+    // HUD Auto-hide
+    let hudTimeout = null;
+    const showHUD = () => {
+      hud.classList.remove("inactive");
+      modal.style.cursor = "default";
+      clearTimeout(hudTimeout);
+      hudTimeout = setTimeout(() => {
+        if (!video.paused && !document.querySelector(".hud-dropdown-menu:not(.hidden)")) {
+          hud.classList.add("inactive");
+          modal.style.cursor = "none";
+        }
+      }, 3000);
+    };
+    modal.onmousemove = showHUD;
+    modal.onclick = showHUD;
+
+    // Scrubber
+    video.ontimeupdate = () => {
+      if (!video.duration) return;
+      const pct = (video.currentTime / video.duration) * 100;
+      if (scrubberProgress) scrubberProgress.style.width = `${pct}%`;
+      if (scrubberThumb) scrubberThumb.style.left = `${pct}%`;
+      if (curTimeElem) curTimeElem.textContent = this.formatTime(video.currentTime);
+      if (durTimeElem) durTimeElem.textContent = this.formatTime(video.duration);
+
+      if (video.buffered.length > 0 && scrubberBuffer) {
+        const bufEnd = video.buffered.end(video.buffered.length - 1);
+        scrubberBuffer.style.width = `${(bufEnd / video.duration) * 100}%`;
+      }
+
+      if (video.currentTime > 4 && Math.floor(video.currentTime) % 5 === 0) {
+        this.savePlaybackProgressPing(item, season, episode, video.currentTime, video.duration);
+      }
+    };
+
+    const seekScrubber = (e) => {
+      const rect = scrubberTrack.getBoundingClientRect();
+      const pos = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+      video.currentTime = pos * (video.duration || 0);
+    };
+
+    let isScrubbing = false;
+    if (scrubberContainer) {
+      scrubberContainer.onmousedown = (e) => {
+        isScrubbing = true;
+        seekScrubber(e);
+      };
+      window.onmousemove = (e) => {
+        if (isScrubbing) seekScrubber(e);
+      };
+      window.onmouseup = () => { isScrubbing = false; };
+
+      scrubberContainer.onmousemove = (e) => {
+        const rect = scrubberTrack.getBoundingClientRect();
+        const pos = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+        if (scrubberTooltip) {
+          scrubberTooltip.classList.remove("hidden");
+          scrubberTooltip.style.left = `${pos * 100}%`;
+          scrubberTooltip.textContent = this.formatTime(pos * (video.duration || 0));
+        }
+      };
+      scrubberContainer.onmouseleave = () => {
+        if (scrubberTooltip) scrubberTooltip.classList.add("hidden");
+      };
+    }
+
+    // Play/Pause
+    const togglePlay = () => {
+      if (video.paused) {
+        video.play();
+        setPlayState(true);
+      } else {
+        video.pause();
+        setPlayState(false);
+      }
+    };
+    if (playBtn) playBtn.onclick = (e) => { e.stopPropagation(); togglePlay(); };
+    if (centerPlay) centerPlay.onclick = (e) => { e.stopPropagation(); togglePlay(); };
+    video.onclick = (e) => { e.stopPropagation(); togglePlay(); };
+
+    // Rewind / Forward
+    if (rewindBtn) rewindBtn.onclick = (e) => { e.stopPropagation(); video.currentTime = Math.max(0, video.currentTime - 10); };
+    if (forwardBtn) forwardBtn.onclick = (e) => { e.stopPropagation(); video.currentTime = Math.min(video.duration || 0, video.currentTime + 10); };
+
+    // Volume
+    if (volSlider) {
+      volSlider.oninput = (e) => {
+        video.volume = parseFloat(e.target.value);
+        video.muted = video.volume === 0;
+        if (volHigh) volHigh.classList.toggle("hidden", video.muted);
+        if (volMuted) volMuted.classList.toggle("hidden", !video.muted);
+      };
+    }
+    if (volumeBtn) {
+      volumeBtn.onclick = (e) => {
+        e.stopPropagation();
+        video.muted = !video.muted;
+        if (volHigh) volHigh.classList.toggle("hidden", video.muted);
+        if (volMuted) volMuted.classList.toggle("hidden", !video.muted);
+        if (volSlider) volSlider.value = video.muted ? 0 : video.volume;
+      };
+    }
+
+    // Dropdown popovers
+    const toggleMenu = (menu) => {
+      if (!menu) return;
+      const isClosed = menu.classList.contains("hidden");
+      document.querySelectorAll(".hud-dropdown-menu").forEach(m => m.classList.add("hidden"));
+      if (isClosed) menu.classList.remove("hidden");
+    };
+    if (audioBtn) audioBtn.onclick = (e) => { e.stopPropagation(); toggleMenu(audioMenu); };
+    if (subBtn) subBtn.onclick = (e) => { e.stopPropagation(); toggleMenu(subMenu); };
+    if (qualityBtn) qualityBtn.onclick = (e) => { e.stopPropagation(); toggleMenu(qualityMenu); };
+    if (speedBtn) speedBtn.onclick = (e) => { e.stopPropagation(); toggleMenu(speedMenu); };
+
+    // Speed options
+    if (speedMenu) {
+      speedMenu.querySelectorAll(".hud-menu-item").forEach(itemBtn => {
+        itemBtn.onclick = (e) => {
+          e.stopPropagation();
+          const spd = parseFloat(itemBtn.dataset.speed);
+          video.playbackRate = spd;
+          document.getElementById("vessel-speed-label").textContent = `${spd}x`;
+          speedMenu.querySelectorAll(".hud-menu-item").forEach(b => b.classList.remove("active"));
+          itemBtn.classList.add("active");
+          speedMenu.classList.add("hidden");
+        };
+      });
+    }
+
+    // Fullscreen
+    const toggleFullscreen = () => {
+      if (document.fullscreenElement) {
+        document.exitFullscreen?.().catch(() => {});
+        if (fsEnter) fsEnter.classList.remove("hidden");
+        if (fsExit) fsExit.classList.add("hidden");
+      } else {
+        modal.requestFullscreen?.().catch(() => {});
+        if (fsEnter) fsEnter.classList.add("hidden");
+        if (fsExit) fsExit.classList.remove("hidden");
+      }
+    };
+    if (fsBtn) fsBtn.onclick = (e) => { e.stopPropagation(); toggleFullscreen(); };
+    video.ondblclick = (e) => { e.stopPropagation(); toggleFullscreen(); };
+
+    // PiP
+    if (pipBtn) {
+      pipBtn.onclick = (e) => {
+        e.stopPropagation();
+        if (document.pictureInPictureElement) {
+          document.exitPictureInPicture?.().catch(() => {});
+        } else {
+          video.requestPictureInPicture?.().catch(() => {});
+        }
+      };
+    }
+
+    // Close Player
+    const closePlayer = () => {
+      this.savePlaybackProgressPing(item, season, episode, video.currentTime, video.duration);
+      video.pause();
+      video.src = "";
+      if (this.vesselHlsInstance) {
+        this.vesselHlsInstance.destroy();
+        this.vesselHlsInstance = null;
+      }
+      if (document.fullscreenElement) {
+        document.exitFullscreen?.().catch(() => {});
+      }
+      modal.classList.add("hidden");
+      window.removeEventListener("keydown", keyHandler);
+      this.loadResumeProgress();
+    };
+    if (closeBtn) closeBtn.onclick = (e) => { e.stopPropagation(); closePlayer(); };
+
+    // Keyboard Shortcuts
+    const keyHandler = (e) => {
+      if (modal.classList.contains("hidden")) return;
+      if (e.key === " " || e.key === "k") {
+        e.preventDefault();
+        togglePlay();
+      } else if (e.key === "ArrowLeft" || e.key === "j") {
+        e.preventDefault();
+        video.currentTime = Math.max(0, video.currentTime - 10);
+      } else if (e.key === "ArrowRight" || e.key === "l") {
+        e.preventDefault();
+        video.currentTime = Math.min(video.duration || 0, video.currentTime + 10);
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        video.volume = Math.min(1, video.volume + 0.1);
+        if (volSlider) volSlider.value = video.volume;
+      } else if (e.key === "ArrowDown") {
+        e.preventDefault();
+        video.volume = Math.max(0, video.volume - 0.1);
+        if (volSlider) volSlider.value = video.volume;
+      } else if (e.key === "f" || e.key === "F") {
+        e.preventDefault();
+        toggleFullscreen();
+      } else if (e.key === "m" || e.key === "M") {
+        e.preventDefault();
+        video.muted = !video.muted;
+        if (volHigh) volHigh.classList.toggle("hidden", video.muted);
+        if (volMuted) volMuted.classList.toggle("hidden", !video.muted);
+      } else if (e.key === "Escape") {
+        if (!document.fullscreenElement) {
+          closePlayer();
+        }
+      }
+    };
+    window.addEventListener("keydown", keyHandler);
+  }
+
+  savePlaybackProgressPing(item, season, episode, currentTime, duration) {
+    if (!item || !item.id) return;
+    const title = item.title || "";
+    const poster = item.poster_url || "";
+    fetch("/api/progress/playback", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        provider_id: item.provider_id || "com.vessel.cinema.cinemasis",
+        media_id: item.id,
+        title: title,
+        poster_url: poster,
+        domain: 1,
+        season_number: season,
+        episode_number: episode,
+        current_position: currentTime,
+        total_duration: duration || 0,
+        progress_percent: duration > 0 ? (currentTime / duration) * 100 : 0,
+        is_completed: duration > 0 && (currentTime / duration) >= 0.9
+      })
+    }).catch(() => {});
+  }
+
 
   renderCurrentView() {
     if (this.currentRoute === "cinema" || this.currentRoute === "reading" || this.currentRoute === "live" || this.currentRoute === "iptv") {
@@ -1777,6 +2601,63 @@ class VesselApp {
     this.switchRoute(this.previousRoute || "cinema");
   }
 
+  async setupDetailsLibraryControl(item, details) {
+    const select = document.getElementById("details-lib-status");
+    if (!select) return;
+
+    const provider = item.provider_id || item.ProviderID || "";
+    const mediaId = item.id || item.ID || "";
+
+    try {
+      const res = await fetch("/api/library?status=ALL");
+      if (res.ok) {
+        const data = await res.json();
+        const match = (data.items || []).find(it => it.media_id === mediaId && (!provider || it.provider_id === provider));
+        if (match && match.status) {
+          select.value = match.status;
+        }
+      }
+    } catch (e) {
+      console.warn("Could not check library status:", e);
+    }
+
+    select.onchange = async () => {
+      const chosenStatus = select.value;
+      if (chosenStatus === "NONE") {
+        try {
+          await fetch(`/api/library?provider=${encodeURIComponent(provider)}&media=${encodeURIComponent(mediaId)}`, {
+            method: "DELETE"
+          });
+          this.showToast("Koleksiyondan kaldırıldı", "info");
+        } catch (err) {
+          this.showToast(err.message, "error");
+        }
+      } else {
+        try {
+          const isReading = this.currentDomain === "reading" || item.type >= 4;
+          const res = await fetch("/api/library", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              provider_id: provider,
+              media_id: mediaId,
+              domain: isReading ? 2 : (item.type === 7 ? 3 : 1),
+              title: details.title || item.title,
+              type: item.type || 1,
+              poster_url: details.poster_url || item.poster_url,
+              status: chosenStatus,
+              user_rating: 8.5
+            })
+          });
+          if (!res.ok) throw new Error("Koleksiyon güncellenemedi");
+          this.showToast("Koleksiyon güncellendi!");
+        } catch (err) {
+          this.showToast(err.message, "error");
+        }
+      }
+    };
+  }
+
   renderCinemaDetails(item, details) {
     const content = document.getElementById("details-content");
     const title = details.title || item.title || "Unknown";
@@ -1822,9 +2703,16 @@ class VesselApp {
         <div class="details-hero-backdrop" style="background-image: url('${backdrop}')"></div>
         <div class="details-poster-col">
           <img class="details-poster-img" src="${poster}" alt="${title}">
-          <button class="btn btn-secondary" id="details-lib-btn" style="width: 100%;">
-            ${this.t("btn_add_library")}
-          </button>
+          <div class="details-lib-box">
+            <select id="details-lib-status" class="details-lib-select">
+              <option value="NONE">➕ ${this.t("btn_add_library") || "Koleksiyona Ekle"}</option>
+              <option value="WATCHING">▶ ${this.t("status_watching") || "İzleniyor"}</option>
+              <option value="PLAN_TO_WATCH">🕒 ${this.t("status_plan") || "Daha Sonra"}</option>
+              <option value="COMPLETED">✓ ${this.t("status_completed") || "Tamamlandı"}</option>
+              <option value="DROPPED">⏹ ${this.t("status_dropped") || "Bırakıldı"}</option>
+              <option value="FAVORITE">★ ${this.t("status_favorites") || "Favoriler"}</option>
+            </select>
+          </div>
         </div>
         <div class="details-info-col">
           <div class="details-meta-tags">
@@ -1916,10 +2804,8 @@ class VesselApp {
       </div>
     `;
 
-    // Library toggle
-    document.getElementById("details-lib-btn").addEventListener("click", () => {
-      this.toggleLibrary(item, details);
-    });
+    // Library status controller
+    this.setupDetailsLibraryControl(item, details);
 
     // Trailer toggle
     if (trailerKey) {
@@ -2031,9 +2917,16 @@ class VesselApp {
         <div class="details-hero-backdrop" style="background-image: url('${poster}')"></div>
         <div class="details-poster-col">
           <img class="details-poster-img" src="${poster}" alt="${title}" style="object-fit: contain; background: #000; padding: 12px;">
-          <button class="btn btn-secondary" id="details-lib-btn" style="width: 100%;">
-            ${this.t("btn_add_library")}
-          </button>
+          <div class="details-lib-box">
+            <select id="details-lib-status" class="details-lib-select">
+              <option value="NONE">➕ ${this.t("btn_add_library") || "Koleksiyona Ekle"}</option>
+              <option value="WATCHING">▶ ${this.t("status_watching") || "İzleniyor"}</option>
+              <option value="PLAN_TO_WATCH">🕒 ${this.t("status_plan") || "Daha Sonra"}</option>
+              <option value="COMPLETED">✓ ${this.t("status_completed") || "Tamamlandı"}</option>
+              <option value="DROPPED">⏹ ${this.t("status_dropped") || "Bırakıldı"}</option>
+              <option value="FAVORITE">★ ${this.t("status_favorites") || "Favoriler"}</option>
+            </select>
+          </div>
         </div>
         <div class="details-info-col">
           <div class="details-meta-tags">
@@ -2055,20 +2948,13 @@ class VesselApp {
       </div>
 
       <div class="details-subsections">
-        <!-- Interactive Player Container -->
-        <div id="inline-player-box" class="details-section-box hidden">
-          <div class="player-container">
-            <video id="vessel-video-player" controls autoplay style="width: 100%; height: 500px; max-height: 70vh; background: #000; border-radius: 8px;"></video>
-          </div>
-        </div>
-
         <div class="details-section-box">
           <h3 class="details-section-title">${this.t("streams_title")}</h3>
           <div class="streams-grid" id="details-streams-grid">
             <div class="stream-card-row">
               <div>
                 <span style="font-weight: 700; margin-right: 8px;">${quality}</span>
-                <span>${title} (Doğrudan HLS Akışı)</span>
+                <span>${title} (Doğrudan HLS Canlı Akış)</span>
               </div>
               <button class="btn btn-primary stream-play-btn" style="padding: 6px 16px; font-size: 0.85rem;">▶ ${this.t("start_live")}</button>
             </div>
@@ -2077,12 +2963,10 @@ class VesselApp {
       </div>
     `;
 
-    document.getElementById("details-lib-btn").addEventListener("click", () => {
-      this.toggleLibrary(item, details);
-    });
+    this.setupDetailsLibraryControl(item, details);
 
     const playHandler = () => {
-      this.playDirectHlsStream(streamURL || `/api/streams?provider=com.vessel.iptv&media=${encodeURIComponent(item.id)}`, title);
+      this.playDirectHlsStream(streamURL || `/api/streams?provider=com.vessel.iptv&media=${encodeURIComponent(item.id)}`, title, item);
     };
 
     document.getElementById("details-watch-live-btn").addEventListener("click", playHandler);
@@ -2090,14 +2974,7 @@ class VesselApp {
     if (streamBtn) streamBtn.addEventListener("click", playHandler);
   }
 
-  async playDirectHlsStream(streamUrl, title) {
-    const playerBox = document.getElementById("inline-player-box");
-    const video = document.getElementById("vessel-video-player");
-    if (!playerBox || !video) return;
-
-    playerBox.classList.remove("hidden");
-    playerBox.scrollIntoView({ behavior: "smooth" });
-
+  async playDirectHlsStream(streamUrl, title, item = null) {
     let finalUrl = streamUrl;
     if (streamUrl.startsWith("/api/streams")) {
       try {
@@ -2113,30 +2990,13 @@ class VesselApp {
       }
     }
 
-    if (window.Hls && window.Hls.isSupported()) {
-      if (this.currentHlsInstance) {
-        this.currentHlsInstance.destroy();
-      }
-      const hls = new window.Hls({ enableWorker: true });
-      this.currentHlsInstance = hls;
-      hls.loadSource(finalUrl);
-      hls.attachMedia(video);
-      hls.on(window.Hls.Events.MANIFEST_PARSED, () => {
-        video.play().catch(e => console.log("Autoplay blocked:", e));
-      });
-      hls.on(window.Hls.Events.ERROR, (event, data) => {
-        if (data.fatal) {
-          console.warn("HLS fatal error, falling back to direct video src:", data);
-          video.src = finalUrl;
-          video.play().catch(() => {});
-        }
-      });
-    } else {
-      video.src = finalUrl;
-      video.play().catch(() => {});
-    }
-
-    this.showToast(`${title} başlatılıyor...`);
+    this.openVesselPlayer(finalUrl, {
+      item: item || { title, poster_url: "/assets/vessel_primary.png" },
+      title,
+      season: 0,
+      episode: 0,
+      subtitles: []
+    });
   }
 
   renderReadingDetails(item, details) {
@@ -2155,9 +3015,16 @@ class VesselApp {
         <div class="details-hero-backdrop" style="background-image: url('${poster}')"></div>
         <div class="details-poster-col">
           <img class="details-poster-img" src="${poster}" alt="${title}">
-          <button class="btn btn-secondary" id="details-lib-btn" style="width: 100%;">
-            ${this.t("btn_add_library")}
-          </button>
+          <div class="details-lib-box">
+            <select id="details-lib-status" class="details-lib-select">
+              <option value="NONE">➕ ${this.t("btn_add_library") || "Koleksiyona Ekle"}</option>
+              <option value="WATCHING">▶ ${this.t("status_watching") || "Okunuyor"}</option>
+              <option value="PLAN_TO_WATCH">🕒 ${this.t("status_plan") || "Daha Sonra"}</option>
+              <option value="COMPLETED">✓ ${this.t("status_completed") || "Tamamlandı"}</option>
+              <option value="DROPPED">⏹ ${this.t("status_dropped") || "Bırakıldı"}</option>
+              <option value="FAVORITE">★ ${this.t("status_favorites") || "Favoriler"}</option>
+            </select>
+          </div>
         </div>
         <div class="details-info-col">
           <div class="details-meta-tags">
@@ -2181,8 +3048,8 @@ class VesselApp {
 
       <div class="details-subsections">
         <!-- Interactive Reader Box (Embedded right in page when reading) -->
-        <div id="inline-reader-box" class="details-section-box hidden">
-          <div class="reader-container" id="inline-reader-container">
+        <div id="inline-reader-box" class="details-section-box hidden" style="padding: 0; overflow: hidden; background: #0b0d13; border: 1px solid var(--v-border-subtle); border-radius: var(--v-radius-lg);">
+          <div class="reader-container" id="inline-reader-container" style="position: relative;">
             <!-- Reader canvas/pages injected here -->
           </div>
         </div>
@@ -2208,9 +3075,7 @@ class VesselApp {
       </div>
     `;
 
-    document.getElementById("details-lib-btn").addEventListener("click", () => {
-      this.toggleLibrary(item, details);
-    });
+    this.setupDetailsLibraryControl(item, details);
 
     const readBtn = document.getElementById("details-read-now-btn");
     if (readBtn && chapters.length > 0) {
@@ -2235,8 +3100,9 @@ class VesselApp {
     readerBox.scrollIntoView({ behavior: "smooth" });
 
     container.innerHTML = `
-      <div style="text-align: center; padding: 40px; color: var(--v-text-muted);">
-        <span style="font-size: 1.5rem;">⏳</span> ${this.t("loading") || "Loading"} ${this.t("chapter")} ${chapterNum}...
+      <div style="text-align: center; padding: 60px 20px; color: var(--v-text-muted);">
+        <div style="font-size: 2rem; animation: pulse-online 1.5s infinite; margin-bottom: 12px;">📖</div>
+        <div>${this.t("loading") || "Yükleniyor..."} ${this.t("chapter")} ${chapterNum}...</div>
       </div>
     `;
 
@@ -2261,16 +3127,34 @@ class VesselApp {
       const prevCh = currentIndex > 0 ? chList[currentIndex - 1] : null;
       const nextCh = (currentIndex >= 0 && currentIndex < chList.length - 1) ? chList[currentIndex + 1] : null;
 
-      const hasPages = content.pages && content.pages.length > 0;
+      const pages = content.pages || [];
+      const hasPages = pages.length > 0;
       const hasText = !!content.text_content;
+      const totalPages = hasPages ? pages.length : 1;
 
-      let headerHTML = `
-        <div class="reader-header">
-          <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
-            <h4 style="margin: 0; font-size: 1rem;">${details.title || item.title} - ${this.t("chapter")} ${chapterNum}</h4>
-            ${content.title ? `<span style="color: var(--v-text-muted); font-size: 0.9rem;">${content.title}</span>` : ""}
+      // Manga Reader Local State (Mangile-inspired)
+      let readerMode = localStorage.getItem("vessel_reader_mode") || "webtoon"; // "webtoon" | "paged" | "continuous"
+      let zoomLevel = 100; // 60 to 160%
+      let brightnessLevel = 100; // 30 to 100%
+      let pagedIndex = 0;
+      let isAutoScrolling = false;
+      let autoScrollSpeed = 1; // 1, 2, 3
+      let autoScrollAnimId = null;
+
+      const titleStr = details.title || item.title || "Manga";
+
+      let html = `
+        <div class="reader-progress-bar-wrap">
+          <div class="reader-progress-bar-fill" id="reader-progress-fill" style="width: 0%;"></div>
+        </div>
+
+        <div class="reader-toolbar">
+          <div class="reader-tool-group">
+            <span style="font-weight: 700; font-size: 0.9rem; color: var(--v-text-primary); white-space: nowrap;">
+              ${titleStr}
+            </span>
             ${chList.length > 1 ? `
-              <select id="reader-chapter-dropdown" class="select-field" style="padding: 4px 10px; font-size: 0.85rem; border-radius: 6px; background: var(--v-bg-elevated); color: var(--v-text-primary); border: 1px solid var(--v-border-subtle);">
+              <select id="reader-chapter-dropdown" class="select-field" style="padding: 4px 10px; font-size: 0.82rem; border-radius: 6px; background: var(--v-bg-elevated); color: var(--v-text-primary); border: 1px solid var(--v-border-subtle); max-width: 180px;">
                 ${chList.map(c => {
                   const cNum = (c.chapter_number !== undefined && c.chapter_number !== null) ? c.chapter_number : 0;
                   const cId = c.id || "";
@@ -2278,76 +3162,282 @@ class VesselApp {
                   return `<option value="${cNum}" data-chid="${cId}" ${isSelected ? "selected" : ""}>${this.t("chapter")} ${cNum}${c.title ? ` - ${c.title}` : ""}</option>`;
                 }).join("")}
               </select>
+            ` : `<span class="badge-subtle">${this.t("chapter")} ${chapterNum}</span>`}
+
+            ${hasPages ? `
+              <select id="reader-mode-select" class="select-field" style="padding: 4px 8px; font-size: 0.82rem; border-radius: 6px; background: var(--v-bg-elevated); color: var(--v-text-primary); border: 1px solid var(--v-border-subtle);">
+                <option value="webtoon" ${readerMode === "webtoon" ? "selected" : ""}>📜 Webtoon</option>
+                <option value="paged" ${readerMode === "paged" ? "selected" : ""}>📖 Tek Sayfa</option>
+                <option value="continuous" ${readerMode === "continuous" ? "selected" : ""}>↔ Sürekli</option>
+              </select>
             ` : ""}
           </div>
-          <div style="display: flex; align-items: center; gap: 8px;">
+
+          <div class="reader-tool-group">
+            ${hasPages ? `
+              <div style="display: flex; align-items: center; gap: 3px; background: var(--v-bg-elevated); border: 1px solid var(--v-border-subtle); border-radius: 6px; padding: 2px 4px;">
+                <button class="btn btn-secondary" id="reader-zoom-dec" style="padding: 2px 7px; font-size: 0.8rem; border: none;">-</button>
+                <span id="reader-zoom-text" style="font-size: 0.75rem; min-width: 38px; text-align: center;">100%</span>
+                <button class="btn btn-secondary" id="reader-zoom-inc" style="padding: 2px 7px; font-size: 0.8rem; border: none;">+</button>
+              </div>
+
+              <div style="display: flex; align-items: center; gap: 4px;" title="Parlaklık / Gece Modu">
+                <span style="font-size: 0.85rem;">🌙</span>
+                <input type="range" id="reader-brightness-slider" min="30" max="100" value="100" style="width: 60px; accent-color: var(--v-accent-primary); cursor: pointer;">
+              </div>
+
+              <div style="display: flex; align-items: center; gap: 3px;">
+                <button class="btn btn-secondary" id="reader-autoscroll-btn" style="padding: 4px 10px; font-size: 0.8rem;" title="Otomatik Kaydır (Boşluk tuşu)">
+                  ▶ Kaydır
+                </button>
+                <select id="reader-autoscroll-speed" class="select-field" style="padding: 4px 6px; font-size: 0.8rem; border-radius: 6px; background: var(--v-bg-elevated); color: var(--v-text-primary); border: 1px solid var(--v-border-subtle);">
+                  <option value="1">1x</option>
+                  <option value="2">2x</option>
+                  <option value="3">3x</option>
+                </select>
+              </div>
+            ` : ""}
+
             ${hasText ? `
               <div class="btn-group" style="display: flex; gap: 4px;">
-                <button class="btn btn-secondary" id="reader-font-dec" style="padding: 4px 10px; font-size: 0.85rem;" title="Yazıyı Küçült">A-</button>
-                <button class="btn btn-secondary" id="reader-font-inc" style="padding: 4px 10px; font-size: 0.85rem;" title="Yazıyı Büyüt">A+</button>
+                <button class="btn btn-secondary" id="reader-font-dec" style="padding: 4px 8px; font-size: 0.8rem;" title="Yazıyı Küçült">A-</button>
+                <button class="btn btn-secondary" id="reader-font-inc" style="padding: 4px 8px; font-size: 0.8rem;" title="Yazıyı Büyüt">A+</button>
               </div>
             ` : ""}
-            <button class="btn btn-secondary" id="close-reader-btn" style="padding: 6px 14px; font-size: 0.85rem;">✕ ${this.t("close") || "Close"}</button>
+
+            <button class="btn btn-secondary" id="reader-fullscreen-btn" style="padding: 4px 10px; font-size: 0.8rem;" title="Tam Ekran (F)">
+              ⛶ Tam Ekran
+            </button>
+            <button class="btn btn-secondary" id="close-reader-btn" style="padding: 4px 12px; font-size: 0.8rem;">
+              ✕ ${this.t("close") || "Kapat"}
+            </button>
           </div>
         </div>
-      `;
 
-      let bodyHTML = "";
-      if (hasPages) {
-        bodyHTML = `
-          <div class="reader-pages-flow">
-            ${content.pages.map(p => `
-              <div class="reader-page-item" style="margin-bottom: 12px; text-align: center;">
-                <img src="${p.url}" alt="Page ${p.page_number}" loading="lazy" style="max-width: 100%; width: 760px; margin: 0 auto; display: block; border-radius: 4px; box-shadow: 0 4px 16px rgba(0,0,0,0.3);">
-                <div style="font-size: 0.75rem; color: var(--v-text-muted); margin-top: 4px;">${p.page_number} / ${content.pages.length}</div>
-              </div>
-            `).join("")}
-          </div>
-        `;
-      } else if (hasText) {
-        const paragraphs = content.text_content.split(/\n\n+/).map(p => {
-          const trimmed = p.trim();
-          if (!trimmed) return "";
-          const imgMatch = trimmed.match(/^!\[(.*?)\]\((https?:\/\/[^\s)]+)\)$/);
-          if (imgMatch) {
-            return `<figure class="reader-illustration" style="text-align: center; margin: 24px 0;"><img src="${imgMatch[2]}" alt="${imgMatch[1]}" style="max-width: 100%; max-height: 70vh; border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.3);"><figcaption style="font-size: 0.85rem; color: var(--v-text-muted); margin-top: 6px; font-style: italic;">${imgMatch[1]}</figcaption></figure>`;
-          }
-          return `<p>${trimmed}</p>`;
-        }).join("");
+        <div id="reader-viewport" style="position: relative; width: 100%; min-height: 70vh; overflow: hidden;">
+          <div id="reader-body-render" style="transition: filter 0.2s ease;"></div>
+        </div>
 
-        bodyHTML = `
-          <div class="reader-text-content" id="reader-text-body">
-            <h2 style="font-size: 1.6rem; font-weight: 800; margin-bottom: 24px; text-align: center;">${content.title || `${this.t("chapter")} ${chapterNum}`}</h2>
-            ${paragraphs}
-          </div>
-        `;
-      } else {
-        bodyHTML = `<div style="text-align: center; padding: 40px; color: var(--v-text-muted);">No readable content found for this chapter.</div>`;
-      }
-
-      let footerHTML = `
-        <div class="reader-footer" style="display: flex; justify-content: space-between; align-items: center; padding: 20px 24px; border-top: 1px solid var(--v-border-default); margin-top: 24px; flex-wrap: wrap; gap: 12px;">
+        <div class="reader-footer" style="display: flex; justify-content: space-between; align-items: center; padding: 18px 24px; border-top: 1px solid var(--v-border-subtle); background: var(--v-bg-surface); flex-wrap: wrap; gap: 10px;">
           <button class="btn btn-secondary" id="reader-prev-btn" ${prevCh ? "" : "disabled"} style="padding: 8px 18px;">
             ← ${this.t("chapter")} ${prevCh ? (prevCh.chapter_number !== undefined ? prevCh.chapter_number : "") : ""}
           </button>
-          <button class="btn btn-secondary" id="reader-top-btn" style="padding: 8px 18px;">
-            ↑ ${this.t("back_to_top") || "Başa Dön"}
-          </button>
+          <div style="font-size: 0.85rem; color: var(--v-text-muted);" id="reader-page-indicator">
+            ${this.t("chapter")} ${chapterNum}
+          </div>
           <button class="btn btn-primary" id="reader-next-btn" ${nextCh ? "" : "disabled"} style="padding: 8px 18px;">
             ${this.t("chapter")} ${nextCh ? (nextCh.chapter_number !== undefined ? nextCh.chapter_number : "") : ""} →
           </button>
         </div>
       `;
 
-      container.innerHTML = headerHTML + bodyHTML + footerHTML;
+      container.innerHTML = html;
 
-      document.getElementById("close-reader-btn").addEventListener("click", () => {
-        readerBox.classList.add("hidden");
+      const bodyRender = document.getElementById("reader-body-render");
+      const progressFill = document.getElementById("reader-progress-fill");
+      const pageIndicator = document.getElementById("reader-page-indicator");
+
+      // Render content according to mode
+      const renderReaderMode = () => {
+        if (hasPages) {
+          if (readerMode === "paged") {
+            const curP = pages[pagedIndex] || pages[0];
+            const pNum = curP.page_number || (pagedIndex + 1);
+            bodyRender.innerHTML = `
+              <div class="reader-pages-container mode-paged">
+                <div class="reader-paged-wrap" style="transform: scale(${zoomLevel / 100}); transform-origin: top center; transition: transform 0.15s ease;">
+                  <div class="reader-tap-zone reader-tap-left" id="reader-tap-left" title="Önceki Sayfa (Sol)"></div>
+                  <img src="${curP.url}" alt="Sayfa ${pNum}" class="reader-page-img" style="max-height: 85vh; max-width: 90vw; object-fit: contain; border-radius: 6px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+                  <div class="reader-tap-zone reader-tap-right" id="reader-tap-right" title="Sonraki Sayfa (Sağ)"></div>
+                </div>
+              </div>
+            `;
+            if (pageIndicator) pageIndicator.textContent = `Sayfa ${pNum} / ${totalPages} (${Math.round((pNum / totalPages) * 100)}%)`;
+            if (progressFill) progressFill.style.width = `${(pNum / totalPages) * 100}%`;
+
+            document.getElementById("reader-tap-left")?.addEventListener("click", () => {
+              if (pagedIndex > 0) {
+                pagedIndex--;
+                renderReaderMode();
+              } else if (prevCh) {
+                const cNum = (prevCh.chapter_number !== undefined && prevCh.chapter_number !== null) ? prevCh.chapter_number : 0;
+                this.openInlineChapter(item, details, cNum, prevCh.id || "", chList);
+              }
+            });
+
+            document.getElementById("reader-tap-right")?.addEventListener("click", () => {
+              if (pagedIndex < pages.length - 1) {
+                pagedIndex++;
+                renderReaderMode();
+              } else if (nextCh) {
+                const cNum = (nextCh.chapter_number !== undefined && nextCh.chapter_number !== null) ? nextCh.chapter_number : 0;
+                this.openInlineChapter(item, details, cNum, nextCh.id || "", chList);
+              }
+            });
+          } else {
+            // Webtoon or Continuous mode
+            const isWebtoon = readerMode === "webtoon";
+            const maxWidthPx = Math.round((isWebtoon ? 820 : 880) * (zoomLevel / 100));
+            bodyRender.innerHTML = `
+              <div class="reader-pages-container ${isWebtoon ? 'mode-webtoon' : 'mode-continuous'}" style="max-width: ${maxWidthPx}px; transition: max-width 0.2s ease;">
+                ${pages.map((p, pIdx) => `
+                  <div class="reader-page-item" style="width: 100%; text-align: center;">
+                    <img src="${p.url}" alt="Sayfa ${p.page_number || pIdx + 1}" class="reader-page-img" loading="lazy">
+                    ${!isWebtoon ? `<div style="font-size: 0.75rem; color: var(--v-text-muted); margin-top: 6px;">${p.page_number || pIdx + 1} / ${totalPages}</div>` : ""}
+                  </div>
+                `).join("")}
+              </div>
+            `;
+          }
+        } else if (hasText) {
+          const paragraphs = content.text_content.split(/\n\n+/).map(p => {
+            const trimmed = p.trim();
+            if (!trimmed) return "";
+            const imgMatch = trimmed.match(/^!\[(.*?)\]\((https?:\/\/[^\s)]+)\)$/);
+            if (imgMatch) {
+              return `<figure class="reader-illustration" style="text-align: center; margin: 24px 0;"><img src="${imgMatch[2]}" alt="${imgMatch[1]}" style="max-width: 100%; max-height: 70vh; border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.3);"><figcaption style="font-size: 0.85rem; color: var(--v-text-muted); margin-top: 6px; font-style: italic;">${imgMatch[1]}</figcaption></figure>`;
+            }
+            return `<p>${trimmed}</p>`;
+          }).join("");
+
+          bodyRender.innerHTML = `
+            <div class="reader-text-content" id="reader-text-body" style="max-width: 800px; margin: 0 auto; padding: 24px 16px;">
+              <h2 style="font-size: 1.6rem; font-weight: 800; margin-bottom: 24px; text-align: center;">${content.title || `${this.t("chapter")} ${chapterNum}`}</h2>
+              ${paragraphs}
+            </div>
+          `;
+        }
+      };
+
+      renderReaderMode();
+
+      // Scroll progress tracking for Webtoon and Continuous
+      const updateScrollProgress = () => {
+        if (readerMode === "paged") return;
+        const rect = bodyRender.getBoundingClientRect();
+        const totalH = rect.height;
+        const windowH = window.innerHeight;
+        const scrolled = -rect.top;
+        if (totalH <= windowH) {
+          if (progressFill) progressFill.style.width = "100%";
+          return;
+        }
+        const pct = Math.max(0, Math.min(100, Math.round((scrolled / (totalH - windowH)) * 100)));
+        if (progressFill) progressFill.style.width = `${pct}%`;
+        if (pageIndicator) pageIndicator.textContent = `${this.t("chapter")} ${chapterNum} (%${pct})`;
+      };
+      window.addEventListener("scroll", updateScrollProgress, { passive: true });
+      readerBox.addEventListener("scroll", updateScrollProgress, { passive: true });
+
+      // Brightness Slider
+      const brightSlider = document.getElementById("reader-brightness-slider");
+      if (brightSlider) {
+        brightSlider.addEventListener("input", (e) => {
+          brightnessLevel = parseInt(e.target.value, 10);
+          bodyRender.style.filter = `brightness(${brightnessLevel}%)`;
+        });
+      }
+
+      // Zoom In / Out
+      const zoomText = document.getElementById("reader-zoom-text");
+      document.getElementById("reader-zoom-dec")?.addEventListener("click", () => {
+        if (zoomLevel > 60) {
+          zoomLevel -= 15;
+          if (zoomText) zoomText.textContent = `${zoomLevel}%`;
+          renderReaderMode();
+        }
+      });
+      document.getElementById("reader-zoom-inc")?.addEventListener("click", () => {
+        if (zoomLevel < 180) {
+          zoomLevel += 15;
+          if (zoomText) zoomText.textContent = `${zoomLevel}%`;
+          renderReaderMode();
+        }
       });
 
+      // Reading Mode Selector
+      const modeSelect = document.getElementById("reader-mode-select");
+      if (modeSelect) {
+        modeSelect.addEventListener("change", (e) => {
+          readerMode = e.target.value;
+          localStorage.setItem("vessel_reader_mode", readerMode);
+          renderReaderMode();
+          updateScrollProgress();
+        });
+      }
+
+      // Fullscreen Toggle
+      const fsBtn = document.getElementById("reader-fullscreen-btn");
+      const toggleReaderFS = () => {
+        const isFS = document.fullscreenElement || readerBox.classList.contains("reader-box-fullscreen");
+        if (isFS) {
+          if (document.exitFullscreen) document.exitFullscreen().catch(() => {});
+          readerBox.classList.remove("reader-box-fullscreen");
+          if (fsBtn) fsBtn.textContent = "⛶ Tam Ekran";
+        } else {
+          if (readerBox.requestFullscreen) {
+            readerBox.requestFullscreen().catch(() => {
+              readerBox.classList.add("reader-box-fullscreen");
+            });
+          } else {
+            readerBox.classList.add("reader-box-fullscreen");
+          }
+          if (fsBtn) fsBtn.textContent = "✕ Çıkış";
+        }
+      };
+      if (fsBtn) fsBtn.addEventListener("click", toggleReaderFS);
+
+      // Auto-scroll loop
+      const autoScrollBtn = document.getElementById("reader-autoscroll-btn");
+      const autoScrollSpeedSelect = document.getElementById("reader-autoscroll-speed");
+      if (autoScrollSpeedSelect) {
+        autoScrollSpeedSelect.addEventListener("change", (e) => {
+          autoScrollSpeed = parseFloat(e.target.value);
+        });
+      }
+
+      const stopAutoScroll = () => {
+        isAutoScrolling = false;
+        if (autoScrollAnimId) cancelAnimationFrame(autoScrollAnimId);
+        if (autoScrollBtn) autoScrollBtn.textContent = "▶ Kaydır";
+      };
+
+      const stepAutoScroll = () => {
+        if (!isAutoScrolling) return;
+        const scrollTarget = readerBox.classList.contains("reader-box-fullscreen") ? readerBox : window;
+        const speedMultiplier = autoScrollSpeed === 1 ? 1.2 : (autoScrollSpeed === 2 ? 2.5 : 4.5);
+        if (scrollTarget === window) {
+          window.scrollBy(0, speedMultiplier);
+          if (window.innerHeight + window.scrollY >= document.body.offsetHeight - 50) {
+            stopAutoScroll();
+            return;
+          }
+        } else {
+          readerBox.scrollTop += speedMultiplier;
+          if (readerBox.scrollTop + readerBox.clientHeight >= readerBox.scrollHeight - 50) {
+            stopAutoScroll();
+            return;
+          }
+        }
+        autoScrollAnimId = requestAnimationFrame(stepAutoScroll);
+      };
+
+      const toggleAutoScroll = () => {
+        isAutoScrolling = !isAutoScrolling;
+        if (isAutoScrolling) {
+          if (autoScrollBtn) autoScrollBtn.textContent = "⏸ Durdur";
+          stepAutoScroll();
+        } else {
+          stopAutoScroll();
+        }
+      };
+      if (autoScrollBtn) autoScrollBtn.addEventListener("click", toggleAutoScroll);
+
+      // Chapter Dropdown
       const dropdown = document.getElementById("reader-chapter-dropdown");
       if (dropdown) {
         dropdown.addEventListener("change", (e) => {
+          stopAutoScroll();
           const opt = e.target.selectedOptions[0];
           const cNum = parseFloat(e.target.value);
           const cId = opt ? opt.dataset.chid : "";
@@ -2355,9 +3445,11 @@ class VesselApp {
         });
       }
 
+      // Prev & Next Buttons
       const prevBtn = document.getElementById("reader-prev-btn");
       if (prevBtn && prevCh) {
         prevBtn.addEventListener("click", () => {
+          stopAutoScroll();
           const cNum = (prevCh.chapter_number !== undefined && prevCh.chapter_number !== null) ? prevCh.chapter_number : 0;
           this.openInlineChapter(item, details, cNum, prevCh.id || "", chList);
         });
@@ -2366,42 +3458,52 @@ class VesselApp {
       const nextBtn = document.getElementById("reader-next-btn");
       if (nextBtn && nextCh) {
         nextBtn.addEventListener("click", () => {
+          stopAutoScroll();
           const cNum = (nextCh.chapter_number !== undefined && nextCh.chapter_number !== null) ? nextCh.chapter_number : 0;
           this.openInlineChapter(item, details, cNum, nextCh.id || "", chList);
         });
       }
 
-      const topBtn = document.getElementById("reader-top-btn");
-      if (topBtn) {
-        topBtn.addEventListener("click", () => {
-          readerBox.scrollIntoView({ behavior: "smooth" });
-        });
-      }
-
-      if (hasText) {
-        let currentFontSize = 18;
-        const textBody = document.getElementById("reader-text-body");
-        const decBtn = document.getElementById("reader-font-dec");
-        const incBtn = document.getElementById("reader-font-inc");
-        if (decBtn && textBody) {
-          decBtn.addEventListener("click", () => {
-            if (currentFontSize > 13) {
-              currentFontSize -= 2;
-              textBody.style.fontSize = `${currentFontSize}px`;
-            }
-          });
+      // Close Button
+      const closeReader = () => {
+        stopAutoScroll();
+        if (document.fullscreenElement) {
+          document.exitFullscreen?.().catch(() => {});
         }
-        if (incBtn && textBody) {
-          incBtn.addEventListener("click", () => {
-            if (currentFontSize < 32) {
-              currentFontSize += 2;
-              textBody.style.fontSize = `${currentFontSize}px`;
-            }
-          });
-        }
-      }
+        readerBox.classList.remove("reader-box-fullscreen");
+        readerBox.classList.add("hidden");
+        window.removeEventListener("scroll", updateScrollProgress);
+        window.removeEventListener("keydown", readerKeyHandler);
+        this.loadResumeProgress();
+      };
+      document.getElementById("close-reader-btn")?.addEventListener("click", closeReader);
 
-      const totalPages = (content.pages && content.pages.length > 0) ? content.pages.length : 1;
+      // Keyboard Controls
+      const readerKeyHandler = (e) => {
+        if (readerBox.classList.contains("hidden")) return;
+        if (e.key === "f" || e.key === "F") {
+          e.preventDefault();
+          toggleReaderFS();
+        } else if (e.key === " " && hasPages && readerMode !== "paged") {
+          e.preventDefault();
+          toggleAutoScroll();
+        } else if (readerMode === "paged") {
+          if (e.key === "ArrowLeft" || e.key === "a") {
+            if (pagedIndex > 0) { pagedIndex--; renderReaderMode(); }
+          } else if (e.key === "ArrowRight" || e.key === "d") {
+            if (pagedIndex < pages.length - 1) { pagedIndex++; renderReaderMode(); }
+          }
+        } else if (e.key === "Escape") {
+          if (document.fullscreenElement || readerBox.classList.contains("reader-box-fullscreen")) {
+            toggleReaderFS();
+          } else {
+            closeReader();
+          }
+        }
+      };
+      window.addEventListener("keydown", readerKeyHandler);
+
+      // Save reading progress ping with title and poster
       await fetch("/api/progress/reading", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -2409,6 +3511,8 @@ class VesselApp {
           provider_id: provider,
           media_id: item.id,
           domain: 2,
+          title: details.title || item.title || "",
+          poster_url: details.poster_url || item.poster_url || "",
           chapter_id: content.chapter_id || chapterId || `ch-${chapterNum}`,
           chapter_number: chapterNum,
           current_page: 1,
@@ -2425,24 +3529,17 @@ class VesselApp {
           <button class="btn btn-secondary" id="retry-chapter-btn" style="margin-top: 16px;">Yeniden Dene</button>
         </div>
       `;
-      const retryBtn = document.getElementById("retry-chapter-btn");
-      if (retryBtn) {
-        retryBtn.addEventListener("click", () => {
-          this.openInlineChapter(item, details, chapterNum, chapterId, chapters);
-        });
-      }
+      document.getElementById("retry-chapter-btn")?.addEventListener("click", () => {
+        this.openInlineChapter(item, details, chapterNum, chapterId, chapters);
+      });
     }
   }
 
   async playMediaStream(item, season, episode, streamObj = null) {
-    const playerBox = document.getElementById("inline-player-box");
-    const video = document.getElementById("vessel-video-player");
-    playerBox.classList.remove("hidden");
-    playerBox.scrollIntoView({ behavior: "smooth" });
-
     try {
       let targetStream = streamObj;
       if (!targetStream) {
+        this.showToast("Akış kaynakları taranıyor...", "info");
         const res = await fetch(`/api/streams?provider=${encodeURIComponent(item.provider_id || "")}&media=${encodeURIComponent(item.id)}&season=${season}&episode=${episode}`);
         if (!res.ok) throw new Error("Could not fetch stream sources");
         const data = await res.json();
@@ -2471,42 +3568,12 @@ class VesselApp {
         console.warn("Stream resolve error:", err);
       }
 
-      if (window.Hls && window.Hls.isSupported() && (streamUrl.includes(".m3u8") || targetStream.format === 2)) {
-        if (this.currentHlsInstance) {
-          this.currentHlsInstance.destroy();
-        }
-        const hls = new window.Hls({ enableWorker: true });
-        this.currentHlsInstance = hls;
-        hls.loadSource(streamUrl);
-        hls.attachMedia(video);
-        hls.on(window.Hls.Events.MANIFEST_PARSED, () => {
-          video.play().catch(e => console.log("Autoplay blocked:", e));
-        });
-      } else {
-        video.src = streamUrl;
-        video.play().catch(e => console.log("Autoplay blocked:", e));
-      }
-
-      // Record playback progress
-      video.ontimeupdate = () => {
-        if (video.currentTime > 5 && Math.floor(video.currentTime) % 10 === 0) {
-          fetch("/api/progress/playback", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              provider_id: item.provider_id,
-              media_id: item.id,
-              domain: 1,
-              season_number: season,
-              episode_number: episode,
-              current_position: video.currentTime,
-              total_duration: video.duration || 0,
-              progress_percent: video.duration > 0 ? (video.currentTime / video.duration) * 100 : 0,
-              is_completed: false
-            })
-          });
-        }
-      };
+      this.openVesselPlayer(streamUrl, {
+        item,
+        season,
+        episode,
+        subtitles: targetStream.subtitles || []
+      });
     } catch (e) {
       this.showToast(`Playback error: ${e.message}`, "error");
     }
@@ -2604,17 +3671,19 @@ class VesselApp {
           const card = document.createElement("div");
           card.className = "plugin-card";
           const isEnabled = p.enabled !== false;
+          const loc = this.getPluginLocalizedInfo(p.id, p.name || p.id, p.description || "");
+
           card.innerHTML = `
             <div class="plugin-card-header">
               <div>
-                <h4 class="plugin-card-title">${p.name || p.id}</h4>
+                <h4 class="plugin-card-title">${loc.title}</h4>
                 <div style="font-size: 0.8rem; color: var(--v-text-muted); margin-top: 4px;">v${p.version || "1.0.0"} • ${p.author || "Vessel"}</div>
               </div>
               <span class="badge-subtle" style="background: ${isEnabled ? "rgba(var(--v-status-success-rgb, 16, 185, 129), 0.15)" : "rgba(156, 163, 175, 0.15)"}; color: ${isEnabled ? "var(--v-status-success)" : "var(--v-text-muted)"};">
                 ${isEnabled ? this.t("btn_active") : "Devre Dışı"}
               </span>
             </div>
-            <p class="plugin-card-desc">${p.description || "Media & catalog provider extension."}</p>
+            <p class="plugin-card-desc">${loc.description}</p>
             <div class="plugin-card-footer">
               <span style="font-size: 0.8rem; color: var(--v-text-muted);">${p.is_builtin ? this.t("plugin_builtin") : this.t("plugin_external")}</span>
               <button class="btn btn-secondary toggle-plugin-btn" style="font-size: 0.8rem; padding: 4px 12px;">
@@ -2642,16 +3711,17 @@ class VesselApp {
         const card = document.createElement("div");
         card.className = "plugin-card";
         const isInst = p.installed;
+        const loc = this.getPluginLocalizedInfo(p.id, p.name, p.description);
 
         card.innerHTML = `
           <div class="plugin-card-header">
             <div>
-              <h4 class="plugin-card-title">${p.name}</h4>
+              <h4 class="plugin-card-title">${loc.title}</h4>
               <div style="font-size: 0.8rem; color: var(--v-text-muted); margin-top: 4px;">v${p.version} • ${p.author}</div>
             </div>
-            <span class="badge-subtle">${p.domain.toUpperCase()}</span>
+            <span class="badge-subtle">${(p.domain || "MEDIA").toUpperCase()}</span>
           </div>
-          <p class="plugin-card-desc">${p.description}</p>
+          <p class="plugin-card-desc">${loc.description}</p>
           <div class="plugin-card-footer">
             <span style="font-size: 0.8rem; color: var(--v-text-muted);">${p.is_builtin ? this.t("plugin_builtin") : "Community"}</span>
             <button class="btn ${isInst ? "btn-secondary" : "btn-primary"} install-action-btn" style="font-size: 0.8rem; padding: 6px 14px;">
@@ -2734,6 +3804,7 @@ class VesselApp {
         const card = document.createElement("div");
         card.className = "resume-card";
         const title = p.title || p.Title || p.media_id || p.MediaID || "Media";
+        const poster = p.poster_url || p.PosterURL || "/assets/vessel_primary.png";
 
         if (isReading) {
           const chNum = p.chapter_number || p.ChapterNumber || 1;
@@ -2742,16 +3813,20 @@ class VesselApp {
           const percent = totPages > 0 ? Math.min(100, Math.round((currPage / totPages) * 100)) : 0;
 
           card.innerHTML = `
+            <div class="resume-thumb-wrap" style="position: relative; width: 100%; height: 130px; overflow: hidden; background: var(--v-bg-elevated);">
+              <img class="resume-thumb" src="${poster}" alt="${title}" onerror="this.src='/assets/vessel_primary.png'">
+              <button class="resume-delete-btn" title="Kaldır / Sil" data-del="true">✕</button>
+            </div>
             <div class="resume-info">
-              <div class="resume-title">${title}</div>
-              <div class="resume-sub">${this.t("chapter")} ${chNum} • ${currPage}/${totPages}</div>
+              <div class="resume-title" title="${title}">${title}</div>
+              <div class="resume-sub">${this.t("chapter")} ${chNum} • ${currPage}/${totPages} (%${percent})</div>
               <div class="progress-bar-container">
                 <div class="progress-bar-fill" style="width: ${percent}%;"></div>
               </div>
             </div>
           `;
           card.addEventListener("click", () => {
-            this.openDetailsView({ id: p.media_id, provider_id: p.provider_id, title, type: 4 });
+            this.openDetailsView({ id: p.media_id, provider_id: p.provider_id, title, poster_url: poster, type: 4 });
           });
         } else {
           const percent = Math.min(100, Math.round(p.progress_percent || p.ProgressPercent || 0));
@@ -2759,16 +3834,45 @@ class VesselApp {
           const epNum = p.episode_number || p.EpisodeNumber || 1;
 
           card.innerHTML = `
+            <div class="resume-thumb-wrap" style="position: relative; width: 100%; height: 130px; overflow: hidden; background: var(--v-bg-elevated);">
+              <img class="resume-thumb" src="${poster}" alt="${title}" onerror="this.src='/assets/vessel_primary.png'">
+              <button class="resume-delete-btn" title="Kaldır / Sil" data-del="true">✕</button>
+            </div>
             <div class="resume-info">
-              <div class="resume-title">${title}</div>
-              <div class="resume-sub">${this.t("season")} ${sNum} • ${this.t("episode")} ${epNum}</div>
+              <div class="resume-title" title="${title}">${title}</div>
+              <div class="resume-sub">${this.t("season")} ${sNum} • ${this.t("episode")} ${epNum} (%${percent})</div>
               <div class="progress-bar-container">
                 <div class="progress-bar-fill" style="width: ${percent}%;"></div>
               </div>
             </div>
           `;
           card.addEventListener("click", () => {
-            this.openDetailsView({ id: p.media_id, provider_id: p.provider_id, title, type: 1 });
+            this.openDetailsView({ id: p.media_id, provider_id: p.provider_id, title, poster_url: poster, type: 1 });
+          });
+        }
+
+        const delBtn = card.querySelector(".resume-delete-btn");
+        if (delBtn) {
+          delBtn.addEventListener("click", async (e) => {
+            e.stopPropagation();
+            try {
+              if (isReading) {
+                const chId = p.chapter_id || p.ChapterID || "";
+                await fetch(`/api/progress/reading?provider=${encodeURIComponent(p.provider_id || "")}&media=${encodeURIComponent(p.media_id || "")}&chapter=${encodeURIComponent(chId)}`, {
+                  method: "DELETE"
+                });
+              } else {
+                const sNum = p.season_number || p.SeasonNumber || 1;
+                const epNum = p.episode_number || p.EpisodeNumber || 1;
+                await fetch(`/api/progress/playback?provider=${encodeURIComponent(p.provider_id || "")}&media=${encodeURIComponent(p.media_id || "")}&season=${sNum}&episode=${epNum}`, {
+                  method: "DELETE"
+                });
+              }
+              this.showToast("İlerleme kaldırıldı", "info");
+              this.loadResumeProgress();
+            } catch (err) {
+              this.showToast(err.message, "error");
+            }
           });
         }
 
@@ -2785,19 +3889,94 @@ class VesselApp {
     grid.innerHTML = `<div style="grid-column: 1/-1; text-align: center; color: var(--v-text-muted); padding: 40px;">⏳ Loading collection...</div>`;
 
     try {
-      const res = await fetch(`/api/library?status=${status}`);
+      const res = await fetch(`/api/library?status=${status || "ALL"}`);
       if (!res.ok) throw new Error("Failed to load library");
       const data = await res.json();
       const items = data.items || [];
 
       grid.innerHTML = "";
       if (items.length === 0) {
-        grid.innerHTML = `<div style="grid-column: 1/-1; text-align: center; color: var(--v-text-muted); padding: 50px;">No items in this collection tab yet.</div>`;
+        grid.innerHTML = `<div style="grid-column: 1/-1; text-align: center; color: var(--v-text-muted); padding: 50px;">Bu sekmede henüz içerik bulunmuyor.</div>`;
         return;
       }
 
       items.forEach(it => {
-        grid.appendChild(this.createMediaCard(it));
+        const card = document.createElement("div");
+        card.className = "media-card";
+        const title = it.title || "Unknown";
+        const poster = it.poster_url || "/assets/vessel_primary.png";
+        const typeLabel = this.mapMediaType(it.type || 1);
+        const curStatus = it.status || "WATCHING";
+
+        card.innerHTML = `
+          <div class="poster-wrapper">
+            <img src="${poster}" alt="${title}" class="poster-img" loading="lazy" onerror="this.src='/assets/vessel_primary.png'">
+            <span class="card-badge">${typeLabel}</span>
+            <div class="poster-overlay-btn">▶</div>
+          </div>
+          <div class="card-details">
+            <div class="card-title" title="${title}">${title}</div>
+            <div class="library-card-actions">
+              <select class="library-item-status-select" data-media="${it.media_id}" data-provider="${it.provider_id}">
+                <option value="WATCHING" ${curStatus === "WATCHING" ? "selected" : ""}>▶ ${this.t("status_watching") || "İzleniyor"}</option>
+                <option value="PLAN_TO_WATCH" ${curStatus === "PLAN_TO_WATCH" ? "selected" : ""}>🕒 ${this.t("status_plan") || "Daha Sonra"}</option>
+                <option value="COMPLETED" ${curStatus === "COMPLETED" ? "selected" : ""}>✓ ${this.t("status_completed") || "Tamamlandı"}</option>
+                <option value="DROPPED" ${curStatus === "DROPPED" ? "selected" : ""}>⏹ ${this.t("status_dropped") || "Bırakıldı"}</option>
+                <option value="FAVORITE" ${curStatus === "FAVORITE" ? "selected" : ""}>★ ${this.t("status_favorites") || "Favoriler"}</option>
+              </select>
+              <button class="library-item-remove-btn" title="Koleksiyondan Kaldır">🗑</button>
+            </div>
+          </div>
+        `;
+
+        card.querySelector(".poster-wrapper").addEventListener("click", () => {
+          this.openDetailsView({ id: it.media_id, provider_id: it.provider_id, title, poster_url: poster, type: it.type });
+        });
+
+        const statusSelect = card.querySelector(".library-item-status-select");
+        statusSelect.addEventListener("click", (e) => e.stopPropagation());
+        statusSelect.addEventListener("change", async (e) => {
+          e.stopPropagation();
+          const newStatus = statusSelect.value;
+          try {
+            await fetch("/api/library", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                provider_id: it.provider_id,
+                media_id: it.media_id,
+                domain: it.domain || 1,
+                title: it.title,
+                type: it.type || 1,
+                poster_url: it.poster_url,
+                status: newStatus,
+                user_rating: it.user_rating || 8.5
+              })
+            });
+            this.showToast(`Durum güncellendi: ${newStatus}`);
+            if (status !== "ALL" && status !== newStatus) {
+              this.loadLibraryItems(status);
+            }
+          } catch (err) {
+            this.showToast(err.message, "error");
+          }
+        });
+
+        const removeBtn = card.querySelector(".library-item-remove-btn");
+        removeBtn.addEventListener("click", async (e) => {
+          e.stopPropagation();
+          try {
+            await fetch(`/api/library?provider=${encodeURIComponent(it.provider_id || "")}&media=${encodeURIComponent(it.media_id || "")}`, {
+              method: "DELETE"
+            });
+            this.showToast("Koleksiyondan kaldırıldı", "info");
+            card.remove();
+          } catch (err) {
+            this.showToast(err.message, "error");
+          }
+        });
+
+        grid.appendChild(card);
       });
     } catch (e) {
       grid.innerHTML = `<div style="grid-column: 1/-1; text-align: center; color: var(--v-status-error); padding: 30px;">${e.message}</div>`;

@@ -556,7 +556,11 @@ func (g *GatewayServer) handleLibrary(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	switch r.Method {
 	case http.MethodGet:
-		status := library.Status(r.URL.Query().Get("status"))
+		statusStr := r.URL.Query().Get("status")
+		var status library.Status
+		if statusStr != "" && statusStr != "ALL" {
+			status = library.Status(statusStr)
+		}
 		items, total, err := g.librarySvc.ListItems(ctx, library.Filter{Status: status})
 		if err != nil {
 			g.writeError(w, http.StatusInternalServerError, err.Error())
@@ -615,6 +619,30 @@ func (g *GatewayServer) handlePlaybackProgress(w http.ResponseWriter, r *http.Re
 		return
 	}
 
+	if r.Method == http.MethodDelete {
+		provider := r.URL.Query().Get("provider")
+		media := r.URL.Query().Get("media")
+		seasonStr := r.URL.Query().Get("season")
+		episodeStr := r.URL.Query().Get("episode")
+		var season, episode int32 = -1, -1
+		if seasonStr != "" {
+			if s, err := strconv.Atoi(seasonStr); err == nil {
+				season = int32(s)
+			}
+		}
+		if episodeStr != "" {
+			if e, err := strconv.Atoi(episodeStr); err == nil {
+				episode = int32(e)
+			}
+		}
+		if err := g.librarySvc.DeletePlayback(r.Context(), provider, media, season, episode); err != nil {
+			g.writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		g.writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
+		return
+	}
+
 	if r.Method != http.MethodPost {
 		g.writeError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
@@ -624,6 +652,8 @@ func (g *GatewayServer) handlePlaybackProgress(w http.ResponseWriter, r *http.Re
 		ProviderID             string  `json:"provider_id"`
 		MediaID                string  `json:"media_id"`
 		Domain                 int32   `json:"domain"`
+		Title                  string  `json:"title"`
+		PosterURL              string  `json:"poster_url"`
 		SeasonNumber           int32   `json:"season_number"`
 		EpisodeNumber          int32   `json:"episode_number"`
 		CurrentPositionSeconds float64 `json:"current_position"`
@@ -640,6 +670,8 @@ func (g *GatewayServer) handlePlaybackProgress(w http.ResponseWriter, r *http.Re
 		ProviderID:             req.ProviderID,
 		MediaID:                req.MediaID,
 		Domain:                 pluginv1.Domain(req.Domain),
+		Title:                  req.Title,
+		PosterURL:              req.PosterURL,
 		SeasonNumber:           req.SeasonNumber,
 		EpisodeNumber:          req.EpisodeNumber,
 		CurrentPositionSeconds: req.CurrentPositionSeconds,
@@ -678,6 +710,18 @@ func (g *GatewayServer) handleRecentPlayback(w http.ResponseWriter, r *http.Requ
 func (g *GatewayServer) handleReadingProgress(w http.ResponseWriter, r *http.Request) {
 	if g.librarySvc == nil {
 		g.writeError(w, http.StatusServiceUnavailable, "library service not available")
+		return
+	}
+
+	if r.Method == http.MethodDelete {
+		provider := r.URL.Query().Get("provider")
+		media := r.URL.Query().Get("media")
+		chapter := r.URL.Query().Get("chapter")
+		if err := g.librarySvc.DeleteReading(r.Context(), provider, media, chapter); err != nil {
+			g.writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		g.writeJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
 		return
 	}
 

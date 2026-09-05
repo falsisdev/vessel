@@ -123,3 +123,11 @@ func (s *LibraryService) GetReading(ctx context.Context, providerID, mediaID, ch
 func (s *LibraryService) ListRecentReading(ctx context.Context, limit int) ([]*library.ReadingProgress, error) {
 	return s.storage.ListRecentReadingProgress(ctx, limit)
 }
+
+func (s *LibraryService) DeletePlayback(ctx context.Context, providerID, mediaID string, season, episode int32) error {
+	return s.storage.DeletePlaybackProgress(ctx, providerID, mediaID, season, episode)
+}
+
+func (s *LibraryService) DeleteReading(ctx context.Context, providerID, mediaID, chapterID string) error {
+	return s.storage.DeleteReadingProgress(ctx, providerID, mediaID, chapterID)
+}

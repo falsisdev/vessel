@@ -163,6 +163,7 @@
             <option value="system">🌐 System</option>
             <option value="en">English</option>
             <option value="tr">Türkçe</option>
+            <option value="az">Azərbaycan</option>
             <option value="de">Deutsch</option>
             <option value="fr">Français</option>
             <option value="es">Español</option>
@@ -256,6 +257,85 @@
           <div class="media-grid" id="search-full-grid"></div>
         </div>
 
+        <!-- Modern Live TV / IPTV Guide Split View -->
+        <div class="section-container hidden" id="iptv-view">
+          <div class="iptv-guide-header">
+            <div class="iptv-title-wrap">
+              <h2 data-i18n="iptv_guide_title">Live TV Guide</h2>
+              <p class="section-subtitle" data-i18n="iptv_guide_subtitle">Browse global TV channels by country & category, watch live instantly.</p>
+            </div>
+            <!-- Country filter pills -->
+            <div class="iptv-country-pills" id="iptv-country-filters">
+              <button class="filter-pill active" data-country="ALL">🌍 ALL</button>
+              <button class="filter-pill" data-country="TR">🇹🇷 Türkiye</button>
+              <button class="filter-pill" data-country="AZ">🇦🇿 Azərbaycan</button>
+              <button class="filter-pill" data-country="US">🇺🇸 USA</button>
+              <button class="filter-pill" data-country="UK">🇬🇧 UK</button>
+              <button class="filter-pill" data-country="DE">🇩🇪 Deutschland</button>
+              <button class="filter-pill" data-country="FR">🇫🇷 France</button>
+            </div>
+          </div>
+
+          <!-- Category filter pills -->
+          <div class="iptv-category-pills" id="iptv-category-filters">
+            <button class="tab active" data-category="ALL">All Categories</button>
+            <button class="tab" data-category="General">General</button>
+            <button class="tab" data-category="News">News</button>
+            <button class="tab" data-category="Sports">Sports</button>
+            <button class="tab" data-category="Documentary">Documentary</button>
+            <button class="tab" data-category="Science">Science</button>
+          </div>
+
+          <!-- Split TV Guide Grid -->
+          <div class="iptv-split-layout">
+            <!-- Left: Channels Directory -->
+            <div class="iptv-channels-panel">
+              <div class="iptv-search-bar">
+                <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none">
+                  <circle cx="11" cy="11" r="8"></circle>
+                  <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                </svg>
+                <input type="text" id="iptv-search-input" placeholder="Search channels..." autocomplete="off">
+              </div>
+              <div class="iptv-channels-list" id="iptv-channels-list">
+                <!-- Injected dynamically -->
+              </div>
+            </div>
+
+            <!-- Right: Persistent Live TV Player -->
+            <div class="iptv-player-panel" id="iptv-player-panel">
+              <div class="iptv-player-card">
+                <div class="iptv-player-header">
+                  <div class="iptv-active-channel-info" id="iptv-active-channel-info">
+                    <div class="iptv-live-badge"><span class="live-dot"></span> LIVE</div>
+                    <h3 class="iptv-active-title" id="iptv-active-title">Select a channel to start watching</h3>
+                    <div class="iptv-active-tags" id="iptv-active-tags"></div>
+                  </div>
+                  <button class="btn btn-secondary btn-icon" id="iptv-player-fullscreen-btn" title="Fullscreen (F)">
+                    <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none">
+                      <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path>
+                    </svg>
+                  </button>
+                </div>
+                <div class="iptv-video-wrapper" id="iptv-video-wrapper">
+                  <video id="iptv-video-player" playsinline preload="auto"></video>
+                  <div class="iptv-player-overlay hidden" id="iptv-player-overlay">
+                    <div class="spinner"></div>
+                    <span id="iptv-loading-text">Buffering broadcast stream...</span>
+                  </div>
+                  <div class="iptv-player-empty" id="iptv-player-empty">
+                    <svg viewBox="0 0 24 24" width="48" height="48" stroke="currentColor" stroke-width="1.5" fill="none">
+                      <rect x="2" y="7" width="20" height="15" rx="2" ry="2"></rect>
+                      <polyline points="17 2 12 7 7 2"></polyline>
+                    </svg>
+                    <p>Select any television channel from the left guide to watch live.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- Full-Page Media / Series Details View (NO Modal / Popup!) -->
         <div class="section-container hidden" id="details-view">
           <div class="details-top-nav">
@@ -278,9 +358,11 @@
           <div class="section-header">
             <h2 data-i18n="library_title">Your Collection</h2>
             <div class="library-tabs">
-              <button class="tab active" data-status="WATCHING" data-i18n="status_watching">In Progress</button>
+              <button class="tab active" data-status="ALL" data-i18n="status_all">Tümü (All)</button>
+              <button class="tab" data-status="WATCHING" data-i18n="status_watching">In Progress</button>
               <button class="tab" data-status="PLAN_TO_WATCH" data-i18n="status_plan">Plan to Watch</button>
               <button class="tab" data-status="COMPLETED" data-i18n="status_completed">Completed</button>
+              <button class="tab" data-status="DROPPED" data-i18n="status_dropped">Dropped</button>
               <button class="tab" data-status="FAVORITE" data-i18n="status_favorites">Favorites</button>
             </div>
           </div>
@@ -412,11 +494,142 @@
     </main>
   </div>
 
+  <!-- Vessel Custom Engineered Video Player Modal -->
+  <div class="vessel-player-modal hidden" id="vessel-player-modal">
+    <div class="vessel-player-backdrop"></div>
+    <div class="vessel-player-container" id="vessel-player-container">
+      <video id="vessel-video-element" playsinline></video>
+
+      <!-- Center Big Play/Loading Status -->
+      <div class="vessel-player-center" id="vessel-player-center">
+        <div class="vessel-center-btn hidden" id="vessel-center-play">
+          <svg viewBox="0 0 24 24" width="64" height="64" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+        </div>
+        <div class="vessel-center-spinner hidden" id="vessel-center-spinner">
+          <div class="spinner"></div>
+        </div>
+      </div>
+
+      <!-- Video Player HUD Overlay -->
+      <div class="vessel-player-hud" id="vessel-player-hud">
+        <!-- Top HUD Header -->
+        <div class="vessel-hud-top">
+          <div class="vessel-hud-info">
+            <h2 class="vessel-hud-title" id="vessel-hud-title">Media Title</h2>
+            <span class="vessel-hud-subtitle" id="vessel-hud-subtitle">Season 1 Episode 1</span>
+          </div>
+          <div class="vessel-hud-top-actions">
+            <button class="hud-btn" id="vessel-pip-btn" title="Picture in Picture">
+              <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none"><rect x="2" y="3" width="20" height="14" rx="2"></rect><rect x="12" y="9" width="8" height="6" rx="1"></rect></svg>
+            </button>
+            <button class="hud-btn hud-close-btn" id="vessel-close-player-btn" title="Close (Esc)">
+              <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" stroke-width="2" fill="none"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Bottom HUD Controls -->
+        <div class="vessel-hud-bottom">
+          <!-- Scrubber / Progress Bar -->
+          <div class="vessel-scrubber-container" id="vessel-scrubber-container">
+            <div class="vessel-scrubber-track">
+              <div class="vessel-scrubber-buffer" id="vessel-scrubber-buffer"></div>
+              <div class="vessel-scrubber-progress" id="vessel-scrubber-progress"></div>
+            </div>
+            <div class="vessel-scrubber-thumb" id="vessel-scrubber-thumb"></div>
+            <div class="vessel-scrubber-tooltip hidden" id="vessel-scrubber-tooltip">00:00</div>
+          </div>
+
+          <!-- Bottom Actions Bar -->
+          <div class="vessel-hud-bar">
+            <div class="vessel-bar-left">
+              <button class="hud-btn" id="vessel-play-btn" title="Play/Pause (Space)">
+                <svg id="vessel-play-icon" viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                <svg id="vessel-pause-icon" class="hidden" viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
+              </button>
+
+              <button class="hud-btn" id="vessel-rewind-btn" title="Rewind 10s (←)">
+                <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path></svg>
+              </button>
+
+              <button class="hud-btn" id="vessel-forward-btn" title="Forward 10s (→)">
+                <svg viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+              </button>
+
+              <div class="vessel-volume-group">
+                <button class="hud-btn" id="vessel-volume-btn" title="Mute/Unmute (M)">
+                  <svg id="vessel-vol-high" viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
+                  <svg id="vessel-vol-muted" class="hidden" viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line></svg>
+                </button>
+                <input type="range" class="vessel-volume-slider" id="vessel-volume-slider" min="0" max="1" step="0.05" value="1">
+              </div>
+
+              <div class="vessel-time-display">
+                <span id="vessel-current-time">00:00</span> / <span id="vessel-duration-time">00:00</span>
+              </div>
+            </div>
+
+            <div class="vessel-bar-right">
+              <!-- Audio Dubbing Selector -->
+              <div class="hud-dropdown-wrap">
+                <button class="hud-pill-btn" id="vessel-audio-btn" title="Audio / Dubbing">
+                  <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line></svg>
+                  <span id="vessel-audio-label">Audio</span>
+                </button>
+                <div class="hud-dropdown-menu hidden" id="vessel-audio-menu"></div>
+              </div>
+
+              <!-- Subtitles Selector -->
+              <div class="hud-dropdown-wrap">
+                <button class="hud-pill-btn" id="vessel-sub-btn" title="Subtitles">
+                  <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><rect x="2" y="4" width="20" height="16" rx="2"></rect><line x1="6" y1="15" x2="10" y2="15"></line><line x1="14" y1="15" x2="18" y2="15"></line><line x1="6" y1="11" x2="18" y2="11"></line></svg>
+                  <span id="vessel-sub-label">Subs</span>
+                </button>
+                <div class="hud-dropdown-menu hidden" id="vessel-sub-menu"></div>
+              </div>
+
+              <!-- Quality Selector -->
+              <div class="hud-dropdown-wrap">
+                <button class="hud-pill-btn" id="vessel-quality-btn" title="Quality">
+                  <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+                  <span id="vessel-quality-label">Auto</span>
+                </button>
+                <div class="hud-dropdown-menu hidden" id="vessel-quality-menu"></div>
+              </div>
+
+              <!-- Speed Selector -->
+              <div class="hud-dropdown-wrap">
+                <button class="hud-pill-btn" id="vessel-speed-btn" title="Playback Speed">
+                  <span id="vessel-speed-label">1x</span>
+                </button>
+                <div class="hud-dropdown-menu hidden" id="vessel-speed-menu">
+                  <button class="hud-menu-item" data-speed="0.5">0.5x</button>
+                  <button class="hud-menu-item" data-speed="0.75">0.75x</button>
+                  <button class="hud-menu-item active" data-speed="1.0">1.0x</button>
+                  <button class="hud-menu-item" data-speed="1.25">1.25x</button>
+                  <button class="hud-menu-item" data-speed="1.5">1.5x</button>
+                  <button class="hud-menu-item" data-speed="2.0">2.0x</button>
+                </div>
+              </div>
+
+              <!-- Fullscreen Button -->
+              <button class="hud-btn" id="vessel-fullscreen-btn" title="Fullscreen (F)">
+                <svg id="vessel-fs-enter" viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path></svg>
+                <svg id="vessel-fs-exit" class="hidden" viewBox="0 0 24 24" width="20" height="20" stroke="currentColor" stroke-width="2" fill="none"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"></path></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Toast Notification Container -->
   <div class="toast-container" id="toast-container"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
-  <script src="/app.js?v=2.1.0"></script>
+  <script src="/app.js?v=2.2.0"></script>
 </body>
 
 </html>
+

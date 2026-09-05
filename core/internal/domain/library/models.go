@@ -37,6 +37,8 @@ type PlaybackProgress struct {
 	ProviderID             string          `json:"provider_id"`
 	MediaID                string          `json:"media_id"`
 	Domain                 pluginv1.Domain `json:"domain"`
+	Title                  string          `json:"title,omitempty"`
+	PosterURL              string          `json:"poster_url,omitempty"`
 	SeasonNumber           int32           `json:"season_number"`
 	EpisodeNumber          int32           `json:"episode_number"`
 	CurrentPositionSeconds float64         `json:"current_position_seconds"`
@@ -50,6 +52,8 @@ type ReadingProgress struct {
 	ProviderID      string          `json:"provider_id"`
 	MediaID         string          `json:"media_id"`
 	Domain          pluginv1.Domain `json:"domain"`
+	Title           string          `json:"title,omitempty"`
+	PosterURL       string          `json:"poster_url,omitempty"`
 	ChapterID       string          `json:"chapter_id"`
 	ChapterNumber   float32         `json:"chapter_number"`
 	CurrentPage     int32           `json:"current_page"`

@@ -70,6 +70,8 @@ func (s *SQLiteStorage) migrate(ctx context.Context) error {
 			provider_id TEXT NOT NULL,
 			media_id TEXT NOT NULL,
 			domain INTEGER NOT NULL,
+			title TEXT DEFAULT '',
+			poster_url TEXT DEFAULT '',
 			season_number INTEGER NOT NULL DEFAULT 0,
 			episode_number INTEGER NOT NULL DEFAULT 0,
 			current_position REAL NOT NULL DEFAULT 0,
@@ -86,6 +88,8 @@ func (s *SQLiteStorage) migrate(ctx context.Context) error {
 			provider_id TEXT NOT NULL,
 			media_id TEXT NOT NULL,
 			domain INTEGER NOT NULL,
+			title TEXT DEFAULT '',
+			poster_url TEXT DEFAULT '',
 			chapter_id TEXT NOT NULL,
 			chapter_number REAL NOT NULL DEFAULT 0,
 			current_page INTEGER NOT NULL DEFAULT 0,
@@ -108,6 +112,17 @@ func (s *SQLiteStorage) migrate(ctx context.Context) error {
 		if _, err := s.db.ExecContext(ctx, q); err != nil {
 			return fmt.Errorf("migration query failed: %w (sql: %s)", err, q)
 		}
+	}
+
+	// Safe column additions for existing databases
+	alters := []string{
+		`ALTER TABLE playback_progress ADD COLUMN title TEXT DEFAULT '';`,
+		`ALTER TABLE playback_progress ADD COLUMN poster_url TEXT DEFAULT '';`,
+		`ALTER TABLE reading_progress ADD COLUMN title TEXT DEFAULT '';`,
+		`ALTER TABLE reading_progress ADD COLUMN poster_url TEXT DEFAULT '';`,
+	}
+	for _, aq := range alters {
+		_, _ = s.db.ExecContext(ctx, aq)
 	}
 
 	return nil
@@ -279,9 +294,11 @@ func (s *SQLiteStorage) SavePlaybackProgress(ctx context.Context, p *library.Pla
 
 	query := `INSERT INTO playback_progress (
 		id, provider_id, media_id, domain, season_number, episode_number,
-		current_position, total_duration, progress_percent, is_completed, updated_at
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		title, poster_url, current_position, total_duration, progress_percent, is_completed, updated_at
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	ON CONFLICT(provider_id, media_id, season_number, episode_number) DO UPDATE SET
+		title = CASE WHEN excluded.title != '' THEN excluded.title ELSE playback_progress.title END,
+		poster_url = CASE WHEN excluded.poster_url != '' THEN excluded.poster_url ELSE playback_progress.poster_url END,
 		current_position = excluded.current_position,
 		total_duration = excluded.total_duration,
 		progress_percent = excluded.progress_percent,
@@ -300,6 +317,8 @@ func (s *SQLiteStorage) SavePlaybackProgress(ctx context.Context, p *library.Pla
 		int(p.Domain),
 		p.SeasonNumber,
 		p.EpisodeNumber,
+		p.Title,
+		p.PosterURL,
 		p.CurrentPositionSeconds,
 		p.TotalDurationSeconds,
 		p.ProgressPercent,
@@ -310,9 +329,13 @@ func (s *SQLiteStorage) SavePlaybackProgress(ctx context.Context, p *library.Pla
 }
 
 func (s *SQLiteStorage) GetPlaybackProgress(ctx context.Context, providerID, mediaID string, season, episode int32) (*library.PlaybackProgress, error) {
-	query := `SELECT provider_id, media_id, domain, season_number, episode_number,
-		current_position, total_duration, progress_percent, is_completed, updated_at
-		FROM playback_progress WHERE provider_id = ? AND media_id = ? AND season_number = ? AND episode_number = ?;`
+	query := `SELECT p.provider_id, p.media_id, p.domain, p.season_number, p.episode_number,
+		COALESCE(NULLIF(p.title, ''), l.title, '') AS title,
+		COALESCE(NULLIF(p.poster_url, ''), l.poster_url, '') AS poster_url,
+		p.current_position, p.total_duration, p.progress_percent, p.is_completed, p.updated_at
+		FROM playback_progress p
+		LEFT JOIN library_items l ON l.provider_id = p.provider_id AND l.media_id = p.media_id
+		WHERE p.provider_id = ? AND p.media_id = ? AND p.season_number = ? AND p.episode_number = ?;`
 
 	row := s.db.QueryRowContext(ctx, query, providerID, mediaID, season, episode)
 
@@ -326,6 +349,8 @@ func (s *SQLiteStorage) GetPlaybackProgress(ctx context.Context, providerID, med
 		&dom,
 		&p.SeasonNumber,
 		&p.EpisodeNumber,
+		&p.Title,
+		&p.PosterURL,
 		&p.CurrentPositionSeconds,
 		&p.TotalDurationSeconds,
 		&p.ProgressPercent,
@@ -349,9 +374,13 @@ func (s *SQLiteStorage) ListRecentPlaybackProgress(ctx context.Context, limit in
 		limit = 20
 	}
 
-	query := `SELECT provider_id, media_id, domain, season_number, episode_number,
-		current_position, total_duration, progress_percent, is_completed, updated_at
-		FROM playback_progress ORDER BY updated_at DESC LIMIT ?;`
+	query := `SELECT p.provider_id, p.media_id, p.domain, p.season_number, p.episode_number,
+		COALESCE(NULLIF(p.title, ''), l.title, '') AS title,
+		COALESCE(NULLIF(p.poster_url, ''), l.poster_url, '') AS poster_url,
+		p.current_position, p.total_duration, p.progress_percent, p.is_completed, p.updated_at
+		FROM playback_progress p
+		LEFT JOIN library_items l ON l.provider_id = p.provider_id AND l.media_id = p.media_id
+		ORDER BY p.updated_at DESC LIMIT ?;`
 
 	rows, err := s.db.QueryContext(ctx, query, limit)
 	if err != nil {
@@ -369,6 +398,8 @@ func (s *SQLiteStorage) ListRecentPlaybackProgress(ctx context.Context, limit in
 			&dom,
 			&p.SeasonNumber,
 			&p.EpisodeNumber,
+			&p.Title,
+			&p.PosterURL,
 			&p.CurrentPositionSeconds,
 			&p.TotalDurationSeconds,
 			&p.ProgressPercent,
@@ -385,16 +416,27 @@ func (s *SQLiteStorage) ListRecentPlaybackProgress(ctx context.Context, limit in
 	return list, rows.Err()
 }
 
+func (s *SQLiteStorage) DeletePlaybackProgress(ctx context.Context, providerID, mediaID string, season, episode int32) error {
+	if season >= 0 && episode >= 0 {
+		_, err := s.db.ExecContext(ctx, "DELETE FROM playback_progress WHERE provider_id = ? AND media_id = ? AND season_number = ? AND episode_number = ?;", providerID, mediaID, season, episode)
+		return err
+	}
+	_, err := s.db.ExecContext(ctx, "DELETE FROM playback_progress WHERE provider_id = ? AND media_id = ?;", providerID, mediaID)
+	return err
+}
+
 func (s *SQLiteStorage) SaveReadingProgress(ctx context.Context, p *library.ReadingProgress) error {
 	p.UpdatedAt = time.Now().UTC()
 	id := fmt.Sprintf("%s:%s:%s", p.ProviderID, p.MediaID, p.ChapterID)
 
 	query := `INSERT INTO reading_progress (
 		id, provider_id, media_id, domain, chapter_id, chapter_number,
-		current_page, total_pages, text_scroll_ratio, is_completed, updated_at
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		title, poster_url, current_page, total_pages, text_scroll_ratio, is_completed, updated_at
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	ON CONFLICT(provider_id, media_id, chapter_id) DO UPDATE SET
 		chapter_number = excluded.chapter_number,
+		title = CASE WHEN excluded.title != '' THEN excluded.title ELSE reading_progress.title END,
+		poster_url = CASE WHEN excluded.poster_url != '' THEN excluded.poster_url ELSE reading_progress.poster_url END,
 		current_page = excluded.current_page,
 		total_pages = excluded.total_pages,
 		text_scroll_ratio = excluded.text_scroll_ratio,
@@ -413,6 +455,8 @@ func (s *SQLiteStorage) SaveReadingProgress(ctx context.Context, p *library.Read
 		int(p.Domain),
 		p.ChapterID,
 		p.ChapterNumber,
+		p.Title,
+		p.PosterURL,
 		p.CurrentPage,
 		p.TotalPages,
 		p.TextScrollRatio,
@@ -423,9 +467,13 @@ func (s *SQLiteStorage) SaveReadingProgress(ctx context.Context, p *library.Read
 }
 
 func (s *SQLiteStorage) GetReadingProgress(ctx context.Context, providerID, mediaID, chapterID string) (*library.ReadingProgress, error) {
-	query := `SELECT provider_id, media_id, domain, chapter_id, chapter_number,
-		current_page, total_pages, text_scroll_ratio, is_completed, updated_at
-		FROM reading_progress WHERE provider_id = ? AND media_id = ? AND chapter_id = ?;`
+	query := `SELECT p.provider_id, p.media_id, p.domain, p.chapter_id, p.chapter_number,
+		COALESCE(NULLIF(p.title, ''), l.title, '') AS title,
+		COALESCE(NULLIF(p.poster_url, ''), l.poster_url, '') AS poster_url,
+		p.current_page, p.total_pages, p.text_scroll_ratio, p.is_completed, p.updated_at
+		FROM reading_progress p
+		LEFT JOIN library_items l ON l.provider_id = p.provider_id AND l.media_id = p.media_id
+		WHERE p.provider_id = ? AND p.media_id = ? AND p.chapter_id = ?;`
 
 	row := s.db.QueryRowContext(ctx, query, providerID, mediaID, chapterID)
 
@@ -438,6 +486,8 @@ func (s *SQLiteStorage) GetReadingProgress(ctx context.Context, providerID, medi
 		&dom,
 		&p.ChapterID,
 		&p.ChapterNumber,
+		&p.Title,
+		&p.PosterURL,
 		&p.CurrentPage,
 		&p.TotalPages,
 		&p.TextScrollRatio,
@@ -461,9 +511,13 @@ func (s *SQLiteStorage) ListRecentReadingProgress(ctx context.Context, limit int
 		limit = 20
 	}
 
-	query := `SELECT provider_id, media_id, domain, chapter_id, chapter_number,
-		current_page, total_pages, text_scroll_ratio, is_completed, updated_at
-		FROM reading_progress ORDER BY updated_at DESC LIMIT ?;`
+	query := `SELECT p.provider_id, p.media_id, p.domain, p.chapter_id, p.chapter_number,
+		COALESCE(NULLIF(p.title, ''), l.title, '') AS title,
+		COALESCE(NULLIF(p.poster_url, ''), l.poster_url, '') AS poster_url,
+		p.current_page, p.total_pages, p.text_scroll_ratio, p.is_completed, p.updated_at
+		FROM reading_progress p
+		LEFT JOIN library_items l ON l.provider_id = p.provider_id AND l.media_id = p.media_id
+		ORDER BY p.updated_at DESC LIMIT ?;`
 
 	rows, err := s.db.QueryContext(ctx, query, limit)
 	if err != nil {
@@ -481,6 +535,8 @@ func (s *SQLiteStorage) ListRecentReadingProgress(ctx context.Context, limit int
 			&dom,
 			&p.ChapterID,
 			&p.ChapterNumber,
+			&p.Title,
+			&p.PosterURL,
 			&p.CurrentPage,
 			&p.TotalPages,
 			&p.TextScrollRatio,
@@ -496,6 +552,16 @@ func (s *SQLiteStorage) ListRecentReadingProgress(ctx context.Context, limit int
 
 	return list, rows.Err()
 }
+
+func (s *SQLiteStorage) DeleteReadingProgress(ctx context.Context, providerID, mediaID, chapterID string) error {
+	if chapterID != "" {
+		_, err := s.db.ExecContext(ctx, "DELETE FROM reading_progress WHERE provider_id = ? AND media_id = ? AND chapter_id = ?;", providerID, mediaID, chapterID)
+		return err
+	}
+	_, err := s.db.ExecContext(ctx, "DELETE FROM reading_progress WHERE provider_id = ? AND media_id = ?;", providerID, mediaID)
+	return err
+}
+
 
 func (s *SQLiteStorage) SetSetting(ctx context.Context, key, value string) error {
 	query := `INSERT INTO settings (key, value, updated_at) VALUES (?, ?, ?)
