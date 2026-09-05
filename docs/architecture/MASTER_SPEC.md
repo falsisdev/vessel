@@ -44,7 +44,7 @@ Vessel is a unified, local-first, modular media consumption platform for Video (
 
 ---
 
-## 4. Spicetify-like Theme Architecture
+## 4. CSS Theme Architecture
 
 The user interface supports custom community theming without recompiling native clients:
 1. **Color Themes (`tokens.json`)**: Design tokens mapping semantic UI elements (background, surface, accent, text, border, blur).

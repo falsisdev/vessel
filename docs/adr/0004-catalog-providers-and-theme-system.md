@@ -7,7 +7,7 @@ Accepted
 1. A media aggregator requires rich metadata even when stream providers are not installed or offline.
 2. Certain core providers (TMDB-based Cinemasis and Sanity-based Mangile) should exist out of the box as unremovable but toggleable defaults.
 3. Asian series do not fundamentally differ in data structure from standard episodic television series.
-4. Users desire rich customization similar to Spicetify without breaking native UI responsiveness.
+4. Users desire rich customization without breaking native UI responsiveness.
 
 ## Decisions
 
