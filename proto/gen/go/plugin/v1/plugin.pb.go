@@ -533,6 +533,98 @@ func (x *SearchRequest) GetPage() int32 {
 	return 0
 }
 
+type ExternalIDs struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ImdbId        string                 `protobuf:"bytes,1,opt,name=imdb_id,json=imdbId,proto3" json:"imdb_id,omitempty"`
+	TmdbId        string                 `protobuf:"bytes,2,opt,name=tmdb_id,json=tmdbId,proto3" json:"tmdb_id,omitempty"`
+	SimklId       string                 `protobuf:"bytes,3,opt,name=simkl_id,json=simklId,proto3" json:"simkl_id,omitempty"`
+	MalId         string                 `protobuf:"bytes,4,opt,name=mal_id,json=malId,proto3" json:"mal_id,omitempty"`
+	AnilistId     string                 `protobuf:"bytes,5,opt,name=anilist_id,json=anilistId,proto3" json:"anilist_id,omitempty"`
+	KitsuId       string                 `protobuf:"bytes,6,opt,name=kitsu_id,json=kitsuId,proto3" json:"kitsu_id,omitempty"`
+	Extra         map[string]string      `protobuf:"bytes,7,rep,name=extra,proto3" json:"extra,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ExternalIDs) Reset() {
+	*x = ExternalIDs{}
+	mi := &file_plugin_v1_plugin_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExternalIDs) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExternalIDs) ProtoMessage() {}
+
+func (x *ExternalIDs) ProtoReflect() protoreflect.Message {
+	mi := &file_plugin_v1_plugin_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExternalIDs.ProtoReflect.Descriptor instead.
+func (*ExternalIDs) Descriptor() ([]byte, []int) {
+	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *ExternalIDs) GetImdbId() string {
+	if x != nil {
+		return x.ImdbId
+	}
+	return ""
+}
+
+func (x *ExternalIDs) GetTmdbId() string {
+	if x != nil {
+		return x.TmdbId
+	}
+	return ""
+}
+
+func (x *ExternalIDs) GetSimklId() string {
+	if x != nil {
+		return x.SimklId
+	}
+	return ""
+}
+
+func (x *ExternalIDs) GetMalId() string {
+	if x != nil {
+		return x.MalId
+	}
+	return ""
+}
+
+func (x *ExternalIDs) GetAnilistId() string {
+	if x != nil {
+		return x.AnilistId
+	}
+	return ""
+}
+
+func (x *ExternalIDs) GetKitsuId() string {
+	if x != nil {
+		return x.KitsuId
+	}
+	return ""
+}
+
+func (x *ExternalIDs) GetExtra() map[string]string {
+	if x != nil {
+		return x.Extra
+	}
+	return nil
+}
+
 type MediaItem struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -541,13 +633,14 @@ type MediaItem struct {
 	Year          int32                  `protobuf:"varint,4,opt,name=year,proto3" json:"year,omitempty"`
 	PosterUrl     string                 `protobuf:"bytes,5,opt,name=poster_url,json=posterUrl,proto3" json:"poster_url,omitempty"`
 	Overview      string                 `protobuf:"bytes,6,opt,name=overview,proto3" json:"overview,omitempty"`
+	ExternalIds   *ExternalIDs           `protobuf:"bytes,7,opt,name=external_ids,json=externalIds,proto3" json:"external_ids,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *MediaItem) Reset() {
 	*x = MediaItem{}
-	mi := &file_plugin_v1_plugin_proto_msgTypes[4]
+	mi := &file_plugin_v1_plugin_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -559,7 +652,7 @@ func (x *MediaItem) String() string {
 func (*MediaItem) ProtoMessage() {}
 
 func (x *MediaItem) ProtoReflect() protoreflect.Message {
-	mi := &file_plugin_v1_plugin_proto_msgTypes[4]
+	mi := &file_plugin_v1_plugin_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -572,7 +665,7 @@ func (x *MediaItem) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MediaItem.ProtoReflect.Descriptor instead.
 func (*MediaItem) Descriptor() ([]byte, []int) {
-	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{4}
+	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *MediaItem) GetId() string {
@@ -617,6 +710,13 @@ func (x *MediaItem) GetOverview() string {
 	return ""
 }
 
+func (x *MediaItem) GetExternalIds() *ExternalIDs {
+	if x != nil {
+		return x.ExternalIds
+	}
+	return nil
+}
+
 type SearchResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Items         []*MediaItem           `protobuf:"bytes,1,rep,name=items,proto3" json:"items,omitempty"`
@@ -627,7 +727,7 @@ type SearchResponse struct {
 
 func (x *SearchResponse) Reset() {
 	*x = SearchResponse{}
-	mi := &file_plugin_v1_plugin_proto_msgTypes[5]
+	mi := &file_plugin_v1_plugin_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -639,7 +739,7 @@ func (x *SearchResponse) String() string {
 func (*SearchResponse) ProtoMessage() {}
 
 func (x *SearchResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_plugin_v1_plugin_proto_msgTypes[5]
+	mi := &file_plugin_v1_plugin_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -652,7 +752,7 @@ func (x *SearchResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SearchResponse.ProtoReflect.Descriptor instead.
 func (*SearchResponse) Descriptor() ([]byte, []int) {
-	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{5}
+	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *SearchResponse) GetItems() []*MediaItem {
@@ -678,7 +778,7 @@ type GetMetadataRequest struct {
 
 func (x *GetMetadataRequest) Reset() {
 	*x = GetMetadataRequest{}
-	mi := &file_plugin_v1_plugin_proto_msgTypes[6]
+	mi := &file_plugin_v1_plugin_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -690,7 +790,7 @@ func (x *GetMetadataRequest) String() string {
 func (*GetMetadataRequest) ProtoMessage() {}
 
 func (x *GetMetadataRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_plugin_v1_plugin_proto_msgTypes[6]
+	mi := &file_plugin_v1_plugin_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -703,7 +803,7 @@ func (x *GetMetadataRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetMetadataRequest.ProtoReflect.Descriptor instead.
 func (*GetMetadataRequest) Descriptor() ([]byte, []int) {
-	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{6}
+	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *GetMetadataRequest) GetMediaId() string {
@@ -725,7 +825,7 @@ type Episode struct {
 
 func (x *Episode) Reset() {
 	*x = Episode{}
-	mi := &file_plugin_v1_plugin_proto_msgTypes[7]
+	mi := &file_plugin_v1_plugin_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -737,7 +837,7 @@ func (x *Episode) String() string {
 func (*Episode) ProtoMessage() {}
 
 func (x *Episode) ProtoReflect() protoreflect.Message {
-	mi := &file_plugin_v1_plugin_proto_msgTypes[7]
+	mi := &file_plugin_v1_plugin_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -750,7 +850,7 @@ func (x *Episode) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Episode.ProtoReflect.Descriptor instead.
 func (*Episode) Descriptor() ([]byte, []int) {
-	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{7}
+	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *Episode) GetEpisodeNumber() int32 {
@@ -792,7 +892,7 @@ type Season struct {
 
 func (x *Season) Reset() {
 	*x = Season{}
-	mi := &file_plugin_v1_plugin_proto_msgTypes[8]
+	mi := &file_plugin_v1_plugin_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -804,7 +904,7 @@ func (x *Season) String() string {
 func (*Season) ProtoMessage() {}
 
 func (x *Season) ProtoReflect() protoreflect.Message {
-	mi := &file_plugin_v1_plugin_proto_msgTypes[8]
+	mi := &file_plugin_v1_plugin_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -817,7 +917,7 @@ func (x *Season) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Season.ProtoReflect.Descriptor instead.
 func (*Season) Descriptor() ([]byte, []int) {
-	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{8}
+	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *Season) GetSeasonNumber() int32 {
@@ -851,13 +951,14 @@ type MediaDetails struct {
 	Overview      string                 `protobuf:"bytes,6,opt,name=overview,proto3" json:"overview,omitempty"`
 	Genres        []string               `protobuf:"bytes,7,rep,name=genres,proto3" json:"genres,omitempty"`
 	Seasons       []*Season              `protobuf:"bytes,8,rep,name=seasons,proto3" json:"seasons,omitempty"`
+	ExternalIds   *ExternalIDs           `protobuf:"bytes,9,opt,name=external_ids,json=externalIds,proto3" json:"external_ids,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *MediaDetails) Reset() {
 	*x = MediaDetails{}
-	mi := &file_plugin_v1_plugin_proto_msgTypes[9]
+	mi := &file_plugin_v1_plugin_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -869,7 +970,7 @@ func (x *MediaDetails) String() string {
 func (*MediaDetails) ProtoMessage() {}
 
 func (x *MediaDetails) ProtoReflect() protoreflect.Message {
-	mi := &file_plugin_v1_plugin_proto_msgTypes[9]
+	mi := &file_plugin_v1_plugin_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -882,7 +983,7 @@ func (x *MediaDetails) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MediaDetails.ProtoReflect.Descriptor instead.
 func (*MediaDetails) Descriptor() ([]byte, []int) {
-	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{9}
+	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *MediaDetails) GetId() string {
@@ -941,6 +1042,13 @@ func (x *MediaDetails) GetSeasons() []*Season {
 	return nil
 }
 
+func (x *MediaDetails) GetExternalIds() *ExternalIDs {
+	if x != nil {
+		return x.ExternalIds
+	}
+	return nil
+}
+
 type GetMetadataResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Details       *MediaDetails          `protobuf:"bytes,1,opt,name=details,proto3" json:"details,omitempty"`
@@ -950,7 +1058,7 @@ type GetMetadataResponse struct {
 
 func (x *GetMetadataResponse) Reset() {
 	*x = GetMetadataResponse{}
-	mi := &file_plugin_v1_plugin_proto_msgTypes[10]
+	mi := &file_plugin_v1_plugin_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -962,7 +1070,7 @@ func (x *GetMetadataResponse) String() string {
 func (*GetMetadataResponse) ProtoMessage() {}
 
 func (x *GetMetadataResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_plugin_v1_plugin_proto_msgTypes[10]
+	mi := &file_plugin_v1_plugin_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -975,7 +1083,7 @@ func (x *GetMetadataResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetMetadataResponse.ProtoReflect.Descriptor instead.
 func (*GetMetadataResponse) Descriptor() ([]byte, []int) {
-	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{10}
+	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *GetMetadataResponse) GetDetails() *MediaDetails {
@@ -996,7 +1104,7 @@ type GetStreamsRequest struct {
 
 func (x *GetStreamsRequest) Reset() {
 	*x = GetStreamsRequest{}
-	mi := &file_plugin_v1_plugin_proto_msgTypes[11]
+	mi := &file_plugin_v1_plugin_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1008,7 +1116,7 @@ func (x *GetStreamsRequest) String() string {
 func (*GetStreamsRequest) ProtoMessage() {}
 
 func (x *GetStreamsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_plugin_v1_plugin_proto_msgTypes[11]
+	mi := &file_plugin_v1_plugin_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1021,7 +1129,7 @@ func (x *GetStreamsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetStreamsRequest.ProtoReflect.Descriptor instead.
 func (*GetStreamsRequest) Descriptor() ([]byte, []int) {
-	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{11}
+	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *GetStreamsRequest) GetMediaId() string {
@@ -1059,7 +1167,7 @@ type StreamSource struct {
 
 func (x *StreamSource) Reset() {
 	*x = StreamSource{}
-	mi := &file_plugin_v1_plugin_proto_msgTypes[12]
+	mi := &file_plugin_v1_plugin_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1071,7 +1179,7 @@ func (x *StreamSource) String() string {
 func (*StreamSource) ProtoMessage() {}
 
 func (x *StreamSource) ProtoReflect() protoreflect.Message {
-	mi := &file_plugin_v1_plugin_proto_msgTypes[12]
+	mi := &file_plugin_v1_plugin_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1084,7 +1192,7 @@ func (x *StreamSource) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StreamSource.ProtoReflect.Descriptor instead.
 func (*StreamSource) Descriptor() ([]byte, []int) {
-	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{12}
+	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *StreamSource) GetId() string {
@@ -1142,7 +1250,7 @@ type Subtitle struct {
 
 func (x *Subtitle) Reset() {
 	*x = Subtitle{}
-	mi := &file_plugin_v1_plugin_proto_msgTypes[13]
+	mi := &file_plugin_v1_plugin_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1154,7 +1262,7 @@ func (x *Subtitle) String() string {
 func (*Subtitle) ProtoMessage() {}
 
 func (x *Subtitle) ProtoReflect() protoreflect.Message {
-	mi := &file_plugin_v1_plugin_proto_msgTypes[13]
+	mi := &file_plugin_v1_plugin_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1167,7 +1275,7 @@ func (x *Subtitle) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Subtitle.ProtoReflect.Descriptor instead.
 func (*Subtitle) Descriptor() ([]byte, []int) {
-	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{13}
+	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *Subtitle) GetLanguage() string {
@@ -1215,7 +1323,7 @@ type GetStreamsResponse struct {
 
 func (x *GetStreamsResponse) Reset() {
 	*x = GetStreamsResponse{}
-	mi := &file_plugin_v1_plugin_proto_msgTypes[14]
+	mi := &file_plugin_v1_plugin_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1227,7 +1335,7 @@ func (x *GetStreamsResponse) String() string {
 func (*GetStreamsResponse) ProtoMessage() {}
 
 func (x *GetStreamsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_plugin_v1_plugin_proto_msgTypes[14]
+	mi := &file_plugin_v1_plugin_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1240,7 +1348,7 @@ func (x *GetStreamsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetStreamsResponse.ProtoReflect.Descriptor instead.
 func (*GetStreamsResponse) Descriptor() ([]byte, []int) {
-	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{14}
+	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *GetStreamsResponse) GetStreams() []*StreamSource {
@@ -1278,7 +1386,20 @@ const file_plugin_v1_plugin_proto_rawDesc = "" +
 	"\bmanifest\x18\x01 \x01(\v2\x19.plugin.v1.PluginManifestR\bmanifest\"9\n" +
 	"\rSearchRequest\x12\x14\n" +
 	"\x05query\x18\x01 \x01(\tR\x05query\x12\x12\n" +
-	"\x04page\x18\x02 \x01(\x05R\x04page\"\xaa\x01\n" +
+	"\x04page\x18\x02 \x01(\x05R\x04page\"\x9e\x02\n" +
+	"\vExternalIDs\x12\x17\n" +
+	"\aimdb_id\x18\x01 \x01(\tR\x06imdbId\x12\x17\n" +
+	"\atmdb_id\x18\x02 \x01(\tR\x06tmdbId\x12\x19\n" +
+	"\bsimkl_id\x18\x03 \x01(\tR\asimklId\x12\x15\n" +
+	"\x06mal_id\x18\x04 \x01(\tR\x05malId\x12\x1d\n" +
+	"\n" +
+	"anilist_id\x18\x05 \x01(\tR\tanilistId\x12\x19\n" +
+	"\bkitsu_id\x18\x06 \x01(\tR\akitsuId\x127\n" +
+	"\x05extra\x18\a \x03(\v2!.plugin.v1.ExternalIDs.ExtraEntryR\x05extra\x1a8\n" +
+	"\n" +
+	"ExtraEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xe5\x01\n" +
 	"\tMediaItem\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05title\x18\x02 \x01(\tR\x05title\x12(\n" +
@@ -1286,7 +1407,8 @@ const file_plugin_v1_plugin_proto_rawDesc = "" +
 	"\x04year\x18\x04 \x01(\x05R\x04year\x12\x1d\n" +
 	"\n" +
 	"poster_url\x18\x05 \x01(\tR\tposterUrl\x12\x1a\n" +
-	"\boverview\x18\x06 \x01(\tR\boverview\"W\n" +
+	"\boverview\x18\x06 \x01(\tR\boverview\x129\n" +
+	"\fexternal_ids\x18\a \x01(\v2\x16.plugin.v1.ExternalIDsR\vexternalIds\"W\n" +
 	"\x0eSearchResponse\x12*\n" +
 	"\x05items\x18\x01 \x03(\v2\x14.plugin.v1.MediaItemR\x05items\x12\x19\n" +
 	"\bhas_more\x18\x02 \x01(\bR\ahasMore\"/\n" +
@@ -1300,7 +1422,7 @@ const file_plugin_v1_plugin_proto_rawDesc = "" +
 	"\x06Season\x12#\n" +
 	"\rseason_number\x18\x01 \x01(\x05R\fseasonNumber\x12\x14\n" +
 	"\x05title\x18\x02 \x01(\tR\x05title\x12.\n" +
-	"\bepisodes\x18\x03 \x03(\v2\x12.plugin.v1.EpisodeR\bepisodes\"\xf2\x01\n" +
+	"\bepisodes\x18\x03 \x03(\v2\x12.plugin.v1.EpisodeR\bepisodes\"\xad\x02\n" +
 	"\fMediaDetails\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05title\x18\x02 \x01(\tR\x05title\x12(\n" +
@@ -1310,7 +1432,8 @@ const file_plugin_v1_plugin_proto_rawDesc = "" +
 	"poster_url\x18\x05 \x01(\tR\tposterUrl\x12\x1a\n" +
 	"\boverview\x18\x06 \x01(\tR\boverview\x12\x16\n" +
 	"\x06genres\x18\a \x03(\tR\x06genres\x12+\n" +
-	"\aseasons\x18\b \x03(\v2\x11.plugin.v1.SeasonR\aseasons\"H\n" +
+	"\aseasons\x18\b \x03(\v2\x11.plugin.v1.SeasonR\aseasons\x129\n" +
+	"\fexternal_ids\x18\t \x01(\v2\x16.plugin.v1.ExternalIDsR\vexternalIds\"H\n" +
 	"\x13GetMetadataResponse\x121\n" +
 	"\adetails\x18\x01 \x01(\v2\x17.plugin.v1.MediaDetailsR\adetails\"z\n" +
 	"\x11GetStreamsRequest\x12\x19\n" +
@@ -1387,7 +1510,7 @@ func file_plugin_v1_plugin_proto_rawDescGZIP() []byte {
 }
 
 var file_plugin_v1_plugin_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
-var file_plugin_v1_plugin_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
+var file_plugin_v1_plugin_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
 var file_plugin_v1_plugin_proto_goTypes = []any{
 	(Domain)(0),                 // 0: plugin.v1.Domain
 	(Capability)(0),             // 1: plugin.v1.Capability
@@ -1398,47 +1521,52 @@ var file_plugin_v1_plugin_proto_goTypes = []any{
 	(*GetManifestRequest)(nil),  // 6: plugin.v1.GetManifestRequest
 	(*GetManifestResponse)(nil), // 7: plugin.v1.GetManifestResponse
 	(*SearchRequest)(nil),       // 8: plugin.v1.SearchRequest
-	(*MediaItem)(nil),           // 9: plugin.v1.MediaItem
-	(*SearchResponse)(nil),      // 10: plugin.v1.SearchResponse
-	(*GetMetadataRequest)(nil),  // 11: plugin.v1.GetMetadataRequest
-	(*Episode)(nil),             // 12: plugin.v1.Episode
-	(*Season)(nil),              // 13: plugin.v1.Season
-	(*MediaDetails)(nil),        // 14: plugin.v1.MediaDetails
-	(*GetMetadataResponse)(nil), // 15: plugin.v1.GetMetadataResponse
-	(*GetStreamsRequest)(nil),   // 16: plugin.v1.GetStreamsRequest
-	(*StreamSource)(nil),        // 17: plugin.v1.StreamSource
-	(*Subtitle)(nil),            // 18: plugin.v1.Subtitle
-	(*GetStreamsResponse)(nil),  // 19: plugin.v1.GetStreamsResponse
-	nil,                         // 20: plugin.v1.StreamSource.HeadersEntry
+	(*ExternalIDs)(nil),         // 9: plugin.v1.ExternalIDs
+	(*MediaItem)(nil),           // 10: plugin.v1.MediaItem
+	(*SearchResponse)(nil),      // 11: plugin.v1.SearchResponse
+	(*GetMetadataRequest)(nil),  // 12: plugin.v1.GetMetadataRequest
+	(*Episode)(nil),             // 13: plugin.v1.Episode
+	(*Season)(nil),              // 14: plugin.v1.Season
+	(*MediaDetails)(nil),        // 15: plugin.v1.MediaDetails
+	(*GetMetadataResponse)(nil), // 16: plugin.v1.GetMetadataResponse
+	(*GetStreamsRequest)(nil),   // 17: plugin.v1.GetStreamsRequest
+	(*StreamSource)(nil),        // 18: plugin.v1.StreamSource
+	(*Subtitle)(nil),            // 19: plugin.v1.Subtitle
+	(*GetStreamsResponse)(nil),  // 20: plugin.v1.GetStreamsResponse
+	nil,                         // 21: plugin.v1.ExternalIDs.ExtraEntry
+	nil,                         // 22: plugin.v1.StreamSource.HeadersEntry
 }
 var file_plugin_v1_plugin_proto_depIdxs = []int32{
 	0,  // 0: plugin.v1.PluginManifest.domain:type_name -> plugin.v1.Domain
 	1,  // 1: plugin.v1.PluginManifest.capabilities:type_name -> plugin.v1.Capability
 	5,  // 2: plugin.v1.GetManifestResponse.manifest:type_name -> plugin.v1.PluginManifest
-	2,  // 3: plugin.v1.MediaItem.type:type_name -> plugin.v1.MediaType
-	9,  // 4: plugin.v1.SearchResponse.items:type_name -> plugin.v1.MediaItem
-	12, // 5: plugin.v1.Season.episodes:type_name -> plugin.v1.Episode
-	2,  // 6: plugin.v1.MediaDetails.type:type_name -> plugin.v1.MediaType
-	13, // 7: plugin.v1.MediaDetails.seasons:type_name -> plugin.v1.Season
-	14, // 8: plugin.v1.GetMetadataResponse.details:type_name -> plugin.v1.MediaDetails
-	3,  // 9: plugin.v1.StreamSource.format:type_name -> plugin.v1.StreamFormat
-	20, // 10: plugin.v1.StreamSource.headers:type_name -> plugin.v1.StreamSource.HeadersEntry
-	4,  // 11: plugin.v1.Subtitle.format:type_name -> plugin.v1.SubtitleFormat
-	17, // 12: plugin.v1.GetStreamsResponse.streams:type_name -> plugin.v1.StreamSource
-	18, // 13: plugin.v1.GetStreamsResponse.subtitles:type_name -> plugin.v1.Subtitle
-	6,  // 14: plugin.v1.PluginService.GetManifest:input_type -> plugin.v1.GetManifestRequest
-	8,  // 15: plugin.v1.PluginService.Search:input_type -> plugin.v1.SearchRequest
-	11, // 16: plugin.v1.PluginService.GetMetadata:input_type -> plugin.v1.GetMetadataRequest
-	16, // 17: plugin.v1.PluginService.GetStreams:input_type -> plugin.v1.GetStreamsRequest
-	7,  // 18: plugin.v1.PluginService.GetManifest:output_type -> plugin.v1.GetManifestResponse
-	10, // 19: plugin.v1.PluginService.Search:output_type -> plugin.v1.SearchResponse
-	15, // 20: plugin.v1.PluginService.GetMetadata:output_type -> plugin.v1.GetMetadataResponse
-	19, // 21: plugin.v1.PluginService.GetStreams:output_type -> plugin.v1.GetStreamsResponse
-	18, // [18:22] is the sub-list for method output_type
-	14, // [14:18] is the sub-list for method input_type
-	14, // [14:14] is the sub-list for extension type_name
-	14, // [14:14] is the sub-list for extension extendee
-	0,  // [0:14] is the sub-list for field type_name
+	21, // 3: plugin.v1.ExternalIDs.extra:type_name -> plugin.v1.ExternalIDs.ExtraEntry
+	2,  // 4: plugin.v1.MediaItem.type:type_name -> plugin.v1.MediaType
+	9,  // 5: plugin.v1.MediaItem.external_ids:type_name -> plugin.v1.ExternalIDs
+	10, // 6: plugin.v1.SearchResponse.items:type_name -> plugin.v1.MediaItem
+	13, // 7: plugin.v1.Season.episodes:type_name -> plugin.v1.Episode
+	2,  // 8: plugin.v1.MediaDetails.type:type_name -> plugin.v1.MediaType
+	14, // 9: plugin.v1.MediaDetails.seasons:type_name -> plugin.v1.Season
+	9,  // 10: plugin.v1.MediaDetails.external_ids:type_name -> plugin.v1.ExternalIDs
+	15, // 11: plugin.v1.GetMetadataResponse.details:type_name -> plugin.v1.MediaDetails
+	3,  // 12: plugin.v1.StreamSource.format:type_name -> plugin.v1.StreamFormat
+	22, // 13: plugin.v1.StreamSource.headers:type_name -> plugin.v1.StreamSource.HeadersEntry
+	4,  // 14: plugin.v1.Subtitle.format:type_name -> plugin.v1.SubtitleFormat
+	18, // 15: plugin.v1.GetStreamsResponse.streams:type_name -> plugin.v1.StreamSource
+	19, // 16: plugin.v1.GetStreamsResponse.subtitles:type_name -> plugin.v1.Subtitle
+	6,  // 17: plugin.v1.PluginService.GetManifest:input_type -> plugin.v1.GetManifestRequest
+	8,  // 18: plugin.v1.PluginService.Search:input_type -> plugin.v1.SearchRequest
+	12, // 19: plugin.v1.PluginService.GetMetadata:input_type -> plugin.v1.GetMetadataRequest
+	17, // 20: plugin.v1.PluginService.GetStreams:input_type -> plugin.v1.GetStreamsRequest
+	7,  // 21: plugin.v1.PluginService.GetManifest:output_type -> plugin.v1.GetManifestResponse
+	11, // 22: plugin.v1.PluginService.Search:output_type -> plugin.v1.SearchResponse
+	16, // 23: plugin.v1.PluginService.GetMetadata:output_type -> plugin.v1.GetMetadataResponse
+	20, // 24: plugin.v1.PluginService.GetStreams:output_type -> plugin.v1.GetStreamsResponse
+	21, // [21:25] is the sub-list for method output_type
+	17, // [17:21] is the sub-list for method input_type
+	17, // [17:17] is the sub-list for extension type_name
+	17, // [17:17] is the sub-list for extension extendee
+	0,  // [0:17] is the sub-list for field type_name
 }
 
 func init() { file_plugin_v1_plugin_proto_init() }
@@ -1452,7 +1580,7 @@ func file_plugin_v1_plugin_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_plugin_v1_plugin_proto_rawDesc), len(file_plugin_v1_plugin_proto_rawDesc)),
 			NumEnums:      5,
-			NumMessages:   16,
+			NumMessages:   18,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

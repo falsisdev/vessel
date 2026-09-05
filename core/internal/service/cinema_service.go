@@ -68,13 +68,14 @@ func (s *CinemaService) Search(ctx context.Context, query string) ([]cinema.Medi
 		}
 		for _, item := range res.items {
 			aggregated = append(aggregated, cinema.MediaItem{
-				ID:         item.Id,
-				ProviderID: res.providerID,
-				Title:      item.Title,
-				Type:       mapMediaType(item.Type),
-				Year:       item.Year,
-				PosterURL:  item.PosterUrl,
-				Overview:   item.Overview,
+				ID:          item.Id,
+				ProviderID:  res.providerID,
+				Title:       item.Title,
+				Type:        mapMediaType(item.Type),
+				Year:        item.Year,
+				PosterURL:   item.PosterUrl,
+				Overview:    item.Overview,
+				ExternalIDs: mapExternalIDs(item.ExternalIds),
 			})
 		}
 	}
@@ -99,14 +100,15 @@ func (s *CinemaService) GetMetadata(ctx context.Context, providerID, mediaID str
 	}
 
 	details := &cinema.MediaDetails{
-		ID:         raw.Id,
-		ProviderID: providerID,
-		Title:      raw.Title,
-		Type:       mapMediaType(raw.Type),
-		Year:       raw.Year,
-		PosterURL:  raw.PosterUrl,
-		Overview:   raw.Overview,
-		Genres:     raw.Genres,
+		ID:          raw.Id,
+		ProviderID:  providerID,
+		Title:       raw.Title,
+		Type:        mapMediaType(raw.Type),
+		Year:        raw.Year,
+		PosterURL:   raw.PosterUrl,
+		Overview:    raw.Overview,
+		Genres:      raw.Genres,
+		ExternalIDs: mapExternalIDs(raw.ExternalIds),
 	}
 
 	for _, s := range raw.Seasons {
@@ -202,5 +204,20 @@ func mapSubtitleFormat(f pluginv1.SubtitleFormat) cinema.SubtitleFormat {
 		return cinema.SubtitleFormatSRT
 	default:
 		return cinema.SubtitleFormatUnspecified
+	}
+}
+
+func mapExternalIDs(raw *pluginv1.ExternalIDs) cinema.ExternalIDs {
+	if raw == nil {
+		return cinema.ExternalIDs{}
+	}
+	return cinema.ExternalIDs{
+		IMDbID:    raw.ImdbId,
+		TMDBID:    raw.TmdbId,
+		SIMKLID:   raw.SimklId,
+		MALID:     raw.MalId,
+		AniListID: raw.AnilistId,
+		KitsuID:   raw.KitsuId,
+		Extra:     raw.Extra,
 	}
 }

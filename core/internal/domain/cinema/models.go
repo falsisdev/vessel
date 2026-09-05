@@ -22,14 +22,25 @@ func (t MediaType) String() string {
 	}
 }
 
+type ExternalIDs struct {
+	IMDbID    string
+	TMDBID    string
+	SIMKLID   string
+	MALID     string
+	AniListID string
+	KitsuID   string
+	Extra     map[string]string
+}
+
 type MediaItem struct {
-	ID         string
-	ProviderID string
-	Title      string
-	Type       MediaType
-	Year       int32
-	PosterURL  string
-	Overview   string
+	ID          string
+	ProviderID  string
+	Title       string
+	Type        MediaType
+	Year        int32
+	PosterURL   string
+	Overview    string
+	ExternalIDs ExternalIDs
 }
 
 type Episode struct {
@@ -46,15 +57,16 @@ type Season struct {
 }
 
 type MediaDetails struct {
-	ID         string
-	ProviderID string
-	Title      string
-	Type       MediaType
-	Year       int32
-	PosterURL  string
-	Overview   string
-	Genres     []string
-	Seasons    []Season
+	ID          string
+	ProviderID  string
+	Title       string
+	Type        MediaType
+	Year        int32
+	PosterURL   string
+	Overview    string
+	Genres      []string
+	Seasons     []Season
+	ExternalIDs ExternalIDs
 }
 
 type StreamFormat int

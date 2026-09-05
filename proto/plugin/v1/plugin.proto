@@ -66,6 +66,16 @@ message SearchRequest {
   int32 page = 2;
 }
 
+message ExternalIDs {
+  string imdb_id = 1;
+  string tmdb_id = 2;
+  string simkl_id = 3;
+  string mal_id = 4;
+  string anilist_id = 5;
+  string kitsu_id = 6;
+  map<string, string> extra = 7;
+}
+
 message MediaItem {
   string id = 1;
   string title = 2;
@@ -73,6 +83,7 @@ message MediaItem {
   int32 year = 4;
   string poster_url = 5;
   string overview = 6;
+  ExternalIDs external_ids = 7;
 }
 
 message SearchResponse {
@@ -106,6 +117,7 @@ message MediaDetails {
   string overview = 6;
   repeated string genres = 7;
   repeated Season seasons = 8;
+  ExternalIDs external_ids = 9;
 }
 
 message GetMetadataResponse {

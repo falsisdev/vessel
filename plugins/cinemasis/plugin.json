@@ -1,0 +1,8 @@
+{
+  "id": "com.vessel.cinema.cinemasis",
+  "name": "Cinemasis",
+  "executable_path": "./cinemasis",
+  "args": [],
+  "is_builtin": true,
+  "enabled": true
+}

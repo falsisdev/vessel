@@ -17,6 +17,7 @@ Vessel is an umbrella, local-first, modular digital media consumption platform.
 │   ├── plugin/v1/plugin.proto  # Plugin v1 contract
 │   └── gen/go/                 # Generated Go gRPC/Protobuf bindings
 ├── plugins/
+│   ├── cinemasis/              # Official built-in TMDB Cinema catalog plugin
 │   └── examples/cinema-mock/   # Reference standalone Cinema plugin
 ├── docs/
 │   ├── adr/                    # Architecture Decision Records
@@ -68,5 +69,17 @@ go run ./plugins/examples/cinema-mock -port 50051
 Query with Vessel Core:
 ```bash
 go run ./core/cmd/core -plugin-addr 127.0.0.1:50051 -search Batman
+```
+
+### 5. Run Official Cinemasis TMDB Plugin
+
+Build Cinemasis:
+```bash
+go build -o ./bin/cinemasis ./plugins/cinemasis
+```
+
+Run with Vessel Core (set your TMDB API key via environment variable):
+```bash
+TMDB_API_KEY="your_api_key_here" go run ./core/cmd/core -plugin-bin ./bin/cinemasis -plugin-id com.vessel.cinema.cinemasis -search Inception -oneshot
 ```
 
