@@ -344,6 +344,9 @@ func (g *GatewayServer) handleMedia(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if domainStr == "2" || strings.EqualFold(domainStr, "reading") || strings.EqualFold(domainStr, "manga") {
+		if providerID == "" {
+			providerID = "com.vessel.reading.mangile"
+		}
 		if g.readingSvc == nil {
 			g.writeError(w, http.StatusServiceUnavailable, "reading service not available")
 			return
@@ -456,6 +459,9 @@ func (g *GatewayServer) handleStreamResolve(w http.ResponseWriter, r *http.Reque
 func (g *GatewayServer) handleChapter(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	providerID := r.URL.Query().Get("provider")
+	if providerID == "" {
+		providerID = "com.vessel.reading.mangile"
+	}
 	mediaID := r.URL.Query().Get("media")
 	chapterID := r.URL.Query().Get("chapter")
 	chapterNum, _ := strconv.ParseFloat(r.URL.Query().Get("chapter_num"), 32)

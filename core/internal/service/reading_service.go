@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"sync"
 	"time"
@@ -115,14 +116,25 @@ func (s *ReadingService) GetMetadata(ctx context.Context, providerID, mediaID st
 		ExternalIDs: mapExternalIDs(raw.ExternalIds),
 	}
 
-	for _, s := range raw.Seasons {
-		for _, ep := range s.Episodes {
-			details.Chapters = append(details.Chapters, reading.Chapter{
-				ID:            fmt.Sprintf("%d", ep.EpisodeNumber),
-				ChapterNumber: float64(ep.EpisodeNumber),
-				VolumeNumber:  float64(s.SeasonNumber),
-				Title:         ep.Title,
-			})
+	if raw.ExternalIds != nil && raw.ExternalIds.Extra != nil {
+		if chaptersJSON, ok := raw.ExternalIds.Extra["chapters_json"]; ok && chaptersJSON != "" {
+			var parsedChapters []reading.Chapter
+			if err := json.Unmarshal([]byte(chaptersJSON), &parsedChapters); err == nil && len(parsedChapters) > 0 {
+				details.Chapters = parsedChapters
+			}
+		}
+	}
+
+	if len(details.Chapters) == 0 {
+		for _, s := range raw.Seasons {
+			for _, ep := range s.Episodes {
+				details.Chapters = append(details.Chapters, reading.Chapter{
+					ID:            fmt.Sprintf("%d", ep.EpisodeNumber),
+					ChapterNumber: float64(ep.EpisodeNumber),
+					VolumeNumber:  float64(s.SeasonNumber),
+					Title:         ep.Title,
+				})
+			}
 		}
 	}
 

@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
@@ -105,10 +106,18 @@ func (s *MangileService) GetMetadata(ctx context.Context, req *pluginv1.GetMetad
 	}
 
 	var episodes []*pluginv1.Episode
+	var chaptersRaw []map[string]any
 	for _, ch := range title.Chapters {
+		chID := ch.GetID()
 		episodes = append(episodes, &pluginv1.Episode{
 			EpisodeNumber: int32(ch.ChapterNumber),
 			Title:         ch.Title,
+		})
+		chaptersRaw = append(chaptersRaw, map[string]any{
+			"id":             chID,
+			"title":          ch.Title,
+			"chapter_number": ch.ChapterNumber,
+			"volume_number":  ch.VolumeNumber,
 		})
 	}
 
@@ -123,6 +132,11 @@ func (s *MangileService) GetMetadata(ctx context.Context, req *pluginv1.GetMetad
 		malID = strconv.Itoa(title.MyAnimeListID)
 	}
 
+	extra := make(map[string]string)
+	if chaptersBytes, err := json.Marshal(chaptersRaw); err == nil {
+		extra["chapters_json"] = string(chaptersBytes)
+	}
+
 	details := &pluginv1.MediaDetails{
 		Id:        title.ID,
 		Title:     title.Title,
@@ -134,6 +148,7 @@ func (s *MangileService) GetMetadata(ctx context.Context, req *pluginv1.GetMetad
 		ExternalIds: &pluginv1.ExternalIDs{
 			SanityId: title.ID,
 			MalId:    malID,
+			Extra:    extra,
 		},
 	}
 
@@ -146,30 +161,58 @@ func (s *MangileService) GetStreams(ctx context.Context, req *pluginv1.GetStream
 
 func (s *MangileService) GetChapterContent(ctx context.Context, req *pluginv1.GetChapterContentRequest) (*pluginv1.GetChapterContentResponse, error) {
 	chapterID := req.ChapterId
+	mediaID := req.MediaId
+	chapterNum := float64(req.ChapterNumber)
 
-	if chapterID == "" && req.MediaId != "" && req.ChapterNumber > 0 {
-		title, err := s.client.GetTitle(ctx, req.MediaId)
-		if err != nil {
-			return nil, fmt.Errorf("failed to lookup media %s: %w", req.MediaId, err)
+	var chapter *sanity.SanityChapterDetails
+	var err error
+
+	// 1. If chapterID is provided, first try standalone chapter lookup
+	if chapterID != "" {
+		chapter, err = s.client.GetChapter(ctx, chapterID)
+		if err != nil && !errors.Is(err, sanity.ErrResourceNotFound) {
+			// Non-critical error, continue to title lookup
 		}
-		for _, ch := range title.Chapters {
-			if float32(ch.ChapterNumber) == req.ChapterNumber {
-				chapterID = ch.ID
-				break
+	}
+
+	// 2. If not found and mediaID is provided, try title embedded lookup by chapterID
+	if (chapter == nil || errors.Is(err, sanity.ErrResourceNotFound)) && mediaID != "" && chapterID != "" {
+		chapter, err = s.client.GetChapterFromTitle(ctx, mediaID, chapterID, chapterNum)
+	}
+
+	// 3. If still not found and mediaID is provided, try title embedded lookup by chapterNumber
+	if (chapter == nil || errors.Is(err, sanity.ErrResourceNotFound)) && mediaID != "" {
+		chapter, err = s.client.GetChapterFromTitle(ctx, mediaID, "", chapterNum)
+	}
+
+	// 4. If still not found, search title chapter list for the matching ID
+	if (chapter == nil || errors.Is(err, sanity.ErrResourceNotFound)) && mediaID != "" {
+		title, titleErr := s.client.GetTitle(ctx, mediaID)
+		if titleErr == nil && title != nil {
+			for _, ch := range title.Chapters {
+				if float32(ch.ChapterNumber) == req.ChapterNumber || (chapterID != "" && (ch.ID == chapterID || ch.Key == chapterID)) {
+					targetID := ch.GetID()
+					chapter, err = s.client.GetChapter(ctx, targetID)
+					if err != nil || chapter == nil {
+						chapter, err = s.client.GetChapterFromTitle(ctx, mediaID, targetID, ch.ChapterNumber)
+					}
+					if chapter != nil {
+						break
+					}
+				}
 			}
 		}
 	}
 
-	if chapterID == "" {
-		return nil, status.Error(codes.InvalidArgument, "chapter_id or valid media_id + chapter_number is required")
-	}
-
-	chapter, err := s.client.GetChapter(ctx, chapterID)
 	if err != nil {
 		if errors.Is(err, sanity.ErrResourceNotFound) {
-			return nil, status.Errorf(codes.NotFound, "chapter %s not found", chapterID)
+			return nil, status.Errorf(codes.NotFound, "chapter %s (media: %s, num: %f) not found", chapterID, mediaID, chapterNum)
 		}
 		return nil, fmt.Errorf("mangile get chapter error: %w", err)
+	}
+
+	if chapter == nil {
+		return nil, status.Errorf(codes.NotFound, "chapter not found")
 	}
 
 	var pages []*pluginv1.PageItem
@@ -181,7 +224,7 @@ func (s *MangileService) GetChapterContent(ctx context.Context, req *pluginv1.Ge
 	}
 
 	return &pluginv1.GetChapterContentResponse{
-		ChapterId:     chapter.ID,
+		ChapterId:     chapter.GetID(),
 		Title:         chapter.Title,
 		ChapterNumber: float32(chapter.ChapterNumber),
 		Pages:         pages,

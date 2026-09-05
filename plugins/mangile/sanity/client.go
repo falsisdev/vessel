@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 	"time"
 )
@@ -181,8 +182,22 @@ func (c *Client) GetTitle(ctx context.Context, id string) (*SanityTitle, error) 
 		format,
 		"coverImage": coverImage.asset->url,
 		"bannerImage": bannerImage.asset->url,
-		"chapters": *[(_type == "mangaChapter" || _type == "novelChapter") && (manga._ref == ^._id || lightNovel._ref == ^._id)] | order(chapterNumber asc) {
+		"embeddedChapters": chapters[] {
+			"_id": coalesce(_id, _key),
+			"_key": _key,
+			title,
+			chapterNumber,
+			volumeNumber
+		},
+		"externalChapters": *[(_type in ["mangaChapter", "novelChapter", "lightNovelChapter"]) && (manga._ref == ^._id || lightNovel._ref == ^._id || (defined(manga->myAnimeListId) && defined(^.myAnimeListId) && manga->myAnimeListId == ^.myAnimeListId) || (defined(lightNovel->myAnimeListId) && defined(^.myAnimeListId) && lightNovel->myAnimeListId == ^.myAnimeListId))] | order(chapterNumber asc) {
 			_id,
+			title,
+			chapterNumber,
+			volumeNumber
+		},
+		chapters[] {
+			"_id": coalesce(_id, _key),
+			"_key": _key,
 			title,
 			chapterNumber,
 			volumeNumber
@@ -197,18 +212,48 @@ func (c *Client) GetTitle(ctx context.Context, id string) (*SanityTitle, error) 
 	if title.ID == "" {
 		return nil, ErrResourceNotFound
 	}
+
+	// Merge and deduplicate chapters by chapterNumber
+	chapterMap := make(map[float64]SanityChapterSummary)
+	for _, ch := range title.ExternalChapters {
+		chapterMap[ch.ChapterNumber] = ch
+	}
+	for _, ch := range title.EmbeddedChapters {
+		chapterMap[ch.ChapterNumber] = ch
+	}
+	for _, ch := range title.Chapters {
+		chapterMap[ch.ChapterNumber] = ch
+	}
+
+	var allChapters []SanityChapterSummary
+	for _, ch := range chapterMap {
+		if ch.ID == "" && ch.Key != "" {
+			ch.ID = ch.Key
+		}
+		allChapters = append(allChapters, ch)
+	}
+
+	sort.Slice(allChapters, func(i, j int) bool {
+		if allChapters[i].VolumeNumber != allChapters[j].VolumeNumber {
+			return allChapters[i].VolumeNumber < allChapters[j].VolumeNumber
+		}
+		return allChapters[i].ChapterNumber < allChapters[j].ChapterNumber
+	})
+
+	title.Chapters = allChapters
 	return &title, nil
 }
 
 func (c *Client) GetChapter(ctx context.Context, id string) (*SanityChapterDetails, error) {
-	query := `*[(_type == "mangaChapter" || _type == "novelChapter") && _id == $id] [0] {
+	query := `*[(_type in ["mangaChapter", "novelChapter", "lightNovelChapter"]) && (_id == $id || _key == $id)] [0] {
 		_id,
 		_type,
 		title,
 		chapterNumber,
 		volumeNumber,
 		pages[] {
-			"url": asset->url
+			"url": asset->url,
+			"ref": asset._ref
 		},
 		content
 	}`
@@ -218,8 +263,71 @@ func (c *Client) GetChapter(ctx context.Context, id string) (*SanityChapterDetai
 	if err != nil {
 		return nil, err
 	}
-	if chapter.ID == "" {
+	if chapter.ID == "" && chapter.Key == "" {
 		return nil, ErrResourceNotFound
+	}
+	if chapter.ID == "" {
+		chapter.ID = chapter.Key
+	}
+	for i := range chapter.Pages {
+		if chapter.Pages[i].URL == "" && chapter.Pages[i].Ref != "" {
+			chapter.Pages[i].URL = chapter.Pages[i].ResolvedURL(c.projectID, c.dataset)
+		}
+	}
+	return &chapter, nil
+}
+
+func (c *Client) GetChapterFromTitle(ctx context.Context, mediaID, chapterID string, chapterNumber float64) (*SanityChapterDetails, error) {
+	var query string
+	params := map[string]any{"mediaId": mediaID}
+
+	if chapterID != "" {
+		query = `*[_type in ["manga", "lightNovel"] && (_id == $mediaId || slug.current == $mediaId)][0].chapters[_key == $chapterId || _id == $chapterId][0] {
+			"_id": coalesce(_id, _key),
+			"_key": _key,
+			_type,
+			title,
+			chapterNumber,
+			volumeNumber,
+			pages[] {
+				"url": asset->url,
+				"ref": asset._ref
+			},
+			content
+		}`
+		params["chapterId"] = chapterID
+	} else {
+		query = `*[_type in ["manga", "lightNovel"] && (_id == $mediaId || slug.current == $mediaId)][0].chapters[chapterNumber == $chapterNum][0] {
+			"_id": coalesce(_id, _key),
+			"_key": _key,
+			_type,
+			title,
+			chapterNumber,
+			volumeNumber,
+			pages[] {
+				"url": asset->url,
+				"ref": asset._ref
+			},
+			content
+		}`
+		params["chapterNum"] = chapterNumber
+	}
+
+	var chapter SanityChapterDetails
+	err := c.Query(ctx, query, params, &chapter)
+	if err != nil {
+		return nil, err
+	}
+	if chapter.ID == "" && chapter.Key == "" {
+		return nil, ErrResourceNotFound
+	}
+	if chapter.ID == "" {
+		chapter.ID = chapter.Key
+	}
+	for i := range chapter.Pages {
+		if chapter.Pages[i].URL == "" && chapter.Pages[i].Ref != "" {
+			chapter.Pages[i].URL = chapter.Pages[i].ResolvedURL(c.projectID, c.dataset)
+		}
 	}
 	return &chapter, nil
 }

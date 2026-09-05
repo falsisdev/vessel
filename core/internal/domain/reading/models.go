@@ -59,15 +59,16 @@ type ReadingDetails struct {
 }
 
 type Page struct {
-	PageNumber int32
-	URL        string
-	Headers    map[string]string
+	PageNumber int32             `json:"page_number"`
+	URL        string            `json:"url"`
+	Headers    map[string]string `json:"headers,omitempty"`
 }
 
 type ChapterContent struct {
-	ChapterID     string
-	Title         string
-	ChapterNumber float64
-	Pages         []Page
-	TextContent   string
+	ChapterID     string   `json:"chapter_id"`
+	Title         string   `json:"title"`
+	ChapterNumber float64  `json:"chapter_number"`
+	Pages         []Page   `json:"pages"`
+	TextContent   string   `json:"text_content"`
 }
+

@@ -2146,6 +2146,10 @@ class VesselApp {
     const chapters = details.chapters || [];
     const genres = details.genres || ["Manga"];
 
+    const firstCh = chapters.length > 0 ? chapters[0] : null;
+    const firstChNum = (firstCh && firstCh.chapter_number !== undefined && firstCh.chapter_number !== null) ? firstCh.chapter_number : 0;
+    const firstChId = firstCh ? (firstCh.id || "") : "";
+
     content.innerHTML = `
       <div class="details-hero">
         <div class="details-hero-backdrop" style="background-image: url('${poster}')"></div>
@@ -2168,7 +2172,7 @@ class VesselApp {
           <div class="details-actions">
             ${chapters.length > 0 ? `
               <button class="btn btn-primary" id="details-read-now-btn" style="font-size: 1rem; padding: 10px 24px;">
-                📖 ${this.t("btn_read")} ${this.t("chapter")} 1
+                📖 ${this.t("btn_read")} ${this.t("chapter")} ${firstChNum}
               </button>
             ` : ""}
           </div>
@@ -2185,11 +2189,12 @@ class VesselApp {
 
         <div class="details-section-box">
           <h3 class="details-section-title">${this.t("chapters")} (${chapters.length})</h3>
-          <div class="episodes-grid" style="max-height: 420px;">
+          <div class="episodes-grid" style="max-height: 480px; overflow-y: auto;">
             ${chapters.length > 0 ? chapters.map(ch => {
-              const chNum = ch.chapter_number || 1;
+              const chNum = (ch.chapter_number !== undefined && ch.chapter_number !== null) ? ch.chapter_number : 0;
+              const chId = ch.id || "";
               return `
-                <div class="chapter-row" data-ch="${chNum}" style="margin-bottom: 8px;">
+                <div class="chapter-row" data-ch="${chNum}" data-chid="${chId}" style="margin-bottom: 8px; cursor: pointer;">
                   <div>
                     <span style="font-weight: 600;">${this.t("chapter")} ${chNum}</span>
                     ${ch.title ? `<span style="color: var(--v-text-muted); margin-left: 8px;">- ${ch.title}</span>` : ""}
@@ -2210,70 +2215,222 @@ class VesselApp {
     const readBtn = document.getElementById("details-read-now-btn");
     if (readBtn && chapters.length > 0) {
       readBtn.addEventListener("click", () => {
-        this.openInlineChapter(item, details, chapters[0].chapter_number || 1, chapters);
+        this.openInlineChapter(item, details, firstChNum, firstChId, chapters);
       });
     }
 
     content.querySelectorAll(".chapter-row").forEach(row => {
       row.addEventListener("click", () => {
         const chNum = parseFloat(row.dataset.ch);
-        this.openInlineChapter(item, details, chNum, chapters);
+        const chId = row.dataset.chid || "";
+        this.openInlineChapter(item, details, chNum, chId, chapters);
       });
     });
   }
 
-  async openInlineChapter(item, details, chapterNum, chapters) {
+  async openInlineChapter(item, details, chapterNum, chapterId, chapters) {
     const readerBox = document.getElementById("inline-reader-box");
     const container = document.getElementById("inline-reader-container");
     readerBox.classList.remove("hidden");
     readerBox.scrollIntoView({ behavior: "smooth" });
 
-    container.innerHTML = `<div style="text-align: center; padding: 40px; color: var(--v-text-muted);"><span style="font-size: 1.5rem;">⏳</span> Loading chapter ${chapterNum}...</div>`;
+    container.innerHTML = `
+      <div style="text-align: center; padding: 40px; color: var(--v-text-muted);">
+        <span style="font-size: 1.5rem;">⏳</span> ${this.t("loading") || "Loading"} ${this.t("chapter")} ${chapterNum}...
+      </div>
+    `;
 
     try {
-      const res = await fetch(`/api/chapter?provider=${encodeURIComponent(item.provider_id || "")}&media=${encodeURIComponent(item.id)}&chapter_num=${chapterNum}`);
-      if (!res.ok) throw new Error("Could not fetch chapter content");
+      const provider = item.provider_id || "com.vessel.reading.mangile";
+      let url = `/api/chapter?provider=${encodeURIComponent(provider)}&media=${encodeURIComponent(item.id)}&chapter_num=${chapterNum}`;
+      if (chapterId) {
+        url += `&chapter=${encodeURIComponent(chapterId)}`;
+      }
+      const res = await fetch(url);
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.error || "Could not fetch chapter content");
+      }
       const content = await res.json();
 
-      let pagesHTML = "";
-      if (content.pages && content.pages.length > 0) {
-        pagesHTML = `
+      const chList = chapters || details.chapters || [];
+      const currentIndex = chList.findIndex(c => {
+        if (chapterId && c.id && c.id === chapterId) return true;
+        return c.chapter_number === chapterNum;
+      });
+      const prevCh = currentIndex > 0 ? chList[currentIndex - 1] : null;
+      const nextCh = (currentIndex >= 0 && currentIndex < chList.length - 1) ? chList[currentIndex + 1] : null;
+
+      const hasPages = content.pages && content.pages.length > 0;
+      const hasText = !!content.text_content;
+
+      let headerHTML = `
+        <div class="reader-header">
+          <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+            <h4 style="margin: 0; font-size: 1rem;">${details.title || item.title} - ${this.t("chapter")} ${chapterNum}</h4>
+            ${content.title ? `<span style="color: var(--v-text-muted); font-size: 0.9rem;">${content.title}</span>` : ""}
+            ${chList.length > 1 ? `
+              <select id="reader-chapter-dropdown" class="select-field" style="padding: 4px 10px; font-size: 0.85rem; border-radius: 6px; background: var(--v-bg-elevated); color: var(--v-text-primary); border: 1px solid var(--v-border-subtle);">
+                ${chList.map(c => {
+                  const cNum = (c.chapter_number !== undefined && c.chapter_number !== null) ? c.chapter_number : 0;
+                  const cId = c.id || "";
+                  const isSelected = (chapterId && cId === chapterId) || cNum === chapterNum;
+                  return `<option value="${cNum}" data-chid="${cId}" ${isSelected ? "selected" : ""}>${this.t("chapter")} ${cNum}${c.title ? ` - ${c.title}` : ""}</option>`;
+                }).join("")}
+              </select>
+            ` : ""}
+          </div>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            ${hasText ? `
+              <div class="btn-group" style="display: flex; gap: 4px;">
+                <button class="btn btn-secondary" id="reader-font-dec" style="padding: 4px 10px; font-size: 0.85rem;" title="Yazıyı Küçült">A-</button>
+                <button class="btn btn-secondary" id="reader-font-inc" style="padding: 4px 10px; font-size: 0.85rem;" title="Yazıyı Büyüt">A+</button>
+              </div>
+            ` : ""}
+            <button class="btn btn-secondary" id="close-reader-btn" style="padding: 6px 14px; font-size: 0.85rem;">✕ ${this.t("close") || "Close"}</button>
+          </div>
+        </div>
+      `;
+
+      let bodyHTML = "";
+      if (hasPages) {
+        bodyHTML = `
           <div class="reader-pages-flow">
-            ${content.pages.map(p => `<img src="${p.url}" alt="Page ${p.page_number}" loading="lazy" style="margin-bottom: 12px;">`).join("")}
+            ${content.pages.map(p => `
+              <div class="reader-page-item" style="margin-bottom: 12px; text-align: center;">
+                <img src="${p.url}" alt="Page ${p.page_number}" loading="lazy" style="max-width: 100%; width: 760px; margin: 0 auto; display: block; border-radius: 4px; box-shadow: 0 4px 16px rgba(0,0,0,0.3);">
+                <div style="font-size: 0.75rem; color: var(--v-text-muted); margin-top: 4px;">${p.page_number} / ${content.pages.length}</div>
+              </div>
+            `).join("")}
           </div>
         `;
-      } else if (content.text_content) {
-        pagesHTML = `<div class="reader-text-content">${content.text_content}</div>`;
+      } else if (hasText) {
+        const paragraphs = content.text_content.split(/\n\n+/).map(p => {
+          const trimmed = p.trim();
+          if (!trimmed) return "";
+          const imgMatch = trimmed.match(/^!\[(.*?)\]\((https?:\/\/[^\s)]+)\)$/);
+          if (imgMatch) {
+            return `<figure class="reader-illustration" style="text-align: center; margin: 24px 0;"><img src="${imgMatch[2]}" alt="${imgMatch[1]}" style="max-width: 100%; max-height: 70vh; border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.3);"><figcaption style="font-size: 0.85rem; color: var(--v-text-muted); margin-top: 6px; font-style: italic;">${imgMatch[1]}</figcaption></figure>`;
+          }
+          return `<p>${trimmed}</p>`;
+        }).join("");
+
+        bodyHTML = `
+          <div class="reader-text-content" id="reader-text-body">
+            <h2 style="font-size: 1.6rem; font-weight: 800; margin-bottom: 24px; text-align: center;">${content.title || `${this.t("chapter")} ${chapterNum}`}</h2>
+            ${paragraphs}
+          </div>
+        `;
+      } else {
+        bodyHTML = `<div style="text-align: center; padding: 40px; color: var(--v-text-muted);">No readable content found for this chapter.</div>`;
       }
 
-      container.innerHTML = `
-        <div class="reader-header" style="margin-bottom: 20px;">
-          <h4>${details.title || item.title} - ${this.t("chapter")} ${chapterNum}</h4>
-          <button class="btn btn-secondary" id="close-reader-btn" style="padding: 4px 12px;">✕ Close Reader</button>
+      let footerHTML = `
+        <div class="reader-footer" style="display: flex; justify-content: space-between; align-items: center; padding: 20px 24px; border-top: 1px solid var(--v-border-default); margin-top: 24px; flex-wrap: wrap; gap: 12px;">
+          <button class="btn btn-secondary" id="reader-prev-btn" ${prevCh ? "" : "disabled"} style="padding: 8px 18px;">
+            ← ${this.t("chapter")} ${prevCh ? (prevCh.chapter_number !== undefined ? prevCh.chapter_number : "") : ""}
+          </button>
+          <button class="btn btn-secondary" id="reader-top-btn" style="padding: 8px 18px;">
+            ↑ ${this.t("back_to_top") || "Başa Dön"}
+          </button>
+          <button class="btn btn-primary" id="reader-next-btn" ${nextCh ? "" : "disabled"} style="padding: 8px 18px;">
+            ${this.t("chapter")} ${nextCh ? (nextCh.chapter_number !== undefined ? nextCh.chapter_number : "") : ""} →
+          </button>
         </div>
-        ${pagesHTML}
       `;
+
+      container.innerHTML = headerHTML + bodyHTML + footerHTML;
 
       document.getElementById("close-reader-btn").addEventListener("click", () => {
         readerBox.classList.add("hidden");
       });
 
-      // Record reading progress
+      const dropdown = document.getElementById("reader-chapter-dropdown");
+      if (dropdown) {
+        dropdown.addEventListener("change", (e) => {
+          const opt = e.target.selectedOptions[0];
+          const cNum = parseFloat(e.target.value);
+          const cId = opt ? opt.dataset.chid : "";
+          this.openInlineChapter(item, details, cNum, cId, chList);
+        });
+      }
+
+      const prevBtn = document.getElementById("reader-prev-btn");
+      if (prevBtn && prevCh) {
+        prevBtn.addEventListener("click", () => {
+          const cNum = (prevCh.chapter_number !== undefined && prevCh.chapter_number !== null) ? prevCh.chapter_number : 0;
+          this.openInlineChapter(item, details, cNum, prevCh.id || "", chList);
+        });
+      }
+
+      const nextBtn = document.getElementById("reader-next-btn");
+      if (nextBtn && nextCh) {
+        nextBtn.addEventListener("click", () => {
+          const cNum = (nextCh.chapter_number !== undefined && nextCh.chapter_number !== null) ? nextCh.chapter_number : 0;
+          this.openInlineChapter(item, details, cNum, nextCh.id || "", chList);
+        });
+      }
+
+      const topBtn = document.getElementById("reader-top-btn");
+      if (topBtn) {
+        topBtn.addEventListener("click", () => {
+          readerBox.scrollIntoView({ behavior: "smooth" });
+        });
+      }
+
+      if (hasText) {
+        let currentFontSize = 18;
+        const textBody = document.getElementById("reader-text-body");
+        const decBtn = document.getElementById("reader-font-dec");
+        const incBtn = document.getElementById("reader-font-inc");
+        if (decBtn && textBody) {
+          decBtn.addEventListener("click", () => {
+            if (currentFontSize > 13) {
+              currentFontSize -= 2;
+              textBody.style.fontSize = `${currentFontSize}px`;
+            }
+          });
+        }
+        if (incBtn && textBody) {
+          incBtn.addEventListener("click", () => {
+            if (currentFontSize < 32) {
+              currentFontSize += 2;
+              textBody.style.fontSize = `${currentFontSize}px`;
+            }
+          });
+        }
+      }
+
+      const totalPages = (content.pages && content.pages.length > 0) ? content.pages.length : 1;
       await fetch("/api/progress/reading", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          provider_id: item.provider_id,
+          provider_id: provider,
           media_id: item.id,
           domain: 2,
+          chapter_id: content.chapter_id || chapterId || `ch-${chapterNum}`,
           chapter_number: chapterNum,
           current_page: 1,
-          total_pages: content.pages?.length || 1,
+          total_pages: totalPages,
           is_completed: false
         })
-      });
+      }).catch(() => {});
+
     } catch (e) {
-      container.innerHTML = `<div style="text-align: center; padding: 40px; color: var(--v-status-error);">Failed to load chapter: ${e.message}</div>`;
+      container.innerHTML = `
+        <div style="text-align: center; padding: 40px; color: var(--v-status-error);">
+          <h4>Failed to load chapter</h4>
+          <p style="margin-top: 8px; color: var(--v-text-muted);">${e.message}</p>
+          <button class="btn btn-secondary" id="retry-chapter-btn" style="margin-top: 16px;">Yeniden Dene</button>
+        </div>
+      `;
+      const retryBtn = document.getElementById("retry-chapter-btn");
+      if (retryBtn) {
+        retryBtn.addEventListener("click", () => {
+          this.openInlineChapter(item, details, chapterNum, chapterId, chapters);
+        });
+      }
     }
   }
 

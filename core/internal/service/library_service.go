@@ -84,6 +84,9 @@ func (s *LibraryService) ListRecentPlayback(ctx context.Context, limit int) ([]*
 }
 
 func (s *LibraryService) RecordReading(ctx context.Context, p *library.ReadingProgress) error {
+	if p.ChapterID == "" && p.ChapterNumber >= 0 {
+		p.ChapterID = fmt.Sprintf("ch-%v", p.ChapterNumber)
+	}
 	if p.ProviderID == "" || p.MediaID == "" || p.ChapterID == "" {
 		return errors.New("provider_id, media_id and chapter_id are required")
 	}
