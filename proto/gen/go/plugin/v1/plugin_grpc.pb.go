@@ -19,10 +19,11 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	PluginService_GetManifest_FullMethodName = "/plugin.v1.PluginService/GetManifest"
-	PluginService_Search_FullMethodName      = "/plugin.v1.PluginService/Search"
-	PluginService_GetMetadata_FullMethodName = "/plugin.v1.PluginService/GetMetadata"
-	PluginService_GetStreams_FullMethodName  = "/plugin.v1.PluginService/GetStreams"
+	PluginService_GetManifest_FullMethodName       = "/plugin.v1.PluginService/GetManifest"
+	PluginService_Search_FullMethodName            = "/plugin.v1.PluginService/Search"
+	PluginService_GetMetadata_FullMethodName       = "/plugin.v1.PluginService/GetMetadata"
+	PluginService_GetStreams_FullMethodName        = "/plugin.v1.PluginService/GetStreams"
+	PluginService_GetChapterContent_FullMethodName = "/plugin.v1.PluginService/GetChapterContent"
 )
 
 // PluginServiceClient is the client API for PluginService service.
@@ -33,6 +34,7 @@ type PluginServiceClient interface {
 	Search(ctx context.Context, in *SearchRequest, opts ...grpc.CallOption) (*SearchResponse, error)
 	GetMetadata(ctx context.Context, in *GetMetadataRequest, opts ...grpc.CallOption) (*GetMetadataResponse, error)
 	GetStreams(ctx context.Context, in *GetStreamsRequest, opts ...grpc.CallOption) (*GetStreamsResponse, error)
+	GetChapterContent(ctx context.Context, in *GetChapterContentRequest, opts ...grpc.CallOption) (*GetChapterContentResponse, error)
 }
 
 type pluginServiceClient struct {
@@ -83,6 +85,16 @@ func (c *pluginServiceClient) GetStreams(ctx context.Context, in *GetStreamsRequ
 	return out, nil
 }
 
+func (c *pluginServiceClient) GetChapterContent(ctx context.Context, in *GetChapterContentRequest, opts ...grpc.CallOption) (*GetChapterContentResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetChapterContentResponse)
+	err := c.cc.Invoke(ctx, PluginService_GetChapterContent_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // PluginServiceServer is the server API for PluginService service.
 // All implementations must embed UnimplementedPluginServiceServer
 // for forward compatibility.
@@ -91,6 +103,7 @@ type PluginServiceServer interface {
 	Search(context.Context, *SearchRequest) (*SearchResponse, error)
 	GetMetadata(context.Context, *GetMetadataRequest) (*GetMetadataResponse, error)
 	GetStreams(context.Context, *GetStreamsRequest) (*GetStreamsResponse, error)
+	GetChapterContent(context.Context, *GetChapterContentRequest) (*GetChapterContentResponse, error)
 	mustEmbedUnimplementedPluginServiceServer()
 }
 
@@ -112,6 +125,9 @@ func (UnimplementedPluginServiceServer) GetMetadata(context.Context, *GetMetadat
 }
 func (UnimplementedPluginServiceServer) GetStreams(context.Context, *GetStreamsRequest) (*GetStreamsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetStreams not implemented")
+}
+func (UnimplementedPluginServiceServer) GetChapterContent(context.Context, *GetChapterContentRequest) (*GetChapterContentResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetChapterContent not implemented")
 }
 func (UnimplementedPluginServiceServer) mustEmbedUnimplementedPluginServiceServer() {}
 func (UnimplementedPluginServiceServer) testEmbeddedByValue()                       {}
@@ -206,6 +222,24 @@ func _PluginService_GetStreams_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
+func _PluginService_GetChapterContent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetChapterContentRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PluginServiceServer).GetChapterContent(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PluginService_GetChapterContent_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PluginServiceServer).GetChapterContent(ctx, req.(*GetChapterContentRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // PluginService_ServiceDesc is the grpc.ServiceDesc for PluginService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -228,6 +262,10 @@ var PluginService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetStreams",
 			Handler:    _PluginService_GetStreams_Handler,
+		},
+		{
+			MethodName: "GetChapterContent",
+			Handler:    _PluginService_GetChapterContent_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

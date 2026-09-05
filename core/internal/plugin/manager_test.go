@@ -29,6 +29,10 @@ func (d *dummyClient) GetStreams(ctx context.Context, mediaID string, season, ep
 	return &pluginv1.GetStreamsResponse{}, nil
 }
 
+func (d *dummyClient) GetChapterContent(ctx context.Context, mediaID, chapterID string, chapterNumber float32) (*pluginv1.GetChapterContentResponse, error) {
+	return &pluginv1.GetChapterContentResponse{}, nil
+}
+
 func (d *dummyClient) Close() error {
 	d.closed = true
 	return nil

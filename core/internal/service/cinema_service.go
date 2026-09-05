@@ -218,6 +218,7 @@ func mapExternalIDs(raw *pluginv1.ExternalIDs) cinema.ExternalIDs {
 		MALID:     raw.MalId,
 		AniListID: raw.AnilistId,
 		KitsuID:   raw.KitsuId,
+		SanityID:  raw.SanityId,
 		Extra:     raw.Extra,
 	}
 }

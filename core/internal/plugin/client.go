@@ -15,6 +15,7 @@ type Client interface {
 	Search(ctx context.Context, query string, page int32) (*pluginv1.SearchResponse, error)
 	GetMetadata(ctx context.Context, mediaID string) (*pluginv1.GetMetadataResponse, error)
 	GetStreams(ctx context.Context, mediaID string, season, episode int32) (*pluginv1.GetStreamsResponse, error)
+	GetChapterContent(ctx context.Context, mediaID, chapterID string, chapterNumber float32) (*pluginv1.GetChapterContentResponse, error)
 	Close() error
 }
 
@@ -75,6 +76,14 @@ func (c *GRPCClient) GetStreams(ctx context.Context, mediaID string, season, epi
 		MediaId:       mediaID,
 		SeasonNumber:  season,
 		EpisodeNumber: episode,
+	})
+}
+
+func (c *GRPCClient) GetChapterContent(ctx context.Context, mediaID, chapterID string, chapterNumber float32) (*pluginv1.GetChapterContentResponse, error) {
+	return c.service.GetChapterContent(ctx, &pluginv1.GetChapterContentRequest{
+		MediaId:       mediaID,
+		ChapterId:     chapterID,
+		ChapterNumber: chapterNumber,
 	})
 }
 

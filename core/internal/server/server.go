@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/falsisdev/vessel/core/internal/domain/cinema"
+	"github.com/falsisdev/vessel/core/internal/domain/reading"
 	"github.com/falsisdev/vessel/core/internal/plugin"
 	"github.com/falsisdev/vessel/core/internal/service"
 	corev1 "github.com/falsisdev/vessel/proto/gen/go/core/v1"
@@ -27,25 +28,27 @@ type ServerConfig struct {
 type Server struct {
 	corev1.UnimplementedCoreServiceServer
 
-	cfg           ServerConfig
-	listener      net.Listener
-	grpcServer    *grpc.Server
-	cinemaService *service.CinemaService
-	pluginManager *plugin.Manager
-	startTime     time.Time
-	isUnixSocket  bool
-	socketPath    string
+	cfg            ServerConfig
+	listener       net.Listener
+	grpcServer     *grpc.Server
+	cinemaService  *service.CinemaService
+	readingService *service.ReadingService
+	pluginManager  *plugin.Manager
+	startTime      time.Time
+	isUnixSocket   bool
+	socketPath     string
 }
 
-func NewServer(cfg ServerConfig, cinemaSvc *service.CinemaService, pluginMgr *plugin.Manager) *Server {
+func NewServer(cfg ServerConfig, cinemaSvc *service.CinemaService, readingSvc *service.ReadingService, pluginMgr *plugin.Manager) *Server {
 	if cfg.Version == "" {
 		cfg.Version = "1.0.0"
 	}
 	return &Server{
-		cfg:           cfg,
-		cinemaService: cinemaSvc,
-		pluginManager: pluginMgr,
-		startTime:     time.Now(),
+		cfg:            cfg,
+		cinemaService:  cinemaSvc,
+		readingService: readingSvc,
+		pluginManager:  pluginMgr,
+		startTime:      time.Now(),
 	}
 }
 
@@ -107,84 +110,173 @@ func (s *Server) Ping(ctx context.Context, req *corev1.PingRequest) (*corev1.Pin
 
 func (s *Server) SearchMedia(ctx context.Context, req *corev1.SearchMediaRequest) (*corev1.SearchMediaResponse, error) {
 	if req.Domain == pluginv1.Domain_DOMAIN_CINEMA || req.Domain == pluginv1.Domain_DOMAIN_UNSPECIFIED {
-		items, err := s.cinemaService.Search(ctx, req.Query)
-		if err != nil {
-			return nil, fmt.Errorf("search failed: %w", err)
-		}
+		if s.cinemaService != nil {
+			items, err := s.cinemaService.Search(ctx, req.Query)
+			if err != nil {
+				return nil, fmt.Errorf("cinema search failed: %w", err)
+			}
 
-		var coreItems []*corev1.CoreMediaItem
-		for _, item := range items {
-			coreItems = append(coreItems, &corev1.CoreMediaItem{
-				Id:         item.ID,
-				ProviderId: item.ProviderID,
-				Title:      item.Title,
-				Type:       mapCinemaTypeToProto(item.Type),
-				Year:       item.Year,
-				PosterUrl:  item.PosterURL,
-				Overview:   item.Overview,
-				ExternalIds: &pluginv1.ExternalIDs{
-					ImdbId:    item.ExternalIDs.IMDbID,
-					TmdbId:    item.ExternalIDs.TMDBID,
-					SimklId:   item.ExternalIDs.SIMKLID,
-					MalId:     item.ExternalIDs.MALID,
-					AnilistId: item.ExternalIDs.AniListID,
-					KitsuId:   item.ExternalIDs.KitsuID,
-					Extra:     item.ExternalIDs.Extra,
-				},
-			})
+			var coreItems []*corev1.CoreMediaItem
+			for _, item := range items {
+				coreItems = append(coreItems, &corev1.CoreMediaItem{
+					Id:         item.ID,
+					ProviderId: item.ProviderID,
+					Title:      item.Title,
+					Type:       mapCinemaTypeToProto(item.Type),
+					Year:       item.Year,
+					PosterUrl:  item.PosterURL,
+					Overview:   item.Overview,
+					ExternalIds: &pluginv1.ExternalIDs{
+						ImdbId:    item.ExternalIDs.IMDbID,
+						TmdbId:    item.ExternalIDs.TMDBID,
+						SimklId:   item.ExternalIDs.SIMKLID,
+						MalId:     item.ExternalIDs.MALID,
+						AnilistId: item.ExternalIDs.AniListID,
+						KitsuId:   item.ExternalIDs.KitsuID,
+						Extra:     item.ExternalIDs.Extra,
+						SanityId:  item.ExternalIDs.SanityID,
+					},
+				})
+			}
+			return &corev1.SearchMediaResponse{Items: coreItems}, nil
 		}
-		return &corev1.SearchMediaResponse{Items: coreItems}, nil
+	}
+
+	if req.Domain == pluginv1.Domain_DOMAIN_MANGA || req.Domain == pluginv1.Domain_DOMAIN_WEBTOON || req.Domain == pluginv1.Domain_DOMAIN_WEBOOK {
+		if s.readingService != nil {
+			items, err := s.readingService.Search(ctx, req.Domain, req.Query)
+			if err != nil {
+				return nil, fmt.Errorf("reading search failed: %w", err)
+			}
+
+			var coreItems []*corev1.CoreMediaItem
+			for _, item := range items {
+				coreItems = append(coreItems, &corev1.CoreMediaItem{
+					Id:         item.ID,
+					ProviderId: item.ProviderID,
+					Title:      item.Title,
+					Type:       mapReadingTypeToProto(item.Type),
+					Year:       item.Year,
+					PosterUrl:  item.PosterURL,
+					Overview:   item.Overview,
+					ExternalIds: &pluginv1.ExternalIDs{
+						ImdbId:    item.ExternalIDs.IMDbID,
+						TmdbId:    item.ExternalIDs.TMDBID,
+						SimklId:   item.ExternalIDs.SIMKLID,
+						MalId:     item.ExternalIDs.MALID,
+						AnilistId: item.ExternalIDs.AniListID,
+						KitsuId:   item.ExternalIDs.KitsuID,
+						Extra:     item.ExternalIDs.Extra,
+						SanityId:  item.ExternalIDs.SanityID,
+					},
+				})
+			}
+			return &corev1.SearchMediaResponse{Items: coreItems}, nil
+		}
 	}
 
 	return &corev1.SearchMediaResponse{}, nil
 }
 
 func (s *Server) GetMediaDetails(ctx context.Context, req *corev1.GetMediaDetailsRequest) (*corev1.GetMediaDetailsResponse, error) {
-	details, err := s.cinemaService.GetMetadata(ctx, req.ProviderId, req.MediaId)
-	if err != nil {
-		return nil, fmt.Errorf("get media details failed: %w", err)
-	}
+	if req.Domain == pluginv1.Domain_DOMAIN_MANGA || req.Domain == pluginv1.Domain_DOMAIN_WEBTOON || req.Domain == pluginv1.Domain_DOMAIN_WEBOOK {
+		if s.readingService != nil {
+			details, err := s.readingService.GetMetadata(ctx, req.ProviderId, req.MediaId)
+			if err != nil {
+				return nil, fmt.Errorf("get reading details failed: %w", err)
+			}
 
-	var protoSeasons []*pluginv1.Season
-	for _, season := range details.Seasons {
-		s := &pluginv1.Season{
-			SeasonNumber: season.SeasonNumber,
-			Title:        season.Title,
-		}
-		for _, ep := range season.Episodes {
-			s.Episodes = append(s.Episodes, &pluginv1.Episode{
-				EpisodeNumber:   ep.EpisodeNumber,
-				Title:           ep.Title,
-				Overview:        ep.Overview,
-				DurationSeconds: ep.DurationSeconds,
+			var protoSeasons []*pluginv1.Season
+			var episodes []*pluginv1.Episode
+			for _, ch := range details.Chapters {
+				episodes = append(episodes, &pluginv1.Episode{
+					EpisodeNumber: int32(ch.ChapterNumber),
+					Title:         ch.Title,
+				})
+			}
+			protoSeasons = append(protoSeasons, &pluginv1.Season{
+				SeasonNumber: 1,
+				Title:        "Chapters",
+				Episodes:     episodes,
 			})
+
+			return &corev1.GetMediaDetailsResponse{
+				Id:         details.ID,
+				ProviderId: details.ProviderID,
+				Title:      details.Title,
+				Type:       mapReadingTypeToProto(details.Type),
+				Year:       details.Year,
+				PosterUrl:  details.PosterURL,
+				Overview:   details.Overview,
+				Genres:     details.Genres,
+				Seasons:    protoSeasons,
+				ExternalIds: &pluginv1.ExternalIDs{
+					ImdbId:    details.ExternalIDs.IMDbID,
+					TmdbId:    details.ExternalIDs.TMDBID,
+					SimklId:   details.ExternalIDs.SIMKLID,
+					MalId:     details.ExternalIDs.MALID,
+					AnilistId: details.ExternalIDs.AniListID,
+					KitsuId:   details.ExternalIDs.KitsuID,
+					Extra:     details.ExternalIDs.Extra,
+					SanityId:  details.ExternalIDs.SanityID,
+				},
+			}, nil
 		}
-		protoSeasons = append(protoSeasons, s)
 	}
 
-	return &corev1.GetMediaDetailsResponse{
-		Id:         details.ID,
-		ProviderId: details.ProviderID,
-		Title:      details.Title,
-		Type:       mapCinemaTypeToProto(details.Type),
-		Year:       details.Year,
-		PosterUrl:  details.PosterURL,
-		Overview:   details.Overview,
-		Genres:     details.Genres,
-		Seasons:    protoSeasons,
-		ExternalIds: &pluginv1.ExternalIDs{
-			ImdbId:    details.ExternalIDs.IMDbID,
-			TmdbId:    details.ExternalIDs.TMDBID,
-			SimklId:   details.ExternalIDs.SIMKLID,
-			MalId:     details.ExternalIDs.MALID,
-			AnilistId: details.ExternalIDs.AniListID,
-			KitsuId:   details.ExternalIDs.KitsuID,
-			Extra:     details.ExternalIDs.Extra,
-		},
-	}, nil
+	if s.cinemaService != nil {
+		details, err := s.cinemaService.GetMetadata(ctx, req.ProviderId, req.MediaId)
+		if err != nil {
+			return nil, fmt.Errorf("get media details failed: %w", err)
+		}
+
+		var protoSeasons []*pluginv1.Season
+		for _, season := range details.Seasons {
+			s := &pluginv1.Season{
+				SeasonNumber: season.SeasonNumber,
+				Title:        season.Title,
+			}
+			for _, ep := range season.Episodes {
+				s.Episodes = append(s.Episodes, &pluginv1.Episode{
+					EpisodeNumber:   ep.EpisodeNumber,
+					Title:           ep.Title,
+					Overview:        ep.Overview,
+					DurationSeconds: ep.DurationSeconds,
+				})
+			}
+			protoSeasons = append(protoSeasons, s)
+		}
+
+		return &corev1.GetMediaDetailsResponse{
+			Id:         details.ID,
+			ProviderId: details.ProviderID,
+			Title:      details.Title,
+			Type:       mapCinemaTypeToProto(details.Type),
+			Year:       details.Year,
+			PosterUrl:  details.PosterURL,
+			Overview:   details.Overview,
+			Genres:     details.Genres,
+			Seasons:    protoSeasons,
+			ExternalIds: &pluginv1.ExternalIDs{
+				ImdbId:    details.ExternalIDs.IMDbID,
+				TmdbId:    details.ExternalIDs.TMDBID,
+				SimklId:   details.ExternalIDs.SIMKLID,
+				MalId:     details.ExternalIDs.MALID,
+				AnilistId: details.ExternalIDs.AniListID,
+				KitsuId:   details.ExternalIDs.KitsuID,
+				Extra:     details.ExternalIDs.Extra,
+				SanityId:  details.ExternalIDs.SanityID,
+			},
+		}, nil
+	}
+
+	return nil, fmt.Errorf("service not available for domain %v", req.Domain)
 }
 
 func (s *Server) GetStreams(ctx context.Context, req *corev1.GetStreamsRequest) (*corev1.GetStreamsResponse, error) {
+	if s.cinemaService == nil {
+		return nil, errors.New("cinema service not initialized")
+	}
 	streams, subs, err := s.cinemaService.GetStreams(ctx, req.ProviderId, req.MediaId, req.SeasonNumber, req.EpisodeNumber)
 	if err != nil {
 		return nil, fmt.Errorf("get streams failed: %w", err)
@@ -216,6 +308,34 @@ func (s *Server) GetStreams(ctx context.Context, req *corev1.GetStreamsRequest) 
 	return &corev1.GetStreamsResponse{
 		Streams:   protoStreams,
 		Subtitles: protoSubs,
+	}, nil
+}
+
+func (s *Server) GetChapterContent(ctx context.Context, req *corev1.GetChapterContentRequest) (*corev1.GetChapterContentResponse, error) {
+	if s.readingService == nil {
+		return nil, errors.New("reading service not initialized")
+	}
+
+	content, err := s.readingService.GetChapterContent(ctx, req.ProviderId, req.MediaId, req.ChapterId, req.ChapterNumber)
+	if err != nil {
+		return nil, fmt.Errorf("get chapter content failed: %w", err)
+	}
+
+	var protoPages []*pluginv1.PageItem
+	for _, p := range content.Pages {
+		protoPages = append(protoPages, &pluginv1.PageItem{
+			PageNumber: p.PageNumber,
+			Url:        p.URL,
+			Headers:    p.Headers,
+		})
+	}
+
+	return &corev1.GetChapterContentResponse{
+		ChapterId:     content.ChapterID,
+		Title:         content.Title,
+		ChapterNumber: float32(content.ChapterNumber),
+		Pages:         protoPages,
+		TextContent:   content.TextContent,
 	}, nil
 }
 
@@ -268,6 +388,21 @@ func mapCinemaTypeToProto(t cinema.MediaType) pluginv1.MediaType {
 		return pluginv1.MediaType_MEDIA_TYPE_SERIES
 	case cinema.MediaTypeAnime:
 		return pluginv1.MediaType_MEDIA_TYPE_ANIME
+	default:
+		return pluginv1.MediaType_MEDIA_TYPE_UNSPECIFIED
+	}
+}
+
+func mapReadingTypeToProto(t reading.ReadingType) pluginv1.MediaType {
+	switch t {
+	case reading.ReadingTypeManga:
+		return pluginv1.MediaType_MEDIA_TYPE_MANGA
+	case reading.ReadingTypeWebtoon:
+		return pluginv1.MediaType_MEDIA_TYPE_WEBTOON
+	case reading.ReadingTypeWebook:
+		return pluginv1.MediaType_MEDIA_TYPE_WEBOOK
+	case reading.ReadingTypeBook:
+		return pluginv1.MediaType_MEDIA_TYPE_BOOK
 	default:
 		return pluginv1.MediaType_MEDIA_TYPE_UNSPECIFIED
 	}

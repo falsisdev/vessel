@@ -29,6 +29,7 @@ type ExternalIDs struct {
 	MALID     string
 	AniListID string
 	KitsuID   string
+	SanityID  string
 	Extra     map[string]string
 }
 

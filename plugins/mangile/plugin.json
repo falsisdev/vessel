@@ -1,0 +1,8 @@
+{
+  "id": "com.vessel.reading.mangile",
+  "name": "Mangile",
+  "executable_path": "./mangile",
+  "args": [],
+  "is_builtin": true,
+  "enabled": true
+}

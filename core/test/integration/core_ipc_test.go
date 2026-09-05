@@ -57,10 +57,11 @@ func TestCoreIPCServerTCP(t *testing.T) {
 	}
 
 	cinemaSvc := service.NewCinemaService(mgr, 3*time.Second)
+	readingSvc := service.NewReadingService(mgr, 3*time.Second)
 	srv := coreserver.NewServer(coreserver.ServerConfig{
 		ListenAddr: tcpAddr,
 		Version:    "1.0.0-test",
-	}, cinemaSvc, mgr)
+	}, cinemaSvc, readingSvc, mgr)
 
 	if err := srv.Start(); err != nil {
 		t.Fatalf("failed to start core server: %v", err)
@@ -130,10 +131,11 @@ func TestCoreIPCServerUnixSocket(t *testing.T) {
 
 	mgr := plugin.NewManager()
 	cinemaSvc := service.NewCinemaService(mgr, 3*time.Second)
+	readingSvc := service.NewReadingService(mgr, 3*time.Second)
 	srv := coreserver.NewServer(coreserver.ServerConfig{
 		ListenAddr: udsAddr,
 		Version:    "1.0.0-uds",
-	}, cinemaSvc, mgr)
+	}, cinemaSvc, readingSvc, mgr)
 
 	if err := srv.Start(); err != nil {
 		t.Fatalf("failed to start core UDS server: %v", err)

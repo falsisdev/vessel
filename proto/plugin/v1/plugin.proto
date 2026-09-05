@@ -20,6 +20,7 @@ enum Capability {
   CAPABILITY_SEARCH = 1;
   CAPABILITY_METADATA = 2;
   CAPABILITY_STREAMS = 3;
+  CAPABILITY_READ = 4;
 }
 
 enum MediaType {
@@ -27,6 +28,10 @@ enum MediaType {
   MEDIA_TYPE_MOVIE = 1;
   MEDIA_TYPE_SERIES = 2;
   MEDIA_TYPE_ANIME = 3;
+  MEDIA_TYPE_MANGA = 4;
+  MEDIA_TYPE_WEBTOON = 5;
+  MEDIA_TYPE_WEBOOK = 6;
+  MEDIA_TYPE_BOOK = 7;
 }
 
 enum StreamFormat {
@@ -74,6 +79,7 @@ message ExternalIDs {
   string anilist_id = 5;
   string kitsu_id = 6;
   map<string, string> extra = 7;
+  string sanity_id = 8;
 }
 
 message MediaItem {
@@ -152,9 +158,30 @@ message GetStreamsResponse {
   repeated Subtitle subtitles = 2;
 }
 
+message PageItem {
+  int32 page_number = 1;
+  string url = 2;
+  map<string, string> headers = 3;
+}
+
+message GetChapterContentRequest {
+  string media_id = 1;
+  string chapter_id = 2;
+  float chapter_number = 3;
+}
+
+message GetChapterContentResponse {
+  string chapter_id = 1;
+  string title = 2;
+  float chapter_number = 3;
+  repeated PageItem pages = 4;
+  string text_content = 5;
+}
+
 service PluginService {
   rpc GetManifest(GetManifestRequest) returns (GetManifestResponse);
   rpc Search(SearchRequest) returns (SearchResponse);
   rpc GetMetadata(GetMetadataRequest) returns (GetMetadataResponse);
   rpc GetStreams(GetStreamsRequest) returns (GetStreamsResponse);
+  rpc GetChapterContent(GetChapterContentRequest) returns (GetChapterContentResponse);
 }

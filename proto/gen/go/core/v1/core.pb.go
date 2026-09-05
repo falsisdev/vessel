@@ -806,6 +806,150 @@ func (x *ListPluginsResponse) GetPlugins() []*PluginInfo {
 	return nil
 }
 
+type GetChapterContentRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ProviderId    string                 `protobuf:"bytes,1,opt,name=provider_id,json=providerId,proto3" json:"provider_id,omitempty"`
+	MediaId       string                 `protobuf:"bytes,2,opt,name=media_id,json=mediaId,proto3" json:"media_id,omitempty"`
+	ChapterId     string                 `protobuf:"bytes,3,opt,name=chapter_id,json=chapterId,proto3" json:"chapter_id,omitempty"`
+	ChapterNumber float32                `protobuf:"fixed32,4,opt,name=chapter_number,json=chapterNumber,proto3" json:"chapter_number,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetChapterContentRequest) Reset() {
+	*x = GetChapterContentRequest{}
+	mi := &file_core_v1_core_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetChapterContentRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetChapterContentRequest) ProtoMessage() {}
+
+func (x *GetChapterContentRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_core_v1_core_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetChapterContentRequest.ProtoReflect.Descriptor instead.
+func (*GetChapterContentRequest) Descriptor() ([]byte, []int) {
+	return file_core_v1_core_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *GetChapterContentRequest) GetProviderId() string {
+	if x != nil {
+		return x.ProviderId
+	}
+	return ""
+}
+
+func (x *GetChapterContentRequest) GetMediaId() string {
+	if x != nil {
+		return x.MediaId
+	}
+	return ""
+}
+
+func (x *GetChapterContentRequest) GetChapterId() string {
+	if x != nil {
+		return x.ChapterId
+	}
+	return ""
+}
+
+func (x *GetChapterContentRequest) GetChapterNumber() float32 {
+	if x != nil {
+		return x.ChapterNumber
+	}
+	return 0
+}
+
+type GetChapterContentResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ChapterId     string                 `protobuf:"bytes,1,opt,name=chapter_id,json=chapterId,proto3" json:"chapter_id,omitempty"`
+	Title         string                 `protobuf:"bytes,2,opt,name=title,proto3" json:"title,omitempty"`
+	ChapterNumber float32                `protobuf:"fixed32,3,opt,name=chapter_number,json=chapterNumber,proto3" json:"chapter_number,omitempty"`
+	Pages         []*v1.PageItem         `protobuf:"bytes,4,rep,name=pages,proto3" json:"pages,omitempty"`
+	TextContent   string                 `protobuf:"bytes,5,opt,name=text_content,json=textContent,proto3" json:"text_content,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetChapterContentResponse) Reset() {
+	*x = GetChapterContentResponse{}
+	mi := &file_core_v1_core_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetChapterContentResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetChapterContentResponse) ProtoMessage() {}
+
+func (x *GetChapterContentResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_core_v1_core_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetChapterContentResponse.ProtoReflect.Descriptor instead.
+func (*GetChapterContentResponse) Descriptor() ([]byte, []int) {
+	return file_core_v1_core_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *GetChapterContentResponse) GetChapterId() string {
+	if x != nil {
+		return x.ChapterId
+	}
+	return ""
+}
+
+func (x *GetChapterContentResponse) GetTitle() string {
+	if x != nil {
+		return x.Title
+	}
+	return ""
+}
+
+func (x *GetChapterContentResponse) GetChapterNumber() float32 {
+	if x != nil {
+		return x.ChapterNumber
+	}
+	return 0
+}
+
+func (x *GetChapterContentResponse) GetPages() []*v1.PageItem {
+	if x != nil {
+		return x.Pages
+	}
+	return nil
+}
+
+func (x *GetChapterContentResponse) GetTextContent() string {
+	if x != nil {
+		return x.TextContent
+	}
+	return ""
+}
+
 var File_core_v1_core_proto protoreflect.FileDescriptor
 
 const file_core_v1_core_proto_rawDesc = "" +
@@ -875,13 +1019,28 @@ const file_core_v1_core_proto_rawDesc = "" +
 	"\x06status\x18\t \x01(\tR\x06status\"\x14\n" +
 	"\x12ListPluginsRequest\"D\n" +
 	"\x13ListPluginsResponse\x12-\n" +
-	"\aplugins\x18\x01 \x03(\v2\x13.core.v1.PluginInfoR\aplugins2\xf3\x02\n" +
+	"\aplugins\x18\x01 \x03(\v2\x13.core.v1.PluginInfoR\aplugins\"\x9c\x01\n" +
+	"\x18GetChapterContentRequest\x12\x1f\n" +
+	"\vprovider_id\x18\x01 \x01(\tR\n" +
+	"providerId\x12\x19\n" +
+	"\bmedia_id\x18\x02 \x01(\tR\amediaId\x12\x1d\n" +
+	"\n" +
+	"chapter_id\x18\x03 \x01(\tR\tchapterId\x12%\n" +
+	"\x0echapter_number\x18\x04 \x01(\x02R\rchapterNumber\"\xc5\x01\n" +
+	"\x19GetChapterContentResponse\x12\x1d\n" +
+	"\n" +
+	"chapter_id\x18\x01 \x01(\tR\tchapterId\x12\x14\n" +
+	"\x05title\x18\x02 \x01(\tR\x05title\x12%\n" +
+	"\x0echapter_number\x18\x03 \x01(\x02R\rchapterNumber\x12)\n" +
+	"\x05pages\x18\x04 \x03(\v2\x13.plugin.v1.PageItemR\x05pages\x12!\n" +
+	"\ftext_content\x18\x05 \x01(\tR\vtextContent2\xcf\x03\n" +
 	"\vCoreService\x123\n" +
 	"\x04Ping\x12\x14.core.v1.PingRequest\x1a\x15.core.v1.PingResponse\x12H\n" +
 	"\vSearchMedia\x12\x1b.core.v1.SearchMediaRequest\x1a\x1c.core.v1.SearchMediaResponse\x12T\n" +
 	"\x0fGetMediaDetails\x12\x1f.core.v1.GetMediaDetailsRequest\x1a .core.v1.GetMediaDetailsResponse\x12E\n" +
 	"\n" +
-	"GetStreams\x12\x1a.core.v1.GetStreamsRequest\x1a\x1b.core.v1.GetStreamsResponse\x12H\n" +
+	"GetStreams\x12\x1a.core.v1.GetStreamsRequest\x1a\x1b.core.v1.GetStreamsResponse\x12Z\n" +
+	"\x11GetChapterContent\x12!.core.v1.GetChapterContentRequest\x1a\".core.v1.GetChapterContentResponse\x12H\n" +
 	"\vListPlugins\x12\x1b.core.v1.ListPluginsRequest\x1a\x1c.core.v1.ListPluginsResponseB9Z7github.com/falsisdev/vessel/proto/gen/go/core/v1;corev1b\x06proto3"
 
 var (
@@ -896,57 +1055,63 @@ func file_core_v1_core_proto_rawDescGZIP() []byte {
 	return file_core_v1_core_proto_rawDescData
 }
 
-var file_core_v1_core_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
+var file_core_v1_core_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
 var file_core_v1_core_proto_goTypes = []any{
-	(*PingRequest)(nil),             // 0: core.v1.PingRequest
-	(*PingResponse)(nil),            // 1: core.v1.PingResponse
-	(*SearchMediaRequest)(nil),      // 2: core.v1.SearchMediaRequest
-	(*CoreMediaItem)(nil),           // 3: core.v1.CoreMediaItem
-	(*SearchMediaResponse)(nil),     // 4: core.v1.SearchMediaResponse
-	(*GetMediaDetailsRequest)(nil),  // 5: core.v1.GetMediaDetailsRequest
-	(*GetMediaDetailsResponse)(nil), // 6: core.v1.GetMediaDetailsResponse
-	(*GetStreamsRequest)(nil),       // 7: core.v1.GetStreamsRequest
-	(*GetStreamsResponse)(nil),      // 8: core.v1.GetStreamsResponse
-	(*PluginInfo)(nil),              // 9: core.v1.PluginInfo
-	(*ListPluginsRequest)(nil),      // 10: core.v1.ListPluginsRequest
-	(*ListPluginsResponse)(nil),     // 11: core.v1.ListPluginsResponse
-	(v1.Domain)(0),                  // 12: plugin.v1.Domain
-	(v1.MediaType)(0),               // 13: plugin.v1.MediaType
-	(*v1.ExternalIDs)(nil),          // 14: plugin.v1.ExternalIDs
-	(*v1.Season)(nil),               // 15: plugin.v1.Season
-	(*v1.StreamSource)(nil),         // 16: plugin.v1.StreamSource
-	(*v1.Subtitle)(nil),             // 17: plugin.v1.Subtitle
-	(v1.Capability)(0),              // 18: plugin.v1.Capability
+	(*PingRequest)(nil),               // 0: core.v1.PingRequest
+	(*PingResponse)(nil),              // 1: core.v1.PingResponse
+	(*SearchMediaRequest)(nil),        // 2: core.v1.SearchMediaRequest
+	(*CoreMediaItem)(nil),             // 3: core.v1.CoreMediaItem
+	(*SearchMediaResponse)(nil),       // 4: core.v1.SearchMediaResponse
+	(*GetMediaDetailsRequest)(nil),    // 5: core.v1.GetMediaDetailsRequest
+	(*GetMediaDetailsResponse)(nil),   // 6: core.v1.GetMediaDetailsResponse
+	(*GetStreamsRequest)(nil),         // 7: core.v1.GetStreamsRequest
+	(*GetStreamsResponse)(nil),        // 8: core.v1.GetStreamsResponse
+	(*PluginInfo)(nil),                // 9: core.v1.PluginInfo
+	(*ListPluginsRequest)(nil),        // 10: core.v1.ListPluginsRequest
+	(*ListPluginsResponse)(nil),       // 11: core.v1.ListPluginsResponse
+	(*GetChapterContentRequest)(nil),  // 12: core.v1.GetChapterContentRequest
+	(*GetChapterContentResponse)(nil), // 13: core.v1.GetChapterContentResponse
+	(v1.Domain)(0),                    // 14: plugin.v1.Domain
+	(v1.MediaType)(0),                 // 15: plugin.v1.MediaType
+	(*v1.ExternalIDs)(nil),            // 16: plugin.v1.ExternalIDs
+	(*v1.Season)(nil),                 // 17: plugin.v1.Season
+	(*v1.StreamSource)(nil),           // 18: plugin.v1.StreamSource
+	(*v1.Subtitle)(nil),               // 19: plugin.v1.Subtitle
+	(v1.Capability)(0),                // 20: plugin.v1.Capability
+	(*v1.PageItem)(nil),               // 21: plugin.v1.PageItem
 }
 var file_core_v1_core_proto_depIdxs = []int32{
-	12, // 0: core.v1.SearchMediaRequest.domain:type_name -> plugin.v1.Domain
-	13, // 1: core.v1.CoreMediaItem.type:type_name -> plugin.v1.MediaType
-	14, // 2: core.v1.CoreMediaItem.external_ids:type_name -> plugin.v1.ExternalIDs
+	14, // 0: core.v1.SearchMediaRequest.domain:type_name -> plugin.v1.Domain
+	15, // 1: core.v1.CoreMediaItem.type:type_name -> plugin.v1.MediaType
+	16, // 2: core.v1.CoreMediaItem.external_ids:type_name -> plugin.v1.ExternalIDs
 	3,  // 3: core.v1.SearchMediaResponse.items:type_name -> core.v1.CoreMediaItem
-	12, // 4: core.v1.GetMediaDetailsRequest.domain:type_name -> plugin.v1.Domain
-	13, // 5: core.v1.GetMediaDetailsResponse.type:type_name -> plugin.v1.MediaType
-	15, // 6: core.v1.GetMediaDetailsResponse.seasons:type_name -> plugin.v1.Season
-	14, // 7: core.v1.GetMediaDetailsResponse.external_ids:type_name -> plugin.v1.ExternalIDs
-	16, // 8: core.v1.GetStreamsResponse.streams:type_name -> plugin.v1.StreamSource
-	17, // 9: core.v1.GetStreamsResponse.subtitles:type_name -> plugin.v1.Subtitle
-	12, // 10: core.v1.PluginInfo.domain:type_name -> plugin.v1.Domain
-	18, // 11: core.v1.PluginInfo.capabilities:type_name -> plugin.v1.Capability
+	14, // 4: core.v1.GetMediaDetailsRequest.domain:type_name -> plugin.v1.Domain
+	15, // 5: core.v1.GetMediaDetailsResponse.type:type_name -> plugin.v1.MediaType
+	17, // 6: core.v1.GetMediaDetailsResponse.seasons:type_name -> plugin.v1.Season
+	16, // 7: core.v1.GetMediaDetailsResponse.external_ids:type_name -> plugin.v1.ExternalIDs
+	18, // 8: core.v1.GetStreamsResponse.streams:type_name -> plugin.v1.StreamSource
+	19, // 9: core.v1.GetStreamsResponse.subtitles:type_name -> plugin.v1.Subtitle
+	14, // 10: core.v1.PluginInfo.domain:type_name -> plugin.v1.Domain
+	20, // 11: core.v1.PluginInfo.capabilities:type_name -> plugin.v1.Capability
 	9,  // 12: core.v1.ListPluginsResponse.plugins:type_name -> core.v1.PluginInfo
-	0,  // 13: core.v1.CoreService.Ping:input_type -> core.v1.PingRequest
-	2,  // 14: core.v1.CoreService.SearchMedia:input_type -> core.v1.SearchMediaRequest
-	5,  // 15: core.v1.CoreService.GetMediaDetails:input_type -> core.v1.GetMediaDetailsRequest
-	7,  // 16: core.v1.CoreService.GetStreams:input_type -> core.v1.GetStreamsRequest
-	10, // 17: core.v1.CoreService.ListPlugins:input_type -> core.v1.ListPluginsRequest
-	1,  // 18: core.v1.CoreService.Ping:output_type -> core.v1.PingResponse
-	4,  // 19: core.v1.CoreService.SearchMedia:output_type -> core.v1.SearchMediaResponse
-	6,  // 20: core.v1.CoreService.GetMediaDetails:output_type -> core.v1.GetMediaDetailsResponse
-	8,  // 21: core.v1.CoreService.GetStreams:output_type -> core.v1.GetStreamsResponse
-	11, // 22: core.v1.CoreService.ListPlugins:output_type -> core.v1.ListPluginsResponse
-	18, // [18:23] is the sub-list for method output_type
-	13, // [13:18] is the sub-list for method input_type
-	13, // [13:13] is the sub-list for extension type_name
-	13, // [13:13] is the sub-list for extension extendee
-	0,  // [0:13] is the sub-list for field type_name
+	21, // 13: core.v1.GetChapterContentResponse.pages:type_name -> plugin.v1.PageItem
+	0,  // 14: core.v1.CoreService.Ping:input_type -> core.v1.PingRequest
+	2,  // 15: core.v1.CoreService.SearchMedia:input_type -> core.v1.SearchMediaRequest
+	5,  // 16: core.v1.CoreService.GetMediaDetails:input_type -> core.v1.GetMediaDetailsRequest
+	7,  // 17: core.v1.CoreService.GetStreams:input_type -> core.v1.GetStreamsRequest
+	12, // 18: core.v1.CoreService.GetChapterContent:input_type -> core.v1.GetChapterContentRequest
+	10, // 19: core.v1.CoreService.ListPlugins:input_type -> core.v1.ListPluginsRequest
+	1,  // 20: core.v1.CoreService.Ping:output_type -> core.v1.PingResponse
+	4,  // 21: core.v1.CoreService.SearchMedia:output_type -> core.v1.SearchMediaResponse
+	6,  // 22: core.v1.CoreService.GetMediaDetails:output_type -> core.v1.GetMediaDetailsResponse
+	8,  // 23: core.v1.CoreService.GetStreams:output_type -> core.v1.GetStreamsResponse
+	13, // 24: core.v1.CoreService.GetChapterContent:output_type -> core.v1.GetChapterContentResponse
+	11, // 25: core.v1.CoreService.ListPlugins:output_type -> core.v1.ListPluginsResponse
+	20, // [20:26] is the sub-list for method output_type
+	14, // [14:20] is the sub-list for method input_type
+	14, // [14:14] is the sub-list for extension type_name
+	14, // [14:14] is the sub-list for extension extendee
+	0,  // [0:14] is the sub-list for field type_name
 }
 
 func init() { file_core_v1_core_proto_init() }
@@ -960,7 +1125,7 @@ func file_core_v1_core_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_core_v1_core_proto_rawDesc), len(file_core_v1_core_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   12,
+			NumMessages:   14,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

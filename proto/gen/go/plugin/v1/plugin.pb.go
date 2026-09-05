@@ -92,6 +92,7 @@ const (
 	Capability_CAPABILITY_SEARCH      Capability = 1
 	Capability_CAPABILITY_METADATA    Capability = 2
 	Capability_CAPABILITY_STREAMS     Capability = 3
+	Capability_CAPABILITY_READ        Capability = 4
 )
 
 // Enum value maps for Capability.
@@ -101,12 +102,14 @@ var (
 		1: "CAPABILITY_SEARCH",
 		2: "CAPABILITY_METADATA",
 		3: "CAPABILITY_STREAMS",
+		4: "CAPABILITY_READ",
 	}
 	Capability_value = map[string]int32{
 		"CAPABILITY_UNSPECIFIED": 0,
 		"CAPABILITY_SEARCH":      1,
 		"CAPABILITY_METADATA":    2,
 		"CAPABILITY_STREAMS":     3,
+		"CAPABILITY_READ":        4,
 	}
 )
 
@@ -144,6 +147,10 @@ const (
 	MediaType_MEDIA_TYPE_MOVIE       MediaType = 1
 	MediaType_MEDIA_TYPE_SERIES      MediaType = 2
 	MediaType_MEDIA_TYPE_ANIME       MediaType = 3
+	MediaType_MEDIA_TYPE_MANGA       MediaType = 4
+	MediaType_MEDIA_TYPE_WEBTOON     MediaType = 5
+	MediaType_MEDIA_TYPE_WEBOOK      MediaType = 6
+	MediaType_MEDIA_TYPE_BOOK        MediaType = 7
 )
 
 // Enum value maps for MediaType.
@@ -153,12 +160,20 @@ var (
 		1: "MEDIA_TYPE_MOVIE",
 		2: "MEDIA_TYPE_SERIES",
 		3: "MEDIA_TYPE_ANIME",
+		4: "MEDIA_TYPE_MANGA",
+		5: "MEDIA_TYPE_WEBTOON",
+		6: "MEDIA_TYPE_WEBOOK",
+		7: "MEDIA_TYPE_BOOK",
 	}
 	MediaType_value = map[string]int32{
 		"MEDIA_TYPE_UNSPECIFIED": 0,
 		"MEDIA_TYPE_MOVIE":       1,
 		"MEDIA_TYPE_SERIES":      2,
 		"MEDIA_TYPE_ANIME":       3,
+		"MEDIA_TYPE_MANGA":       4,
+		"MEDIA_TYPE_WEBTOON":     5,
+		"MEDIA_TYPE_WEBOOK":      6,
+		"MEDIA_TYPE_BOOK":        7,
 	}
 )
 
@@ -542,6 +557,7 @@ type ExternalIDs struct {
 	AnilistId     string                 `protobuf:"bytes,5,opt,name=anilist_id,json=anilistId,proto3" json:"anilist_id,omitempty"`
 	KitsuId       string                 `protobuf:"bytes,6,opt,name=kitsu_id,json=kitsuId,proto3" json:"kitsu_id,omitempty"`
 	Extra         map[string]string      `protobuf:"bytes,7,rep,name=extra,proto3" json:"extra,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	SanityId      string                 `protobuf:"bytes,8,opt,name=sanity_id,json=sanityId,proto3" json:"sanity_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -623,6 +639,13 @@ func (x *ExternalIDs) GetExtra() map[string]string {
 		return x.Extra
 	}
 	return nil
+}
+
+func (x *ExternalIDs) GetSanityId() string {
+	if x != nil {
+		return x.SanityId
+	}
+	return ""
 }
 
 type MediaItem struct {
@@ -1365,6 +1388,202 @@ func (x *GetStreamsResponse) GetSubtitles() []*Subtitle {
 	return nil
 }
 
+type PageItem struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	PageNumber    int32                  `protobuf:"varint,1,opt,name=page_number,json=pageNumber,proto3" json:"page_number,omitempty"`
+	Url           string                 `protobuf:"bytes,2,opt,name=url,proto3" json:"url,omitempty"`
+	Headers       map[string]string      `protobuf:"bytes,3,rep,name=headers,proto3" json:"headers,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PageItem) Reset() {
+	*x = PageItem{}
+	mi := &file_plugin_v1_plugin_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PageItem) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PageItem) ProtoMessage() {}
+
+func (x *PageItem) ProtoReflect() protoreflect.Message {
+	mi := &file_plugin_v1_plugin_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PageItem.ProtoReflect.Descriptor instead.
+func (*PageItem) Descriptor() ([]byte, []int) {
+	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *PageItem) GetPageNumber() int32 {
+	if x != nil {
+		return x.PageNumber
+	}
+	return 0
+}
+
+func (x *PageItem) GetUrl() string {
+	if x != nil {
+		return x.Url
+	}
+	return ""
+}
+
+func (x *PageItem) GetHeaders() map[string]string {
+	if x != nil {
+		return x.Headers
+	}
+	return nil
+}
+
+type GetChapterContentRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	MediaId       string                 `protobuf:"bytes,1,opt,name=media_id,json=mediaId,proto3" json:"media_id,omitempty"`
+	ChapterId     string                 `protobuf:"bytes,2,opt,name=chapter_id,json=chapterId,proto3" json:"chapter_id,omitempty"`
+	ChapterNumber float32                `protobuf:"fixed32,3,opt,name=chapter_number,json=chapterNumber,proto3" json:"chapter_number,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetChapterContentRequest) Reset() {
+	*x = GetChapterContentRequest{}
+	mi := &file_plugin_v1_plugin_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetChapterContentRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetChapterContentRequest) ProtoMessage() {}
+
+func (x *GetChapterContentRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_plugin_v1_plugin_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetChapterContentRequest.ProtoReflect.Descriptor instead.
+func (*GetChapterContentRequest) Descriptor() ([]byte, []int) {
+	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *GetChapterContentRequest) GetMediaId() string {
+	if x != nil {
+		return x.MediaId
+	}
+	return ""
+}
+
+func (x *GetChapterContentRequest) GetChapterId() string {
+	if x != nil {
+		return x.ChapterId
+	}
+	return ""
+}
+
+func (x *GetChapterContentRequest) GetChapterNumber() float32 {
+	if x != nil {
+		return x.ChapterNumber
+	}
+	return 0
+}
+
+type GetChapterContentResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ChapterId     string                 `protobuf:"bytes,1,opt,name=chapter_id,json=chapterId,proto3" json:"chapter_id,omitempty"`
+	Title         string                 `protobuf:"bytes,2,opt,name=title,proto3" json:"title,omitempty"`
+	ChapterNumber float32                `protobuf:"fixed32,3,opt,name=chapter_number,json=chapterNumber,proto3" json:"chapter_number,omitempty"`
+	Pages         []*PageItem            `protobuf:"bytes,4,rep,name=pages,proto3" json:"pages,omitempty"`
+	TextContent   string                 `protobuf:"bytes,5,opt,name=text_content,json=textContent,proto3" json:"text_content,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetChapterContentResponse) Reset() {
+	*x = GetChapterContentResponse{}
+	mi := &file_plugin_v1_plugin_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetChapterContentResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetChapterContentResponse) ProtoMessage() {}
+
+func (x *GetChapterContentResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_plugin_v1_plugin_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetChapterContentResponse.ProtoReflect.Descriptor instead.
+func (*GetChapterContentResponse) Descriptor() ([]byte, []int) {
+	return file_plugin_v1_plugin_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *GetChapterContentResponse) GetChapterId() string {
+	if x != nil {
+		return x.ChapterId
+	}
+	return ""
+}
+
+func (x *GetChapterContentResponse) GetTitle() string {
+	if x != nil {
+		return x.Title
+	}
+	return ""
+}
+
+func (x *GetChapterContentResponse) GetChapterNumber() float32 {
+	if x != nil {
+		return x.ChapterNumber
+	}
+	return 0
+}
+
+func (x *GetChapterContentResponse) GetPages() []*PageItem {
+	if x != nil {
+		return x.Pages
+	}
+	return nil
+}
+
+func (x *GetChapterContentResponse) GetTextContent() string {
+	if x != nil {
+		return x.TextContent
+	}
+	return ""
+}
+
 var File_plugin_v1_plugin_proto protoreflect.FileDescriptor
 
 const file_plugin_v1_plugin_proto_rawDesc = "" +
@@ -1386,7 +1605,7 @@ const file_plugin_v1_plugin_proto_rawDesc = "" +
 	"\bmanifest\x18\x01 \x01(\v2\x19.plugin.v1.PluginManifestR\bmanifest\"9\n" +
 	"\rSearchRequest\x12\x14\n" +
 	"\x05query\x18\x01 \x01(\tR\x05query\x12\x12\n" +
-	"\x04page\x18\x02 \x01(\x05R\x04page\"\x9e\x02\n" +
+	"\x04page\x18\x02 \x01(\x05R\x04page\"\xbb\x02\n" +
 	"\vExternalIDs\x12\x17\n" +
 	"\aimdb_id\x18\x01 \x01(\tR\x06imdbId\x12\x17\n" +
 	"\atmdb_id\x18\x02 \x01(\tR\x06tmdbId\x12\x19\n" +
@@ -1395,7 +1614,8 @@ const file_plugin_v1_plugin_proto_rawDesc = "" +
 	"\n" +
 	"anilist_id\x18\x05 \x01(\tR\tanilistId\x12\x19\n" +
 	"\bkitsu_id\x18\x06 \x01(\tR\akitsuId\x127\n" +
-	"\x05extra\x18\a \x03(\v2!.plugin.v1.ExternalIDs.ExtraEntryR\x05extra\x1a8\n" +
+	"\x05extra\x18\a \x03(\v2!.plugin.v1.ExternalIDs.ExtraEntryR\x05extra\x12\x1b\n" +
+	"\tsanity_id\x18\b \x01(\tR\bsanityId\x1a8\n" +
 	"\n" +
 	"ExtraEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
@@ -1459,7 +1679,27 @@ const file_plugin_v1_plugin_proto_rawDesc = "" +
 	"is_default\x18\x05 \x01(\bR\tisDefault\"z\n" +
 	"\x12GetStreamsResponse\x121\n" +
 	"\astreams\x18\x01 \x03(\v2\x17.plugin.v1.StreamSourceR\astreams\x121\n" +
-	"\tsubtitles\x18\x02 \x03(\v2\x13.plugin.v1.SubtitleR\tsubtitles*\x9f\x01\n" +
+	"\tsubtitles\x18\x02 \x03(\v2\x13.plugin.v1.SubtitleR\tsubtitles\"\xb5\x01\n" +
+	"\bPageItem\x12\x1f\n" +
+	"\vpage_number\x18\x01 \x01(\x05R\n" +
+	"pageNumber\x12\x10\n" +
+	"\x03url\x18\x02 \x01(\tR\x03url\x12:\n" +
+	"\aheaders\x18\x03 \x03(\v2 .plugin.v1.PageItem.HeadersEntryR\aheaders\x1a:\n" +
+	"\fHeadersEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"{\n" +
+	"\x18GetChapterContentRequest\x12\x19\n" +
+	"\bmedia_id\x18\x01 \x01(\tR\amediaId\x12\x1d\n" +
+	"\n" +
+	"chapter_id\x18\x02 \x01(\tR\tchapterId\x12%\n" +
+	"\x0echapter_number\x18\x03 \x01(\x02R\rchapterNumber\"\xc5\x01\n" +
+	"\x19GetChapterContentResponse\x12\x1d\n" +
+	"\n" +
+	"chapter_id\x18\x01 \x01(\tR\tchapterId\x12\x14\n" +
+	"\x05title\x18\x02 \x01(\tR\x05title\x12%\n" +
+	"\x0echapter_number\x18\x03 \x01(\x02R\rchapterNumber\x12)\n" +
+	"\x05pages\x18\x04 \x03(\v2\x13.plugin.v1.PageItemR\x05pages\x12!\n" +
+	"\ftext_content\x18\x05 \x01(\tR\vtextContent*\x9f\x01\n" +
 	"\x06Domain\x12\x16\n" +
 	"\x12DOMAIN_UNSPECIFIED\x10\x00\x12\x11\n" +
 	"\rDOMAIN_CINEMA\x10\x01\x12\x10\n" +
@@ -1468,18 +1708,23 @@ const file_plugin_v1_plugin_proto_rawDesc = "" +
 	"\rDOMAIN_WEBOOK\x10\x04\x12\x0f\n" +
 	"\vDOMAIN_BOOK\x10\x05\x12\x0f\n" +
 	"\vDOMAIN_LIVE\x10\x06\x12\x0f\n" +
-	"\vDOMAIN_IPTV\x10\a*p\n" +
+	"\vDOMAIN_IPTV\x10\a*\x85\x01\n" +
 	"\n" +
 	"Capability\x12\x1a\n" +
 	"\x16CAPABILITY_UNSPECIFIED\x10\x00\x12\x15\n" +
 	"\x11CAPABILITY_SEARCH\x10\x01\x12\x17\n" +
 	"\x13CAPABILITY_METADATA\x10\x02\x12\x16\n" +
-	"\x12CAPABILITY_STREAMS\x10\x03*j\n" +
+	"\x12CAPABILITY_STREAMS\x10\x03\x12\x13\n" +
+	"\x0fCAPABILITY_READ\x10\x04*\xc4\x01\n" +
 	"\tMediaType\x12\x1a\n" +
 	"\x16MEDIA_TYPE_UNSPECIFIED\x10\x00\x12\x14\n" +
 	"\x10MEDIA_TYPE_MOVIE\x10\x01\x12\x15\n" +
 	"\x11MEDIA_TYPE_SERIES\x10\x02\x12\x14\n" +
-	"\x10MEDIA_TYPE_ANIME\x10\x03*\x8a\x01\n" +
+	"\x10MEDIA_TYPE_ANIME\x10\x03\x12\x14\n" +
+	"\x10MEDIA_TYPE_MANGA\x10\x04\x12\x16\n" +
+	"\x12MEDIA_TYPE_WEBTOON\x10\x05\x12\x15\n" +
+	"\x11MEDIA_TYPE_WEBOOK\x10\x06\x12\x13\n" +
+	"\x0fMEDIA_TYPE_BOOK\x10\a*\x8a\x01\n" +
 	"\fStreamFormat\x12\x1d\n" +
 	"\x19STREAM_FORMAT_UNSPECIFIED\x10\x00\x12\x15\n" +
 	"\x11STREAM_FORMAT_HLS\x10\x01\x12\x16\n" +
@@ -1489,13 +1734,14 @@ const file_plugin_v1_plugin_proto_rawDesc = "" +
 	"\x0eSubtitleFormat\x12\x1f\n" +
 	"\x1bSUBTITLE_FORMAT_UNSPECIFIED\x10\x00\x12\x17\n" +
 	"\x13SUBTITLE_FORMAT_VTT\x10\x01\x12\x17\n" +
-	"\x13SUBTITLE_FORMAT_SRT\x10\x022\xb5\x02\n" +
+	"\x13SUBTITLE_FORMAT_SRT\x10\x022\x95\x03\n" +
 	"\rPluginService\x12L\n" +
 	"\vGetManifest\x12\x1d.plugin.v1.GetManifestRequest\x1a\x1e.plugin.v1.GetManifestResponse\x12=\n" +
 	"\x06Search\x12\x18.plugin.v1.SearchRequest\x1a\x19.plugin.v1.SearchResponse\x12L\n" +
 	"\vGetMetadata\x12\x1d.plugin.v1.GetMetadataRequest\x1a\x1e.plugin.v1.GetMetadataResponse\x12I\n" +
 	"\n" +
-	"GetStreams\x12\x1c.plugin.v1.GetStreamsRequest\x1a\x1d.plugin.v1.GetStreamsResponseB=Z;github.com/falsisdev/vessel/proto/gen/go/plugin/v1;pluginv1b\x06proto3"
+	"GetStreams\x12\x1c.plugin.v1.GetStreamsRequest\x1a\x1d.plugin.v1.GetStreamsResponse\x12^\n" +
+	"\x11GetChapterContent\x12#.plugin.v1.GetChapterContentRequest\x1a$.plugin.v1.GetChapterContentResponseB=Z;github.com/falsisdev/vessel/proto/gen/go/plugin/v1;pluginv1b\x06proto3"
 
 var (
 	file_plugin_v1_plugin_proto_rawDescOnce sync.Once
@@ -1510,37 +1756,41 @@ func file_plugin_v1_plugin_proto_rawDescGZIP() []byte {
 }
 
 var file_plugin_v1_plugin_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
-var file_plugin_v1_plugin_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
+var file_plugin_v1_plugin_proto_msgTypes = make([]protoimpl.MessageInfo, 22)
 var file_plugin_v1_plugin_proto_goTypes = []any{
-	(Domain)(0),                 // 0: plugin.v1.Domain
-	(Capability)(0),             // 1: plugin.v1.Capability
-	(MediaType)(0),              // 2: plugin.v1.MediaType
-	(StreamFormat)(0),           // 3: plugin.v1.StreamFormat
-	(SubtitleFormat)(0),         // 4: plugin.v1.SubtitleFormat
-	(*PluginManifest)(nil),      // 5: plugin.v1.PluginManifest
-	(*GetManifestRequest)(nil),  // 6: plugin.v1.GetManifestRequest
-	(*GetManifestResponse)(nil), // 7: plugin.v1.GetManifestResponse
-	(*SearchRequest)(nil),       // 8: plugin.v1.SearchRequest
-	(*ExternalIDs)(nil),         // 9: plugin.v1.ExternalIDs
-	(*MediaItem)(nil),           // 10: plugin.v1.MediaItem
-	(*SearchResponse)(nil),      // 11: plugin.v1.SearchResponse
-	(*GetMetadataRequest)(nil),  // 12: plugin.v1.GetMetadataRequest
-	(*Episode)(nil),             // 13: plugin.v1.Episode
-	(*Season)(nil),              // 14: plugin.v1.Season
-	(*MediaDetails)(nil),        // 15: plugin.v1.MediaDetails
-	(*GetMetadataResponse)(nil), // 16: plugin.v1.GetMetadataResponse
-	(*GetStreamsRequest)(nil),   // 17: plugin.v1.GetStreamsRequest
-	(*StreamSource)(nil),        // 18: plugin.v1.StreamSource
-	(*Subtitle)(nil),            // 19: plugin.v1.Subtitle
-	(*GetStreamsResponse)(nil),  // 20: plugin.v1.GetStreamsResponse
-	nil,                         // 21: plugin.v1.ExternalIDs.ExtraEntry
-	nil,                         // 22: plugin.v1.StreamSource.HeadersEntry
+	(Domain)(0),                       // 0: plugin.v1.Domain
+	(Capability)(0),                   // 1: plugin.v1.Capability
+	(MediaType)(0),                    // 2: plugin.v1.MediaType
+	(StreamFormat)(0),                 // 3: plugin.v1.StreamFormat
+	(SubtitleFormat)(0),               // 4: plugin.v1.SubtitleFormat
+	(*PluginManifest)(nil),            // 5: plugin.v1.PluginManifest
+	(*GetManifestRequest)(nil),        // 6: plugin.v1.GetManifestRequest
+	(*GetManifestResponse)(nil),       // 7: plugin.v1.GetManifestResponse
+	(*SearchRequest)(nil),             // 8: plugin.v1.SearchRequest
+	(*ExternalIDs)(nil),               // 9: plugin.v1.ExternalIDs
+	(*MediaItem)(nil),                 // 10: plugin.v1.MediaItem
+	(*SearchResponse)(nil),            // 11: plugin.v1.SearchResponse
+	(*GetMetadataRequest)(nil),        // 12: plugin.v1.GetMetadataRequest
+	(*Episode)(nil),                   // 13: plugin.v1.Episode
+	(*Season)(nil),                    // 14: plugin.v1.Season
+	(*MediaDetails)(nil),              // 15: plugin.v1.MediaDetails
+	(*GetMetadataResponse)(nil),       // 16: plugin.v1.GetMetadataResponse
+	(*GetStreamsRequest)(nil),         // 17: plugin.v1.GetStreamsRequest
+	(*StreamSource)(nil),              // 18: plugin.v1.StreamSource
+	(*Subtitle)(nil),                  // 19: plugin.v1.Subtitle
+	(*GetStreamsResponse)(nil),        // 20: plugin.v1.GetStreamsResponse
+	(*PageItem)(nil),                  // 21: plugin.v1.PageItem
+	(*GetChapterContentRequest)(nil),  // 22: plugin.v1.GetChapterContentRequest
+	(*GetChapterContentResponse)(nil), // 23: plugin.v1.GetChapterContentResponse
+	nil,                               // 24: plugin.v1.ExternalIDs.ExtraEntry
+	nil,                               // 25: plugin.v1.StreamSource.HeadersEntry
+	nil,                               // 26: plugin.v1.PageItem.HeadersEntry
 }
 var file_plugin_v1_plugin_proto_depIdxs = []int32{
 	0,  // 0: plugin.v1.PluginManifest.domain:type_name -> plugin.v1.Domain
 	1,  // 1: plugin.v1.PluginManifest.capabilities:type_name -> plugin.v1.Capability
 	5,  // 2: plugin.v1.GetManifestResponse.manifest:type_name -> plugin.v1.PluginManifest
-	21, // 3: plugin.v1.ExternalIDs.extra:type_name -> plugin.v1.ExternalIDs.ExtraEntry
+	24, // 3: plugin.v1.ExternalIDs.extra:type_name -> plugin.v1.ExternalIDs.ExtraEntry
 	2,  // 4: plugin.v1.MediaItem.type:type_name -> plugin.v1.MediaType
 	9,  // 5: plugin.v1.MediaItem.external_ids:type_name -> plugin.v1.ExternalIDs
 	10, // 6: plugin.v1.SearchResponse.items:type_name -> plugin.v1.MediaItem
@@ -1550,23 +1800,27 @@ var file_plugin_v1_plugin_proto_depIdxs = []int32{
 	9,  // 10: plugin.v1.MediaDetails.external_ids:type_name -> plugin.v1.ExternalIDs
 	15, // 11: plugin.v1.GetMetadataResponse.details:type_name -> plugin.v1.MediaDetails
 	3,  // 12: plugin.v1.StreamSource.format:type_name -> plugin.v1.StreamFormat
-	22, // 13: plugin.v1.StreamSource.headers:type_name -> plugin.v1.StreamSource.HeadersEntry
+	25, // 13: plugin.v1.StreamSource.headers:type_name -> plugin.v1.StreamSource.HeadersEntry
 	4,  // 14: plugin.v1.Subtitle.format:type_name -> plugin.v1.SubtitleFormat
 	18, // 15: plugin.v1.GetStreamsResponse.streams:type_name -> plugin.v1.StreamSource
 	19, // 16: plugin.v1.GetStreamsResponse.subtitles:type_name -> plugin.v1.Subtitle
-	6,  // 17: plugin.v1.PluginService.GetManifest:input_type -> plugin.v1.GetManifestRequest
-	8,  // 18: plugin.v1.PluginService.Search:input_type -> plugin.v1.SearchRequest
-	12, // 19: plugin.v1.PluginService.GetMetadata:input_type -> plugin.v1.GetMetadataRequest
-	17, // 20: plugin.v1.PluginService.GetStreams:input_type -> plugin.v1.GetStreamsRequest
-	7,  // 21: plugin.v1.PluginService.GetManifest:output_type -> plugin.v1.GetManifestResponse
-	11, // 22: plugin.v1.PluginService.Search:output_type -> plugin.v1.SearchResponse
-	16, // 23: plugin.v1.PluginService.GetMetadata:output_type -> plugin.v1.GetMetadataResponse
-	20, // 24: plugin.v1.PluginService.GetStreams:output_type -> plugin.v1.GetStreamsResponse
-	21, // [21:25] is the sub-list for method output_type
-	17, // [17:21] is the sub-list for method input_type
-	17, // [17:17] is the sub-list for extension type_name
-	17, // [17:17] is the sub-list for extension extendee
-	0,  // [0:17] is the sub-list for field type_name
+	26, // 17: plugin.v1.PageItem.headers:type_name -> plugin.v1.PageItem.HeadersEntry
+	21, // 18: plugin.v1.GetChapterContentResponse.pages:type_name -> plugin.v1.PageItem
+	6,  // 19: plugin.v1.PluginService.GetManifest:input_type -> plugin.v1.GetManifestRequest
+	8,  // 20: plugin.v1.PluginService.Search:input_type -> plugin.v1.SearchRequest
+	12, // 21: plugin.v1.PluginService.GetMetadata:input_type -> plugin.v1.GetMetadataRequest
+	17, // 22: plugin.v1.PluginService.GetStreams:input_type -> plugin.v1.GetStreamsRequest
+	22, // 23: plugin.v1.PluginService.GetChapterContent:input_type -> plugin.v1.GetChapterContentRequest
+	7,  // 24: plugin.v1.PluginService.GetManifest:output_type -> plugin.v1.GetManifestResponse
+	11, // 25: plugin.v1.PluginService.Search:output_type -> plugin.v1.SearchResponse
+	16, // 26: plugin.v1.PluginService.GetMetadata:output_type -> plugin.v1.GetMetadataResponse
+	20, // 27: plugin.v1.PluginService.GetStreams:output_type -> plugin.v1.GetStreamsResponse
+	23, // 28: plugin.v1.PluginService.GetChapterContent:output_type -> plugin.v1.GetChapterContentResponse
+	24, // [24:29] is the sub-list for method output_type
+	19, // [19:24] is the sub-list for method input_type
+	19, // [19:19] is the sub-list for extension type_name
+	19, // [19:19] is the sub-list for extension extendee
+	0,  // [0:19] is the sub-list for field type_name
 }
 
 func init() { file_plugin_v1_plugin_proto_init() }
@@ -1580,7 +1834,7 @@ func file_plugin_v1_plugin_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_plugin_v1_plugin_proto_rawDesc), len(file_plugin_v1_plugin_proto_rawDesc)),
 			NumEnums:      5,
-			NumMessages:   18,
+			NumMessages:   22,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

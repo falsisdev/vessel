@@ -53,12 +53,13 @@ func run() error {
 	}()
 
 	cinemaService := service.NewCinemaService(pluginManager, 5*time.Second)
+	readingService := service.NewReadingService(pluginManager, 5*time.Second)
 
 	if !*noServer && !*oneshot {
 		coreServer := server.NewServer(server.ServerConfig{
 			ListenAddr: *listenAddr,
 			Version:    "1.0.0",
-		}, cinemaService, pluginManager)
+		}, cinemaService, readingService, pluginManager)
 
 		if err := coreServer.Start(); err != nil {
 			return fmt.Errorf("failed to start core IPC server at %s: %w", *listenAddr, err)

@@ -19,11 +19,12 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	CoreService_Ping_FullMethodName            = "/core.v1.CoreService/Ping"
-	CoreService_SearchMedia_FullMethodName     = "/core.v1.CoreService/SearchMedia"
-	CoreService_GetMediaDetails_FullMethodName = "/core.v1.CoreService/GetMediaDetails"
-	CoreService_GetStreams_FullMethodName      = "/core.v1.CoreService/GetStreams"
-	CoreService_ListPlugins_FullMethodName     = "/core.v1.CoreService/ListPlugins"
+	CoreService_Ping_FullMethodName              = "/core.v1.CoreService/Ping"
+	CoreService_SearchMedia_FullMethodName       = "/core.v1.CoreService/SearchMedia"
+	CoreService_GetMediaDetails_FullMethodName   = "/core.v1.CoreService/GetMediaDetails"
+	CoreService_GetStreams_FullMethodName        = "/core.v1.CoreService/GetStreams"
+	CoreService_GetChapterContent_FullMethodName = "/core.v1.CoreService/GetChapterContent"
+	CoreService_ListPlugins_FullMethodName       = "/core.v1.CoreService/ListPlugins"
 )
 
 // CoreServiceClient is the client API for CoreService service.
@@ -34,6 +35,7 @@ type CoreServiceClient interface {
 	SearchMedia(ctx context.Context, in *SearchMediaRequest, opts ...grpc.CallOption) (*SearchMediaResponse, error)
 	GetMediaDetails(ctx context.Context, in *GetMediaDetailsRequest, opts ...grpc.CallOption) (*GetMediaDetailsResponse, error)
 	GetStreams(ctx context.Context, in *GetStreamsRequest, opts ...grpc.CallOption) (*GetStreamsResponse, error)
+	GetChapterContent(ctx context.Context, in *GetChapterContentRequest, opts ...grpc.CallOption) (*GetChapterContentResponse, error)
 	ListPlugins(ctx context.Context, in *ListPluginsRequest, opts ...grpc.CallOption) (*ListPluginsResponse, error)
 }
 
@@ -85,6 +87,16 @@ func (c *coreServiceClient) GetStreams(ctx context.Context, in *GetStreamsReques
 	return out, nil
 }
 
+func (c *coreServiceClient) GetChapterContent(ctx context.Context, in *GetChapterContentRequest, opts ...grpc.CallOption) (*GetChapterContentResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetChapterContentResponse)
+	err := c.cc.Invoke(ctx, CoreService_GetChapterContent_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *coreServiceClient) ListPlugins(ctx context.Context, in *ListPluginsRequest, opts ...grpc.CallOption) (*ListPluginsResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ListPluginsResponse)
@@ -103,6 +115,7 @@ type CoreServiceServer interface {
 	SearchMedia(context.Context, *SearchMediaRequest) (*SearchMediaResponse, error)
 	GetMediaDetails(context.Context, *GetMediaDetailsRequest) (*GetMediaDetailsResponse, error)
 	GetStreams(context.Context, *GetStreamsRequest) (*GetStreamsResponse, error)
+	GetChapterContent(context.Context, *GetChapterContentRequest) (*GetChapterContentResponse, error)
 	ListPlugins(context.Context, *ListPluginsRequest) (*ListPluginsResponse, error)
 	mustEmbedUnimplementedCoreServiceServer()
 }
@@ -125,6 +138,9 @@ func (UnimplementedCoreServiceServer) GetMediaDetails(context.Context, *GetMedia
 }
 func (UnimplementedCoreServiceServer) GetStreams(context.Context, *GetStreamsRequest) (*GetStreamsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetStreams not implemented")
+}
+func (UnimplementedCoreServiceServer) GetChapterContent(context.Context, *GetChapterContentRequest) (*GetChapterContentResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetChapterContent not implemented")
 }
 func (UnimplementedCoreServiceServer) ListPlugins(context.Context, *ListPluginsRequest) (*ListPluginsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListPlugins not implemented")
@@ -222,6 +238,24 @@ func _CoreService_GetStreams_Handler(srv interface{}, ctx context.Context, dec f
 	return interceptor(ctx, in, info, handler)
 }
 
+func _CoreService_GetChapterContent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetChapterContentRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(CoreServiceServer).GetChapterContent(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: CoreService_GetChapterContent_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(CoreServiceServer).GetChapterContent(ctx, req.(*GetChapterContentRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _CoreService_ListPlugins_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ListPluginsRequest)
 	if err := dec(in); err != nil {
@@ -262,6 +296,10 @@ var CoreService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetStreams",
 			Handler:    _CoreService_GetStreams_Handler,
+		},
+		{
+			MethodName: "GetChapterContent",
+			Handler:    _CoreService_GetChapterContent_Handler,
 		},
 		{
 			MethodName: "ListPlugins",

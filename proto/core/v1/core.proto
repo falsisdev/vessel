@@ -84,10 +84,26 @@ message ListPluginsResponse {
   repeated PluginInfo plugins = 1;
 }
 
+message GetChapterContentRequest {
+  string provider_id = 1;
+  string media_id = 2;
+  string chapter_id = 3;
+  float chapter_number = 4;
+}
+
+message GetChapterContentResponse {
+  string chapter_id = 1;
+  string title = 2;
+  float chapter_number = 3;
+  repeated plugin.v1.PageItem pages = 4;
+  string text_content = 5;
+}
+
 service CoreService {
   rpc Ping(PingRequest) returns (PingResponse);
   rpc SearchMedia(SearchMediaRequest) returns (SearchMediaResponse);
   rpc GetMediaDetails(GetMediaDetailsRequest) returns (GetMediaDetailsResponse);
   rpc GetStreams(GetStreamsRequest) returns (GetStreamsResponse);
+  rpc GetChapterContent(GetChapterContentRequest) returns (GetChapterContentResponse);
   rpc ListPlugins(ListPluginsRequest) returns (ListPluginsResponse);
 }

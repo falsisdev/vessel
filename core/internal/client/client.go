@@ -80,6 +80,15 @@ func (c *Client) GetStreams(ctx context.Context, providerID, mediaID string, sea
 	})
 }
 
+func (c *Client) GetChapterContent(ctx context.Context, providerID, mediaID, chapterID string, chapterNumber float32) (*corev1.GetChapterContentResponse, error) {
+	return c.service.GetChapterContent(ctx, &corev1.GetChapterContentRequest{
+		ProviderId:    providerID,
+		MediaId:       mediaID,
+		ChapterId:     chapterID,
+		ChapterNumber: chapterNumber,
+	})
+}
+
 func (c *Client) ListPlugins(ctx context.Context) (*corev1.ListPluginsResponse, error) {
 	return c.service.ListPlugins(ctx, &corev1.ListPluginsRequest{})
 }
