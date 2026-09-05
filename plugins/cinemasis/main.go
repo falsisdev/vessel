@@ -33,13 +33,13 @@ func main() {
 	}
 
 	if key == "" {
-		log.Println("[cinemasis] Notice: TMDB_API_KEY is not provided. Set TMDB_API_KEY to execute live queries against TMDB.")
+		log.Println("[Cinemasis] Notice: TMDB_API_KEY is not provided. Set TMDB_API_KEY to execute live queries against TMDB.")
 	}
 
 	addr := fmt.Sprintf("127.0.0.1:%d", *port)
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
-		log.Fatalf("[cinemasis] failed to listen on %s: %v", addr, err)
+		log.Fatalf("[Cinemasis] failed to listen on %s: %v", addr, err)
 	}
 
 	var opts []tmdb.Option
@@ -52,8 +52,8 @@ func main() {
 	server := grpc.NewServer()
 	pluginv1.RegisterPluginServiceServer(server, service)
 
-	log.Printf("[cinemasis] Cinemasis Plugin running on %s", addr)
+	log.Printf("[Cinemasis] Cinemasis Plugin running on %s", addr)
 	if err := server.Serve(listener); err != nil {
-		log.Fatalf("[cinemasis] server error: %v", err)
+		log.Fatalf("[Cinemasis] server error: %v", err)
 	}
 }

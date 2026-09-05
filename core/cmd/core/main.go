@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/falsisdev/vessel/core/internal/plugin"
+	"github.com/falsisdev/vessel/core/internal/server"
 	"github.com/falsisdev/vessel/core/internal/service"
 )
 
@@ -26,6 +27,8 @@ func run() error {
 	pluginBin := flag.String("plugin-bin", "", "Path to plugin executable to launch as managed subprocess")
 	pluginID := flag.String("plugin-id", "plugin-local", "Identifier for managed plugin binary")
 	pluginsDir := flag.String("plugins-dir", "", "Directory containing plugins to discover")
+	listenAddr := flag.String("listen-addr", "127.0.0.1:50050", "Address for Core IPC gRPC server (TCP or unix:///path)")
+	noServer := flag.Bool("no-server", false, "Disable Core IPC gRPC server")
 	testQuery := flag.String("search", "", "Query to search on connected plugins")
 	oneshot := flag.Bool("oneshot", false, "Exit immediately after executing operations")
 	flag.Parse()
@@ -50,6 +53,18 @@ func run() error {
 	}()
 
 	cinemaService := service.NewCinemaService(pluginManager, 5*time.Second)
+
+	if !*noServer && !*oneshot {
+		coreServer := server.NewServer(server.ServerConfig{
+			ListenAddr: *listenAddr,
+			Version:    "1.0.0",
+		}, cinemaService, pluginManager)
+
+		if err := coreServer.Start(); err != nil {
+			return fmt.Errorf("failed to start core IPC server at %s: %w", *listenAddr, err)
+		}
+		defer coreServer.Stop()
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()

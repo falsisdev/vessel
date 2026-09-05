@@ -9,11 +9,14 @@ Vessel is an umbrella, local-first, modular digital media consumption platform.
 ├── core/                       # Go Core application runtime
 │   ├── cmd/core/               # Core daemon / CLI entrypoint
 │   ├── internal/
+│   │   ├── client/             # Go Core IPC client SDK
 │   │   ├── domain/cinema/      # Cinema domain models
 │   │   ├── plugin/             # Plugin gRPC client and registry manager
+│   │   ├── server/             # Core IPC gRPC server (UDS & TCP)
 │   │   └── service/            # Cinema aggregation service
 │   └── test/integration/       # End-to-end integration tests
 ├── proto/                      # Protocol Buffers definitions
+│   ├── core/v1/core.proto      # Core IPC contract (Native UI bridge)
 │   ├── plugin/v1/plugin.proto  # Plugin v1 contract
 │   └── gen/go/                 # Generated Go gRPC/Protobuf bindings
 ├── plugins/

@@ -1,0 +1,93 @@
+syntax = "proto3";
+
+package core.v1;
+
+option go_package = "github.com/falsisdev/vessel/proto/gen/go/core/v1;corev1";
+
+import "plugin/v1/plugin.proto";
+
+message PingRequest {}
+
+message PingResponse {
+  string status = 1;
+  string version = 2;
+  int64 uptime_seconds = 3;
+}
+
+message SearchMediaRequest {
+  plugin.v1.Domain domain = 1;
+  string query = 2;
+  int32 page = 3;
+}
+
+message CoreMediaItem {
+  string id = 1;
+  string provider_id = 2;
+  string title = 3;
+  plugin.v1.MediaType type = 4;
+  int32 year = 5;
+  string poster_url = 6;
+  string overview = 7;
+  plugin.v1.ExternalIDs external_ids = 8;
+}
+
+message SearchMediaResponse {
+  repeated CoreMediaItem items = 1;
+}
+
+message GetMediaDetailsRequest {
+  plugin.v1.Domain domain = 1;
+  string provider_id = 2;
+  string media_id = 3;
+}
+
+message GetMediaDetailsResponse {
+  string id = 1;
+  string provider_id = 2;
+  string title = 3;
+  plugin.v1.MediaType type = 4;
+  int32 year = 5;
+  string poster_url = 6;
+  string overview = 7;
+  repeated string genres = 8;
+  repeated plugin.v1.Season seasons = 9;
+  plugin.v1.ExternalIDs external_ids = 10;
+}
+
+message GetStreamsRequest {
+  string provider_id = 1;
+  string media_id = 2;
+  int32 season_number = 3;
+  int32 episode_number = 4;
+}
+
+message GetStreamsResponse {
+  repeated plugin.v1.StreamSource streams = 1;
+  repeated plugin.v1.Subtitle subtitles = 2;
+}
+
+message PluginInfo {
+  string id = 1;
+  string name = 2;
+  string version = 3;
+  string description = 4;
+  string author = 5;
+  plugin.v1.Domain domain = 6;
+  repeated plugin.v1.Capability capabilities = 7;
+  bool is_builtin = 8;
+  string status = 9;
+}
+
+message ListPluginsRequest {}
+
+message ListPluginsResponse {
+  repeated PluginInfo plugins = 1;
+}
+
+service CoreService {
+  rpc Ping(PingRequest) returns (PingResponse);
+  rpc SearchMedia(SearchMediaRequest) returns (SearchMediaResponse);
+  rpc GetMediaDetails(GetMediaDetailsRequest) returns (GetMediaDetailsResponse);
+  rpc GetStreams(GetStreamsRequest) returns (GetStreamsResponse);
+  rpc ListPlugins(ListPluginsRequest) returns (ListPluginsResponse);
+}

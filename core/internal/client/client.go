@@ -1,0 +1,92 @@
+package client
+
+import (
+	"context"
+	"fmt"
+	"strings"
+	"time"
+
+	corev1 "github.com/falsisdev/vessel/proto/gen/go/core/v1"
+	pluginv1 "github.com/falsisdev/vessel/proto/gen/go/plugin/v1"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+)
+
+type Client struct {
+	conn    *grpc.ClientConn
+	service corev1.CoreServiceClient
+}
+
+func Dial(ctx context.Context, target string, dialOpts ...grpc.DialOption) (*Client, error) {
+	opts := []grpc.DialOption{
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	}
+	opts = append(opts, dialOpts...)
+
+	cleanTarget := target
+	if strings.HasPrefix(target, "unix://") {
+		cleanTarget = target
+	} else if strings.Contains(target, "/") && !strings.Contains(target, ":") {
+		cleanTarget = "unix://" + target
+	}
+
+	conn, err := grpc.NewClient(cleanTarget, opts...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to dial core at %s: %w", target, err)
+	}
+
+	service := corev1.NewCoreServiceClient(conn)
+
+	pingCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+
+	if _, err := service.Ping(pingCtx, &corev1.PingRequest{}); err != nil {
+		_ = conn.Close()
+		return nil, fmt.Errorf("failed to ping core at %s: %w", target, err)
+	}
+
+	return &Client{
+		conn:    conn,
+		service: service,
+	}, nil
+}
+
+func (c *Client) Ping(ctx context.Context) (*corev1.PingResponse, error) {
+	return c.service.Ping(ctx, &corev1.PingRequest{})
+}
+
+func (c *Client) SearchMedia(ctx context.Context, domain pluginv1.Domain, query string, page int32) (*corev1.SearchMediaResponse, error) {
+	return c.service.SearchMedia(ctx, &corev1.SearchMediaRequest{
+		Domain: domain,
+		Query:  query,
+		Page:   page,
+	})
+}
+
+func (c *Client) GetMediaDetails(ctx context.Context, domain pluginv1.Domain, providerID, mediaID string) (*corev1.GetMediaDetailsResponse, error) {
+	return c.service.GetMediaDetails(ctx, &corev1.GetMediaDetailsRequest{
+		Domain:     domain,
+		ProviderId: providerID,
+		MediaId:    mediaID,
+	})
+}
+
+func (c *Client) GetStreams(ctx context.Context, providerID, mediaID string, season, episode int32) (*corev1.GetStreamsResponse, error) {
+	return c.service.GetStreams(ctx, &corev1.GetStreamsRequest{
+		ProviderId:    providerID,
+		MediaId:       mediaID,
+		SeasonNumber:  season,
+		EpisodeNumber: episode,
+	})
+}
+
+func (c *Client) ListPlugins(ctx context.Context) (*corev1.ListPluginsResponse, error) {
+	return c.service.ListPlugins(ctx, &corev1.ListPluginsRequest{})
+}
+
+func (c *Client) Close() error {
+	if c.conn != nil {
+		return c.conn.Close()
+	}
+	return nil
+}

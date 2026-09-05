@@ -50,7 +50,7 @@ func (s *CinemasisService) GetManifest(ctx context.Context, req *pluginv1.GetMan
 func (s *CinemasisService) Search(ctx context.Context, req *pluginv1.SearchRequest) (*pluginv1.SearchResponse, error) {
 	resp, err := s.client.Search(ctx, req.Query, req.Page)
 	if err != nil {
-		return nil, fmt.Errorf("cinemasis search error: %w", err)
+		return nil, fmt.Errorf("Cinemasis search error: %w", err)
 	}
 
 	var items []*pluginv1.MediaItem
@@ -90,19 +90,19 @@ func (s *CinemasisService) Search(ctx context.Context, req *pluginv1.SearchReque
 func (s *CinemasisService) GetMetadata(ctx context.Context, req *pluginv1.GetMetadataRequest) (*pluginv1.GetMetadataResponse, error) {
 	mediaType, idStr, found := strings.Cut(req.MediaId, ":")
 	if !found {
-		return nil, fmt.Errorf("invalid cinemasis media_id format (expected type:id): %s", req.MediaId)
+		return nil, fmt.Errorf("Invalid Cinemasis media_id format (expected type:id): %s", req.MediaId)
 	}
 
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
-		return nil, fmt.Errorf("invalid media id integer: %w", err)
+		return nil, fmt.Errorf("Invalid media id integer: %w", err)
 	}
 
 	switch mediaType {
 	case "movie":
 		movie, err := s.client.GetMovie(ctx, id)
 		if err != nil {
-			return nil, fmt.Errorf("failed to fetch movie details from TMDB: %w", err)
+			return nil, fmt.Errorf("Failed to fetch movie details from TMDB: %w", err)
 		}
 
 		var genreNames []string
