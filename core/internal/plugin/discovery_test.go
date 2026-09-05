@@ -57,4 +57,13 @@ func TestLoadDescriptorAndDiscover(t *testing.T) {
 	if discovered[0].ID != "com.vessel.test" {
 		t.Fatalf("expected ID com.vessel.test, got %s", discovered[0].ID)
 	}
+
+	// Test direct plugin directory discovery
+	directDiscovered, err := plugin.DiscoverPlugins(pluginDir)
+	if err != nil {
+		t.Fatalf("direct discovery error: %v", err)
+	}
+	if len(directDiscovered) != 1 || directDiscovered[0].ID != "com.vessel.test" {
+		t.Fatalf("expected 1 directly discovered plugin, got %+v", directDiscovered)
+	}
 }

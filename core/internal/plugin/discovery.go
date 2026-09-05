@@ -37,6 +37,14 @@ func LoadDescriptor(path string) (*PluginDescriptor, error) {
 }
 
 func DiscoverPlugins(rootDir string) ([]*PluginDescriptor, error) {
+	rootPluginJSON := filepath.Join(rootDir, "plugin.json")
+	if _, err := os.Stat(rootPluginJSON); err == nil {
+		desc, err := LoadDescriptor(rootPluginJSON)
+		if err == nil {
+			return []*PluginDescriptor{desc}, nil
+		}
+	}
+
 	var descriptors []*PluginDescriptor
 
 	entries, err := os.ReadDir(rootDir)

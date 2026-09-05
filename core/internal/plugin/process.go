@@ -101,7 +101,7 @@ func (p *Process) Start(ctx context.Context) error {
 	args := append([]string{}, p.cfg.Args...)
 	args = append(args, "-port", strconv.Itoa(port))
 
-	cmd := exec.CommandContext(ctx, p.cfg.ExecutablePath, args...)
+	cmd := exec.Command(p.cfg.ExecutablePath, args...)
 	cmd.Dir = p.cfg.WorkDir
 	if len(p.cfg.Env) > 0 {
 		cmd.Env = p.cfg.Env
@@ -176,6 +176,12 @@ func (p *Process) Kill() error {
 	return cmd.Process.Kill()
 }
 
+func (p *Process) ExitError() error {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.exitErr
+}
+
 func (p *Process) monitorProcess(cmd *exec.Cmd) {
 	err := cmd.Wait()
 
@@ -203,13 +209,22 @@ func (p *Process) monitorProcess(cmd *exec.Cmd) {
 
 func (p *Process) streamLogs(reader io.Reader, pipeName string) {
 	scanner := bufio.NewScanner(reader)
+	buf := make([]byte, 64*1024)
+	scanner.Buffer(buf, 1024*1024)
+
 	for scanner.Scan() {
 		line := scanner.Text()
-		slog.Debug("Plugin log output",
-			"plugin_id", p.cfg.ID,
-			"pipe", pipeName,
-			"message", line,
-		)
+		if pipeName == "stderr" {
+			slog.Warn("Plugin stderr",
+				"plugin_id", p.cfg.ID,
+				"message", line,
+			)
+		} else {
+			slog.Debug("Plugin stdout",
+				"plugin_id", p.cfg.ID,
+				"message", line,
+			)
+		}
 	}
 }
 

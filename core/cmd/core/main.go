@@ -15,6 +15,13 @@ import (
 )
 
 func main() {
+	if err := run(); err != nil {
+		slog.Error("Fatal runtime error", "error", err)
+		os.Exit(1)
+	}
+}
+
+func run() error {
 	pluginAddr := flag.String("plugin-addr", "", "Direct plugin gRPC target to connect (e.g. 127.0.0.1:50051)")
 	pluginBin := flag.String("plugin-bin", "", "Path to plugin executable to launch as managed subprocess")
 	pluginID := flag.String("plugin-id", "plugin-local", "Identifier for managed plugin binary")
@@ -54,8 +61,7 @@ func main() {
 			ExecutablePath: *pluginBin,
 		})
 		if err != nil {
-			slog.Error("Failed to launch plugin subprocess", "error", err)
-			os.Exit(1)
+			return fmt.Errorf("failed to launch plugin subprocess %s: %w", *pluginBin, err)
 		}
 	}
 
@@ -77,8 +83,7 @@ func main() {
 		slog.Info("Connecting to external plugin", "target", *pluginAddr)
 		client, err := plugin.Dial(ctx, *pluginAddr)
 		if err != nil {
-			slog.Error("Failed to connect to plugin", "target", *pluginAddr, "error", err)
-			os.Exit(1)
+			return fmt.Errorf("failed to connect to plugin at %s: %w", *pluginAddr, err)
 		}
 
 		manifest := client.Manifest()
@@ -90,8 +95,7 @@ func main() {
 		)
 
 		if err := pluginManager.Register(client); err != nil {
-			slog.Error("Failed to register plugin in manager", "error", err)
-			os.Exit(1)
+			return fmt.Errorf("failed to register plugin in manager: %w", err)
 		}
 	}
 
@@ -110,10 +114,11 @@ func main() {
 	}
 
 	if *oneshot {
-		return
+		return nil
 	}
 
 	slog.Info("Vessel Core is running. Press Ctrl+C to terminate.")
 	<-ctx.Done()
 	slog.Info("Shutting down Vessel Core runtime...")
+	return nil
 }

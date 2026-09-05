@@ -51,7 +51,7 @@ func (s *Supervisor) Launch(ctx context.Context, cfg ProcessConfig) (*GRPCClient
 		return nil, fmt.Errorf("failed to start process for %s: %w", cfg.ID, err)
 	}
 
-	client, err := waitForPlugin(ctx, proc.Target(), 5*time.Second)
+	client, err := waitForPlugin(ctx, proc, 5*time.Second)
 	if err != nil {
 		_ = proc.Stop(1 * time.Second)
 		s.mu.Lock()
@@ -153,7 +153,9 @@ func (s *Supervisor) Shutdown(timeout time.Duration) error {
 			if mID != "" {
 				_ = s.manager.Unregister(mID)
 			}
-			_ = s.manager.Unregister(p.ID())
+			if p.ID() != mID {
+				_ = s.manager.Unregister(p.ID())
+			}
 			_ = p.Stop(timeout)
 		}(proc, manifestID)
 	}
@@ -169,19 +171,26 @@ func (s *Supervisor) handleCrash(id string, err error) {
 	managed, exists := s.processes[id]
 	if exists {
 		delete(s.processes, id)
-		if managed.manifestID != "" {
+		if managed.manifestID != "" && managed.manifestID != id {
 			delete(s.processes, managed.manifestID)
 		}
+		delete(s.processes, managed.proc.ID())
 	}
 	s.mu.Unlock()
 
-	if exists && managed.manifestID != "" {
-		_ = s.manager.Unregister(managed.manifestID)
+	if exists {
+		if managed.manifestID != "" {
+			_ = s.manager.Unregister(managed.manifestID)
+		}
+		if id != managed.manifestID {
+			_ = s.manager.Unregister(id)
+		}
+	} else {
+		_ = s.manager.Unregister(id)
 	}
-	_ = s.manager.Unregister(id)
 }
 
-func waitForPlugin(ctx context.Context, target string, timeout time.Duration) (*GRPCClient, error) {
+func waitForPlugin(ctx context.Context, proc *Process, timeout time.Duration) (*GRPCClient, error) {
 	deadline := time.Now().Add(timeout)
 	var lastErr error
 
@@ -192,7 +201,11 @@ func waitForPlugin(ctx context.Context, target string, timeout time.Duration) (*
 		default:
 		}
 
-		client, err := Dial(ctx, target)
+		if proc.State() == StateCrashed || proc.State() == StateStopped {
+			return nil, fmt.Errorf("plugin process %s exited prematurely: %v", proc.ID(), proc.ExitError())
+		}
+
+		client, err := Dial(ctx, proc.Target())
 		if err == nil {
 			return client, nil
 		}
