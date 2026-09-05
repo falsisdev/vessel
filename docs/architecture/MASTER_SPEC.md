@@ -60,3 +60,8 @@ In the Cinema domain:
 - `MediaTypeMovie`: Standalone feature films.
 - `MediaTypeSeries`: Television, web, and Asian series (unified under series semantics).
 - `MediaTypeAnime`: Anime productions with Japanese/global metadata mappings.
+
+---
+
+## 6. Git & Workflow Rules
+- **Commit Management**: Commits and pushes are performed by the coding agent automatically upon completing and verifying tasks, using Conventional Commits (`feat:`, `fix:`, `docs:`, `chore:`, etc.).
