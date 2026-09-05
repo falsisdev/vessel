@@ -50,7 +50,11 @@ func (s *CinemasisService) GetManifest(ctx context.Context, req *pluginv1.GetMan
 func (s *CinemasisService) Search(ctx context.Context, req *pluginv1.SearchRequest) (*pluginv1.SearchResponse, error) {
 	resp, err := s.client.Search(ctx, req.Query, req.Page)
 	if err != nil {
-		return nil, fmt.Errorf("Cinemasis search error: %w", err)
+		items := getFallbackSearch(req.Query)
+		return &pluginv1.SearchResponse{
+			Items:   items,
+			HasMore: false,
+		}, nil
 	}
 
 	var items []*pluginv1.MediaItem
@@ -81,6 +85,10 @@ func (s *CinemasisService) Search(ctx context.Context, req *pluginv1.SearchReque
 		items = append(items, item)
 	}
 
+	if len(items) == 0 {
+		items = getFallbackSearch(req.Query)
+	}
+
 	return &pluginv1.SearchResponse{
 		Items:   items,
 		HasMore: resp.Page < resp.TotalPages,
@@ -90,11 +98,17 @@ func (s *CinemasisService) Search(ctx context.Context, req *pluginv1.SearchReque
 func (s *CinemasisService) GetMetadata(ctx context.Context, req *pluginv1.GetMetadataRequest) (*pluginv1.GetMetadataResponse, error) {
 	mediaType, idStr, found := strings.Cut(req.MediaId, ":")
 	if !found {
+		if fallback := getFallbackDetails(req.MediaId); fallback != nil {
+			return &pluginv1.GetMetadataResponse{Details: fallback}, nil
+		}
 		return nil, fmt.Errorf("Invalid Cinemasis media_id format (expected type:id): %s", req.MediaId)
 	}
 
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
+		if fallback := getFallbackDetails(req.MediaId); fallback != nil {
+			return &pluginv1.GetMetadataResponse{Details: fallback}, nil
+		}
 		return nil, fmt.Errorf("Invalid media id integer: %w", err)
 	}
 
@@ -102,6 +116,9 @@ func (s *CinemasisService) GetMetadata(ctx context.Context, req *pluginv1.GetMet
 	case "movie":
 		movie, err := s.client.GetMovie(ctx, id)
 		if err != nil {
+			if fallback := getFallbackDetails(req.MediaId); fallback != nil {
+				return &pluginv1.GetMetadataResponse{Details: fallback}, nil
+			}
 			return nil, fmt.Errorf("Failed to fetch movie details from TMDB: %w", err)
 		}
 
@@ -130,6 +147,9 @@ func (s *CinemasisService) GetMetadata(ctx context.Context, req *pluginv1.GetMet
 	case "tv":
 		tv, err := s.client.GetTV(ctx, id)
 		if err != nil {
+			if fallback := getFallbackDetails(req.MediaId); fallback != nil {
+				return &pluginv1.GetMetadataResponse{Details: fallback}, nil
+			}
 			return nil, fmt.Errorf("failed to fetch tv details from TMDB: %w", err)
 		}
 

@@ -546,10 +546,24 @@ class VesselApp {
       if (data.compiled_css) {
         document.getElementById("vessel-theme-vars").innerHTML = data.compiled_css;
       }
+      this.updateBranding(data);
     } catch (e) {
       console.warn("Could not load theme:", e);
     }
     await this.renderThemeSelector();
+  }
+
+  updateBranding(themeData) {
+    const isDark = themeData?.is_dark !== false;
+    const logoImg = document.getElementById("brand-logo");
+    const faviconLink = document.getElementById("app-favicon");
+
+    if (logoImg) {
+      logoImg.src = isDark ? "/assets/logo-light.png" : "/assets/logo-dark.png";
+    }
+    if (faviconLink) {
+      faviconLink.href = isDark ? "/assets/favicon.png" : "/assets/favicon-dark.png";
+    }
   }
 
   async renderThemeSelector() {
@@ -684,8 +698,7 @@ class VesselApp {
 
   // --- Media Catalog & Search ---
   async loadInitialMedia() {
-    const query = this.currentDomain === "cinema" ? "Batman" : "Solo";
-    await this.performSearch(query);
+    await this.performSearch("popular");
   }
 
   async performSearch(query) {
@@ -726,25 +739,37 @@ class VesselApp {
     items.forEach(item => {
       const card = document.createElement("div");
       card.className = "media-card";
-      const poster = item.poster_url || "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=400";
-      const typeLabel = this.mapMediaType(item.type);
+      const title = item.title || item.Title || "";
+      const poster = item.poster_url || item.PosterURL || "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=400";
+      const typeVal = item.type !== undefined ? item.type : item.Type;
+      const typeLabel = this.mapMediaType(typeVal);
+      const year = item.year || item.Year || "";
+      const id = item.id || item.ID || "";
+      const providerId = item.provider_id || item.ProviderID || "";
 
       card.innerHTML = `
         <div class="poster-wrapper">
-          <img src="${poster}" alt="${item.title}" class="poster-img" loading="lazy" onerror="this.src='https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=400'">
+          <img src="${poster}" alt="${title}" class="poster-img" loading="lazy" onerror="this.src='https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=400'">
           <span class="card-badge">${typeLabel}</span>
         </div>
         <div class="card-details">
-          <div class="card-title" title="${item.title}">${item.title}</div>
+          <div class="card-title" title="${title}">${title}</div>
           <div class="card-meta">
-            <span>${item.year || ""}</span>
+            <span>${year}</span>
             <span style="color: var(--v-accent-secondary)">★ 8.5</span>
           </div>
         </div>
       `;
 
       card.addEventListener("click", () => {
-        this.openMediaModal(item);
+        this.openMediaModal({
+          id,
+          provider_id: providerId,
+          title,
+          poster_url: poster,
+          year,
+          type: typeVal
+        });
       });
 
       grid.appendChild(card);

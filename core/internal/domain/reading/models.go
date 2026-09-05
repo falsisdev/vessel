@@ -28,34 +28,34 @@ func (t ReadingType) String() string {
 }
 
 type ReadingItem struct {
-	ID          string
-	ProviderID  string
-	Title       string
-	Type        ReadingType
-	Year        int32
-	PosterURL   string
-	Overview    string
-	ExternalIDs cinema.ExternalIDs
+	ID          string             `json:"id"`
+	ProviderID  string             `json:"provider_id"`
+	Title       string             `json:"title"`
+	Type        ReadingType        `json:"type"`
+	Year        int32              `json:"year"`
+	PosterURL   string             `json:"poster_url"`
+	Overview    string             `json:"overview"`
+	ExternalIDs cinema.ExternalIDs `json:"external_ids"`
 }
 
 type Chapter struct {
-	ID            string
-	ChapterNumber float64
-	VolumeNumber  float64
-	Title         string
+	ID            string  `json:"id"`
+	ChapterNumber float64 `json:"chapter_number"`
+	VolumeNumber  float64 `json:"volume_number"`
+	Title         string  `json:"title"`
 }
 
 type ReadingDetails struct {
-	ID          string
-	ProviderID  string
-	Title       string
-	Type        ReadingType
-	Year        int32
-	PosterURL   string
-	Overview    string
-	Genres      []string
-	Chapters    []Chapter
-	ExternalIDs cinema.ExternalIDs
+	ID          string             `json:"id"`
+	ProviderID  string             `json:"provider_id"`
+	Title       string             `json:"title"`
+	Type        ReadingType        `json:"type"`
+	Year        int32              `json:"year"`
+	PosterURL   string             `json:"poster_url"`
+	Overview    string             `json:"overview"`
+	Genres      []string           `json:"genres"`
+	Chapters    []Chapter          `json:"chapters"`
+	ExternalIDs cinema.ExternalIDs `json:"external_ids"`
 }
 
 type Page struct {

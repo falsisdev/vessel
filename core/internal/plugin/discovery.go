@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 )
 
@@ -30,7 +31,38 @@ func LoadDescriptor(path string) (*PluginDescriptor, error) {
 
 	if !filepath.IsAbs(desc.ExecutablePath) {
 		dir := filepath.Dir(path)
-		desc.ExecutablePath = filepath.Clean(filepath.Join(dir, desc.ExecutablePath))
+		candidate := filepath.Clean(filepath.Join(dir, desc.ExecutablePath))
+		if fi, err := os.Stat(candidate); err == nil && !fi.IsDir() {
+			desc.ExecutablePath = candidate
+		} else {
+			baseName := filepath.Base(desc.ExecutablePath)
+			execPath, _ := os.Executable()
+			execDir := filepath.Dir(execPath)
+
+			altCandidates := []string{
+				filepath.Join("bin", baseName),
+				filepath.Join("..", "bin", baseName),
+				filepath.Join(dir, "..", "..", "bin", baseName),
+				filepath.Join(execDir, baseName),
+				filepath.Join(execDir, "..", "bin", baseName),
+			}
+
+			found := false
+			for _, alt := range altCandidates {
+				if fi, err := os.Stat(alt); err == nil && !fi.IsDir() {
+					desc.ExecutablePath, _ = filepath.Abs(alt)
+					found = true
+					break
+				}
+			}
+			if !found {
+				if look, err := exec.LookPath(baseName); err == nil {
+					desc.ExecutablePath = look
+				} else {
+					desc.ExecutablePath = candidate
+				}
+			}
+		}
 	}
 
 	return &desc, nil

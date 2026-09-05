@@ -4,5 +4,5 @@ import "embed"
 
 // DistFS contains the embedded static files for the Vessel Native Web/Desktop UI.
 //
-//go:embed index.html styles.css app.js
+//go:embed index.html styles.css app.js assets/* favicon.png
 var DistFS embed.FS

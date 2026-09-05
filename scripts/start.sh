@@ -6,9 +6,32 @@ ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 cd "$ROOT_DIR"
 
-if [ ! -f "./bin/vessel" ] || [ "${1:-}" = "--rebuild" ]; then
+mkdir -p bin
+
+REBUILD=false
+if [ "${1:-}" = "--rebuild" ]; then
+    REBUILD=true
+    shift
+fi
+
+if [ ! -f "./bin/vessel" ] || [ "$REBUILD" = true ]; then
     echo "Compiling Vessel executable..."
     go build -o ./bin/vessel ./core/cmd/vessel
 fi
+
+if [ ! -f "./bin/cinemasis" ] || [ "$REBUILD" = true ]; then
+    echo "Compiling Cinemasis plugin..."
+    go build -o ./bin/cinemasis ./plugins/cinemasis
+fi
+
+if [ ! -f "./bin/mangile" ] || [ "$REBUILD" = true ]; then
+    echo "Compiling Mangile plugin..."
+    go build -o ./bin/mangile ./plugins/mangile
+fi
+
+# Ensure local plugin directory symlinks or copies exist for seamless discovery
+mkdir -p plugins/cinemasis plugins/mangile
+cp -f ./bin/cinemasis ./plugins/cinemasis/cinemasis 2>/dev/null || true
+cp -f ./bin/mangile ./plugins/mangile/mangile 2>/dev/null || true
 
 exec ./bin/vessel serve "$@"

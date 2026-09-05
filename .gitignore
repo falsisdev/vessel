@@ -5,6 +5,8 @@ bin/
 *.dll
 *.so
 *.dylib
+plugins/cinemasis/cinemasis
+plugins/mangile/mangile
 
 # Test artifacts
 *.out

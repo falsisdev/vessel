@@ -60,16 +60,24 @@ html, body {
 }
 
 .brand-icon {
-  width: 34px;
-  height: 34px;
-  border-radius: var(--v-radius-md);
-  background: linear-gradient(135deg, var(--v-accent-primary), var(--v-accent-hover));
+  width: 36px;
+  height: 36px;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #ffffff;
-  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
   flex-shrink: 0;
+}
+
+.brand-logo-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.35));
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.brand-main:hover .brand-logo-img {
+  transform: scale(1.08) rotate(-2deg);
 }
 
 .brand-name {

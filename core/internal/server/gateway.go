@@ -186,8 +186,7 @@ func (g *GatewayServer) handleSearch(w http.ResponseWriter, r *http.Request) {
 	domainStr := r.URL.Query().Get("domain")
 
 	if q == "" {
-		g.writeJSON(w, http.StatusOK, map[string]any{"items": []any{}})
-		return
+		q = "popular"
 	}
 
 	ctx := r.Context()
@@ -392,6 +391,7 @@ func (g *GatewayServer) handleThemeActive(w http.ResponseWriter, r *http.Request
 			"name": active.Theme.Manifest.Name,
 		},
 		"active_variant": active.Variant.ID,
+		"is_dark":        active.Variant.IsDark,
 		"tokens":         active.Tokens,
 		"compiled_css":   active.CompiledCSS,
 	})

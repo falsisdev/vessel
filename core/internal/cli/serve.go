@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"syscall"
@@ -162,12 +163,29 @@ func RunServer(args []string) error {
 	}
 
 	// Discover plugins from configured and specified directories
-	var searchDirs []string
-	if cfg != nil && cfg.PluginsDir != "" {
-		searchDirs = append(searchDirs, cfg.PluginsDir)
-	}
+	var rawDirs []string
 	if *pluginsDir != "" {
-		searchDirs = append(searchDirs, *pluginsDir)
+		rawDirs = append(rawDirs, *pluginsDir)
+	}
+	if cfg != nil && cfg.PluginsDir != "" {
+		rawDirs = append(rawDirs, cfg.PluginsDir)
+	}
+	rawDirs = append(rawDirs, "plugins")
+
+	seenDirs := make(map[string]bool)
+	var searchDirs []string
+	for _, d := range rawDirs {
+		if d == "" {
+			continue
+		}
+		abs, err := filepath.Abs(d)
+		if err != nil {
+			abs = filepath.Clean(d)
+		}
+		if fi, err := os.Stat(abs); err == nil && fi.IsDir() && !seenDirs[abs] {
+			seenDirs[abs] = true
+			searchDirs = append(searchDirs, abs)
+		}
 	}
 
 	for _, pDir := range searchDirs {

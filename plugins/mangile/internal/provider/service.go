@@ -57,7 +57,12 @@ func (s *MangileService) Search(ctx context.Context, req *pluginv1.SearchRequest
 		limit = int(req.Page) * 30
 	}
 
-	titles, err := s.client.SearchTitles(ctx, req.Query, limit)
+	q := strings.TrimSpace(req.Query)
+	if strings.EqualFold(q, "popular") || strings.EqualFold(q, "trending") || strings.EqualFold(q, "all") {
+		q = ""
+	}
+
+	titles, err := s.client.SearchTitles(ctx, q, limit)
 	if err != nil {
 		return nil, fmt.Errorf("mangile search error: %w", err)
 	}
