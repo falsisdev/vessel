@@ -130,11 +130,14 @@ func RunServer(args []string) error {
 		}
 
 		// Register Bridge Plugins (Adapters for external ecosystems)
-		// Anthology Nuvio manifest (canlı TV, M3U tabanlı) — canonical pointer.
-		nuvioBridge, err := plugin.NewBridgeClient(plugin.BridgeTypeNuvio, "https://falsisdev.github.io/anthology/manifest.json")
-		if err == nil {
-			if err := pluginManager.Register(nuvioBridge); err == nil {
-				slog.Info("Registered bridge plugin", "id", nuvioBridge.Manifest().Id, "name", nuvioBridge.Manifest().Name)
+		// Anthology Nuvio manifest (canlı TV + film/dizi, M3U tabanlı) — canonical pointer.
+		if nuvioBridges, err := plugin.NewNuvioBridgeClients("https://falsisdev.github.io/anthology/manifest.json"); err == nil {
+			for _, n := range nuvioBridges {
+				if err := pluginManager.Register(n); err == nil {
+					slog.Info("Registered bridge plugin", "id", n.Manifest().Id, "name", n.Manifest().Name)
+				} else {
+					slog.Warn("Failed to register bridge plugin", "id", n.Manifest().Id, "error", err)
+				}
 			}
 		} else {
 			slog.Warn("Failed to initialize Nuvio bridge", "error", err)

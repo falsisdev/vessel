@@ -8,11 +8,25 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
 
 	pluginv1 "github.com/falsisdev/vessel/proto/gen/go/plugin/v1"
+)
+
+// NuvioKind selects which part of a Nuvio extension a bridge client serves.
+// The discovery protocol is per-scraper: the host manifest lists multiple
+// scrapers, each contributing either live TV (channel) or movie/series catalog
+// content. Since Vessel plugins carry a single domain, a single extension is
+// exposed through one client per kind.
+type NuvioKind string
+
+const (
+	NuvioKindAuto   NuvioKind = ""
+	NuvioKindLive   NuvioKind = "live"
+	NuvioKindCinema NuvioKind = "cinema"
 )
 
 type nuvioScraper struct {
@@ -51,10 +65,13 @@ type NuvioAdapter struct {
 	rawBase     string
 	m           nuvioManifest
 	hasLive     bool
+	hasCinema   bool
+	kind        NuvioKind
 
 	mu       sync.RWMutex
 	channels []nuvioChannel
 	byID     map[string]nuvioChannel
+	m3uURL   string
 	loaded   bool
 }
 
@@ -124,6 +141,31 @@ func nuvioHasLiveTVScrapers(scrapers []nuvioScraper) bool {
 	return false
 }
 
+func nuvioHasCinemaScrapers(scrapers []nuvioScraper) bool {
+	for _, s := range scrapers {
+		for _, t := range s.SupportedTypes {
+			if t == "movie" || t == "tv" || t == "series" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func (a *NuvioAdapter) effectiveKind() NuvioKind {
+	switch a.kind {
+	case NuvioKindLive, NuvioKindCinema:
+		return a.kind
+	}
+	if a.hasLive {
+		return NuvioKindLive
+	}
+	if a.hasCinema {
+		return NuvioKindCinema
+	}
+	return NuvioKindLive
+}
+
 func (a *NuvioAdapter) GetManifest(ctx context.Context, manifestURL string) (*pluginv1.PluginManifest, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, manifestURL, nil)
 	if err != nil {
@@ -151,16 +193,21 @@ func (a *NuvioAdapter) GetManifest(ctx context.Context, manifestURL string) (*pl
 	a.m = m
 	a.rawBase = nuvioRawBase(manifestURL)
 	a.hasLive = nuvioHasLiveTVScrapers(m.Scrapers)
+	a.hasCinema = nuvioHasCinemaScrapers(m.Scrapers)
 	a.byID = make(map[string]nuvioChannel)
+	a.kind = a.effectiveKind()
 
 	slug := nuvioSlugify(m.Name)
 	if slug == "" {
 		slug = "unknown"
 	}
 	pluginID := fmt.Sprintf("com.vessel.bridge.nuvio.%s", slug)
+	if a.kind == NuvioKindCinema {
+		pluginID += ".cinema"
+	}
 
 	domain := pluginv1.Domain_DOMAIN_CINEMA
-	if a.hasLive {
+	if a.kind == NuvioKindLive {
 		domain = pluginv1.Domain_DOMAIN_IPTV
 	}
 
@@ -180,6 +227,75 @@ func (a *NuvioAdapter) GetManifest(ctx context.Context, manifestURL string) (*pl
 	}, nil
 }
 
+var (
+	nuvioM3UDeclRe = regexp.MustCompile(`(?i)(?:M3U_FILE|M3U_URL|PLAYLIST_URL)\s*[:=]\s*["']([^"']+\.m3u(?:8)?[^"']*)["']`)
+	nuvioRawM3URe  = regexp.MustCompile(`(?i)https?://[^'"\s]+\.m3u(?:8)?[^'"\s]*`)
+)
+
+// fetchRaw downloads a file from the extension repo relative to the raw base.
+func (a *NuvioAdapter) fetchRaw(ctx context.Context, path string) (string, error) {
+	if a.rawBase == "" {
+		return "", fmt.Errorf("no raw base URL derived from manifest")
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, a.rawBase+"/"+strings.TrimPrefix(path, "/"), nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0")
+	resp, err := a.client().Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("raw fetch returned HTTP %d for %s", resp.StatusCode, path)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+	return string(body), nil
+}
+
+// m3uURLCandidates discovers playlist URLs for live TV. It first inspects the
+// repo's live-TV scraper sources for M3U_FILE/M3U_URL declarations, then falls
+// back to the conventional providers/M3U/Liste/canli.m3u layout. Returning
+// multiple candidates makes the adapter work across arbitrary Nuvio repos.
+func (a *NuvioAdapter) m3uURLCandidates(ctx context.Context) []string {
+	if a.rawBase == "" {
+		return nil
+	}
+	seen := map[string]bool{}
+	add := func(u string) {
+		if u != "" && !seen[u] {
+			seen[u] = true
+		}
+	}
+	for _, s := range a.m.Scrapers {
+		f := strings.ToLower(s.Filename)
+		if !strings.Contains(f, "m3u") && !strings.Contains(f, "iptv") && !strings.Contains(f, "live") {
+			continue
+		}
+		src, err := a.fetchRaw(ctx, s.Filename)
+		if err != nil {
+			continue
+		}
+		for _, m := range nuvioM3UDeclRe.FindAllStringSubmatch(src, -1) {
+			add(m[1])
+		}
+		for _, m := range nuvioRawM3URe.FindAllStringSubmatch(src, -1) {
+			add(m[0])
+		}
+		break
+	}
+	add(a.rawBase + "/providers/M3U/Liste/canli.m3u")
+	var out []string
+	for u := range seen {
+		out = append(out, u)
+	}
+	return out
+}
+
 func (a *NuvioAdapter) loadChannels(ctx context.Context) error {
 	a.mu.RLock()
 	if a.loaded {
@@ -188,28 +304,56 @@ func (a *NuvioAdapter) loadChannels(ctx context.Context) error {
 	}
 	a.mu.RUnlock()
 
-	if a.rawBase == "" {
-		return fmt.Errorf("no raw base URL derived from manifest")
+	var lastErr error
+	for _, m3uURL := range a.m3uURLCandidates(ctx) {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, m3uURL, nil)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		req.Header.Set("User-Agent", "Mozilla/5.0")
+		resp, err := a.client().Do(req)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		if resp.StatusCode != http.StatusOK {
+			resp.Body.Close()
+			lastErr = fmt.Errorf("M3U endpoint returned HTTP %d", resp.StatusCode)
+			continue
+		}
+		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		if parsed := parseNuvioM3U(string(body)); len(parsed) > 0 {
+			a.mu.Lock()
+			a.channels = parsed
+			a.byID = make(map[string]nuvioChannel, len(parsed))
+			for _, ch := range parsed {
+				a.byID[ch.ID] = ch
+			}
+			a.m3uURL = m3uURL
+			a.loaded = true
+			a.mu.Unlock()
+			return nil
+		}
+		lastErr = fmt.Errorf("M3U at %s contained no channels", m3uURL)
 	}
+	if lastErr != nil {
+		return lastErr
+	}
+	return fmt.Errorf("no M3U playlist discovered for nuvio extension")
+}
 
-	m3uURL := a.rawBase + "/providers/M3U/Liste/canli.m3u"
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, m3uURL, nil)
-	if err != nil {
-		return fmt.Errorf("failed to build M3U request: %w", err)
-	}
-	resp, err := a.client().Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to fetch M3U: %w", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("M3U endpoint returned HTTP %d", resp.StatusCode)
-	}
-
+// parseNuvioM3U parses a standard M3U playlist body into channel entries.
+func parseNuvioM3U(content string) []nuvioChannel {
 	var parsed []nuvioChannel
 	var curName, curLogo, curGroup, curID string
 
-	scanner := bufio.NewScanner(resp.Body)
+	scanner := bufio.NewScanner(strings.NewReader(content))
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		if strings.HasPrefix(line, "#EXTINF:") {
@@ -268,21 +412,14 @@ func (a *NuvioAdapter) loadChannels(ctx context.Context) error {
 		}
 	}
 
-	if len(parsed) > 0 {
-		a.mu.Lock()
-		a.channels = parsed
-		a.byID = make(map[string]nuvioChannel, len(parsed))
-		for _, ch := range parsed {
-			a.byID[ch.ID] = ch
-		}
-		a.loaded = true
-		a.mu.Unlock()
-	}
-
-	return nil
+	return parsed
 }
 
 func (a *NuvioAdapter) Search(ctx context.Context, baseURL string, query string, page int32) (*pluginv1.SearchResponse, error) {
+	if a.kind == NuvioKindCinema {
+		return a.searchCinema(ctx, query, page)
+	}
+
 	if err := a.loadChannels(ctx); err != nil {
 		return nil, err
 	}
@@ -372,6 +509,10 @@ func (a *NuvioAdapter) Search(ctx context.Context, baseURL string, query string,
 }
 
 func (a *NuvioAdapter) GetMetadata(ctx context.Context, baseURL string, mediaID string) (*pluginv1.GetMetadataResponse, error) {
+	if a.kind == NuvioKindCinema {
+		return a.getCinemaMetadata(ctx, mediaID)
+	}
+
 	if err := a.loadChannels(ctx); err != nil {
 		return nil, err
 	}
@@ -406,6 +547,10 @@ func (a *NuvioAdapter) GetMetadata(ctx context.Context, baseURL string, mediaID 
 }
 
 func (a *NuvioAdapter) GetStreams(ctx context.Context, baseURL string, mediaID string, season, episode int32) (*pluginv1.GetStreamsResponse, error) {
+	if a.kind == NuvioKindCinema {
+		return a.getCinemaStreams(ctx, mediaID, season, episode)
+	}
+
 	if err := a.loadChannels(ctx); err != nil {
 		return nil, err
 	}

@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/falsisdev/vessel/core/internal/discovery"
+	"github.com/falsisdev/vessel/core/internal/domain/cinema"
 	"github.com/falsisdev/vessel/core/internal/domain/library"
 	"github.com/falsisdev/vessel/core/internal/domain/locale"
 	"github.com/falsisdev/vessel/core/internal/plugin"
@@ -511,8 +512,7 @@ func (g *GatewayServer) handleStreams(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if strings.HasPrefix(providerID, "com.vessel.iptv") || strings.HasPrefix(mediaID, "tr-") ||
-		strings.HasPrefix(mediaID, "intl-") || strings.HasPrefix(mediaID, "tv:") ||
-		strings.HasPrefix(providerID, "com.vessel.bridge.") {
+		strings.HasPrefix(mediaID, "intl-") || strings.HasPrefix(mediaID, "tv:") {
 		client := g.resolveIPTVClient(providerID, mediaID, pluginv1.Capability_CAPABILITY_STREAMS)
 		if client != nil {
 			resp, err := client.GetStreams(ctx, mediaID, int32(season), int32(episode))
@@ -533,13 +533,81 @@ func (g *GatewayServer) handleStreams(w http.ResponseWriter, r *http.Request) {
 
 	streams, subtitles, err := g.cinemaSvc.GetStreams(ctx, providerID, mediaID, int32(season), int32(episode))
 	if err != nil {
-		g.writeError(w, http.StatusInternalServerError, err.Error())
-		return
+		if providerID != "" {
+			g.writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		streams = nil
 	}
+
+	// Catalog-only cinema plugins (ex. cinemasis) do not supply streams, but
+	// movie/series metadata backed by TMDB ids can usually be resolved by other
+	// installed cinema plugins (ex. the nuvio m3u cinema bridge).
+	if len(streams) == 0 && g.pluginMgr != nil {
+		for _, p := range g.pluginMgr.ListByDomainAndCapability(pluginv1.Domain_DOMAIN_CINEMA, pluginv1.Capability_CAPABILITY_STREAMS) {
+			if providerID != "" && p.Manifest().Id == providerID {
+				continue
+			}
+			sresp, serr := p.GetStreams(ctx, mediaID, int32(season), int32(episode))
+			if serr != nil || sresp == nil {
+				continue
+			}
+			for _, s := range sresp.Streams {
+				streams = append(streams, cinema.StreamSource{
+					ID:         s.Id,
+					ProviderID: p.Manifest().Id,
+					Title:      s.Title,
+					URL:        s.Url,
+					Format:     mapCinemaStreamFormat(s.Format),
+					Quality:    s.Quality,
+					Headers:    s.Headers,
+				})
+			}
+			for _, k := range sresp.Subtitles {
+				subtitles = append(subtitles, cinema.Subtitle{
+					Language:  k.Language,
+					Label:     k.Label,
+					URL:       k.Url,
+					Format:    mapCinemaSubtitleFormat(k.Format),
+					IsDefault: k.IsDefault,
+				})
+			}
+			if len(streams) > 0 {
+				break
+			}
+		}
+	}
+
 	g.writeJSON(w, http.StatusOK, map[string]any{
 		"streams":   streams,
 		"subtitles": subtitles,
 	})
+}
+
+func mapCinemaStreamFormat(f pluginv1.StreamFormat) cinema.StreamFormat {
+	switch f {
+	case pluginv1.StreamFormat_STREAM_FORMAT_HLS:
+		return cinema.StreamFormatHLS
+	case pluginv1.StreamFormat_STREAM_FORMAT_DASH:
+		return cinema.StreamFormatDASH
+	case pluginv1.StreamFormat_STREAM_FORMAT_MP4:
+		return cinema.StreamFormatMP4
+	case pluginv1.StreamFormat_STREAM_FORMAT_MKV:
+		return cinema.StreamFormatMKV
+	default:
+		return cinema.StreamFormatUnspecified
+	}
+}
+
+func mapCinemaSubtitleFormat(f pluginv1.SubtitleFormat) cinema.SubtitleFormat {
+	switch f {
+	case pluginv1.SubtitleFormat_SUBTITLE_FORMAT_VTT:
+		return cinema.SubtitleFormatVTT
+	case pluginv1.SubtitleFormat_SUBTITLE_FORMAT_SRT:
+		return cinema.SubtitleFormatSRT
+	default:
+		return cinema.SubtitleFormatUnspecified
+	}
 }
 
 func (g *GatewayServer) handleStreamResolve(w http.ResponseWriter, r *http.Request) {
@@ -550,9 +618,13 @@ func (g *GatewayServer) handleStreamResolve(w http.ResponseWriter, r *http.Reque
 
 	var req struct {
 		StreamURL         string `json:"stream_url"`
+		URL               string `json:"url"`
 		Title             string `json:"title"`
+		MediaID           string `json:"media_id"`
 		SeasonNumber      int    `json:"season_number"`
+		Season            int    `json:"season"`
 		EpisodeNumber     int    `json:"episode_number"`
+		Episode           int    `json:"episode"`
 		PreferredProvider string `json:"preferred_provider"`
 	}
 
@@ -561,18 +633,37 @@ func (g *GatewayServer) handleStreamResolve(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	streamURL := req.StreamURL
+	if streamURL == "" {
+		streamURL = req.URL
+	}
+	season := req.SeasonNumber
+	if season == 0 {
+		season = req.Season
+	}
+	episode := req.EpisodeNumber
+	if episode == 0 {
+		episode = req.Episode
+	}
+
 	if g.streamSvc == nil {
-		g.writeError(w, http.StatusServiceUnavailable, "stream service not available")
+		g.writeJSON(w, http.StatusOK, map[string]any{"url": streamURL})
 		return
 	}
 
-	res, err := g.streamSvc.ResolveStream(r.Context(), req.StreamURL, req.Title, req.SeasonNumber, req.EpisodeNumber, req.PreferredProvider)
+	res, err := g.streamSvc.ResolveStream(r.Context(), streamURL, req.Title, season, episode, req.PreferredProvider)
 	if err != nil {
-		g.writeError(w, http.StatusInternalServerError, err.Error())
+		g.writeJSON(w, http.StatusOK, map[string]any{"url": streamURL})
 		return
 	}
 
-	g.writeJSON(w, http.StatusOK, map[string]any{"stream": res})
+	g.writeJSON(w, http.StatusOK, map[string]any{
+		"url":      res.PlaybackUrl,
+		"type":     res.StreamType,
+		"provider": res.Provider,
+		"quality":  res.Quality,
+		"filename": res.Filename,
+	})
 }
 
 func (g *GatewayServer) handleChapter(w http.ResponseWriter, r *http.Request) {
@@ -966,12 +1057,32 @@ func (g *GatewayServer) handlePlugins(w http.ResponseWriter, r *http.Request) {
 	}
 
 	clients := g.pluginMgr.ListAll()
+
+	// Deduplicate by name: when multiple plugins share the same display name
+	// (e.g. Nuvio live + cinema bridges both named "Anthology"), append the
+	// domain suffix so the user can distinguish them.
+	nameCount := make(map[string]int)
+	for _, c := range clients {
+		nameCount[c.Manifest().Name]++
+	}
+
 	list := make([]any, 0, len(clients))
 	for _, c := range clients {
 		m := c.Manifest()
+		displayName := m.Name
+		if nameCount[m.Name] > 1 {
+			switch m.Domain {
+			case pluginv1.Domain_DOMAIN_IPTV:
+				displayName = m.Name + " — Canlı TV"
+			case pluginv1.Domain_DOMAIN_CINEMA:
+				displayName = m.Name + " — Film & Dizi"
+			default:
+				displayName = m.Name
+			}
+		}
 		entry := map[string]any{
 			"id":               m.Id,
-			"name":             m.Name,
+			"name":             displayName,
 			"version":          m.Version,
 			"description":      m.Description,
 			"author":           m.Author,
@@ -1087,6 +1198,39 @@ func (g *GatewayServer) detectBridgeType(targetURL string) plugin.BridgeType {
 	return ""
 }
 
+// registerBridgePlugins installs a bridge extension. Nuvio extensions can
+// expose both live TV and cinema content, so they may produce multiple bridge
+// plugins while other bridge types produce exactly one.
+func (g *GatewayServer) registerBridgePlugins(bridgeType plugin.BridgeType, targetURL string) ([]string, error) {
+	var clients []*plugin.BridgeClient
+	if bridgeType == plugin.BridgeTypeNuvio {
+		nuvio, err := plugin.NewNuvioBridgeClients(targetURL)
+		if err != nil {
+			return nil, err
+		}
+		clients = nuvio
+	} else {
+		c, err := plugin.NewBridgeClient(bridgeType, targetURL)
+		if err != nil {
+			return nil, err
+		}
+		clients = []*plugin.BridgeClient{c}
+	}
+
+	var ids []string
+	for _, client := range clients {
+		if err := g.pluginMgr.Register(client); err != nil {
+			if errors.Is(err, plugin.ErrDuplicatePlugin) {
+				continue
+			}
+			slog.Warn("Failed to register bridge plugin", "id", client.Manifest().Id, "error", err)
+			return ids, err
+		}
+		ids = append(ids, client.Manifest().Id)
+	}
+	return ids, nil
+}
+
 func (g *GatewayServer) handlePluginsAvailable(w http.ResponseWriter, r *http.Request) {
 	available := []map[string]any{
 		{
@@ -1169,29 +1313,21 @@ func (g *GatewayServer) handlePluginsInstall(w http.ResponseWriter, r *http.Requ
 
 	if targetURL != "" && g.pluginMgr != nil {
 		if bridgeType := g.detectBridgeType(targetURL); bridgeType != "" {
-			client, err := plugin.NewBridgeClient(bridgeType, targetURL)
+			ids, err := g.registerBridgePlugins(bridgeType, targetURL)
 			if err != nil {
 				g.writeError(w, http.StatusBadRequest, fmt.Sprintf("failed to load bridge plugin: %v", err))
 				return
 			}
-			if err := g.pluginMgr.Register(client); err != nil {
-				if errors.Is(err, plugin.ErrDuplicatePlugin) {
-					g.writeJSON(w, http.StatusOK, map[string]any{
-						"success": true,
-						"message": fmt.Sprintf("Bridge plugin '%s' is already installed", client.Manifest().Name),
-						"id":      client.Manifest().Id,
-					})
-					return
-				}
-				slog.Warn("Failed to register bridge plugin", "id", client.Manifest().Id, "error", err)
-				g.writeError(w, http.StatusInternalServerError, fmt.Sprintf("failed to register bridge plugin: %v", err))
+			if len(ids) == 0 {
+				g.writeError(w, http.StatusBadRequest, fmt.Sprintf("bridge plugin '%s' is already installed", bridgeType))
 				return
 			}
-			slog.Info("Registered bridge plugin", "type", bridgeType, "id", client.Manifest().Id, "name", client.Manifest().Name)
+			slog.Info("Registered bridge plugin(s)", "type", bridgeType, "ids", ids)
 			g.writeJSON(w, http.StatusOK, map[string]any{
 				"success": true,
-				"message": fmt.Sprintf("Bridge plugin '%s' installed successfully", client.Manifest().Name),
-				"id":      client.Manifest().Id,
+				"message": fmt.Sprintf("Bridge plugin '%s' installed successfully", bridgeType),
+				"id":      ids[0],
+				"ids":     ids,
 			})
 			return
 		}

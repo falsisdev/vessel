@@ -1954,7 +1954,7 @@ class VesselApp {
       this.currentDomain = route;
       mainView.classList.remove("hidden");
       resumeSection.classList.remove("hidden");
-      if (aiSection) aiSection.classList.remove("hidden");
+      if (route === "cinema" && aiSection) aiSection.classList.remove("hidden");
 
       // Update Header Title based on domain
       const titleMap = {
@@ -2258,6 +2258,11 @@ class VesselApp {
 
   // --- Vessel Custom Engineered Video Player Modal ---
   openVesselPlayer(streamUrl, meta = {}) {
+    // Re-entrancy guard: prevent concurrent player opens from corrupting HLS state
+    if (this._vesselPlayerOpening) return;
+    this._vesselPlayerOpening = true;
+    setTimeout(() => { this._vesselPlayerOpening = false; }, 500);
+
     const modal = document.getElementById("vessel-player-modal");
     const video = document.getElementById("vessel-video-element");
     const titleElem = document.getElementById("vessel-hud-title");
@@ -4587,6 +4592,10 @@ class VesselApp {
 
   // --- Dedicated Plugins View ---
   async loadPluginsView() {
+    // Guard against concurrent renders: increment version, skip if stale
+    this._pluginsViewVersion = (this._pluginsViewVersion || 0) + 1;
+    const myVersion = this._pluginsViewVersion;
+
     const installedList = document.getElementById("installed-plugins-list");
     const curatedList = document.getElementById("curated-plugins-list");
 
@@ -4595,6 +4604,7 @@ class VesselApp {
     try {
       // 1. Fetch Installed Plugins
       const instRes = await fetch("/api/plugins");
+      if (this._pluginsViewVersion !== myVersion) return;
       const instData = instRes.ok ? await instRes.json() : { plugins: [] };
       const installed = instData.plugins || [];
 
@@ -4688,6 +4698,7 @@ class VesselApp {
 
       // 2. Fetch Curated Directory
       const curRes = await fetch("/api/plugins/available");
+      if (this._pluginsViewVersion !== myVersion) return;
       const curData = curRes.ok ? await curRes.json() : { plugins: [] };
       const available = curData.plugins || [];
 

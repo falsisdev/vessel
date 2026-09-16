@@ -34,11 +34,15 @@ type BridgeClient struct {
 
 // NewBridgeClient creates a new bridge plugin based on the specified type and manifest URL.
 func NewBridgeClient(bType BridgeType, manifestURL string) (*BridgeClient, error) {
+	return newBridgeClient(bType, manifestURL, NuvioKindAuto)
+}
+
+func newBridgeClient(bType BridgeType, manifestURL string, kind NuvioKind) (*BridgeClient, error) {
 	var adapter BridgeAdapter
 
 	switch bType {
 	case BridgeTypeNuvio:
-		adapter = &NuvioAdapter{}
+		adapter = &NuvioAdapter{kind: kind}
 	case BridgeTypeStremio:
 		adapter = &StremioAdapter{}
 	case BridgeTypeCloudstream:
@@ -61,6 +65,41 @@ func NewBridgeClient(bType BridgeType, manifestURL string) (*BridgeClient, error
 	client.manifest = m
 
 	return client, nil
+}
+
+// NewNuvioBridgeClients exposes a Nuvio extension through one bridge client per
+// content kind: live TV (IPTV domain) and movie/series catalogs (CINEMA domain).
+// A single extension manifest may contain both channel and movie/tv scrapers,
+// so a Nuvio extension can end up registered as two Vessel plugins.
+func NewNuvioBridgeClients(manifestURL string) ([]*BridgeClient, error) {
+	probe := &NuvioAdapter{}
+	if _, err := probe.GetManifest(context.Background(), manifestURL); err != nil {
+		return nil, fmt.Errorf("failed to inspect nuvio manifest: %w", err)
+	}
+
+	var kinds []NuvioKind
+	if probe.hasLive {
+		kinds = append(kinds, NuvioKindLive)
+	}
+	if probe.hasCinema {
+		kinds = append(kinds, NuvioKindCinema)
+	}
+	if len(kinds) == 0 {
+		kinds = append(kinds, NuvioKindAuto)
+	}
+
+	var out []*BridgeClient
+	for _, k := range kinds {
+		c, err := newBridgeClient(BridgeTypeNuvio, manifestURL, k)
+		if err != nil {
+			continue
+		}
+		out = append(out, c)
+	}
+	if len(out) == 0 {
+		return nil, fmt.Errorf("failed to initialize any nuvio bridge clients for %s", manifestURL)
+	}
+	return out, nil
 }
 
 // Type returns the bridge type (nuvio/stremio/cloudstream).
