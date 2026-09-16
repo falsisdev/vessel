@@ -129,14 +129,28 @@ func RunServer(args []string) error {
 			}
 		}
 
-		anthologySvc := service.NewAnthologyService()
-		if err := anthologySvc.LoadManifest(); err != nil {
-			slog.Warn("Failed to load Anthology manifest", "error", err)
-		}
-		if inProcClient, err := plugin.NewInProcessClient(anthologySvc); err == nil {
-			if err := pluginManager.Register(inProcClient); err == nil {
-				slog.Info("Registered bundled in-process plugin", "id", inProcClient.Manifest().Id, "name", inProcClient.Manifest().Name)
+		// Register Bridge Plugins (Adapters for external ecosystems)
+		// Anthology Nuvio manifest (canlı TV + film/dizi, M3U tabanlı) — canonical pointer.
+		if nuvioBridges, err := plugin.NewNuvioBridgeClients("https://falsisdev.github.io/anthology/manifest.json"); err == nil {
+			for _, n := range nuvioBridges {
+				if err := pluginManager.Register(n); err == nil {
+					slog.Info("Registered bridge plugin", "id", n.Manifest().Id, "name", n.Manifest().Name)
+				} else {
+					slog.Warn("Failed to register bridge plugin", "id", n.Manifest().Id, "error", err)
+				}
 			}
+		} else {
+			slog.Warn("Failed to initialize Nuvio bridge", "error", err)
+		}
+
+		// Anthology Stremio addon (live TV, Stremio protocol).
+		stremioBridge, err := plugin.NewBridgeClient(plugin.BridgeTypeStremio, "https://falsisdev.github.io/anthology/stremio/manifest.json")
+		if err == nil {
+			if err := pluginManager.Register(stremioBridge); err == nil {
+				slog.Info("Registered bridge plugin", "id", stremioBridge.Manifest().Id, "name", stremioBridge.Manifest().Name)
+			}
+		} else {
+			slog.Warn("Failed to initialize Stremio bridge", "error", err)
 		}
 
 	catalogService := service.NewCatalogService(pluginManager, 5*time.Second)

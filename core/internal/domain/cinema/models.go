@@ -89,19 +89,19 @@ const (
 )
 
 type StreamSource struct {
-	ID         string
-	ProviderID string
-	Title      string
-	URL        string
-	Format     StreamFormat
-	Quality    string
-	Headers    map[string]string
+	ID         string            `json:"id"`
+	ProviderID string            `json:"provider_id"`
+	Title      string            `json:"title"`
+	URL        string            `json:"url"`
+	Format     StreamFormat      `json:"format"`
+	Quality    string            `json:"quality"`
+	Headers    map[string]string `json:"headers,omitempty"`
 }
 
 type Subtitle struct {
-	Language  string
-	Label     string
-	URL       string
-	Format    SubtitleFormat
-	IsDefault bool
+	Language  string         `json:"language"`
+	Label     string         `json:"label"`
+	URL       string         `json:"url"`
+	Format    SubtitleFormat `json:"format"`
+	IsDefault bool           `json:"is_default"`
 }

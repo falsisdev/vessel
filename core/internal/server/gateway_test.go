@@ -174,24 +174,51 @@ func TestGatewayServer_StaticAndAPI(t *testing.T) {
 	}
 
 	// 8. Test /api/stream/resolve
+	// UI sends "url" (+ legacy "stream_url" fallback); response exposes "url"/"type"
 	resolveJSON, _ := json.Marshal(map[string]any{
-		"stream_url": "https://sample.test/movie.mp4",
-		"title":      "Test Movie",
+		"url":    "https://sample.test/movie.mp4",
+		"title":  "Test Movie",
+		"season": 1,
+		"episode": 1,
 	})
 	resp, err = http.Post(baseURL+"/api/stream/resolve", "application/json", bytes.NewReader(resolveJSON))
 	if err != nil {
 		t.Fatalf("failed to POST /api/stream/resolve: %v", err)
 	}
 	var resolveData struct {
-		Stream struct {
-			PlaybackURL string `json:"playback_url"`
-			StreamType  string `json:"stream_type"`
-		} `json:"stream"`
+		URL  string `json:"url"`
+		Type string `json:"type"`
 	}
 	_ = json.NewDecoder(resp.Body).Decode(&resolveData)
 	resp.Body.Close()
-	if resolveData.Stream.StreamType != "direct" {
-		t.Errorf("expected direct stream type, got %s", resolveData.Stream.StreamType)
+	if resolveData.URL == "" {
+		t.Errorf("expected resolved url to not be empty")
+	}
+	if resolveData.Type != "direct" {
+		t.Errorf("expected direct stream type, got %s", resolveData.Type)
+	}
+
+	// Legacy "stream_url" field should also work
+	resolveLegacyJSON, _ := json.Marshal(map[string]any{
+		"stream_url":     "https://sample.test/movie.m3u8",
+		"stream_number":  1,
+		"episode_number": 1,
+	})
+	resp, err = http.Post(baseURL+"/api/stream/resolve", "application/json", bytes.NewReader(resolveLegacyJSON))
+	if err != nil {
+		t.Fatalf("failed to POST /api/stream/resolve (legacy): %v", err)
+	}
+	var resolveLegacyData struct {
+		URL  string `json:"url"`
+		Type string `json:"type"`
+	}
+	_ = json.NewDecoder(resp.Body).Decode(&resolveLegacyData)
+	resp.Body.Close()
+	if resolveLegacyData.URL == "" {
+		t.Errorf("expected legacy resolved url to not be empty")
+	}
+	if resolveLegacyData.Type != "hls" {
+		t.Errorf("expected hls stream type for m3u8, got %s", resolveLegacyData.Type)
 	}
 }
 

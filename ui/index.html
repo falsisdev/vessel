@@ -707,6 +707,24 @@
     </div>
   </div>
 
+  <!-- Dedicated Source Picker Overlay (episode stream selection) -->
+  <div class="source-picker-overlay hidden" id="source-picker-overlay">
+    <div class="source-picker-backdrop" id="source-picker-backdrop"></div>
+    <div class="source-picker-panel" id="source-picker-panel">
+      <div class="source-picker-header">
+        <img class="source-picker-thumb" id="source-picker-thumb" alt="">
+        <div class="source-picker-meta">
+          <h3 class="source-picker-title" id="source-picker-title">Episode</h3>
+          <span class="source-picker-sub" id="source-picker-sub"></span>
+        </div>
+        <button class="btn btn-secondary source-picker-close" id="source-picker-close">
+          <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+      </div>
+      <div class="source-picker-streams" id="source-picker-streams"></div>
+    </div>
+  </div>
+
   <!-- LAN Sync & Multi-Device Remote Control Modal -->
   <div class="modal-overlay hidden" id="lan-sync-modal">
     <div class="lan-sync-card">
