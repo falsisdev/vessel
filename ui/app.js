@@ -1617,6 +1617,23 @@ class VesselApp {
       this.closeDetailsView();
     });
 
+    // Dedicated Source Picker overlay
+    const spClose = document.getElementById("source-picker-close");
+    if (spClose) spClose.addEventListener("click", (e) => {
+      e.stopPropagation();
+      this.closeSourcePicker();
+    });
+    const spBackdrop = document.getElementById("source-picker-backdrop");
+    if (spBackdrop) spBackdrop.addEventListener("click", () => {
+      this.closeSourcePicker();
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && this.sourcePickerVisible) {
+        e.preventDefault();
+        this.closeSourcePicker();
+      }
+    });
+
     // Empty domain button -> switch to plugins
     document.getElementById("empty-domain-btn").addEventListener("click", () => {
       this.switchRoute("plugins");
@@ -1781,6 +1798,48 @@ class VesselApp {
     return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
   }
 
+  // --- Dominant Color Artwork (poster-derived tint for cinematic hero) ---
+  getDominantColor(imgUrl, cb) {
+    try {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.onload = () => {
+        try {
+          const canvas = document.createElement("canvas");
+          const size = 46;
+          canvas.width = size;
+          canvas.height = Math.max(1, Math.round((size * img.height) / (img.width || 1)));
+          const ctx = canvas.getContext("2d", { willReadFrequently: true });
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          const px = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+          const buckets = new Map();
+          let maxCount = 0;
+          let dominant = "180,140,220";
+          for (let i = 0; i < px.length; i += 16) {
+            const r = px[i], g = px[i + 1], b = px[i + 2], a = px[i + 3];
+            if (a < 128) continue;
+            const lum = r + g + b;
+            if (lum < 120 || lum > 700) continue;
+            const key = `${r >> 3}_${g >> 3}_${b >> 3}`;
+            const count = (buckets.get(key) || 0) + 1;
+            buckets.set(key, count);
+            if (count > maxCount) {
+              maxCount = count;
+              dominant = `${r},${g},${b}`;
+            }
+          }
+          cb(dominant);
+        } catch (e) {
+          cb(null);
+        }
+      };
+      img.onerror = () => cb(null);
+      img.src = imgUrl;
+    } catch (e) {
+      cb(null);
+    }
+  }
+
   // --- Theme Engine ---
   async loadActiveTheme() {
     try {
@@ -1904,8 +1963,8 @@ class VesselApp {
   }
 
   async cycleTheme() {
-    const list = ["mangile", "mangile-mauve", "mangile-stone", "midnight-blue", "light-clean"];
-    const curr = this.activeTheme?.id || "mangile";
+    const list = ["catppuccin", "nord", "dracula", "mangile", "vessel-dark"];
+    const curr = this.activeTheme?.id || "catppuccin";
     const nextIdx = (list.indexOf(curr) + 1) % list.length;
     await this.applyTheme(list[nextIdx]);
   }
@@ -3523,10 +3582,13 @@ class VesselApp {
     }
 
     const isSeries = seasons.length > 0 || item.type === 2 || item.type === 3 || details.type === 2 || details.type === 3;
+    const airDateLabel = "Yayın:";
 
     content.innerHTML = `
-      <div class="details-hero">
+      <div class="details-hero details-hero-cinematic" id="details-hero">
         <div class="details-hero-backdrop" style="background-image: url('${backdrop}')"></div>
+        <div class="details-hero-scrim"></div>
+        <div class="details-hero-accent" id="details-hero-accent"></div>
         <div class="details-poster-col">
           <img class="details-poster-img" src="${poster}" alt="${title}">
           <div class="details-lib-box">
@@ -3552,16 +3614,18 @@ class VesselApp {
             ${genres.map(g => `<span class="badge-subtle">${g}</span>`).join("")}
           </div>
           <h1 class="details-title">${title}</h1>
-          ${tagline ? `<p class="details-tagline" style="font-style: italic; color: var(--v-text-muted); font-size: 1.05rem; margin-bottom: 10px;">"${tagline}"</p>` : ""}
+          ${tagline ? `<p class="details-tagline">"${tagline}"</p>` : ""}
           <p class="details-overview">${details.overview || item.overview || "No overview available."}</p>
-          ${directors ? `<div class="details-crew" style="margin-top: 10px; font-size: 0.9rem; color: var(--v-text-secondary);"><span class="crew-item"><strong>${this.t("directors")}:</strong> ${directors}</span></div>` : ""}
-          <div class="details-actions" style="margin-top: 18px; display: flex; gap: 12px; flex-wrap: wrap;">
-            <button class="btn btn-primary" id="details-watch-now-btn" style="font-size: 1rem; padding: 10px 24px;">
-              ▶ ${this.t("btn_play")}
+          ${directors ? `<div class="details-crew"><span class="crew-item"><strong>${this.t("directors")}:</strong> ${directors}</span></div>` : ""}
+          <div class="details-actions">
+            <button class="btn btn-primary" id="details-watch-now-btn">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" style="margin-right:6px;"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+              ${this.t("btn_play")}
             </button>
             ${trailerKey ? `
-              <button class="btn btn-secondary" id="details-trailer-btn" style="font-size: 1rem; padding: 10px 20px;">
-                🎬 ${this.t("btn_watch_trailer")}
+              <button class="btn btn-secondary" id="details-trailer-btn">
+                <svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" style="margin-right:6px;"><rect x="2" y="6" width="15" height="12" rx="2"></rect><polygon points="17 9 22 9 22 15 17 15"></polygon></svg>
+                ${this.t("btn_watch_trailer")}
               </button>
             ` : ""}
           </div>
@@ -3621,14 +3685,31 @@ class VesselApp {
         ` : ""}
 
         <!-- Stream Sources / Debrid Section -->
+        ${!isSeries ? `
         <div class="details-section-box">
           <h3 class="details-section-title">${this.t("streams_title")}</h3>
           <div class="streams-grid" id="details-streams-grid">
             <div style="color: var(--v-text-muted); padding: 12px;">${this.t("streams_loading")}</div>
           </div>
         </div>
+        ` : ""}
       </div>
     `;
+
+    // Cinematic hero: tint backdrop + poster glow from poster artwork
+    if (poster) {
+      this.getDominantColor(poster, (color) => {
+        if (!color) return;
+        const hero = document.getElementById("details-hero");
+        const accent = document.getElementById("details-hero-accent");
+        const posterImg = document.querySelector(".details-poster-img");
+        if (accent) accent.style.background = `radial-gradient(ellipse at top right, rgba(${color}, 0.55), transparent 70%)`;
+        if (hero) hero.style.setProperty("--hero-glow", `rgba(${color}, 0.45)`);
+        if (hero) hero.style.setProperty("--hero-tint-bg", `linear-gradient(135deg, rgba(${color}, 0.28), transparent 55%)`);
+        if (hero) hero.style.setProperty("--hero-border-accent", `rgba(${color}, 0.5)`);
+        if (posterImg) posterImg.style.boxShadow = `0 18px 44px rgba(0,0,0,0.6), 0 0 0 1px var(--v-border-subtle), 0 0 56px rgba(${color}, 0.4)`;
+      });
+    }
 
     // Library status controller
     this.setupDetailsLibraryControl(item, details);
@@ -3676,37 +3757,43 @@ class VesselApp {
           const epNum = ep.episode_number || (epIdx + 1);
           const epTitle = ep.title || `Bölüm ${epNum}`;
           const still = ep.still_url || poster;
-          const airDate = ep.air_date ? `Yayın: ${ep.air_date}` : "";
+          const airDate = ep.air_date ? `${airDateLabel} ${ep.air_date}` : "";
           const dur = ep.duration_seconds ? `${Math.round(ep.duration_seconds / 60)} dk` : (runtime ? runtime : "");
-          const epOverview = ep.overview || "Bu bölüm için henüz detaylı özet girilmedi.";
+          const epOverview = ep.overview || "";
           const isActive = curSeason.season_number === this.selectedSeason && epNum === this.selectedEpisode;
 
           return `
-            <div class="episode-card-detailed ${isActive ? 'active' : ''}" data-ep="${epNum}" data-season="${curSeason.season_number || (sIdx + 1)}">
-              <div class="episode-thumb-wrap">
-                <img src="${still}" alt="${epTitle}" class="episode-thumb-img" loading="lazy" onerror="this.src='${poster}'">
-                ${dur ? `<div class="episode-thumb-badge">${dur}</div>` : ""}
+            <div class="episode-card-h ${isActive ? 'active' : ''}" data-ep="${epNum}" data-season="${curSeason.season_number || (sIdx + 1)}">
+              <div class="ep-h-thumb">
+                <img src="${still}" alt="${epTitle}" loading="lazy" onerror="this.src='${poster}'">
+                <span class="ep-h-num">${epNum}</span>
+                ${dur ? `<span class="ep-h-duration">${dur}</span>` : ""}
               </div>
-              <div class="episode-info-wrap">
-                <div class="episode-title-row">
-                  <div class="episode-title-text">${epNum}. ${epTitle}</div>
-                  ${airDate ? `<span class="episode-air-date">${airDate}</span>` : ""}
+              <div class="ep-h-info">
+                <div class="ep-h-title-row">
+                  <span class="ep-h-title">${epNum}. ${epTitle}</span>
+                  ${airDate ? `<span class="ep-h-date">${airDate}</span>` : ""}
                 </div>
-                <div class="episode-synopsis">${epOverview}</div>
+                ${epOverview ? `<p class="ep-h-synopsis">${epOverview}</p>` : ""}
+                <div class="ep-h-hint-row">
+                  <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><circle cx="12" cy="12" r="3"></circle><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"></path></svg>
+                  <span>${this.t("streams_title") || "Kaynakları göster"}</span>
+                </div>
               </div>
             </div>
           `;
         }).join("") : `<div style="padding: 20px; color: var(--v-text-muted);">No episodes found.</div>`;
 
-        grid.querySelectorAll(".episode-card-detailed").forEach(card => {
+        grid.querySelectorAll(".episode-card-h").forEach(card => {
           card.addEventListener("click", () => {
-            grid.querySelectorAll(".episode-card-detailed").forEach(c => c.classList.remove("active"));
+            grid.querySelectorAll(".episode-card-h").forEach(c => c.classList.remove("active"));
             card.classList.add("active");
             const epNum = parseInt(card.dataset.ep, 10);
             const sNum = parseInt(card.dataset.season, 10);
             this.selectedSeason = sNum;
             this.selectedEpisode = epNum;
-            this.loadStreamsList(item, sNum, epNum);
+            const epTitle = card.querySelector(".ep-h-title")?.textContent || `Bölüm ${epNum}`;
+            this.openSourcePicker(item, sNum, epNum, still, epTitle);
           });
         });
       };
@@ -3724,8 +3811,9 @@ class VesselApp {
       });
     }
 
-    // Load available streams for initial season & episode
-    this.loadStreamsList(item, this.selectedSeason, this.selectedEpisode);
+    // Load available streams for initial season & episode (movies only — series
+    // sources are explored via the dedicated source picker on episode click)
+    if (!isSeries) this.loadStreamsList(item, this.selectedSeason, this.selectedEpisode);
   }
 
   renderIPTVDetails(item, details) {
@@ -4522,62 +4610,26 @@ class VesselApp {
   }
 
   async loadStreamsList(item, season, episode) {
-    const grid = document.getElementById("details-streams-grid");
-    if (!grid) return;
+    await this.loadStreamsInto(document.getElementById("details-streams-grid"), item, season, episode);
+  }
 
-    grid.innerHTML = `
-      <div style="padding: 20px; color: var(--v-text-muted); display: flex; align-items: center; gap: 10px;">
-        <div style="font-size: 1.2rem; animation: pulse-online 1.5s infinite;">⏳</div>
-        <div>${this.t("streams_loading")} (Sezon ${season}, Bölüm ${episode})</div>
+  async loadStreamsInto(container, item, season, episode) {
+    if (!container) return;
+
+    container.innerHTML = `
+      <div class="streams-loading-state">
+        <div style="font-size: 1.1rem; animation: pulse-online 1.5s infinite;">⏳</div>
+        <div>${this.t("streams_loading")}${season > 0 ? ` (${this.t("season")} ${season}, ${this.t("episode")} ${episode})` : ""}</div>
       </div>
     `;
 
-    try {
-      const data = await this.apiFetch(`/api/streams?provider=${encodeURIComponent(item.provider_id || "")}&media=${encodeURIComponent(item.id)}&season=${season}&episode=${episode}`);
-      const streams = data.streams || [];
-
-      if (streams.length === 0) {
-        grid.innerHTML = `
-          <div class="streams-empty-banner">
-            <div class="empty-banner-icon">📡</div>
-            <div style="flex: 1;">
-              <div class="empty-banner-title">${this.t("no_episode_streams")}</div>
-              <div class="empty-banner-desc">Sezon ${season}, Bölüm ${episode} için şu anda aktif eşler veya akış sağlayıcısı bulunamadı. Torrent / Debrid bağlantılarınızı kontrol edebilir veya yeniden deneyebilirsiniz.</div>
-            </div>
-            <button class="btn btn-secondary" id="retry-streams-btn" style="white-space: nowrap;">
-              🔄 ${this.t("btn_retry")}
-            </button>
-          </div>
-        `;
-        document.getElementById("retry-streams-btn")?.addEventListener("click", () => {
-          this.loadStreamsList(item, season, episode);
-        });
-        return;
-      }
-
-      grid.innerHTML = streams.map((st, idx) => `
-        <div class="stream-card-row">
-          <div>
-            <span style="font-weight: 700; margin-right: 8px;">${st.quality || "1080p"}</span>
-            <span>${st.title || "Stream Source"}</span>
-          </div>
-          <button class="btn btn-secondary stream-play-btn" data-idx="${idx}" style="padding: 4px 14px; font-size: 0.8rem;">▶ Stream</button>
-        </div>
-      `).join("");
-
-      grid.querySelectorAll(".stream-play-btn").forEach(btn => {
-        btn.addEventListener("click", () => {
-          const idx = parseInt(btn.dataset.idx, 10);
-          this.playMediaStream(item, season, episode, streams[idx]);
-        });
-      });
-    } catch (e) {
-      grid.innerHTML = `
+    const showEmpty = (desc) => {
+      container.innerHTML = `
         <div class="streams-empty-banner">
           <div class="empty-banner-icon">📡</div>
           <div style="flex: 1;">
             <div class="empty-banner-title">${this.t("no_episode_streams")}</div>
-            <div class="empty-banner-desc">Hata: ${e.message}</div>
+            <div class="empty-banner-desc">${desc}</div>
           </div>
           <button class="btn btn-secondary" id="retry-streams-btn" style="white-space: nowrap;">
             🔄 ${this.t("btn_retry")}
@@ -4585,9 +4637,82 @@ class VesselApp {
         </div>
       `;
       document.getElementById("retry-streams-btn")?.addEventListener("click", () => {
-        this.loadStreamsList(item, season, episode);
+        this.loadStreamsInto(container, item, season, episode);
       });
+    };
+
+    try {
+      const data = await this.apiFetch(`/api/streams?provider=${encodeURIComponent(item.provider_id || "")}&media=${encodeURIComponent(item.id)}&season=${season}&episode=${episode}`);
+      const streams = data.streams || [];
+
+      if (streams.length === 0) {
+        const desc = season > 0 && episode > 0
+          ? `${this.t("season")} ${season}, ${this.t("episode")} ${episode} için şu anda aktif eşler veya akış sağlayıcısı bulunamadı. Torrent / Debrid bağlantılarınızı kontrol edebilir veya yeniden deneyebilirsiniz.`
+          : "Bu içerik için şu anda aktif akış sağlayıcısı bulunamadı. Yeniden deneyebilirsiniz.";
+        showEmpty(desc);
+        return;
+      }
+
+      container.innerHTML = streams.map((st, idx) => `
+        <div class="stream-card-row">
+          <div class="stream-card-main">
+            <span class="stream-quality-badge ${this.streamQualityClass(st.quality || "1080p")}">${st.quality || "HD"}</span>
+            <div class="stream-card-text">
+              <span class="stream-card-title">${st.title || "Stream Source"}</span>
+              <span class="stream-card-provider">${st.provider_id ? st.provider_id.replace(/_/g, " ").replace(/\./g, " · ") : (st.format ? st.format : "")}</span>
+            </div>
+          </div>
+          <button class="btn btn-primary stream-play-btn" data-idx="${idx}" style="padding: 6px 18px; font-size: 0.82rem; white-space: nowrap;">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" style="margin-right:4px;"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+            ${this.t("btn_play")}
+          </button>
+        </div>
+      `).join("");
+
+      container.querySelectorAll(".stream-play-btn").forEach(btn => {
+        btn.addEventListener("click", () => {
+          const idx = parseInt(btn.dataset.idx, 10);
+          this.playMediaStream(item, season, episode, streams[idx]);
+        });
+      });
+    } catch (e) {
+      showEmpty(`Hata: ${e.message}`);
     }
+  }
+
+  streamQualityClass(q) {
+    const s = String(q || "").toLowerCase();
+    if (s.includes("4k") || s.includes("2160") || s.includes("ultra")) return "q-4k";
+    if (s.includes("1080") || s.includes("full") || s.includes("fhd")) return "q-1080";
+    if (s.includes("720") || s.includes("hd") || s.includes("tv")) return "q-720";
+    return "q-hd";
+  }
+
+  // --- Dedicated Source Picker (Nuvio-style slide-up panel) ---
+  openSourcePicker(item, season, episode, thumb, titleText) {
+    const overlay = document.getElementById("source-picker-overlay");
+    if (!overlay) return;
+    overlay.classList.remove("hidden", "closing");
+    this.sourcePickerVisible = true;
+
+    const thumbEl = document.getElementById("source-picker-thumb");
+    const titleEl = document.getElementById("source-picker-title");
+    const subEl = document.getElementById("source-picker-sub");
+    const streamsEl = document.getElementById("source-picker-streams");
+    if (thumbEl) thumbEl.src = thumb || "";
+    if (titleEl) titleEl.textContent = titleText || (item.title || "Bölüm");
+    if (subEl) subEl.textContent = item.title ? `${item.title} • ${this.t("season")} ${season}, ${this.t("episode")} ${episode}` : `${this.t("season")} ${season}, ${this.t("episode")} ${episode}`;
+    if (streamsEl) streamsEl.innerHTML = '<div class="streams-loading-state"><div style="font-size: 1.1rem; animation: pulse-online 1.5s infinite;">⏳</div><div>' + this.t("streams_loading") + '</div></div>';
+
+    this.loadStreamsInto(streamsEl, item, season, episode);
+  }
+
+  closeSourcePicker() {
+    const overlay = document.getElementById("source-picker-overlay");
+    if (!overlay) return;
+    this.sourcePickerVisible = false;
+    overlay.classList.add("closing");
+    setTimeout(() => overlay.classList.add("hidden"), 220);
   }
 
   // --- Dedicated Plugins View ---
