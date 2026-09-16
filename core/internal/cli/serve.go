@@ -122,12 +122,22 @@ func RunServer(args []string) error {
 		}
 	}
 
-	iptvSvc := iptvProvider.NewIPTVService()
-	if inProcClient, err := plugin.NewInProcessClient(iptvSvc); err == nil {
-		if err := pluginManager.Register(inProcClient); err == nil {
-			slog.Info("Registered bundled in-process plugin", "id", inProcClient.Manifest().Id, "name", inProcClient.Manifest().Name)
+		iptvSvc := iptvProvider.NewIPTVService()
+		if inProcClient, err := plugin.NewInProcessClient(iptvSvc); err == nil {
+			if err := pluginManager.Register(inProcClient); err == nil {
+				slog.Info("Registered bundled in-process plugin", "id", inProcClient.Manifest().Id, "name", inProcClient.Manifest().Name)
+			}
 		}
-	}
+
+		anthologySvc := service.NewAnthologyService()
+		if err := anthologySvc.LoadManifest(); err != nil {
+			slog.Warn("Failed to load Anthology manifest", "error", err)
+		}
+		if inProcClient, err := plugin.NewInProcessClient(anthologySvc); err == nil {
+			if err := pluginManager.Register(inProcClient); err == nil {
+				slog.Info("Registered bundled in-process plugin", "id", inProcClient.Manifest().Id, "name", inProcClient.Manifest().Name)
+			}
+		}
 
 	catalogService := service.NewCatalogService(pluginManager, 5*time.Second)
 	supervisor := plugin.NewSupervisor(pluginManager)
