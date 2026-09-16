@@ -147,7 +147,8 @@ html, body {
   background-color: var(--v-bg-surface);
   color: var(--v-accent-secondary);
   font-weight: 600;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  box-shadow: inset 4px 0 0 var(--v-accent-secondary);
+  border-radius: 0 var(--v-radius-md) var(--v-radius-md) 0;
 }
 
 .sidebar-footer {
@@ -548,6 +549,7 @@ html, body {
   transform: translateY(-6px) scale(1.02);
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35);
   border-color: var(--v-accent-primary);
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s ease, border-color 0.3s ease;
 }
 
 .poster-wrapper {
@@ -1173,13 +1175,19 @@ html, body {
   text-align: center;
   padding: 60px 24px;
   background-color: var(--v-bg-surface);
-  border: 1px dashed var(--v-border-default);
+  border: 2px dashed var(--v-border-subtle);
   border-radius: var(--v-radius-lg);
   margin: 30px 0;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
+  gap: 16px;
+  transition: all 0.3s ease;
+}
+
+.empty-domain-notice:hover {
+  border-color: var(--v-accent-primary);
+  background-color: var(--v-bg-elevated);
 }
 
 .empty-domain-notice .empty-icon {

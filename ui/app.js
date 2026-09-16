@@ -1482,6 +1482,36 @@ class VesselApp {
     this.previousRoute = "cinema";
   }
 
+  async apiFetch(endpoint, options = {}) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+    try {
+      const res = await fetch(endpoint, {
+        ...options,
+        signal: controller.signal,
+        headers: {
+          "Content-Type": "application/json",
+          ...options.headers
+        }
+      });
+      clearTimeout(timeoutId);
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.message || `HTTP error! status: ${res.status}`);
+      }
+
+      return await res.json();
+    } catch (e) {
+      clearTimeout(timeoutId);
+      if (e.name === 'AbortError') {
+        throw new Error("Request timed out after 15 seconds");
+      }
+      throw e;
+    }
+  }
+
   async init() {
     await this.loadLocalePreference();
     await this.loadActiveTheme();
@@ -1752,9 +1782,7 @@ class VesselApp {
   // --- Theme Engine ---
   async loadActiveTheme() {
     try {
-      const res = await fetch("/api/theme/active");
-      if (!res.ok) return;
-      const data = await res.json();
+      const data = await this.apiFetch("/api/theme/active");
       this.activeTheme = data;
 
       if (data.compiled_css) {
@@ -1785,9 +1813,7 @@ class VesselApp {
     if (!container) return;
 
     try {
-      const res = await fetch("/api/themes");
-      if (!res.ok) return;
-      const data = await res.json();
+      const data = await this.apiFetch("/api/themes");
       const themes = data.themes || (Array.isArray(data) ? data : []);
 
       container.innerHTML = "";
@@ -1858,13 +1884,10 @@ class VesselApp {
 
   async applyTheme(themeId) {
     try {
-      const res = await fetch("/api/theme/active", {
+      const data = await this.apiFetch("/api/theme/active", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ theme_id: themeId })
       });
-      if (!res.ok) throw new Error("Failed to change theme");
-      const data = await res.json();
       this.activeTheme = data;
 
       if (data.compiled_css) {
@@ -2059,9 +2082,7 @@ class VesselApp {
       if (this.iptvState.country !== "ALL") {
         query = `country:${this.iptvState.country}`;
       }
-      const res = await fetch(`/api/search?domain=7&query=${encodeURIComponent(query)}&q=${encodeURIComponent(query)}`);
-      if (!res.ok) throw new Error("Could not fetch IPTV channels");
-      const data = await res.json();
+      const data = await this.apiFetch(`/api/search?domain=7&query=${encodeURIComponent(query)}&q=${encodeURIComponent(query)}`);
       this.iptvState.channels = data.items || [];
     } catch (e) {
       if (listElem) listElem.innerHTML = `<div style="padding: 24px; color: var(--v-status-error); text-align: center;">${e.message}</div>`;
@@ -2171,12 +2192,9 @@ class VesselApp {
     let streamUrl = extra.stream_url;
     if (!streamUrl) {
       try {
-        const res = await fetch(`/api/streams?provider=com.vessel.iptv&media=${encodeURIComponent(channel.id)}`);
-        if (res.ok) {
-          const data = await res.json();
-          if (data.streams && data.streams.length > 0) {
-            streamUrl = data.streams[0].url;
-          }
+        const data = await this.apiFetch(`/api/streams?provider=com.vessel.iptv&media=${encodeURIComponent(channel.id)}`);
+        if (data.streams && data.streams.length > 0) {
+          streamUrl = data.streams[0].url;
         }
       } catch (e) {
         console.warn("Could not fetch streams for IPTV channel:", e);
@@ -2298,14 +2316,11 @@ class VesselApp {
       }
       const pollSwarm = async () => {
         try {
-          const res = await fetch(`/api/torrent/status?uri=${encodeURIComponent(streamUrl)}`);
-          if (res.ok) {
-            const data = await res.json();
-            if (swarmBadge) {
-              const speedMB = ((data.download_speed || 0) / (1024 * 1024)).toFixed(1);
-              const progressPct = Math.round((data.progress || 0) * 100);
-              swarmBadge.innerHTML = `🧲 P2P: <strong>${data.peers || 0} peers</strong> • ${speedMB} MB/s • ${progressPct}% buffered`;
-            }
+          const data = await this.apiFetch(`/api/torrent/status?uri=${encodeURIComponent(streamUrl)}`);
+          if (swarmBadge) {
+            const speedMB = ((data.download_speed || 0) / (1024 * 1024)).toFixed(1);
+            const progressPct = Math.round((data.progress || 0) * 100);
+            swarmBadge.innerHTML = `🧲 P2P: <strong>${data.peers || 0} peers</strong> • ${speedMB} MB/s • ${progressPct}% buffered`;
           }
         } catch (e) {}
       };
@@ -2683,9 +2698,8 @@ class VesselApp {
     if (!item || !item.id) return;
     const title = item.title || "";
     const poster = item.poster_url || "";
-    fetch("/api/progress/playback", {
+    this.apiFetch("/api/progress/playback", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         provider_id: item.provider_id || "com.vessel.cinema.cinemasis",
         media_id: item.id,
@@ -2832,9 +2846,7 @@ class VesselApp {
 
   async loadAITasteProfile() {
     try {
-      const res = await fetch("/api/ai/taste-profile");
-      if (!res.ok) return;
-      const data = await res.json();
+      const data = await this.apiFetch("/api/ai/taste-profile");
 
       const tagsContainer = document.getElementById("ai-taste-tags");
       if (tagsContainer) {
@@ -2879,9 +2891,7 @@ class VesselApp {
     if (!container) return;
 
     try {
-      const res = await fetch("/api/ai/moods");
-      if (!res.ok) return;
-      const data = await res.json();
+      const data = await this.apiFetch("/api/ai/moods");
       const moods = data.moods || [];
 
       container.innerHTML = "";
@@ -2931,13 +2941,10 @@ class VesselApp {
     }
 
     try {
-      const res = await fetch("/api/ai/discover", {
+      const data = await this.apiFetch("/api/ai/discover", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ query: query, mood: mood, domain: effectiveDomain, limit: 12 })
       });
-      if (!res.ok) throw new Error("AI discovery failed");
-      const data = await res.json();
       const items = data.recommendations || [];
 
       grid.innerHTML = "";
@@ -2999,9 +3006,7 @@ class VesselApp {
 
   async loadAITasteShelf(domain, container) {
     try {
-      const res = await fetch(`/api/ai/recommendations?domain=${encodeURIComponent(domain)}&limit=12`);
-      if (!res.ok) return;
-      const data = await res.json();
+      const data = await this.apiFetch(`/api/ai/recommendations?domain=${encodeURIComponent(domain)}&limit=12`);
       const items = data.recommendations || [];
       if (items.length === 0) return;
 
@@ -3045,10 +3050,8 @@ class VesselApp {
     `;
 
     try {
-      const res = await fetch(`/api/catalogs?domain=${encodeURIComponent(domain)}`);
-      if (!res.ok) throw new Error("Failed to load catalogs");
-      const data = await res.json();
-      const catalogs = data.catalogs || [];
+      const catalogs = await this.apiFetch(`/api/catalogs?domain=${encodeURIComponent(domain)}`);
+      const catalogList = catalogs.catalogs || [];
 
       // Sort catalogs by user-defined plugin priority order if saved
       const rawOrder = localStorage.getItem("vessel_plugin_order");
@@ -3069,7 +3072,7 @@ class VesselApp {
 
       container.innerHTML = "";
 
-      if (catalogs.length === 0) {
+      if (catalogList.length === 0) {
         emptyNotice.classList.remove("hidden");
         document.getElementById("empty-domain-title").textContent = this.t("empty_domain_title");
         document.getElementById("empty-domain-desc").textContent = this.t("empty_domain_desc");
@@ -3077,12 +3080,12 @@ class VesselApp {
       }
 
       emptyNotice.classList.add("hidden");
-      this.currentCatalogs = catalogs;
+      this.currentCatalogs = catalogList;
 
       // Automatically inject AI Taste Match Shelf on top
       this.loadAITasteShelf(domain, container);
 
-      catalogs.forEach((catRow, idx) => {
+      catalogList.forEach((catRow, idx) => {
         const rowElem = document.createElement("div");
         rowElem.className = "catalog-row";
         rowElem.id = `catalog-row-${idx}`;
@@ -3200,9 +3203,7 @@ class VesselApp {
 
     try {
       // Query multi-domain search concurrently across all active providers (Cinema, Reading, IPTV)
-      const res = await fetch(`/api/search?domain=all&query=${encodeURIComponent(query)}`);
-      if (!res.ok) throw new Error("Arama sorgusu başarısız oldu");
-      const data = await res.json();
+      const data = await this.apiFetch(`/api/search?domain=all&query=${encodeURIComponent(query)}`);
       this.allSearchResults = data.items || [];
       const rawOrder = localStorage.getItem("vessel_plugin_order");
       if (rawOrder) {
@@ -3388,8 +3389,8 @@ class VesselApp {
       if (isIPTV) domainNum = 7;
       else if (isReading) domainNum = 2;
 
-      const res = await fetch(`/api/media?domain=${domainNum}&provider=${encodeURIComponent(item.provider_id || "")}&id=${encodeURIComponent(item.id)}`);
-      const details = res.ok ? (await res.json()) : item;
+      const res = await this.apiFetch(`/api/media?domain=${domainNum}&provider=${encodeURIComponent(item.provider_id || "")}&id=${encodeURIComponent(item.id)}`);
+      const details = res;
 
       if (isIPTV) {
         this.renderIPTVDetails(item, details);
@@ -3431,13 +3432,10 @@ class VesselApp {
     const mediaId = item.id || item.ID || "";
 
     try {
-      const res = await fetch("/api/library?status=ALL");
-      if (res.ok) {
-        const data = await res.json();
-        const match = (data.items || []).find(it => it.media_id === mediaId && (!provider || it.provider_id === provider));
-        if (match && match.status) {
-          select.value = match.status;
-        }
+      const data = await this.apiFetch("/api/library?status=ALL");
+      const match = (data.items || []).find(it => it.media_id === mediaId && (!provider || it.provider_id === provider));
+      if (match && match.status) {
+        select.value = match.status;
       }
     } catch (e) {
       console.warn("Could not check library status:", e);
@@ -3447,7 +3445,7 @@ class VesselApp {
       const chosenStatus = select.value;
       if (chosenStatus === "NONE") {
         try {
-          await fetch(`/api/library?provider=${encodeURIComponent(provider)}&media=${encodeURIComponent(mediaId)}`, {
+          await this.apiFetch(`/api/library?provider=${encodeURIComponent(provider)}&media=${encodeURIComponent(mediaId)}`, {
             method: "DELETE"
           });
           this.showToast("Koleksiyondan kaldırıldı", "info");
@@ -3457,9 +3455,8 @@ class VesselApp {
       } else {
         try {
           const isReading = this.currentDomain === "reading" || item.type >= 4;
-          const res = await fetch("/api/library", {
+          await this.apiFetch("/api/library", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               provider_id: provider,
               media_id: mediaId,
@@ -3471,7 +3468,6 @@ class VesselApp {
               user_rating: 8.5
             })
           });
-          if (!res.ok) throw new Error("Koleksiyon güncellenemedi");
           this.showToast("Koleksiyon güncellendi!");
         } catch (err) {
           this.showToast(err.message, "error");
@@ -3952,9 +3948,8 @@ class VesselApp {
         const chTitle = btn.dataset.title || "";
         btn.textContent = "⏳";
         try {
-          const res = await fetch("/api/reading/download", {
+          await this.apiFetch("/api/reading/download", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               provider_id: item.provider_id || "com.vessel.reading.mangile",
               media_id: item.id,
@@ -3965,7 +3960,6 @@ class VesselApp {
               title: chTitle
             })
           });
-          if (!res.ok) throw new Error("Download request failed");
           btn.innerHTML = "✓ İndirildi";
           btn.classList.remove("btn-secondary");
           btn.classList.add("btn-primary");
@@ -4008,12 +4002,8 @@ class VesselApp {
             url += `&chapter=${encodeURIComponent(chapterId)}`;
           }
         }
-        const res = await fetch(url);
-        if (!res.ok) {
-          const errJson = await res.json().catch(() => ({}));
-          throw new Error(errJson.error || "Could not fetch chapter content");
-        }
-        content = await res.json();
+        const res = await this.apiFetch(url);
+        content = res;
       }
 
       const chList = chapters || details.chapters || [];
@@ -4454,9 +4444,8 @@ class VesselApp {
       window.addEventListener("keydown", readerKeyHandler);
 
       // Save reading progress ping with title and poster
-      await fetch("/api/progress/reading", {
+      this.apiFetch("/api/progress/reading", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           provider_id: provider,
           media_id: item.id,
@@ -4490,9 +4479,7 @@ class VesselApp {
       let targetStream = streamObj;
       if (!targetStream) {
         this.showToast("Akış kaynakları taranıyor...", "info");
-        const res = await fetch(`/api/streams?provider=${encodeURIComponent(item.provider_id || "")}&media=${encodeURIComponent(item.id)}&season=${season}&episode=${episode}`);
-        if (!res.ok) throw new Error("Could not fetch stream sources");
-        const data = await res.json();
+        const data = await this.apiFetch(`/api/streams?provider=${encodeURIComponent(item.provider_id || "")}&media=${encodeURIComponent(item.id)}&season=${season}&episode=${episode}`);
         const streams = data.streams || [];
 
         if (streams.length === 0) {
@@ -4505,15 +4492,11 @@ class VesselApp {
       // Resolve stream
       let streamUrl = targetStream.url;
       try {
-        const resolveRes = await fetch("/api/stream/resolve", {
+        const resolved = await this.apiFetch("/api/stream/resolve", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ url: targetStream.url, media_id: item.id, season, episode })
         });
-        if (resolveRes.ok) {
-          const resolved = await resolveRes.json();
-          if (resolved.url) streamUrl = resolved.url;
-        }
+        if (resolved.url) streamUrl = resolved.url;
       } catch (err) {
         console.warn("Stream resolve error:", err);
       }
@@ -4541,9 +4524,7 @@ class VesselApp {
     `;
 
     try {
-      const res = await fetch(`/api/streams?provider=${encodeURIComponent(item.provider_id || "")}&media=${encodeURIComponent(item.id)}&season=${season}&episode=${episode}`);
-      if (!res.ok) throw new Error("Could not load streams");
-      const data = await res.json();
+      const data = await this.apiFetch(`/api/streams?provider=${encodeURIComponent(item.provider_id || "")}&media=${encodeURIComponent(item.id)}&season=${season}&episode=${episode}`);
       const streams = data.streams || [];
 
       if (streams.length === 0) {
