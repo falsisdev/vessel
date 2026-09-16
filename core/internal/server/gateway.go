@@ -29,6 +29,33 @@ import (
 	"github.com/falsisdev/vessel/ui"
 )
 
+type SearchItem struct {
+	ID           string            `json:"id"`
+	ProviderID   string            `json:"provider_id"`
+	Title        string            `json:"title"`
+	Type         int               `json:"type"`
+	TypeName     string            `json:"type_name"`
+	Year         int32             `json:"year"`
+	PosterURL    string            `json:"poster_url"`
+	Overview     string            `json:"overview"`
+	Domain       int               `json:"domain"`
+	ExternalIDs  map[string]string `json:"external_ids,omitempty"`
+}
+
+type IPTVMediaDetails struct {
+	ID           string            `json:"id"`
+	Title        string            `json:"title"`
+	Type         int               `json:"type"`
+	TypeName     string            `json:"type_name"`
+	Year         int32             `json:"year"`
+	PosterURL    string            `json:"poster_url"`
+	Overview     string            `json:"overview"`
+	Genres       []string          `json:"genres"`
+	Domain       int               `json:"domain"`
+	ProviderID   string            `json:"provider_id"`
+	ExternalIDs  map[string]string `json:"external_ids"`
+}
+
 type GatewayServer struct {
 	addr          string
 	server        *http.Server
@@ -294,17 +321,17 @@ func (g *GatewayServer) handleSearch(w http.ResponseWriter, r *http.Request) {
 			if items, err := g.cinemaSvc.Search(ctx, q); err == nil {
 				mu.Lock()
 				for _, it := range items {
-					allItems = append(allItems, map[string]any{
-						"id":           it.ID,
-						"provider_id":  it.ProviderID,
-						"title":        it.Title,
-						"type":         int(it.Type),
-						"type_name":    it.Type.String(),
-						"year":         it.Year,
-						"poster_url":   it.PosterURL,
-						"overview":     it.Overview,
-						"domain":       1,
-						"external_ids": it.ExternalIDs,
+					allItems = append(allItems, SearchItem{
+						ID:           it.ID,
+						ProviderID:   it.ProviderID,
+						Title:        it.Title,
+						Type:         int(it.Type),
+						TypeName:     it.Type.String(),
+						Year:         it.Year,
+						PosterURL:    it.PosterURL,
+						Overview:     it.Overview,
+						Domain:       1,
+						ExternalIDs:  it.ExternalIDs.Extra,
 					})
 				}
 				mu.Unlock()
@@ -319,17 +346,17 @@ func (g *GatewayServer) handleSearch(w http.ResponseWriter, r *http.Request) {
 			if items, err := g.readingSvc.Search(ctx, pluginv1.Domain_DOMAIN_MANGA, q); err == nil {
 				mu.Lock()
 				for _, it := range items {
-					allItems = append(allItems, map[string]any{
-						"id":           it.ID,
-						"provider_id":  it.ProviderID,
-						"title":        it.Title,
-						"type":         int(it.Type),
-						"type_name":    it.Type.String(),
-						"year":         it.Year,
-						"poster_url":   it.PosterURL,
-						"overview":     it.Overview,
-						"domain":       2,
-						"external_ids": it.ExternalIDs,
+					allItems = append(allItems, SearchItem{
+						ID:           it.ID,
+						ProviderID:   it.ProviderID,
+						Title:        it.Title,
+						Type:         int(it.Type),
+						TypeName:     it.Type.String(),
+						Year:         it.Year,
+						PosterURL:    it.PosterURL,
+						Overview:     it.Overview,
+						Domain:       2,
+						ExternalIDs:  it.ExternalIDs.Extra,
 					})
 				}
 				mu.Unlock()
@@ -346,16 +373,16 @@ func (g *GatewayServer) handleSearch(w http.ResponseWriter, r *http.Request) {
 				if resp, err := client.Search(ctx, q, 1); err == nil && resp != nil {
 					mu.Lock()
 					for _, it := range resp.Items {
-						allItems = append(allItems, map[string]any{
-							"id":          it.Id,
-							"title":       it.Title,
-							"type":        7,
-							"type_name":   "IPTV",
-							"year":        it.Year,
-							"poster_url":  it.PosterUrl,
-							"overview":    it.Overview,
-							"domain":      7,
-							"provider_id": client.Manifest().Id,
+						allItems = append(allItems, SearchItem{
+							ID:          it.Id,
+							Title:       it.Title,
+							Type:        7,
+							TypeName:   "IPTV",
+							Year:        it.Year,
+							PosterURL:  it.PosterUrl,
+							Overview:    it.Overview,
+							Domain:      7,
+							ProviderID: client.Manifest().Id,
 						})
 					}
 					mu.Unlock()
