@@ -1171,9 +1171,33 @@ func (g *GatewayServer) handlePluginsInstall(w http.ResponseWriter, r *http.Requ
 	}
 
 	slog.Info("Verified and registered community plugin", "id", rawManifest.ID, "name", rawManifest.Name)
+
+	// Attempt to register as a bridge plugin if it's from a known ecosystem
+	var bridgeType plugin.BridgeType
+	if strings.Contains(targetURL, "stremio") {
+		bridgeType = plugin.BridgeTypeStremio
+	} else if strings.Contains(targetURL, "cloudstream") {
+		bridgeType = plugin.BridgeTypeCloudstream
+	} else if strings.Contains(targetURL, "anthology") || strings.Contains(targetURL, "nuvio") {
+		bridgeType = plugin.BridgeTypeNuvio
+	}
+
+	if bridgeType != "" && g.pluginMgr != nil {
+		if client, err := plugin.NewBridgeClient(bridgeType, targetURL); err == nil {
+			if err := g.pluginMgr.Register(client); err == nil {
+				g.writeJSON(w, http.StatusOK, map[string]any{
+					"success": true,
+					"message": fmt.Sprintf("Bridge plugin '%s' installed successfully", rawManifest.Name),
+					"id":      client.Manifest().Id,
+				})
+				return
+			}
+		}
+	}
+
 	g.writeJSON(w, http.StatusOK, map[string]any{
 		"success": true,
-		"message": fmt.Sprintf("Plugin '%s' (%s) verified and installed successfully", rawManifest.Name, rawManifest.ID),
+		"message": fmt.Sprintf("Plugin '%s' (%s) verified, but not yet registered as a functional client", rawManifest.Name, rawManifest.ID),
 		"id":      rawManifest.ID,
 	})
 }
