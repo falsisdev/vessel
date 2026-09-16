@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -395,6 +396,31 @@ func (g *GatewayServer) handleSearch(w http.ResponseWriter, r *http.Request) {
 	g.writeJSON(w, http.StatusOK, map[string]any{"items": allItems})
 }
 
+func (g *GatewayServer) resolveIPTVClient(providerID, mediaID string, cap pluginv1.Capability) plugin.Client {
+	if g.pluginMgr == nil {
+		return nil
+	}
+	if providerID != "" {
+		if c, err := g.pluginMgr.Get(providerID); err == nil && c != nil {
+			if c.Manifest().Domain == pluginv1.Domain_DOMAIN_IPTV {
+				return c
+			}
+		}
+	}
+	hinted := strings.HasPrefix(providerID, "com.vessel.iptv") ||
+		strings.HasPrefix(mediaID, "tr-") ||
+		strings.HasPrefix(mediaID, "intl-") ||
+		strings.HasPrefix(mediaID, "tv:") ||
+		strings.HasPrefix(mediaID, "nuvio-")
+	if hinted {
+		plugs := g.pluginMgr.ListByDomainAndCapability(pluginv1.Domain_DOMAIN_IPTV, cap)
+		if len(plugs) > 0 {
+			return plugs[0]
+		}
+	}
+	return nil
+}
+
 func (g *GatewayServer) handleMedia(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	providerID := r.URL.Query().Get("provider")
@@ -412,35 +438,27 @@ func (g *GatewayServer) handleMedia(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if domainStr == "7" || strings.EqualFold(domainStr, "iptv") || strings.HasPrefix(providerID, "com.vessel.iptv") {
-		if g.pluginMgr != nil {
-			client, err := g.pluginMgr.Get(providerID)
-			if err != nil || client == nil {
-				iptvPlugins := g.pluginMgr.ListByDomainAndCapability(pluginv1.Domain_DOMAIN_IPTV, pluginv1.Capability_CAPABILITY_METADATA)
-				if len(iptvPlugins) > 0 {
-					client = iptvPlugins[0]
-					err = nil
-				}
-			}
-			if err == nil && client != nil {
-				resp, err := client.GetMetadata(ctx, mediaID)
-				if err == nil && resp != nil && resp.Details != nil {
-					d := resp.Details
-					g.writeJSON(w, http.StatusOK, map[string]any{
-						"id":           d.Id,
-						"title":        d.Title,
-						"type":         7,
-						"type_name":    "IPTV",
-						"year":         d.Year,
-						"poster_url":   d.PosterUrl,
-						"overview":     d.Overview,
-						"genres":       d.Genres,
-						"domain":       7,
-						"provider_id":  client.Manifest().Id,
-						"external_ids": d.ExternalIds,
-					})
-					return
-				}
+	if domainStr == "7" || strings.EqualFold(domainStr, "iptv") ||
+		strings.HasPrefix(providerID, "com.vessel.iptv") || strings.HasPrefix(mediaID, "tv:") {
+		client := g.resolveIPTVClient(providerID, mediaID, pluginv1.Capability_CAPABILITY_METADATA)
+		if client != nil {
+			resp, err := client.GetMetadata(ctx, mediaID)
+			if err == nil && resp != nil && resp.Details != nil {
+				d := resp.Details
+				g.writeJSON(w, http.StatusOK, map[string]any{
+					"id":           d.Id,
+					"title":        d.Title,
+					"type":         7,
+					"type_name":    "IPTV",
+					"year":         d.Year,
+					"poster_url":   d.PosterUrl,
+					"overview":     d.Overview,
+					"genres":       d.Genres,
+					"domain":       7,
+					"provider_id":  client.Manifest().Id,
+					"external_ids": d.ExternalIds,
+				})
+				return
 			}
 		}
 	}
@@ -492,25 +510,18 @@ func (g *GatewayServer) handleStreams(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if strings.HasPrefix(providerID, "com.vessel.iptv") || strings.HasPrefix(mediaID, "tr-") || strings.HasPrefix(mediaID, "intl-") {
-		if g.pluginMgr != nil {
-			client, err := g.pluginMgr.Get(providerID)
-			if err != nil || client == nil {
-				iptvPlugins := g.pluginMgr.ListByDomainAndCapability(pluginv1.Domain_DOMAIN_IPTV, pluginv1.Capability_CAPABILITY_STREAMS)
-				if len(iptvPlugins) > 0 {
-					client = iptvPlugins[0]
-					err = nil
-				}
-			}
-			if err == nil && client != nil {
-				resp, err := client.GetStreams(ctx, mediaID, int32(season), int32(episode))
-				if err == nil && resp != nil {
-					g.writeJSON(w, http.StatusOK, map[string]any{
-						"streams":   resp.Streams,
-						"subtitles": resp.Subtitles,
-					})
-					return
-				}
+	if strings.HasPrefix(providerID, "com.vessel.iptv") || strings.HasPrefix(mediaID, "tr-") ||
+		strings.HasPrefix(mediaID, "intl-") || strings.HasPrefix(mediaID, "tv:") ||
+		strings.HasPrefix(providerID, "com.vessel.bridge.") {
+		client := g.resolveIPTVClient(providerID, mediaID, pluginv1.Capability_CAPABILITY_STREAMS)
+		if client != nil {
+			resp, err := client.GetStreams(ctx, mediaID, int32(season), int32(episode))
+			if err == nil && resp != nil {
+				g.writeJSON(w, http.StatusOK, map[string]any{
+					"streams":   resp.Streams,
+					"subtitles": resp.Subtitles,
+				})
+				return
 			}
 		}
 	}
@@ -958,7 +969,7 @@ func (g *GatewayServer) handlePlugins(w http.ResponseWriter, r *http.Request) {
 	list := make([]any, 0, len(clients))
 	for _, c := range clients {
 		m := c.Manifest()
-		list = append(list, map[string]any{
+		entry := map[string]any{
 			"id":               m.Id,
 			"name":             m.Name,
 			"version":          m.Version,
@@ -969,7 +980,12 @@ func (g *GatewayServer) handlePlugins(w http.ResponseWriter, r *http.Request) {
 			"protocol_version": m.ProtocolVersion,
 			"is_builtin":       m.IsBuiltin,
 			"enabled":          g.pluginMgr.IsEnabled(m.Id),
-		})
+		}
+		if bc, ok := c.(*plugin.BridgeClient); ok {
+			entry["ecosystem"] = string(bc.Type())
+			entry["manifest_url"] = bc.ManifestURL()
+		}
+		list = append(list, entry)
 	}
 	g.writeJSON(w, http.StatusOK, map[string]any{"plugins": list})
 }
@@ -1057,6 +1073,20 @@ func (g *GatewayServer) isPluginInstalled(id string) bool {
 	return err == nil
 }
 
+func (g *GatewayServer) detectBridgeType(targetURL string) plugin.BridgeType {
+	lower := strings.ToLower(targetURL)
+	if strings.Contains(lower, "stremio") {
+		return plugin.BridgeTypeStremio
+	}
+	if strings.Contains(lower, "cloudstream") {
+		return plugin.BridgeTypeCloudstream
+	}
+	if strings.Contains(lower, "nuvio") || strings.Contains(lower, "anthology") {
+		return plugin.BridgeTypeNuvio
+	}
+	return ""
+}
+
 func (g *GatewayServer) handlePluginsAvailable(w http.ResponseWriter, r *http.Request) {
 	available := []map[string]any{
 		{
@@ -1118,10 +1148,53 @@ func (g *GatewayServer) handlePluginsInstall(w http.ResponseWriter, r *http.Requ
 
 	targetURL := strings.TrimSpace(req.URL)
 	targetPath := strings.TrimSpace(req.Path)
+	targetID := strings.TrimSpace(req.ID)
 
 	if targetURL == "" && targetPath == "" {
+		if targetID != "" {
+			if g.isPluginInstalled(targetID) {
+				g.writeJSON(w, http.StatusOK, map[string]any{
+					"success": true,
+					"message": fmt.Sprintf("Plugin '%s' is already installed", targetID),
+					"id":      targetID,
+				})
+				return
+			}
+			g.writeError(w, http.StatusBadRequest, fmt.Sprintf("unknown builtin plugin id '%s'; provide a plugin URL", targetID))
+			return
+		}
 		g.writeError(w, http.StatusBadRequest, "either URL or local Path must be specified")
 		return
+	}
+
+	if targetURL != "" && g.pluginMgr != nil {
+		if bridgeType := g.detectBridgeType(targetURL); bridgeType != "" {
+			client, err := plugin.NewBridgeClient(bridgeType, targetURL)
+			if err != nil {
+				g.writeError(w, http.StatusBadRequest, fmt.Sprintf("failed to load bridge plugin: %v", err))
+				return
+			}
+			if err := g.pluginMgr.Register(client); err != nil {
+				if errors.Is(err, plugin.ErrDuplicatePlugin) {
+					g.writeJSON(w, http.StatusOK, map[string]any{
+						"success": true,
+						"message": fmt.Sprintf("Bridge plugin '%s' is already installed", client.Manifest().Name),
+						"id":      client.Manifest().Id,
+					})
+					return
+				}
+				slog.Warn("Failed to register bridge plugin", "id", client.Manifest().Id, "error", err)
+				g.writeError(w, http.StatusInternalServerError, fmt.Sprintf("failed to register bridge plugin: %v", err))
+				return
+			}
+			slog.Info("Registered bridge plugin", "type", bridgeType, "id", client.Manifest().Id, "name", client.Manifest().Name)
+			g.writeJSON(w, http.StatusOK, map[string]any{
+				"success": true,
+				"message": fmt.Sprintf("Bridge plugin '%s' installed successfully", client.Manifest().Name),
+				"id":      client.Manifest().Id,
+			})
+			return
+		}
 	}
 
 	var manifestData []byte
@@ -1171,29 +1244,6 @@ func (g *GatewayServer) handlePluginsInstall(w http.ResponseWriter, r *http.Requ
 	}
 
 	slog.Info("Verified and registered community plugin", "id", rawManifest.ID, "name", rawManifest.Name)
-
-	// Attempt to register as a bridge plugin if it's from a known ecosystem
-	var bridgeType plugin.BridgeType
-	if strings.Contains(targetURL, "stremio") {
-		bridgeType = plugin.BridgeTypeStremio
-	} else if strings.Contains(targetURL, "cloudstream") {
-		bridgeType = plugin.BridgeTypeCloudstream
-	} else if strings.Contains(targetURL, "anthology") || strings.Contains(targetURL, "nuvio") {
-		bridgeType = plugin.BridgeTypeNuvio
-	}
-
-	if bridgeType != "" && g.pluginMgr != nil {
-		if client, err := plugin.NewBridgeClient(bridgeType, targetURL); err == nil {
-			if err := g.pluginMgr.Register(client); err == nil {
-				g.writeJSON(w, http.StatusOK, map[string]any{
-					"success": true,
-					"message": fmt.Sprintf("Bridge plugin '%s' installed successfully", rawManifest.Name),
-					"id":      client.Manifest().Id,
-				})
-				return
-			}
-		}
-	}
 
 	g.writeJSON(w, http.StatusOK, map[string]any{
 		"success": true,

@@ -11,8 +11,8 @@ import (
 type BridgeType string
 
 const (
-	BridgeTypeNuvio      BridgeType = "nuvio"
-	BridgeTypeStremio    BridgeType = "stremio"
+	BridgeTypeNuvio       BridgeType = "nuvio"
+	BridgeTypeStremio     BridgeType = "stremio"
 	BridgeTypeCloudstream BridgeType = "cloudstream"
 )
 
@@ -26,9 +26,10 @@ type BridgeAdapter interface {
 
 // BridgeClient implements the plugin.Client interface by proxying requests to an external system via an adapter.
 type BridgeClient struct {
+	bType      BridgeType
 	adapter    BridgeAdapter
 	manifestURL string
-	manifest   *pluginv1.PluginManifest
+	manifest    *pluginv1.PluginManifest
 }
 
 // NewBridgeClient creates a new bridge plugin based on the specified type and manifest URL.
@@ -39,19 +40,19 @@ func NewBridgeClient(bType BridgeType, manifestURL string) (*BridgeClient, error
 	case BridgeTypeNuvio:
 		adapter = &NuvioAdapter{}
 	case BridgeTypeStremio:
-							adapter = &StremioAdapter{}
+		adapter = &StremioAdapter{}
 	case BridgeTypeCloudstream:
-							adapter = &CloudstreamAdapter{}
+		adapter = &CloudstreamAdapter{}
 	default:
 		return nil, fmt.Errorf("unsupported bridge type: %s", bType)
 	}
 
 	client := &BridgeClient{
+		bType:       bType,
 		adapter:     adapter,
 		manifestURL: manifestURL,
 	}
 
-	// Load manifest immediately to validate the bridge
 	ctx := context.Background()
 	m, err := adapter.GetManifest(ctx, manifestURL)
 	if err != nil {
@@ -60,6 +61,16 @@ func NewBridgeClient(bType BridgeType, manifestURL string) (*BridgeClient, error
 	client.manifest = m
 
 	return client, nil
+}
+
+// Type returns the bridge type (nuvio/stremio/cloudstream).
+func (c *BridgeClient) Type() BridgeType {
+	return c.bType
+}
+
+// ManifestURL returns the URL used to load the bridge manifest.
+func (c *BridgeClient) ManifestURL() string {
+	return c.manifestURL
 }
 
 func (c *BridgeClient) Manifest() *pluginv1.PluginManifest {
@@ -79,7 +90,6 @@ func (c *BridgeClient) GetStreams(ctx context.Context, mediaID string, season, e
 }
 
 func (c *BridgeClient) GetChapterContent(ctx context.Context, mediaID, chapterID string, chapterNumber float32) (*pluginv1.GetChapterContentResponse, error) {
-	// Most media bridges don't support chapter content directly in the same way as reading plugins.
 	return nil, fmt.Errorf("chapter content not supported by bridge plugins")
 }
 

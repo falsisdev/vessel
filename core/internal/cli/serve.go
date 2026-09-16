@@ -130,13 +130,24 @@ func RunServer(args []string) error {
 		}
 
 		// Register Bridge Plugins (Adapters for external ecosystems)
-		nuvioBridge, err := plugin.NewBridgeClient(plugin.BridgeTypeNuvio, "https://raw.githubusercontent.com/falsisdev/anthology/main/manifest.json")
+		// Anthology Nuvio manifest (canlı TV, M3U tabanlı) — canonical pointer.
+		nuvioBridge, err := plugin.NewBridgeClient(plugin.BridgeTypeNuvio, "https://falsisdev.github.io/anthology/manifest.json")
 		if err == nil {
 			if err := pluginManager.Register(nuvioBridge); err == nil {
 				slog.Info("Registered bridge plugin", "id", nuvioBridge.Manifest().Id, "name", nuvioBridge.Manifest().Name)
 			}
 		} else {
 			slog.Warn("Failed to initialize Nuvio bridge", "error", err)
+		}
+
+		// Anthology Stremio addon (live TV, Stremio protocol).
+		stremioBridge, err := plugin.NewBridgeClient(plugin.BridgeTypeStremio, "https://falsisdev.github.io/anthology/stremio/manifest.json")
+		if err == nil {
+			if err := pluginManager.Register(stremioBridge); err == nil {
+				slog.Info("Registered bridge plugin", "id", stremioBridge.Manifest().Id, "name", stremioBridge.Manifest().Name)
+			}
+		} else {
+			slog.Warn("Failed to initialize Stremio bridge", "error", err)
 		}
 
 	catalogService := service.NewCatalogService(pluginManager, 5*time.Second)

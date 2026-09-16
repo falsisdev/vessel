@@ -1483,16 +1483,18 @@ class VesselApp {
   }
 
   async apiFetch(endpoint, options = {}) {
+    const { timeout = 15000, headers: extraHeaders, ...rest } = options;
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000);
+    let timeoutId = null;
+    if (timeout > 0) timeoutId = setTimeout(() => controller.abort(), timeout);
 
     try {
       const res = await fetch(endpoint, {
-        ...options,
+        ...rest,
         signal: controller.signal,
         headers: {
-          "Content-Type": "application/json",
-          ...options.headers
+          ...(rest.body != null ? { "Content-Type": "application/json" } : {}),
+          ...(extraHeaders || {})
         }
       });
       clearTimeout(timeoutId);
@@ -1506,7 +1508,7 @@ class VesselApp {
     } catch (e) {
       clearTimeout(timeoutId);
       if (e.name === 'AbortError') {
-        throw new Error("Request timed out after 15 seconds");
+        throw new Error(`Request timed out after ${timeout} seconds`);
       }
       throw e;
     }
@@ -2192,7 +2194,8 @@ class VesselApp {
     let streamUrl = extra.stream_url;
     if (!streamUrl) {
       try {
-        const data = await this.apiFetch(`/api/streams?provider=com.vessel.iptv&media=${encodeURIComponent(channel.id)}`);
+        const provider = channel.provider_id || "com.vessel.iptv";
+        const data = await this.apiFetch(`/api/streams?provider=${encodeURIComponent(provider)}&media=${encodeURIComponent(channel.id)}`);
         if (data.streams && data.streams.length > 0) {
           streamUrl = data.streams[0].url;
         }
@@ -3784,7 +3787,8 @@ class VesselApp {
     this.setupDetailsLibraryControl(item, details);
 
     const playHandler = () => {
-      this.playDirectHlsStream(streamURL || `/api/streams?provider=com.vessel.iptv&media=${encodeURIComponent(item.id)}`, title, item);
+      const provider = (details.provider_id || item.provider_id || "com.vessel.iptv");
+      this.playDirectHlsStream(streamURL || `/api/streams?provider=${encodeURIComponent(provider)}&media=${encodeURIComponent(item.id)}`, title, item);
     };
 
     document.getElementById("details-watch-live-btn").addEventListener("click", playHandler);
