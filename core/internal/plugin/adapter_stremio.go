@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/url"
 
 	pluginv1 "github.com/falsisdev/vessel/proto/gen/go/plugin/v1"
 )
@@ -94,7 +93,6 @@ func (a *StremioAdapter) GetMetadata(ctx context.Context, baseURL string, mediaI
 			Title: meta.Meta.Name,
 			Overview: meta.Meta.Description,
 			PosterUrl: meta.Meta.Poster,
-			BackgroundUrl: meta.Meta.Background,
 		},
 	}, nil
 }

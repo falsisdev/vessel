@@ -3,7 +3,6 @@ package plugin
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 
 	pluginv1 "github.com/falsisdev/vessel/proto/gen/go/plugin/v1"
