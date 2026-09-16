@@ -129,14 +129,14 @@ func RunServer(args []string) error {
 			}
 		}
 
-		anthologySvc := service.NewAnthologyService()
-		if err := anthologySvc.LoadManifest(); err != nil {
-			slog.Warn("Failed to load Anthology manifest", "error", err)
-		}
-		if inProcClient, err := plugin.NewInProcessClient(anthologySvc); err == nil {
-			if err := pluginManager.Register(inProcClient); err == nil {
-				slog.Info("Registered bundled in-process plugin", "id", inProcClient.Manifest().Id, "name", inProcClient.Manifest().Name)
+		// Register Bridge Plugins (Adapters for external ecosystems)
+		nuvioBridge, err := plugin.NewBridgeClient(plugin.BridgeTypeNuvio, "https://raw.githubusercontent.com/falsisdev/anthology/main/manifest.json")
+		if err == nil {
+			if err := pluginManager.Register(nuvioBridge); err == nil {
+				slog.Info("Registered bridge plugin", "id", nuvioBridge.Manifest().Id, "name", nuvioBridge.Manifest().Name)
 			}
+		} else {
+			slog.Warn("Failed to initialize Nuvio bridge", "error", err)
 		}
 
 	catalogService := service.NewCatalogService(pluginManager, 5*time.Second)

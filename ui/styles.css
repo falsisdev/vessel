@@ -147,8 +147,9 @@ html, body {
   background-color: var(--v-bg-surface);
   color: var(--v-accent-secondary);
   font-weight: 600;
-  box-shadow: inset 4px 0 0 var(--v-accent-secondary);
+  box-shadow: inset 3px 0 0 var(--v-accent-secondary);
   border-radius: 0 var(--v-radius-md) var(--v-radius-md) 0;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .sidebar-footer {
@@ -270,9 +271,9 @@ html, body {
   align-items: center;
   justify-content: space-between;
   gap: 20px;
-  background-color: var(--v-bg-surface);
+  background-color: rgba(var(--v-bg-surface-rgb, 24, 24, 37), 0.8);
   border-bottom: 1px solid var(--v-border-subtle);
-  backdrop-filter: blur(var(--v-blur-amount));
+  backdrop-filter: blur(24px);
   z-index: 5;
 }
 
@@ -298,14 +299,14 @@ html, body {
 
 .search-box input {
   width: 100%;
-  padding: 9px 36px 9px 38px;
+  padding: 10px 36px 10px 38px;
   border: 1px solid var(--v-border-subtle);
   border-radius: var(--v-radius-full);
   background-color: var(--v-bg-base);
   color: var(--v-text-primary);
   font-size: 0.9rem;
   outline: none;
-  transition: all 0.2s ease;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 [dir="rtl"] .search-box input {
@@ -314,7 +315,8 @@ html, body {
 
 .search-box input:focus {
   border-color: var(--v-accent-primary);
-  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.25);
+  background-color: var(--v-bg-surface);
+  box-shadow: 0 0 0 3px rgba(203, 166, 247, 0.15);
 }
 
 .clear-search {
@@ -546,10 +548,10 @@ html, body {
 }
 
 .media-card:hover {
-  transform: translateY(-6px) scale(1.02);
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35);
+  transform: translateY(-4px);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
   border-color: var(--v-accent-primary);
-  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s ease, border-color 0.3s ease;
+  transition: transform 0.3s cubic-bezier(0.2, 0, 0.2, 1), box-shadow 0.3s ease, border-color 0.3s ease;
 }
 
 .poster-wrapper {
@@ -598,11 +600,13 @@ html, body {
 }
 
 .card-title {
-  font-size: 0.92rem;
+  font-size: 0.95rem;
   font-weight: 600;
+  letter-spacing: -0.01em;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  color: var(--v-text-primary);
 }
 
 .card-meta {
@@ -611,6 +615,7 @@ html, body {
   justify-content: space-between;
   font-size: 0.8rem;
   color: var(--v-text-muted);
+  font-weight: 500;
 }
 
 /* Settings View Styles */
@@ -2729,10 +2734,16 @@ html, body {
   background: linear-gradient(135deg, var(--v-bg-surface) 0%, var(--v-bg-card) 100%);
   border: 1px solid var(--v-border-default);
   border-radius: var(--v-radius-lg, 16px);
-  padding: 22px 26px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(16px);
+  padding: 24px 30px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(20px);
   overflow: hidden;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.ai-discovery-card:hover {
+  border-color: var(--v-accent-primary);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4);
 }
 
 .ai-discovery-card::before {
