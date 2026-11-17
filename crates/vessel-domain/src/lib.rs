@@ -9,6 +9,8 @@ pub mod ports;
 pub mod stream;
 pub mod ui;
 
+pub use error::{VesselError, VesselResult};
+
 /// Returns the crate version embedded at compile time from `Cargo.toml`.
 pub fn domain_version() -> &'static str {
     env!("CARGO_PKG_VERSION")
