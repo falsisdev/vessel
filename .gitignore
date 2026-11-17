@@ -1,32 +1,8 @@
-# Binaries and build artifacts
-bin/
-*.exe
-*.exe~
-*.dll
-*.so
-*.dylib
-plugins/cinemasis/cinemasis
-plugins/mangile/mangile
+# Antigravity / AI Private Memory & Workspace Context
+.agents/
+GEMINI.md
+AGENTS.md
 
-# Test artifacts
-*.out
-*.test
-
-# OS metadata
+# OS
 .DS_Store
 Thumbs.db
-
-# IDEs
-.idea/
-.vscode/
-.gemini/
-
-# Local databases and environment
-*.db
-*.db-*
-.env
-
-# Swift Package Manager
-.build/
-*.xcodeproj
-*.xcworkspace
