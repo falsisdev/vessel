@@ -7,3 +7,6 @@ PLAN.md
 # OS
 .DS_Store
 Thumbs.db
+
+# Rust / Cargo
+/target/
