@@ -10,6 +10,7 @@ pub mod stream;
 pub mod ui;
 
 pub use error::{VesselError, VesselResult};
+pub use ids::{ExternalIds, MediaRef, PluginId};
 
 /// Returns the crate version embedded at compile time from `Cargo.toml`.
 pub fn domain_version() -> &'static str {
