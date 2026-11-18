@@ -4,6 +4,7 @@ pub mod error;
 pub mod event;
 pub mod ids;
 pub mod media;
+pub mod paths;
 pub mod plugin;
 pub mod ports;
 pub mod stream;
@@ -18,6 +19,7 @@ pub use media::{
     ContentRating, Episode, EpisodeTag, MediaDetail, MediaRelation, MediaSummary, MediaType,
     PlaybackProgress, RelationKind, SeasonSummary,
 };
+pub use paths::VesselPaths;
 pub use plugin::{
     ContentCategory, PluginCapability, PluginManifest, PluginSettingField, RegistryIndex,
     RepoIndex, RepoPluginEntry, SettingDefault, SettingFieldType, SettingSelectOption,
