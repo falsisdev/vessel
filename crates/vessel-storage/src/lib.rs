@@ -1,6 +1,7 @@
 //! Local SQLite persistence (`bundled` + WAL + FTS5) for Vessel.
 
 pub mod actor;
+pub mod backup;
 pub mod library;
 pub mod plugins;
 pub mod secret;
@@ -12,6 +13,7 @@ use rusqlite::Connection;
 use vessel_domain::{VesselError, VesselPaths, VesselResult};
 
 pub use actor::StorageActor;
+pub use backup::{BACKUP_SCHEMA_VERSION, BackupImportMode, BackupPluginEntry, VesselBackup};
 pub use plugins::StoredPlugin;
 pub use secret::SqliteSecretStore;
 pub use store::{SqliteStorage, UI_PREFERENCES_KEY};
@@ -74,6 +76,11 @@ impl StorageDb {
     /// Borrows the underlying SQLite connection for crate-internal repositories.
     pub(crate) fn conn(&self) -> &Connection {
         &self.conn
+    }
+
+    /// Mutably borrows the underlying SQLite connection for transactional operations.
+    pub(crate) fn conn_mut(&mut self) -> &mut Connection {
+        &mut self.conn
     }
 
     /// Returns the highest applied migration version, or `0` if none have run.

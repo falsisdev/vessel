@@ -8,7 +8,7 @@ use vessel_domain::{
 
 use crate::{SqliteStorage, map_sql_err};
 
-fn media_type_as_str(kind: MediaType) -> &'static str {
+pub(crate) fn media_type_as_str(kind: MediaType) -> &'static str {
     match kind {
         MediaType::Movie => "movie",
         MediaType::Series => "series",
@@ -16,7 +16,7 @@ fn media_type_as_str(kind: MediaType) -> &'static str {
     }
 }
 
-fn parse_media_type(raw: &str) -> VesselResult<MediaType> {
+pub(crate) fn parse_media_type(raw: &str) -> VesselResult<MediaType> {
     match raw {
         "movie" => Ok(MediaType::Movie),
         "series" => Ok(MediaType::Series),
@@ -27,7 +27,7 @@ fn parse_media_type(raw: &str) -> VesselResult<MediaType> {
     }
 }
 
-fn library_status_as_str(status: LibraryStatus) -> &'static str {
+pub(crate) fn library_status_as_str(status: LibraryStatus) -> &'static str {
     match status {
         LibraryStatus::Watching => "watching",
         LibraryStatus::PlanToWatch => "plan_to_watch",
@@ -37,7 +37,7 @@ fn library_status_as_str(status: LibraryStatus) -> &'static str {
     }
 }
 
-fn parse_library_status(raw: &str) -> VesselResult<LibraryStatus> {
+pub(crate) fn parse_library_status(raw: &str) -> VesselResult<LibraryStatus> {
     match raw {
         "watching" => Ok(LibraryStatus::Watching),
         "plan_to_watch" => Ok(LibraryStatus::PlanToWatch),
@@ -50,15 +50,15 @@ fn parse_library_status(raw: &str) -> VesselResult<LibraryStatus> {
     }
 }
 
-fn u64_to_i64(value: u64, field: &str) -> VesselResult<i64> {
+pub(crate) fn u64_to_i64(value: u64, field: &str) -> VesselResult<i64> {
     i64::try_from(value).map_err(|_| VesselError::InvalidInput(format!("{field} overflows i64")))
 }
 
-fn i64_to_u64(value: i64, field: &str) -> VesselResult<u64> {
+pub(crate) fn i64_to_u64(value: i64, field: &str) -> VesselResult<u64> {
     u64::try_from(value).map_err(|_| VesselError::Storage(format!("negative {field} in database")))
 }
 
-struct RawLibraryRow {
+pub(crate) struct RawLibraryRow {
     plugin_id: String,
     native_id: String,
     canonical_id: Option<String>,
@@ -73,7 +73,7 @@ struct RawLibraryRow {
 }
 
 impl RawLibraryRow {
-    fn from_sql(row: &Row<'_>) -> rusqlite::Result<Self> {
+    pub(crate) fn from_sql(row: &Row<'_>) -> rusqlite::Result<Self> {
         Ok(Self {
             plugin_id: row.get(0)?,
             native_id: row.get(1)?,
@@ -89,7 +89,7 @@ impl RawLibraryRow {
         })
     }
 
-    fn into_domain(self) -> VesselResult<LibraryItem> {
+    pub(crate) fn into_domain(self) -> VesselResult<LibraryItem> {
         let plugin_id = PluginId::new(self.plugin_id)?;
         let media = MediaRef::new(plugin_id, self.native_id)?;
         Ok(LibraryItem {
@@ -107,7 +107,7 @@ impl RawLibraryRow {
     }
 }
 
-struct RawProgressRow {
+pub(crate) struct RawProgressRow {
     stream_id: String,
     canonical_id: Option<String>,
     absolute_episode: Option<u32>,
@@ -118,7 +118,7 @@ struct RawProgressRow {
 }
 
 impl RawProgressRow {
-    fn from_sql(row: &Row<'_>) -> rusqlite::Result<Self> {
+    pub(crate) fn from_sql(row: &Row<'_>) -> rusqlite::Result<Self> {
         Ok(Self {
             stream_id: row.get(0)?,
             canonical_id: row.get(1)?,
@@ -130,7 +130,7 @@ impl RawProgressRow {
         })
     }
 
-    fn into_domain(
+    pub(crate) fn into_domain(
         self,
         media: MediaRef,
         season: u32,
