@@ -1,6 +1,6 @@
 # 🚢 Vessel
 
-*Most ships dread **Rust**. This **cargo vessel** runs on it — **shipped** with **Cargo**, engineered not to **rust**, **docking** plugins by **manifest** at local **ports**.*
+*Most **ships** dread **Rust**. This **cargo vessel** runs on it — **shipped** with **Cargo**, engineered not to **rust**, **docking** plugins by **manifest** at local **ports**.*
 
 **Vessel** is a local-first, cross-platform streaming and media center currently being written from the ground up in **Rust**.
 
