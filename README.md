@@ -1,6 +1,8 @@
-# Vessel
+# 🚢 Vessel
 
-**Vessel** is a local-first, cross-platform streaming and media center currently being rewritten from the ground up in **Rust**.
+*Most ships dread **Rust**. This **cargo vessel** runs on it — shipped with **Cargo**, engineered not to rust, docking plugins by **manifest** at **local ports**.*
+
+**Vessel** is a local-first, cross-platform streaming and media center currently being written from the ground up in **Rust**.
 
 > **Project Status:** Early Development (**Milestone 0** — clean repository setup and core domain architecture).
 > The previous Go + SwiftUI prototype has been archived on the `archive/v1-go` branch (`v1-go-archive` tag) and `archive/v1-go-ui-polish` (`v1-go-ui-polish-archive` tag).
