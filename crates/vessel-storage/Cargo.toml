@@ -8,4 +8,8 @@ repository.workspace = true
 
 [dependencies]
 rusqlite.workspace = true
+tokio.workspace = true
 vessel-domain = { path = "../vessel-domain" }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt"] }

@@ -1,9 +1,13 @@
 //! Local SQLite persistence (`bundled` + WAL + FTS5) for Vessel.
 
+pub mod actor;
+
 use std::path::Path;
 
 use rusqlite::Connection;
 use vessel_domain::{VesselError, VesselPaths, VesselResult};
+
+pub use actor::StorageActor;
 
 const MIGRATION_001_INIT: &str = include_str!("../migrations/001_init.sql");
 
@@ -58,6 +62,12 @@ impl StorageDb {
         configure_connection(&conn)?;
         run_migrations(&mut conn)?;
         Ok(Self { conn })
+    }
+
+    /// Borrows the underlying SQLite connection for crate-internal tests before M1.3 repositories.
+    #[cfg(test)]
+    pub(crate) fn conn(&self) -> &Connection {
+        &self.conn
     }
 
     /// Returns the highest applied migration version, or `0` if none have run.
