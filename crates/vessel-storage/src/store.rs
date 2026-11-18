@@ -1,9 +1,13 @@
-//! High-level typed storage repository over `StorageActor`.
+//! High-level typed storage repository implementing `StoragePort`.
 
+use async_trait::async_trait;
 use rusqlite::OptionalExtension;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
-use vessel_domain::{UiPreferences, VesselError, VesselResult};
+use vessel_domain::{
+    DomainGrantSource, LibraryItem, LibraryStatus, MediaRef, PlaybackProgress, PluginId,
+    StoragePort, UiPreferences, VesselError, VesselResult,
+};
 
 use crate::{StorageActor, map_sql_err};
 
@@ -109,10 +113,81 @@ impl SqliteStorage {
     }
 }
 
+#[async_trait]
+impl StoragePort for SqliteStorage {
+    async fn get_setting(&self, key: &str) -> VesselResult<Option<String>> {
+        self.get_setting_raw(key).await
+    }
+
+    async fn set_setting(&self, key: &str, value_json: &str) -> VesselResult<()> {
+        self.set_setting_raw(key, value_json).await
+    }
+
+    async fn get_plugin_kv(&self, plugin_id: &PluginId, key: &str) -> VesselResult<Option<String>> {
+        SqliteStorage::get_plugin_kv(self, plugin_id, key).await
+    }
+
+    async fn set_plugin_kv(
+        &self,
+        plugin_id: &PluginId,
+        key: &str,
+        value: &str,
+    ) -> VesselResult<()> {
+        SqliteStorage::set_plugin_kv(self, plugin_id, key, value).await
+    }
+
+    async fn remove_plugin_kv(&self, plugin_id: &PluginId, key: &str) -> VesselResult<()> {
+        SqliteStorage::remove_plugin_kv(self, plugin_id, key).await
+    }
+
+    async fn is_domain_allowed(&self, plugin_id: &PluginId, domain: &str) -> VesselResult<bool> {
+        SqliteStorage::is_domain_allowed(self, plugin_id, domain).await
+    }
+
+    async fn grant_domain(
+        &self,
+        plugin_id: &PluginId,
+        domain: &str,
+        source: DomainGrantSource,
+    ) -> VesselResult<()> {
+        SqliteStorage::grant_domain(self, plugin_id, domain, source).await
+    }
+
+    async fn get_progress(
+        &self,
+        media: &MediaRef,
+        season: u32,
+        episode: u32,
+    ) -> VesselResult<Option<PlaybackProgress>> {
+        self.get_watch_progress(media, season, episode).await
+    }
+
+    async fn upsert_progress(&self, progress: &PlaybackProgress) -> VesselResult<()> {
+        self.upsert_watch_progress(progress).await
+    }
+
+    async fn list_library(&self, status: Option<LibraryStatus>) -> VesselResult<Vec<LibraryItem>> {
+        self.list_library_items(status).await
+    }
+
+    async fn upsert_library_item(&self, item: &LibraryItem) -> VesselResult<()> {
+        self.upsert_library(item).await
+    }
+
+    async fn remove_library_item(&self, media: &MediaRef) -> VesselResult<()> {
+        self.delete_library_item(media).await
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use serde::{Deserialize, Serialize};
-    use vessel_domain::{NavLayout, PlayClickBehavior, UiPreferences, VesselError};
+    use vessel_domain::{
+        LibraryItem, LibraryStatus, MediaRef, MediaType, NavLayout, PlayClickBehavior,
+        PlaybackProgress, PluginId, StoragePort, UiPreferences, VesselError,
+    };
 
     use super::{SqliteStorage, UI_PREFERENCES_KEY};
     use crate::StorageActor;
@@ -173,5 +248,84 @@ mod tests {
 
         let res = storage.get_ui_preferences().await;
         assert!(matches!(res, Err(VesselError::Storage(_))));
+    }
+
+    #[tokio::test]
+    async fn implements_storage_port_for_library_and_progress() {
+        let actor = StorageActor::open_in_memory().await.expect("open actor");
+        let port: Arc<dyn StoragePort> = Arc::new(SqliteStorage::new(actor));
+
+        let anthology = PluginId::new("anthology").expect("valid plugin id");
+        let gintama = MediaRef::new(anthology, "/anime/gintama").expect("valid media ref");
+
+        let mut item = LibraryItem {
+            media: gintama.clone(),
+            canonical_id: Some("anilist:918".into()),
+            media_type: MediaType::Series,
+            is_anime: true,
+            title: "Gintama".into(),
+            poster_url: None,
+            year: Some(2006),
+            status: LibraryStatus::Watching,
+            added_at: "2026-11-18T17:00:00Z".into(),
+            updated_at: "2026-11-18T17:00:00Z".into(),
+        };
+        port.upsert_library_item(&item)
+            .await
+            .expect("insert library item");
+
+        item.status = LibraryStatus::Completed;
+        item.updated_at = "2026-11-18T18:00:00Z".into();
+        port.upsert_library_item(&item)
+            .await
+            .expect("update library item");
+
+        assert!(
+            port.list_library(Some(LibraryStatus::Watching))
+                .await
+                .expect("list watching")
+                .is_empty()
+        );
+        let completed = port
+            .list_library(Some(LibraryStatus::Completed))
+            .await
+            .expect("list completed");
+        assert_eq!(completed.len(), 1);
+        assert!(completed[0].is_anime);
+        assert_eq!(completed[0].added_at, "2026-11-18T17:00:00Z");
+
+        let mut progress = PlaybackProgress {
+            media: gintama.clone(),
+            stream_id: "/watch/gintama-50".into(),
+            canonical_id: Some("anilist:918".into()),
+            season: 1,
+            episode: 50,
+            absolute_episode: Some(50),
+            position_ms: 420_000,
+            duration_ms: 1_440_000,
+            completed: false,
+            last_watched_at: "2026-11-18T17:30:00Z".into(),
+        };
+        port.upsert_progress(&progress)
+            .await
+            .expect("insert progress");
+
+        progress.position_ms = 1_400_000;
+        progress.completed = true;
+        port.upsert_progress(&progress)
+            .await
+            .expect("update progress");
+
+        let loaded = port
+            .get_progress(&gintama, 1, 50)
+            .await
+            .expect("read progress")
+            .expect("progress exists");
+        assert_eq!(loaded, progress);
+
+        port.remove_library_item(&gintama)
+            .await
+            .expect("delete library item");
+        assert!(port.list_library(None).await.expect("list all").is_empty());
     }
 }

@@ -1,6 +1,8 @@
 //! Local SQLite persistence (`bundled` + WAL + FTS5) for Vessel.
 
 pub mod actor;
+pub mod library;
+pub mod plugins;
 pub mod secret;
 pub mod store;
 
@@ -10,6 +12,7 @@ use rusqlite::Connection;
 use vessel_domain::{VesselError, VesselPaths, VesselResult};
 
 pub use actor::StorageActor;
+pub use plugins::StoredPlugin;
 pub use secret::SqliteSecretStore;
 pub use store::{SqliteStorage, UI_PREFERENCES_KEY};
 

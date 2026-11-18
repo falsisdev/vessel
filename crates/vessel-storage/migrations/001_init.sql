@@ -59,6 +59,7 @@ CREATE TABLE IF NOT EXISTS library_items (
     native_id TEXT NOT NULL,
     canonical_id TEXT,
     media_type TEXT NOT NULL,
+    is_anime INTEGER NOT NULL DEFAULT 0,
     title TEXT NOT NULL,
     poster_url TEXT,
     year INTEGER,
