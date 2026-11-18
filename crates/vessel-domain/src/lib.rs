@@ -15,6 +15,11 @@ pub use media::{
     ContentRating, Episode, EpisodeTag, MediaDetail, MediaRelation, MediaSummary, MediaType,
     PlaybackProgress, RelationKind, SeasonSummary,
 };
+pub use plugin::{
+    ContentCategory, PluginCapability, PluginManifest, PluginSettingField, RegistryIndex,
+    RepoIndex, RepoPluginEntry, SettingDefault, SettingFieldType, SettingSelectOption,
+    SharedExtractorsRef,
+};
 pub use stream::{
     AudioPriority, AudioType, StreamCandidate, StreamFlag, StreamKind, StreamResult,
     SubtitleFormat, SubtitleSource, SubtitleTrack,
