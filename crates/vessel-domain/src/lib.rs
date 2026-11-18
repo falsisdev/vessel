@@ -10,6 +10,9 @@ pub mod stream;
 pub mod ui;
 
 pub use error::{VesselError, VesselResult};
+pub use event::{
+    DownloadProgressSnapshot, DownloadStatus, EngineEvent, LogLevel, PlayerStateSnapshot,
+};
 pub use ids::{ExternalIds, MediaRef, PluginId};
 pub use media::{
     ContentRating, Episode, EpisodeTag, MediaDetail, MediaRelation, MediaSummary, MediaType,
@@ -19,6 +22,11 @@ pub use plugin::{
     ContentCategory, PluginCapability, PluginManifest, PluginSettingField, RegistryIndex,
     RepoIndex, RepoPluginEntry, SettingDefault, SettingFieldType, SettingSelectOption,
     SharedExtractorsRef,
+};
+pub use ports::{
+    ContentProvider, DomainGrantSource, EventSink, HomeFeed, HomeSection, HomeSectionLayout,
+    LibraryItem, LibraryStatus, PlaybackRequest, PlayerBackend, ResolvedSubtitle, SearchPage,
+    SecretStore, StoragePort, SubtitleCandidate, SubtitleProvider, SubtitleQuery,
 };
 pub use stream::{
     AudioPriority, AudioType, StreamCandidate, StreamFlag, StreamKind, StreamResult,
