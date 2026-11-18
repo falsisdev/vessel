@@ -15,6 +15,10 @@ pub use media::{
     ContentRating, Episode, EpisodeTag, MediaDetail, MediaRelation, MediaSummary, MediaType,
     PlaybackProgress, RelationKind, SeasonSummary,
 };
+pub use stream::{
+    AudioPriority, AudioType, StreamCandidate, StreamFlag, StreamKind, StreamResult,
+    SubtitleFormat, SubtitleSource, SubtitleTrack,
+};
 
 /// Returns the crate version embedded at compile time from `Cargo.toml`.
 pub fn domain_version() -> &'static str {
