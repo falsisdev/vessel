@@ -1,9 +1,19 @@
 //! Local loopback HTTP/HLS proxy server (`127.0.0.1:0`) with stateless HMAC sub-URL signing.
 
+pub mod session;
+
+use std::collections::BTreeMap;
 use std::fmt::Write as _;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
+use axum::body::Body;
+use axum::extract::{Path, State};
+use axum::http::header::{
+    ACCEPT_RANGES, CONTENT_LENGTH, CONTENT_RANGE, CONTENT_TYPE, IF_RANGE, RANGE,
+};
+use axum::http::{HeaderMap, HeaderName, HeaderValue, StatusCode};
+use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use axum::{Json, Router};
 use hmac::{Hmac, KeyInit, Mac};
@@ -12,6 +22,8 @@ use sha2::Sha256;
 use tokio::net::TcpListener;
 use tokio::sync::oneshot;
 use vessel_domain::{VesselError, VesselResult};
+
+pub use session::{DEFAULT_SESSION_TTL, ProxySession, ProxySessionStore};
 
 type HmacSha256 = Hmac<Sha256>;
 
@@ -60,7 +72,7 @@ impl HmacSigner {
     }
 }
 
-fn bytes_to_hex(bytes: &[u8]) -> String {
+pub(crate) fn bytes_to_hex(bytes: &[u8]) -> String {
     let mut out = String::with_capacity(bytes.len() * 2);
     for &b in bytes {
         let _ = write!(&mut out, "{b:02x}");
@@ -86,16 +98,76 @@ pub struct HealthResponse {
     pub status: String,
 }
 
+#[derive(Clone)]
+struct AppState {
+    sessions: Arc<ProxySessionStore>,
+    #[allow(dead_code)]
+    signer: Arc<HmacSigner>,
+    client: reqwest::Client,
+}
+
 async fn health_handler() -> Json<HealthResponse> {
     Json(HealthResponse {
         status: "ok".into(),
     })
 }
 
+async fn master_stream_handler(
+    Path(token): Path<String>,
+    State(state): State<AppState>,
+    req_headers: HeaderMap,
+) -> Response {
+    let Some(session) = state.sessions.get(&token) else {
+        return (StatusCode::NOT_FOUND, "unknown or expired proxy token").into_response();
+    };
+
+    let mut upstream_req = state.client.get(&session.upstream_url);
+    for (name, value) in &session.headers {
+        if let (Ok(header_name), Ok(header_val)) = (
+            HeaderName::from_bytes(name.as_bytes()),
+            HeaderValue::from_str(value),
+        ) {
+            upstream_req = upstream_req.header(header_name, header_val);
+        }
+    }
+
+    for forward_key in [RANGE, IF_RANGE] {
+        if let Some(val) = req_headers.get(&forward_key) {
+            upstream_req = upstream_req.header(forward_key, val.clone());
+        }
+    }
+
+    let upstream_resp = match upstream_req.send().await {
+        Ok(resp) => resp,
+        Err(err) => {
+            return (
+                StatusCode::BAD_GATEWAY,
+                format!("[VesselNetworkError]: upstream request failed: {err}"),
+            )
+                .into_response();
+        }
+    };
+
+    let status = upstream_resp.status();
+    let mut builder = Response::builder().status(status);
+    for pass_key in [CONTENT_TYPE, CONTENT_LENGTH, CONTENT_RANGE, ACCEPT_RANGES] {
+        if let Some(val) = upstream_resp.headers().get(&pass_key) {
+            builder = builder.header(pass_key, val.clone());
+        }
+    }
+
+    let stream = upstream_resp.bytes_stream();
+    match builder.body(Body::from_stream(stream)) {
+        Ok(resp) => resp,
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    }
+}
+
 /// Localhost-bound `axum` proxy server with shared `reqwest` (`rustls`) pool and HMAC key.
 #[derive(Debug)]
 pub struct ProxyServer {
     local_addr: SocketAddr,
+    sessions: Arc<ProxySessionStore>,
     signer: Arc<HmacSigner>,
     client: reqwest::Client,
     shutdown_tx: Option<oneshot::Sender<()>>,
@@ -105,6 +177,7 @@ impl ProxyServer {
     /// Binds to `127.0.0.1:0` and starts serving routes on a background Tokio task.
     pub async fn start() -> VesselResult<Self> {
         let signer = Arc::new(HmacSigner::generate()?);
+        let sessions = Arc::new(ProxySessionStore::default());
         let client = reqwest::Client::builder()
             .build()
             .map_err(|err| VesselError::Network(format!("build proxy http client: {err}")))?;
@@ -116,7 +189,16 @@ impl ProxyServer {
             .local_addr()
             .map_err(|err| VesselError::Network(format!("read local proxy address: {err}")))?;
 
-        let router = Router::new().route("/health", get(health_handler));
+        let state = AppState {
+            sessions: Arc::clone(&sessions),
+            signer: Arc::clone(&signer),
+            client: client.clone(),
+        };
+
+        let router = Router::new()
+            .route("/health", get(health_handler))
+            .route("/s/{token}/master", get(master_stream_handler))
+            .with_state(state);
         let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
 
         tokio::spawn(async move {
@@ -129,10 +211,21 @@ impl ProxyServer {
 
         Ok(Self {
             local_addr,
+            sessions,
             signer,
             client,
             shutdown_tx: Some(shutdown_tx),
         })
+    }
+
+    /// Registers a stream target and returns its full local master proxy URL.
+    pub fn register_stream(
+        &self,
+        upstream_url: impl Into<String>,
+        headers: BTreeMap<String, String>,
+    ) -> VesselResult<String> {
+        let token = self.sessions.register(upstream_url, headers)?;
+        Ok(format!("{}/s/{token}/master", self.base_url()))
     }
 
     /// Returns the actual `127.0.0.1:<port>` address allocated by the OS.
@@ -143,6 +236,11 @@ impl ProxyServer {
     /// Returns the base HTTP URL (e.g. `http://127.0.0.1:54321`).
     pub fn base_url(&self) -> String {
         format!("http://{}", self.local_addr)
+    }
+
+    /// Borrows the ephemeral session store.
+    pub fn sessions(&self) -> &ProxySessionStore {
+        &self.sessions
     }
 
     /// Borrows the ephemeral HMAC signer for sub-URL authentication.
@@ -171,7 +269,61 @@ impl Drop for ProxyServer {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
+    use axum::Router;
+    use axum::http::header::{ACCEPT_RANGES, CONTENT_RANGE, RANGE, REFERER};
+    use axum::http::{HeaderMap, StatusCode};
+    use axum::response::IntoResponse;
+    use axum::routing::get;
+    use tokio::net::TcpListener;
+
     use super::{HealthResponse, HmacSigner, ProxyServer};
+
+    async fn spawn_mock_upstream() -> String {
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind mock upstream");
+        let addr = listener.local_addr().expect("mock addr");
+
+        let app = Router::new().route(
+            "/video.mp4",
+            get(|headers: HeaderMap| async move {
+                let referer = headers
+                    .get(REFERER)
+                    .and_then(|v| v.to_str().ok())
+                    .unwrap_or("");
+                if referer != "https://anthology.example" {
+                    return (StatusCode::FORBIDDEN, "missing referer").into_response();
+                }
+
+                let payload = b"0123456789";
+                if let Some(range_val) = headers.get(RANGE).and_then(|v| v.to_str().ok())
+                    && range_val == "bytes=2-5"
+                {
+                    return (
+                        StatusCode::PARTIAL_CONTENT,
+                        [(CONTENT_RANGE, "bytes 2-5/10"), (ACCEPT_RANGES, "bytes")],
+                        &payload[2..=5],
+                    )
+                        .into_response();
+                }
+
+                (
+                    StatusCode::OK,
+                    [(ACCEPT_RANGES, "bytes")],
+                    payload.as_slice(),
+                )
+                    .into_response()
+            }),
+        );
+
+        tokio::spawn(async move {
+            let _ = axum::serve(listener, app).await;
+        });
+
+        format!("http://{addr}")
+    }
 
     #[tokio::test]
     async fn binds_localhost_ephemeral_port_and_serves_health_endpoint() {
@@ -197,6 +349,59 @@ mod tests {
         );
 
         server.shutdown();
+    }
+
+    #[tokio::test]
+    async fn streams_bytes_with_injected_headers_and_range_support() {
+        let upstream_base = spawn_mock_upstream().await;
+        let server = ProxyServer::start().await.expect("start local proxy");
+
+        // Unknown token must be rejected (no open relay).
+        let bad_resp = server
+            .client()
+            .get(format!("{}/s/invalid-token/master", server.base_url()))
+            .send()
+            .await
+            .expect("call invalid token");
+        assert_eq!(bad_resp.status(), reqwest::StatusCode::NOT_FOUND);
+
+        let mut headers = BTreeMap::new();
+        headers.insert("Referer".into(), "https://anthology.example".into());
+        let proxy_url = server
+            .register_stream(format!("{upstream_base}/video.mp4"), headers)
+            .expect("register stream");
+
+        let full_resp = server
+            .client()
+            .get(&proxy_url)
+            .send()
+            .await
+            .expect("stream full");
+        assert_eq!(full_resp.status(), reqwest::StatusCode::OK);
+        assert_eq!(
+            full_resp.bytes().await.expect("read full body").as_ref(),
+            b"0123456789"
+        );
+
+        let range_resp = server
+            .client()
+            .get(&proxy_url)
+            .header(RANGE, "bytes=2-5")
+            .send()
+            .await
+            .expect("stream range");
+        assert_eq!(range_resp.status(), reqwest::StatusCode::PARTIAL_CONTENT);
+        assert_eq!(
+            range_resp
+                .headers()
+                .get(CONTENT_RANGE)
+                .and_then(|v| v.to_str().ok()),
+            Some("bytes 2-5/10")
+        );
+        assert_eq!(
+            range_resp.bytes().await.expect("read range body").as_ref(),
+            b"2345"
+        );
     }
 
     #[test]
