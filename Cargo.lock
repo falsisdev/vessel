@@ -1641,12 +1641,14 @@ name = "vessel-proxy"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "base64",
  "getrandom 0.4.3",
  "hmac",
  "reqwest",
  "serde",
  "sha2",
  "tokio",
+ "url",
  "vessel-domain",
 ]
 

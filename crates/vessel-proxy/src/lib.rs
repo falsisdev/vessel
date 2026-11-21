@@ -1,5 +1,6 @@
 //! Local loopback HTTP/HLS proxy server (`127.0.0.1:0`) with stateless HMAC sub-URL signing.
 
+pub mod hls;
 pub mod session;
 
 use std::collections::BTreeMap;
@@ -8,7 +9,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use axum::body::Body;
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::http::header::{
     ACCEPT_RANGES, CONTENT_LENGTH, CONTENT_RANGE, CONTENT_TYPE, IF_RANGE, RANGE,
 };
@@ -23,6 +24,7 @@ use tokio::net::TcpListener;
 use tokio::sync::oneshot;
 use vessel_domain::{VesselError, VesselResult};
 
+use hls::{decode_signed_seg_url, is_hls_playlist, rewrite_m3u8_playlist};
 pub use session::{DEFAULT_SESSION_TTL, ProxySession, ProxySessionStore};
 
 type HmacSha256 = Hmac<Sha256>;
@@ -98,10 +100,16 @@ pub struct HealthResponse {
     pub status: String,
 }
 
+#[derive(Deserialize)]
+struct SegQuery {
+    u: String,
+    sig: String,
+}
+
 #[derive(Clone)]
 struct AppState {
+    base_url: String,
     sessions: Arc<ProxySessionStore>,
-    #[allow(dead_code)]
     signer: Arc<HmacSigner>,
     client: reqwest::Client,
 }
@@ -120,9 +128,45 @@ async fn master_stream_handler(
     let Some(session) = state.sessions.get(&token) else {
         return (StatusCode::NOT_FOUND, "unknown or expired proxy token").into_response();
     };
+    stream_upstream_target(
+        &state,
+        &token,
+        &session.upstream_url,
+        &session.headers,
+        &req_headers,
+    )
+    .await
+}
 
-    let mut upstream_req = state.client.get(&session.upstream_url);
-    for (name, value) in &session.headers {
+async fn seg_stream_handler(
+    Path(token): Path<String>,
+    Query(query): Query<SegQuery>,
+    State(state): State<AppState>,
+    req_headers: HeaderMap,
+) -> Response {
+    let Some(session) = state.sessions.get(&token) else {
+        return (StatusCode::NOT_FOUND, "unknown or expired proxy token").into_response();
+    };
+    let Some(target_url) = decode_signed_seg_url(&state.signer, &token, &query.u, &query.sig)
+    else {
+        return (
+            StatusCode::FORBIDDEN,
+            "invalid or tampered segment signature",
+        )
+            .into_response();
+    };
+    stream_upstream_target(&state, &token, &target_url, &session.headers, &req_headers).await
+}
+
+async fn stream_upstream_target(
+    state: &AppState,
+    token: &str,
+    target_url: &str,
+    session_headers: &BTreeMap<String, String>,
+    req_headers: &HeaderMap,
+) -> Response {
+    let mut upstream_req = state.client.get(target_url);
+    for (name, value) in session_headers {
         if let (Ok(header_name), Ok(header_val)) = (
             HeaderName::from_bytes(name.as_bytes()),
             HeaderValue::from_str(value),
@@ -149,6 +193,42 @@ async fn master_stream_handler(
     };
 
     let status = upstream_resp.status();
+    let final_url = upstream_resp.url().as_str().to_owned();
+    let content_type = upstream_resp
+        .headers()
+        .get(CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .map(str::to_owned);
+
+    if status.is_success() && is_hls_playlist(&final_url, content_type.as_deref()) {
+        let playlist_text = match upstream_resp.text().await {
+            Ok(text) => text,
+            Err(err) => {
+                return (
+                    StatusCode::BAD_GATEWAY,
+                    format!("[VesselNetworkError]: read hls playlist: {err}"),
+                )
+                    .into_response();
+            }
+        };
+
+        return match rewrite_m3u8_playlist(
+            &playlist_text,
+            &final_url,
+            &state.base_url,
+            token,
+            &state.signer,
+        ) {
+            Ok(rewritten) => (
+                status,
+                [(CONTENT_TYPE, "application/vnd.apple.mpegurl; charset=utf-8")],
+                rewritten,
+            )
+                .into_response(),
+            Err(err) => (StatusCode::BAD_GATEWAY, err.to_string()).into_response(),
+        };
+    }
+
     let mut builder = Response::builder().status(status);
     for pass_key in [CONTENT_TYPE, CONTENT_LENGTH, CONTENT_RANGE, ACCEPT_RANGES] {
         if let Some(val) = upstream_resp.headers().get(&pass_key) {
@@ -190,6 +270,7 @@ impl ProxyServer {
             .map_err(|err| VesselError::Network(format!("read local proxy address: {err}")))?;
 
         let state = AppState {
+            base_url: format!("http://{local_addr}"),
             sessions: Arc::clone(&sessions),
             signer: Arc::clone(&signer),
             client: client.clone(),
@@ -198,6 +279,7 @@ impl ProxyServer {
         let router = Router::new()
             .route("/health", get(health_handler))
             .route("/s/{token}/master", get(master_stream_handler))
+            .route("/s/{token}/seg", get(seg_stream_handler))
             .with_state(state);
         let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
 
@@ -272,7 +354,7 @@ mod tests {
     use std::collections::BTreeMap;
 
     use axum::Router;
-    use axum::http::header::{ACCEPT_RANGES, CONTENT_RANGE, RANGE, REFERER};
+    use axum::http::header::{ACCEPT_RANGES, CONTENT_RANGE, CONTENT_TYPE, RANGE, REFERER};
     use axum::http::{HeaderMap, StatusCode};
     use axum::response::IntoResponse;
     use axum::routing::get;
@@ -286,37 +368,90 @@ mod tests {
             .expect("bind mock upstream");
         let addr = listener.local_addr().expect("mock addr");
 
-        let app = Router::new().route(
-            "/video.mp4",
-            get(|headers: HeaderMap| async move {
-                let referer = headers
-                    .get(REFERER)
-                    .and_then(|v| v.to_str().ok())
-                    .unwrap_or("");
-                if referer != "https://anthology.example" {
-                    return (StatusCode::FORBIDDEN, "missing referer").into_response();
-                }
+        let app = Router::new()
+            .route(
+                "/video.mp4",
+                get(|headers: HeaderMap| async move {
+                    let referer = headers
+                        .get(REFERER)
+                        .and_then(|v| v.to_str().ok())
+                        .unwrap_or("");
+                    if referer != "https://anthology.example" {
+                        return (StatusCode::FORBIDDEN, "missing referer").into_response();
+                    }
 
-                let payload = b"0123456789";
-                if let Some(range_val) = headers.get(RANGE).and_then(|v| v.to_str().ok())
-                    && range_val == "bytes=2-5"
-                {
-                    return (
-                        StatusCode::PARTIAL_CONTENT,
-                        [(CONTENT_RANGE, "bytes 2-5/10"), (ACCEPT_RANGES, "bytes")],
-                        &payload[2..=5],
+                    let payload = b"0123456789";
+                    if let Some(range_val) = headers.get(RANGE).and_then(|v| v.to_str().ok())
+                        && range_val == "bytes=2-5"
+                    {
+                        return (
+                            StatusCode::PARTIAL_CONTENT,
+                            [(CONTENT_RANGE, "bytes 2-5/10"), (ACCEPT_RANGES, "bytes")],
+                            &payload[2..=5],
+                        )
+                            .into_response();
+                    }
+
+                    (
+                        StatusCode::OK,
+                        [(ACCEPT_RANGES, "bytes")],
+                        payload.as_slice(),
                     )
-                        .into_response();
-                }
-
-                (
-                    StatusCode::OK,
-                    [(ACCEPT_RANGES, "bytes")],
-                    payload.as_slice(),
-                )
-                    .into_response()
-            }),
-        );
+                        .into_response()
+                }),
+            )
+            .route(
+                "/hls/master.m3u8",
+                get(|headers: HeaderMap| async move {
+                    if headers.get(REFERER).and_then(|v| v.to_str().ok())
+                        != Some("https://anthology.example")
+                    {
+                        return StatusCode::FORBIDDEN.into_response();
+                    }
+                    (
+                        [(CONTENT_TYPE, "application/vnd.apple.mpegurl")],
+                        "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1000000\n720p/index.m3u8\n",
+                    )
+                        .into_response()
+                }),
+            )
+            .route(
+                "/hls/720p/index.m3u8",
+                get(|headers: HeaderMap| async move {
+                    if headers.get(REFERER).and_then(|v| v.to_str().ok())
+                        != Some("https://anthology.example")
+                    {
+                        return StatusCode::FORBIDDEN.into_response();
+                    }
+                    (
+                        [(CONTENT_TYPE, "application/vnd.apple.mpegurl")],
+                        "#EXTM3U\n#EXT-X-KEY:METHOD=AES-128,URI=\"../enc.key\"\n#EXTINF:4.0,\nseg0.ts\n",
+                    )
+                        .into_response()
+                }),
+            )
+            .route(
+                "/hls/enc.key",
+                get(|headers: HeaderMap| async move {
+                    if headers.get(REFERER).and_then(|v| v.to_str().ok())
+                        != Some("https://anthology.example")
+                    {
+                        return StatusCode::FORBIDDEN.into_response();
+                    }
+                    b"0123456789abcdef".as_slice().into_response()
+                }),
+            )
+            .route(
+                "/hls/720p/seg0.ts",
+                get(|headers: HeaderMap| async move {
+                    if headers.get(REFERER).and_then(|v| v.to_str().ok())
+                        != Some("https://anthology.example")
+                    {
+                        return StatusCode::FORBIDDEN.into_response();
+                    }
+                    b"ts-packet-bytes".as_slice().into_response()
+                }),
+            );
 
         tokio::spawn(async move {
             let _ = axum::serve(listener, app).await;
@@ -402,6 +537,89 @@ mod tests {
             range_resp.bytes().await.expect("read range body").as_ref(),
             b"2345"
         );
+    }
+
+    #[tokio::test]
+    async fn rewrites_nested_hls_playlists_and_enforces_hmac_signatures() {
+        let upstream_base = spawn_mock_upstream().await;
+        let server = ProxyServer::start().await.expect("start local proxy");
+
+        let mut headers = BTreeMap::new();
+        headers.insert("Referer".into(), "https://anthology.example".into());
+        let master_proxy_url = server
+            .register_stream(format!("{upstream_base}/hls/master.m3u8"), headers)
+            .expect("register master playlist");
+
+        let master_body = server
+            .client()
+            .get(&master_proxy_url)
+            .send()
+            .await
+            .expect("fetch master playlist")
+            .text()
+            .await
+            .expect("read master text");
+        let variant_url = master_body
+            .lines()
+            .find(|line| !line.starts_with('#') && !line.is_empty())
+            .expect("rewritten variant URL");
+
+        // Tampered HMAC signature must be rejected with 403 Forbidden.
+        let tampered_url = format!("{variant_url}0");
+        let tampered_resp = server
+            .client()
+            .get(&tampered_url)
+            .send()
+            .await
+            .expect("fetch tampered seg");
+        assert_eq!(tampered_resp.status(), reqwest::StatusCode::FORBIDDEN);
+
+        // Valid variant playlist URL must recursively rewrite #EXT-X-KEY and segment lines.
+        let media_body = server
+            .client()
+            .get(variant_url)
+            .send()
+            .await
+            .expect("fetch variant playlist")
+            .text()
+            .await
+            .expect("read variant text");
+
+        let key_line = media_body
+            .lines()
+            .find(|line| line.starts_with("#EXT-X-KEY:"))
+            .expect("key line");
+        let key_url = key_line
+            .split("URI=\"")
+            .nth(1)
+            .and_then(|rest| rest.split('"').next())
+            .expect("rewritten key URL");
+        let seg_url = media_body
+            .lines()
+            .find(|line| !line.starts_with('#') && !line.is_empty())
+            .expect("rewritten seg0 URL");
+
+        let key_bytes = server
+            .client()
+            .get(key_url)
+            .send()
+            .await
+            .expect("fetch key")
+            .bytes()
+            .await
+            .expect("read key bytes");
+        assert_eq!(key_bytes.as_ref(), b"0123456789abcdef");
+
+        let seg_bytes = server
+            .client()
+            .get(seg_url)
+            .send()
+            .await
+            .expect("fetch seg0")
+            .bytes()
+            .await
+            .expect("read seg0 bytes");
+        assert_eq!(seg_bytes.as_ref(), b"ts-packet-bytes");
     }
 
     #[test]
