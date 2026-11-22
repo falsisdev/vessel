@@ -194,6 +194,15 @@ impl PluginSandbox {
         self.runtime.run_gc().await;
     }
 
+    /// Registers an ES module resolver and loader on this runtime.
+    pub(crate) async fn set_loader<R, L>(&self, resolver: R, loader: L)
+    where
+        R: rquickjs::loader::Resolver + 'static,
+        L: rquickjs::loader::Loader + 'static,
+    {
+        self.runtime.set_loader(resolver, loader).await;
+    }
+
     /// Evaluates a JavaScript snippet under this sandbox's timeout and memory constraints.
     pub async fn eval<T>(&self, script: &str) -> VesselResult<T>
     where
@@ -208,20 +217,29 @@ impl PluginSandbox {
     where
         T: for<'js> FromJs<'js> + Send + 'static,
     {
+        let source = script.to_owned();
+        self.run_in_context(timeout, async |ctx| {
+            ctx.eval::<T, _>(source)
+                .catch(&ctx)
+                .map_err(|err| err.to_string())
+        })
+        .await
+    }
+
+    /// Runs an async closure against the sandbox's `Ctx` under active timeout, cancel, and error rules.
+    pub(crate) async fn run_in_context<F, R>(&self, timeout: Duration, f: F) -> VesselResult<R>
+    where
+        F: for<'js> AsyncFnOnce(rquickjs::Ctx<'js>) -> Result<R, String> + Send,
+        R: Send + 'static,
+    {
         if self.interrupt.cancelled.load(Ordering::Acquire) {
             return Err(VesselError::Cancelled);
         }
 
         self.interrupt.arm_timeout(timeout);
         let _guard = ExecutionGuard(&self.interrupt);
-        let source = script.to_owned();
 
-        let eval_future = self.context.async_with(async |ctx| {
-            ctx.eval::<T, _>(source)
-                .catch(&ctx)
-                .map_err(|err| err.to_string())
-        });
-
+        let eval_future = self.context.async_with(f);
         let outcome = tokio::time::timeout(timeout, eval_future).await;
         match outcome {
             Err(_) => Err(VesselError::Timeout),
@@ -231,6 +249,10 @@ impl PluginSandbox {
                     Err(VesselError::Timeout)
                 } else if self.interrupt.cancelled.load(Ordering::Acquire) {
                     Err(VesselError::Cancelled)
+                } else if let Some(domain_err) =
+                    crate::security::parse_domain_blocked_message(&message)
+                {
+                    Err(domain_err)
                 } else {
                     Err(VesselError::PluginRuntime {
                         plugin_id: self.plugin_id.to_string(),
