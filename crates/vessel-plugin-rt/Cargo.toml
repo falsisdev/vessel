@@ -8,5 +8,7 @@ repository.workspace = true
 
 [dependencies]
 oxc.workspace = true
+rquickjs.workspace = true
 sha2.workspace = true
+tokio.workspace = true
 vessel-domain = { path = "../vessel-domain" }
