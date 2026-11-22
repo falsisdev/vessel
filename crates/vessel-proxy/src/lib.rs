@@ -22,10 +22,21 @@ use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 use tokio::net::TcpListener;
 use tokio::sync::oneshot;
-use vessel_domain::{VesselError, VesselResult};
+use vessel_domain::{StreamCandidate, StreamFlag, StreamKind, VesselError, VesselResult};
 
 use hls::{decode_signed_seg_url, is_hls_playlist, rewrite_m3u8_playlist};
 pub use session::{DEFAULT_SESSION_TTL, ProxySession, ProxySessionStore};
+
+/// Decides whether a resolved stream candidate should pass through the local proxy.
+///
+/// Plain streams (e.g. `.mp4`, `.mkv`) with no custom headers bypass the proxy unless
+/// `always_proxy` is enabled, `RequiresProxy` is set, or the stream is HLS / MPEG-TS.
+pub fn should_proxy_stream(candidate: &StreamCandidate, always_proxy: bool) -> bool {
+    always_proxy
+        || !candidate.headers.is_empty()
+        || candidate.flags.contains(&StreamFlag::RequiresProxy)
+        || matches!(candidate.kind, StreamKind::Hls | StreamKind::MpegTs)
+}
 
 type HmacSha256 = Hmac<Sha256>;
 
@@ -310,6 +321,25 @@ impl ProxyServer {
         Ok(format!("{}/s/{token}/master", self.base_url()))
     }
 
+    /// Applies Smart Proxy routing rules and returns the playback URL for a player backend.
+    pub fn resolve_playback_url(
+        &self,
+        candidate: &StreamCandidate,
+        always_proxy: bool,
+    ) -> VesselResult<String> {
+        if candidate.needs_extractor || candidate.kind == StreamKind::Embed {
+            return Err(VesselError::InvalidInput(
+                "stream candidate requires extractor resolution before playback".into(),
+            ));
+        }
+
+        if should_proxy_stream(candidate, always_proxy) {
+            self.register_stream(candidate.url.clone(), candidate.headers.clone())
+        } else {
+            Ok(candidate.url.clone())
+        }
+    }
+
     /// Returns the actual `127.0.0.1:<port>` address allocated by the OS.
     pub fn local_addr(&self) -> SocketAddr {
         self.local_addr
@@ -360,7 +390,9 @@ mod tests {
     use axum::routing::get;
     use tokio::net::TcpListener;
 
-    use super::{HealthResponse, HmacSigner, ProxyServer};
+    use vessel_domain::{StreamCandidate, StreamFlag, StreamKind, VesselError};
+
+    use super::{HealthResponse, HmacSigner, ProxyServer, should_proxy_stream};
 
     async fn spawn_mock_upstream() -> String {
         let listener = TcpListener::bind("127.0.0.1:0")
@@ -642,5 +674,85 @@ mod tests {
             fixed.sign(token, encoded_url),
             fixed.sign(token, encoded_url)
         );
+    }
+
+    fn sample_candidate(url: &str, kind: StreamKind) -> StreamCandidate {
+        StreamCandidate {
+            url: url.into(),
+            kind,
+            quality: Some("1080p".into()),
+            label: "Anthology CDN".into(),
+            language: Some("en".into()),
+            audio_type: None,
+            priority: None,
+            is_default: true,
+            flags: Vec::new(),
+            headers: BTreeMap::new(),
+            needs_extractor: false,
+            subtitles: Vec::new(),
+        }
+    }
+
+    #[tokio::test]
+    async fn routes_streams_with_smart_proxy_policy() {
+        let server = ProxyServer::start().await.expect("start local proxy");
+
+        // Plain MP4 with no headers bypasses the proxy unless always_proxy is enabled.
+        let plain_mp4 =
+            sample_candidate("https://cdn.anthology.example/movie.mp4", StreamKind::Mp4);
+        assert!(!should_proxy_stream(&plain_mp4, false));
+        let direct_url = server
+            .resolve_playback_url(&plain_mp4, false)
+            .expect("resolve plain mp4 directly");
+        assert_eq!(direct_url, plain_mp4.url);
+
+        assert!(should_proxy_stream(&plain_mp4, true));
+        let forced_proxy_url = server
+            .resolve_playback_url(&plain_mp4, true)
+            .expect("force proxy plain mp4");
+        assert!(forced_proxy_url.starts_with(&format!("{}/s/", server.base_url())));
+        assert!(forced_proxy_url.ends_with("/master"));
+
+        // Custom headers force proxying so secrets are never passed to the player.
+        let mut headered_mp4 = plain_mp4.clone();
+        headered_mp4
+            .headers
+            .insert("Referer".into(), "https://anthology.example".into());
+        assert!(should_proxy_stream(&headered_mp4, false));
+        let headered_url = server
+            .resolve_playback_url(&headered_mp4, false)
+            .expect("proxy headered mp4");
+        assert!(headered_url.starts_with(&format!("{}/s/", server.base_url())));
+
+        // RequiresProxy flag forces proxying even without headers.
+        let mut flagged_mkv =
+            sample_candidate("https://cdn.anthology.example/episode.mkv", StreamKind::Mkv);
+        flagged_mkv.flags.push(StreamFlag::RequiresProxy);
+        assert!(should_proxy_stream(&flagged_mkv, false));
+        let flagged_url = server
+            .resolve_playback_url(&flagged_mkv, false)
+            .expect("proxy flagged mkv");
+        assert!(flagged_url.starts_with(&format!("{}/s/", server.base_url())));
+
+        // HLS & MPEG-TS always go through the proxy (rewriting / reconnect).
+        let hls = sample_candidate("https://cdn.anthology.example/master.m3u8", StreamKind::Hls);
+        let mpeg_ts =
+            sample_candidate("https://iptv.anthology.example/live.ts", StreamKind::MpegTs);
+        assert!(should_proxy_stream(&hls, false));
+        assert!(should_proxy_stream(&mpeg_ts, false));
+
+        // Embed / unresolved extractor links must be rejected before playback.
+        let embed = sample_candidate("https://embed.anthology.example/v/123", StreamKind::Embed);
+        let err = server
+            .resolve_playback_url(&embed, false)
+            .expect_err("reject unresolved embed");
+        assert!(matches!(err, VesselError::InvalidInput(_)));
+
+        let mut needs_extract = plain_mp4;
+        needs_extract.needs_extractor = true;
+        assert!(matches!(
+            server.resolve_playback_url(&needs_extract, false),
+            Err(VesselError::InvalidInput(_))
+        ));
     }
 }

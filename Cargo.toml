@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/vessel-domain", "crates/vessel-proxy", "crates/vessel-storage"]
+members = ["crates/vessel-domain", "crates/vessel-plugin-rt", "crates/vessel-proxy", "crates/vessel-storage"]
 
 [workspace.package]
 version = "0.1.0"
@@ -15,6 +15,7 @@ axum = "0.8"
 base64 = "0.23"
 getrandom = { version = "0.4", features = ["std"] }
 hmac = "0.13"
+oxc = { version = "0.159", features = ["codegen", "semantic", "transformer"] }
 reqwest = { version = "0.13", default-features = false, features = ["charset", "http2", "json", "rustls", "stream"] }
 rusqlite = { version = "0.43", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
