@@ -78,21 +78,50 @@ pub fn absolute_to_season_episode(spans: &[SeasonSpan], absolute: u32) -> Option
     None
 }
 
-fn is_generic_episode_title(title: &str) -> bool {
-    let trimmed = title.trim().to_ascii_lowercase();
-    if trimmed.is_empty() {
+fn is_coord_token(token: &str) -> bool {
+    let mut has_digit = false;
+    for ch in token.chars() {
+        if ch.is_ascii_digit() {
+            has_digit = true;
+        } else if !matches!(ch, 's' | 'e' | 'x') {
+            return false;
+        }
+    }
+    has_digit
+}
+
+pub(crate) fn is_generic_episode_title(title: &str) -> bool {
+    let normalized = title.trim().to_lowercase();
+    if normalized.is_empty() {
         return true;
     }
-    if let Some(rest) = trimmed.strip_prefix("episode ") {
-        return rest.trim().chars().all(|c| c.is_ascii_digit());
+
+    let mut has_digit = false;
+    let mut has_any_token = false;
+    for token in normalized.split(|ch: char| {
+        ch.is_whitespace()
+            || matches!(
+                ch,
+                '.' | ':' | '-' | '_' | '/' | '·' | ',' | '|' | '(' | ')' | '[' | ']'
+            )
+    }) {
+        if token.is_empty() {
+            continue;
+        }
+        has_any_token = true;
+        if token.chars().any(|c| c.is_ascii_digit()) {
+            has_digit = true;
+        }
+        let is_boilerplate = matches!(
+            token,
+            "sezon" | "season" | "bölüm" | "bolum" | "episode" | "ep" | "part" | "kısım" | "kisim"
+        );
+        if !is_boilerplate && !is_coord_token(token) {
+            return false;
+        }
     }
-    if let Some(rest) = trimmed.strip_prefix("bölüm ") {
-        return rest.trim().chars().all(|c| c.is_ascii_digit());
-    }
-    if let Some(prefix) = trimmed.strip_suffix(". bölüm") {
-        return prefix.trim().chars().all(|c| c.is_ascii_digit());
-    }
-    false
+
+    !has_any_token || has_digit
 }
 
 /// Enriches provider `episodes` non-destructively using `canonical_spans` and `canonical_episodes`.
@@ -148,7 +177,10 @@ pub fn align_episode_metadata(
 
         if let Some(meta) = matched {
             if ep.title.as_deref().is_none_or(is_generic_episode_title)
-                && meta.title.as_deref().is_some_and(|t| !t.trim().is_empty())
+                && meta
+                    .title
+                    .as_deref()
+                    .is_some_and(|t| !is_generic_episode_title(t))
             {
                 ep.title = meta.title.clone();
             }
@@ -242,5 +274,84 @@ mod tests {
             plugin_eps[0].thumbnail.as_deref(),
             Some("https://img.example/s2e1.jpg")
         );
+    }
+
+    #[test]
+    fn replaces_turkish_season_episode_placeholders_but_keeps_real_titles() {
+        let spans = [SeasonSpan {
+            season: 1,
+            episode_count: 24,
+        }];
+        let canonical = vec![
+            CanonicalEpisodeMeta {
+                season: 1,
+                episode: 1,
+                absolute_episode: Some(1),
+                title: Some("You're Under Arrest".into()),
+                overview: Some("Real synopsis".into()),
+                thumbnail: None,
+                air_date: None,
+            },
+            CanonicalEpisodeMeta {
+                season: 1,
+                episode: 2,
+                absolute_episode: Some(2),
+                title: Some("Hard-Boiled".into()),
+                overview: None,
+                thumbnail: None,
+                air_date: None,
+            },
+            CanonicalEpisodeMeta {
+                season: 1,
+                episode: 3,
+                absolute_episode: Some(3),
+                title: None,
+                overview: None,
+                thumbnail: None,
+                air_date: None,
+            },
+        ];
+
+        let mut plugin_eps = vec![
+            Episode {
+                stream_id: "ep1".into(),
+                season: 1,
+                episode: 1,
+                absolute_episode: None,
+                title: Some("1. Sezon 1. Bölüm".into()),
+                overview: None,
+                thumbnail: None,
+                air_date: None,
+                tags: vec![],
+            },
+            Episode {
+                stream_id: "ep2".into(),
+                season: 1,
+                episode: 2,
+                absolute_episode: None,
+                title: Some("S01E02 - Özel Başlık".into()),
+                overview: None,
+                thumbnail: None,
+                air_date: None,
+                tags: vec![],
+            },
+            Episode {
+                stream_id: "ep3".into(),
+                season: 1,
+                episode: 3,
+                absolute_episode: None,
+                title: Some("1. Sezon 3. Bölüm".into()),
+                overview: None,
+                thumbnail: None,
+                air_date: None,
+                tags: vec![],
+            },
+        ];
+
+        align_episode_metadata(&mut plugin_eps, &spans, &canonical);
+
+        assert_eq!(plugin_eps[0].title.as_deref(), Some("You're Under Arrest"));
+        assert_eq!(plugin_eps[1].title.as_deref(), Some("S01E02 - Özel Başlık"));
+        assert_eq!(plugin_eps[2].title.as_deref(), Some("1. Sezon 3. Bölüm"));
     }
 }

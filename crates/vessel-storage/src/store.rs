@@ -408,7 +408,7 @@ mod tests {
 
         storage
             .upsert_metadata_cache(
-                "meta2:anthology:anime/918:en",
+                "meta3:anthology:anime/918:en",
                 r#"{"title":"Gintama","poster":"https://img.example/poster.jpg","backdrop":"https://img.example/backdrop.jpg"}"#,
                 "2099-01-01T00:00:00Z",
             )
@@ -433,10 +433,10 @@ mod tests {
         storage
             .invalidate_metadata_cache(&anthology, "anime/918")
             .await
-            .expect("invalidate meta2 cache");
+            .expect("invalidate meta3 cache");
         assert!(
             storage
-                .get_metadata_cache("meta2:anthology:anime/918:en")
+                .get_metadata_cache("meta3:anthology:anime/918:en")
                 .await
                 .expect("read invalidated cache")
                 .is_none()

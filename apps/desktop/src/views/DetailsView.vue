@@ -510,7 +510,7 @@ onMounted(() => {
                   E{{ String(ep.episode).padStart(2, '0') }}
                 </span>
                 <template v-else>{{ ep.episode }}. </template>
-                {{ ep.title ?? `Episode ${ep.episode}` }}
+                {{ ep.title?.trim() || `Episode ${ep.episode}` }}
               </span>
               <span
                 v-if="ep.overview && episodeLayout !== 'compact_rows' && !uiPreferences.details.hideEpisodeOverviews"

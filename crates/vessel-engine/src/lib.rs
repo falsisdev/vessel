@@ -1397,7 +1397,7 @@ async fn run_enrichment_and_emit(
     }
 
     let cache_key = format!(
-        "meta2:{}:{}:{}",
+        "meta3:{}:{}:{}",
         plugin_id.as_str(),
         raw.native_id,
         preferred_lang.to_ascii_lowercase()

@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import AppNav from '@/components/layout/AppNav.vue'
 import DomainPermissionModal from '@/components/overlays/DomainPermissionModal.vue'
 import NowPlayingBar from '@/components/overlays/NowPlayingBar.vue'
+import SplashOverlay from '@/components/overlays/SplashOverlay.vue'
 import ToastContainer from '@/components/overlays/ToastContainer.vue'
 import UpdateModal from '@/components/overlays/UpdateModal.vue'
 import { useAppUpdater } from '@/composables/useAppUpdater'
@@ -15,6 +16,7 @@ import { useVesselEvents } from '@/composables/useVesselEvents'
 const route = useRoute()
 const router = useRouter()
 const isPlayerRoute = computed(() => route.name === 'player')
+const showSplash = shallowRef(true)
 const isRouteTransitioning = shallowRef(false)
 let routeTimer: number | null = null
 
@@ -133,6 +135,8 @@ onUnmounted(() => {
     <UpdateModal />
 
     <ToastContainer :items="toasts" />
+
+    <SplashOverlay v-if="showSplash" @done="showSplash = false" />
   </div>
 </template>
 

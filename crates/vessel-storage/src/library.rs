@@ -486,6 +486,7 @@ impl SqliteStorage {
                         .filter(|s| !s.trim().is_empty())
                         .or_else(|| li_poster.filter(|s| !s.trim().is_empty()));
 
+                    let meta3_pattern = format!("meta3:{plugin_raw}:{native_id}:%");
                     let meta2_pattern = format!("meta2:{plugin_raw}:{native_id}:%");
                     let meta_pattern = format!("meta:{plugin_raw}:{native_id}:%");
                     let detail_pattern = format!("detail:{plugin_raw}:{native_id}:%");
@@ -493,10 +494,10 @@ impl SqliteStorage {
                         .conn()
                         .query_row(
                             "SELECT payload_json FROM metadata_cache
-                             WHERE cache_key LIKE ?1 OR cache_key LIKE ?2 OR cache_key LIKE ?3
+                             WHERE cache_key LIKE ?1 OR cache_key LIKE ?2 OR cache_key LIKE ?3 OR cache_key LIKE ?4
                              ORDER BY expires_at DESC
                              LIMIT 1",
-                            (&meta2_pattern, &meta_pattern, &detail_pattern),
+                            (&meta3_pattern, &meta2_pattern, &meta_pattern, &detail_pattern),
                             |r| r.get(0),
                         )
                         .optional()

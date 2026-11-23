@@ -67,13 +67,14 @@ impl SqliteStorage {
         native_id: &str,
     ) -> VesselResult<()> {
         let legacy_prefix = format!("meta:{}:{native_id}:%", plugin_id.as_str());
-        let current_prefix = format!("meta2:{}:{native_id}:%", plugin_id.as_str());
+        let v2_prefix = format!("meta2:{}:{native_id}:%", plugin_id.as_str());
+        let current_prefix = format!("meta3:{}:{native_id}:%", plugin_id.as_str());
         self.actor()
             .execute(move |db| {
                 db.conn()
                     .execute(
-                        "DELETE FROM metadata_cache WHERE cache_key LIKE ?1 OR cache_key LIKE ?2",
-                        (&legacy_prefix, &current_prefix),
+                        "DELETE FROM metadata_cache WHERE cache_key LIKE ?1 OR cache_key LIKE ?2 OR cache_key LIKE ?3",
+                        (&legacy_prefix, &v2_prefix, &current_prefix),
                     )
                     .map_err(map_sql_err)?;
                 Ok(())

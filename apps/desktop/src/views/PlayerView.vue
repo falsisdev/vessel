@@ -1404,7 +1404,7 @@ onUnmounted(() => {
                   isLive ? `CH ${ep.episode}` : `S${ep.season} · E${ep.episode}`
                 }}</span>
                 <span class="cs-item-title">{{
-                  ep.title ?? (isLive ? `Channel ${ep.episode}` : `Episode ${ep.episode}`)
+                  ep.title?.trim() || (isLive ? `Channel ${ep.episode}` : `Episode ${ep.episode}`)
                 }}</span>
                 <span v-if="ep.overview" class="cs-item-sub cs-ep-desc">{{ ep.overview }}</span>
               </div>

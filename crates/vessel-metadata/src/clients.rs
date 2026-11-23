@@ -689,13 +689,20 @@ impl MetadataClients {
                 }
                 *season_counts.entry(season_num).or_insert(0) += 1;
                 let title = ep.title.and_then(|map| {
-                    map.get(preferred_lang)
-                        .or_else(|| map.get("en"))
-                        .or_else(|| map.get("x-jat"))
-                        .or_else(|| map.get("ja"))
-                        .or_else(|| map.values().next())
-                        .map(|s| s.trim().to_owned())
-                        .filter(|s| !s.is_empty())
+                    let pick_non_generic = |lang: &str| {
+                        map.get(lang)
+                            .map(|s| s.trim().to_owned())
+                            .filter(|s| !crate::coordinates::is_generic_episode_title(s))
+                    };
+                    pick_non_generic(preferred_lang)
+                        .or_else(|| pick_non_generic("en"))
+                        .or_else(|| pick_non_generic("x-jat"))
+                        .or_else(|| pick_non_generic("ja"))
+                        .or_else(|| {
+                            map.values()
+                                .map(|s| s.trim().to_owned())
+                                .find(|s| !crate::coordinates::is_generic_episode_title(s))
+                        })
                 });
                 eps.push(CanonicalEpisodeMeta {
                     season: season_num,
