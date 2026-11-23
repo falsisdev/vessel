@@ -8,12 +8,14 @@ use std::time::Duration;
 
 use serde::Serialize;
 use serde_json::Value;
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-use tokio::net::UnixStream;
+use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader};
 use tokio::sync::{Mutex, oneshot};
 use vessel_domain::{EngineEvent, EventSink, PlayerStateSnapshot, VesselError, VesselResult};
 
 const IPC_COMMAND_TIMEOUT: Duration = Duration::from_secs(5);
+
+type BoxedReader = Box<dyn AsyncRead + Unpin + Send>;
+type BoxedWriter = Box<dyn AsyncWrite + Unpin + Send>;
 
 #[derive(Serialize)]
 struct IpcRequest<'a> {
@@ -25,7 +27,7 @@ type PendingMap = Arc<StdMutex<HashMap<u64, oneshot::Sender<VesselResult<Value>>
 
 /// Asynchronous JSON IPC connection to a running `mpv` instance.
 pub struct MpvIpcClient {
-    writer: Mutex<tokio::net::unix::OwnedWriteHalf>,
+    writer: Mutex<BoxedWriter>,
     next_id: AtomicU64,
     pending: PendingMap,
     reader_task: tokio::task::JoinHandle<()>,
@@ -40,15 +42,29 @@ impl std::fmt::Debug for MpvIpcClient {
 }
 
 impl MpvIpcClient {
-    /// Connects to an `mpv` Unix domain IPC socket and begins observing playback state.
+    /// Connects to an `mpv` IPC endpoint (Unix domain socket or Windows named pipe) and observes playback state.
     pub async fn connect(
         socket_path: &Path,
         event_sink: Option<Arc<dyn EventSink>>,
     ) -> VesselResult<Self> {
-        let stream = UnixStream::connect(socket_path)
-            .await
-            .map_err(|err| VesselError::Player(format!("connect mpv IPC socket: {err}")))?;
-        let (read_half, write_half) = stream.into_split();
+        let (read_half, write_half): (BoxedReader, BoxedWriter) = {
+            #[cfg(unix)]
+            {
+                let stream = tokio::net::UnixStream::connect(socket_path)
+                    .await
+                    .map_err(|err| VesselError::Player(format!("connect mpv IPC socket: {err}")))?;
+                let (r, w) = tokio::io::split(stream);
+                (Box::new(r), Box::new(w))
+            }
+            #[cfg(windows)]
+            {
+                let pipe = tokio::net::windows::named_pipe::ClientOptions::new()
+                    .open(socket_path)
+                    .map_err(|err| VesselError::Player(format!("connect mpv named pipe: {err}")))?;
+                let (r, w) = tokio::io::split(pipe);
+                (Box::new(r), Box::new(w))
+            }
+        };
 
         let pending: PendingMap = Arc::new(StdMutex::new(HashMap::new()));
         let pending_reader = Arc::clone(&pending);
