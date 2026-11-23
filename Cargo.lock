@@ -580,7 +580,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -1935,6 +1935,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "quick-xml"
+version = "0.42.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "41b1177fdf999d2321d3fb46ff47159d9c1fb9ad66a4879f8c50a0b504615e9b"
+dependencies = [
+ "memchr",
+]
+
+[[package]]
 name = "quinn"
 version = "0.11.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2964,6 +2973,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "vessel-downloader"
+version = "0.1.0"
+dependencies = [
+ "aes",
+ "axum",
+ "cbc",
+ "cipher",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tokio-util",
+ "url",
+ "vessel-domain",
+ "vessel-storage",
+]
+
+[[package]]
 name = "vessel-engine"
 version = "0.1.0"
 dependencies = [
@@ -2976,10 +3003,26 @@ dependencies = [
  "tokio",
  "tokio-util",
  "vessel-domain",
+ "vessel-downloader",
+ "vessel-iptv",
  "vessel-metadata",
  "vessel-plugin-rt",
  "vessel-proxy",
  "vessel-storage",
+]
+
+[[package]]
+name = "vessel-iptv"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "quick-xml",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tokio",
+ "url",
+ "vessel-domain",
 ]
 
 [[package]]

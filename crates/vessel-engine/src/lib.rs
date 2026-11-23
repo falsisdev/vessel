@@ -4,6 +4,7 @@ pub mod pool;
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
@@ -16,12 +17,19 @@ use vessel_domain::{
     StoragePort, StreamCandidate, StreamResult, SubtitleSource, SubtitleTrack, VesselError,
     VesselPaths, VesselResult,
 };
+use vessel_iptv::{IptvClient, channel_to_stream_candidate, xtream::xtream_xmltv_url};
 use vessel_metadata::{CanonicalMetadata, MetaEndpoints, MetadataService, merge_detail};
 use vessel_plugin_rt::{LoadedPackage, ResolvedSource, SourceResolver, TsCompileCache};
 use vessel_proxy::ProxyServer;
-use vessel_storage::{SqliteSecretStore, SqliteStorage, StorageActor, StoredPlugin};
+use vessel_storage::{
+    NewIptvChannel, SqliteSecretStore, SqliteStorage, StorageActor, StoredDownload,
+    StoredEpgNowNext, StoredEpgProgram, StoredIptvChannel, StoredIptvKind, StoredIptvProfile,
+    StoredPlugin,
+};
 
 pub use pool::{DEFAULT_IDLE_TTL, DEFAULT_MAX_WARM_PLUGINS, PluginPool};
+pub use vessel_downloader::{DownloadManager, DownloadRequest};
+pub use vessel_iptv::{EpgNowNext, EpgProgram, IptvChannel, IptvKind, IptvProfile};
 
 static SEQ_ID: AtomicU64 = AtomicU64::new(1);
 
@@ -73,6 +81,8 @@ pub struct VesselEngine {
     ts_cache: Arc<TsCompileCache>,
     source_resolver: SourceResolver,
     metadata: MetadataService,
+    iptv: IptvClient,
+    downloader: DownloadManager,
     pool: Arc<PluginPool>,
     always_proxy: AtomicBool,
     metadata_enabled: AtomicBool,
@@ -101,13 +111,14 @@ impl VesselEngine {
         let secrets = Arc::new(SqliteSecretStore::new(actor.clone()));
         let storage = Arc::new(SqliteStorage::new(actor));
         let proxy = Arc::new(ProxyServer::start().await?);
-        Self::from_parts(
+        Self::from_parts_with_downloads(
             storage,
             secrets,
             proxy,
             player,
             event_sink,
             SourceResolver::new(),
+            paths.downloads_dir(),
             always_proxy,
         )
         .await
@@ -123,6 +134,32 @@ impl VesselEngine {
         source_resolver: SourceResolver,
         always_proxy: bool,
     ) -> VesselResult<Self> {
+        let downloads_dir = std::env::temp_dir().join("vessel-downloads");
+        Self::from_parts_with_downloads(
+            storage,
+            secrets,
+            proxy,
+            player,
+            event_sink,
+            source_resolver,
+            downloads_dir,
+            always_proxy,
+        )
+        .await
+    }
+
+    /// Constructs `VesselEngine` with an explicit offline downloads directory.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn from_parts_with_downloads(
+        storage: Arc<SqliteStorage>,
+        secrets: Arc<SqliteSecretStore>,
+        proxy: Arc<ProxyServer>,
+        player: Arc<dyn PlayerBackend>,
+        event_sink: Arc<dyn EventSink>,
+        source_resolver: SourceResolver,
+        downloads_dir: PathBuf,
+        always_proxy: bool,
+    ) -> VesselResult<Self> {
         let cached_ts = storage.load_ts_compile_cache().await?;
         let ts_cache = Arc::new(TsCompileCache::with_entries(cached_ts));
         let storage_port: Arc<dyn StoragePort> = storage.clone();
@@ -131,6 +168,8 @@ impl VesselEngine {
             Some(Arc::clone(&event_sink)),
             Arc::clone(&ts_cache),
         ));
+        let downloader =
+            DownloadManager::new(Arc::clone(&storage), Arc::clone(&event_sink), downloads_dir);
 
         Ok(Self {
             storage,
@@ -141,6 +180,8 @@ impl VesselEngine {
             ts_cache,
             source_resolver,
             metadata: MetadataService::default(),
+            iptv: IptvClient::new(),
+            downloader,
             pool,
             always_proxy: AtomicBool::new(always_proxy),
             metadata_enabled: AtomicBool::new(true),
@@ -601,6 +642,272 @@ impl VesselEngine {
     /// Stops playback and cleans up temporary subtitle resources.
     pub async fn stop(&self) -> VesselResult<()> {
         self.player.stop().await
+    }
+
+    /// Saves or updates an IPTV profile, storing any optional Xtream password in `SecretStore`.
+    pub async fn upsert_iptv_profile(
+        &self,
+        profile: IptvProfile,
+        password: Option<&str>,
+    ) -> VesselResult<StoredIptvProfile> {
+        let secret_ref = match password {
+            Some(pass) => {
+                let key = format!("iptv:{}:password", profile.id);
+                self.secrets.set(&key, pass).await?;
+                Some(key)
+            }
+            None => profile.secret_ref,
+        };
+        let stored = StoredIptvProfile {
+            id: profile.id,
+            name: profile.name,
+            kind: match profile.kind {
+                IptvKind::Xtream => StoredIptvKind::Xtream,
+                IptvKind::M3u => StoredIptvKind::M3u,
+            },
+            server_url: profile.server_url,
+            username: profile.username,
+            secret_ref,
+            epg_url: profile.epg_url,
+            user_agent: profile.user_agent,
+            last_synced_at: profile.last_synced_at,
+        };
+        self.storage.upsert_iptv_profile(&stored).await?;
+        Ok(stored)
+    }
+
+    /// Lists configured IPTV profiles.
+    pub async fn list_iptv_profiles(&self) -> VesselResult<Vec<StoredIptvProfile>> {
+        self.storage.list_iptv_profiles().await
+    }
+
+    /// Deletes an IPTV profile, its channels/EPG (via cascade), and any stored password secret.
+    pub async fn delete_iptv_profile(&self, profile_id: &str) -> VesselResult<()> {
+        let profiles = self.storage.list_iptv_profiles().await?;
+        if let Some(target) = profiles.into_iter().find(|p| p.id == profile_id)
+            && let Some(secret_ref) = target.secret_ref
+        {
+            self.secrets.delete(&secret_ref).await?;
+        }
+        self.storage.delete_iptv_profile(profile_id).await
+    }
+
+    /// Syncs channels for `profile_id` from its M3U or Xtream Codes source, preserving favorites.
+    pub async fn sync_iptv_profile(&self, profile_id: &str) -> VesselResult<usize> {
+        let profile = self
+            .storage
+            .list_iptv_profiles()
+            .await?
+            .into_iter()
+            .find(|p| p.id == profile_id)
+            .ok_or_else(|| {
+                VesselError::NotFound(format!("IPTV profile '{profile_id}' not found"))
+            })?;
+
+        let channels = match profile.kind {
+            StoredIptvKind::M3u => {
+                self.iptv
+                    .fetch_m3u(&profile.server_url, profile.user_agent.as_deref())
+                    .await?
+            }
+            StoredIptvKind::Xtream => {
+                let username = profile.username.as_deref().ok_or_else(|| {
+                    VesselError::InvalidInput("Xtream profile missing username".into())
+                })?;
+                let password = match profile.secret_ref.as_deref() {
+                    Some(key) => self.secrets.get(key).await?.unwrap_or_default(),
+                    None => String::new(),
+                };
+                self.iptv
+                    .fetch_xtream_channels(
+                        &profile.server_url,
+                        username,
+                        &password,
+                        profile.user_agent.as_deref(),
+                    )
+                    .await?
+            }
+        };
+
+        let converted: Vec<NewIptvChannel> = channels
+            .into_iter()
+            .map(|ch| NewIptvChannel {
+                stream_id: ch.stream_id,
+                name: ch.name,
+                group_title: ch.group_title,
+                logo_url: ch.logo_url,
+                stream_url: ch.stream_url,
+                tvg_id: ch.tvg_id,
+            })
+            .collect();
+
+        self.storage
+            .replace_iptv_channels(profile_id, converted)
+            .await
+    }
+
+    /// Downloads and stores XMLTV EPG entries for `profile_id`.
+    pub async fn sync_iptv_epg(&self, profile_id: &str) -> VesselResult<usize> {
+        let profile = self
+            .storage
+            .list_iptv_profiles()
+            .await?
+            .into_iter()
+            .find(|p| p.id == profile_id)
+            .ok_or_else(|| {
+                VesselError::NotFound(format!("IPTV profile '{profile_id}' not found"))
+            })?;
+
+        let epg_url = match profile.epg_url {
+            Some(url) if !url.trim().is_empty() => url,
+            _ if profile.kind == StoredIptvKind::Xtream => {
+                let username = profile.username.as_deref().unwrap_or_default();
+                let password = match profile.secret_ref.as_deref() {
+                    Some(key) => self.secrets.get(key).await?.unwrap_or_default(),
+                    None => String::new(),
+                };
+                xtream_xmltv_url(&profile.server_url, username, &password)?
+            }
+            _ => return Ok(0),
+        };
+
+        let programs = self
+            .iptv
+            .fetch_xmltv_epg(&epg_url, profile.user_agent.as_deref())
+            .await?;
+        let stored: Vec<StoredEpgProgram> = programs
+            .into_iter()
+            .map(|p| StoredEpgProgram {
+                channel_tvg_id: p.channel_tvg_id,
+                title: p.title,
+                description: p.description,
+                start_ts: p.start_ts,
+                end_ts: p.end_ts,
+            })
+            .collect();
+        self.storage.replace_epg_programs(profile_id, stored).await
+    }
+
+    /// Searches synced IPTV channels using SQLite FTS5 prefix matching and optional filters.
+    pub async fn search_iptv_channels(
+        &self,
+        profile_id: Option<&str>,
+        query: Option<&str>,
+        group_title: Option<&str>,
+        favorites_only: bool,
+        limit: usize,
+    ) -> VesselResult<Vec<StoredIptvChannel>> {
+        self.storage
+            .search_iptv_channels(profile_id, query, group_title, favorites_only, limit)
+            .await
+    }
+
+    /// Lists sorted IPTV category group names for `profile_id`.
+    pub async fn list_iptv_groups(&self, profile_id: &str) -> VesselResult<Vec<String>> {
+        self.storage.list_iptv_groups(profile_id).await
+    }
+
+    /// Marks or unmarks an IPTV channel row as favorite.
+    pub async fn set_iptv_favorite(&self, channel_id: i64, is_favorite: bool) -> VesselResult<()> {
+        self.storage
+            .set_iptv_favorite(channel_id, is_favorite)
+            .await
+    }
+
+    /// Deletes expired XMLTV EPG entries ending at or before `before_ts`.
+    pub async fn prune_expired_epg(&self, before_ts: i64) -> VesselResult<usize> {
+        self.storage.prune_expired_epg(before_ts).await
+    }
+
+    /// Returns active (`now`) and upcoming (`next`) programs for a channel `tvg_id`.
+    pub async fn get_epg_now_next(
+        &self,
+        profile_id: &str,
+        channel_tvg_id: &str,
+        now_ts: i64,
+    ) -> VesselResult<EpgNowNext> {
+        let StoredEpgNowNext { now, next } = self
+            .storage
+            .get_epg_now_next(profile_id, channel_tvg_id, now_ts)
+            .await?;
+        Ok(EpgNowNext {
+            now: now.map(|p| EpgProgram {
+                channel_tvg_id: p.channel_tvg_id,
+                title: p.title,
+                description: p.description,
+                start_ts: p.start_ts,
+                end_ts: p.end_ts,
+            }),
+            next: next.map(|p| EpgProgram {
+                channel_tvg_id: p.channel_tvg_id,
+                title: p.title,
+                description: p.description,
+                start_ts: p.start_ts,
+                end_ts: p.end_ts,
+            }),
+        })
+    }
+
+    /// Routes an IPTV live channel through Smart Proxy (preserving custom `User-Agent`) and plays it.
+    pub async fn play_iptv_channel(
+        &self,
+        channel: &StoredIptvChannel,
+        profile_user_agent: Option<&str>,
+    ) -> VesselResult<String> {
+        let iptv_ch = IptvChannel {
+            stream_id: channel.stream_id.clone(),
+            name: channel.name.clone(),
+            group_title: channel.group_title.clone(),
+            logo_url: channel.logo_url.clone(),
+            stream_url: channel.stream_url.clone(),
+            tvg_id: channel.tvg_id.clone(),
+            user_agent: None,
+        };
+        let candidate = channel_to_stream_candidate(&iptv_ch, profile_user_agent);
+        let media = MediaRef::new(PluginId::new("iptv")?, channel.stream_id.clone())?;
+        self.play_candidate(PlayCandidateRequest {
+            media,
+            canonical_id: None,
+            season: 0,
+            episode: 0,
+            absolute_episode: None,
+            media_type: MediaType::Movie,
+            candidate,
+            extra_subtitles: Vec::new(),
+            start_position_ms: Some(0),
+            title: Some(channel.name.clone()),
+        })
+        .await
+    }
+
+    /// Enqueues an offline media download (bounded to `MAX_CONCURRENT_DOWNLOADS = 2`).
+    pub async fn enqueue_download(&self, req: DownloadRequest) -> VesselResult<StoredDownload> {
+        self.downloader.enqueue(req).await
+    }
+
+    /// Pauses an active or queued download while preserving partial files / segment progress.
+    pub async fn pause_download(&self, download_id: &str) -> VesselResult<()> {
+        self.downloader.pause(download_id).await
+    }
+
+    /// Resumes a paused or failed download from its SQLite checkpoint or HTTP `Range` offset.
+    pub async fn resume_download(&self, download_id: &str) -> VesselResult<StoredDownload> {
+        self.downloader.resume(download_id).await
+    }
+
+    /// Cancels, removes local media/subtitles folder, and deletes DB state for `download_id`.
+    pub async fn delete_download(&self, download_id: &str) -> VesselResult<()> {
+        self.downloader.delete(download_id).await
+    }
+
+    /// Lists all tracked offline downloads.
+    pub async fn list_downloads(&self) -> VesselResult<Vec<StoredDownload>> {
+        self.downloader.list().await
+    }
+
+    /// Reads one download record by ID.
+    pub async fn get_download(&self, download_id: &str) -> VesselResult<Option<StoredDownload>> {
+        self.downloader.get(download_id).await
     }
 
     /// Evicts warm QuickJS runtimes idle beyond TTL (`3 min`).
@@ -1232,6 +1539,170 @@ mod tests {
         disabled_task.await.expect("join disabled");
         assert_eq!(recorder.events.lock().expect("lock").len(), prev_count);
 
+        engine.shutdown().await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn engine_syncs_iptv_searches_fts5_plays_via_proxy_and_completes_download() {
+        use std::time::{Duration, SystemTime, UNIX_EPOCH};
+        use vessel_domain::DownloadStatus;
+        use vessel_downloader::DownloadRequest;
+        use vessel_iptv::{IptvKind, IptvProfile};
+        use vessel_storage::DownloadKind;
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
+        let addr = listener.local_addr().expect("addr");
+        let base_url = format!("http://{addr}");
+        let m3u_base = base_url.clone();
+
+        let app = Router::new()
+            .route(
+                "/playlist.m3u",
+                get(move || async move {
+                    format!(
+                        "#EXTM3U\n#EXTINF:-1 tvg-id=\"ch.one\" group-title=\"News\",Anthology News HD\n{m3u_base}/live/news.m3u8\n"
+                    )
+                }),
+            )
+            .route(
+                "/epg.xml",
+                get(|| async {
+                    r#"<tv><programme start="20261123120000 +0000" stop="20261123130000 +0000" channel="ch.one"><title>Noon Live</title></programme></tv>"#
+                }),
+            )
+            .route(
+                "/live/news.m3u8",
+                get(|headers: HeaderMap| async move {
+                    let ua = headers
+                        .get(axum::http::header::USER_AGENT)
+                        .and_then(|v| v.to_str().ok())
+                        .unwrap_or("");
+                    if ua == "VesselCustomUA/3.0" {
+                        (StatusCode::OK, "#EXTM3U\n#EXTINF:4,\nseg.ts\n")
+                    } else {
+                        (StatusCode::FORBIDDEN, "bad ua")
+                    }
+                }),
+            )
+            .route("/offline.mp4", get(|| async { b"OFFLINE_MP4_BYTES".to_vec() }));
+
+        tokio::spawn(async move {
+            let _ = axum::serve(listener, app).await;
+        });
+
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos();
+        let dl_root = std::env::temp_dir().join(format!("vessel-engine-dl-{nanos}"));
+
+        let actor = StorageActor::open_in_memory().await.expect("open actor");
+        let secrets = Arc::new(SqliteSecretStore::new(actor.clone()));
+        let storage = Arc::new(SqliteStorage::new(actor));
+        let proxy = Arc::new(ProxyServer::start().await.expect("start proxy"));
+        let player = Arc::new(MockPlayer::default());
+        let recorder = Arc::new(EventRecorder::default());
+        let engine = VesselEngine::from_parts_with_downloads(
+            storage,
+            secrets,
+            proxy,
+            player.clone(),
+            recorder,
+            SourceResolver::new(),
+            dl_root.clone(),
+            false,
+        )
+        .await
+        .expect("engine");
+
+        engine
+            .upsert_iptv_profile(
+                IptvProfile {
+                    id: "prof-1".into(),
+                    name: "Anthology TV".into(),
+                    kind: IptvKind::M3u,
+                    server_url: format!("{base_url}/playlist.m3u"),
+                    username: None,
+                    secret_ref: None,
+                    epg_url: Some(format!("{base_url}/epg.xml")),
+                    user_agent: Some("VesselCustomUA/3.0".into()),
+                    last_synced_at: None,
+                },
+                None,
+            )
+            .await
+            .expect("upsert iptv profile");
+
+        let synced_ch = engine.sync_iptv_profile("prof-1").await.expect("sync iptv");
+        assert_eq!(synced_ch, 1);
+        let synced_epg = engine.sync_iptv_epg("prof-1").await.expect("sync epg");
+        assert_eq!(synced_epg, 1);
+
+        let hits = engine
+            .search_iptv_channels(Some("prof-1"), Some("antho"), None, false, 10)
+            .await
+            .expect("fts5 search");
+        assert_eq!(hits.len(), 1);
+
+        let proxied_url = engine
+            .play_iptv_channel(&hits[0], Some("VesselCustomUA/3.0"))
+            .await
+            .expect("play iptv");
+        assert!(proxied_url.starts_with("http://127.0.0.1:"));
+
+        // Verify the player's proxied URL actually forwards our custom User-Agent.
+        let body = reqwest::get(&proxied_url)
+            .await
+            .expect("fetch proxied")
+            .text()
+            .await
+            .expect("proxied text");
+        assert!(body.contains("#EXTM3U"));
+
+        let now_ts = vessel_iptv::xmltv::parse_xmltv_timestamp("20261123121500 +0000").expect("ts");
+        let nn = engine
+            .get_epg_now_next("prof-1", "ch.one", now_ts)
+            .await
+            .expect("now next");
+        assert_eq!(nn.now.as_ref().map(|p| p.title.as_str()), Some("Noon Live"));
+
+        let dl = engine
+            .enqueue_download(DownloadRequest {
+                id: Some("dl-engine-1".into()),
+                plugin_id: "anthology".into(),
+                native_id: "offline-1".into(),
+                title: "Anthology Offline".into(),
+                season: None,
+                episode: None,
+                kind: DownloadKind::Direct,
+                source_url: format!("{base_url}/offline.mp4"),
+                headers: BTreeMap::new(),
+                subtitles: Vec::new(),
+            })
+            .await
+            .expect("enqueue download");
+
+        let mut completed = None;
+        for _ in 0..80 {
+            if let Some(cur) = engine.get_download(&dl.id).await.expect("get dl")
+                && cur.status == DownloadStatus::Completed
+            {
+                completed = Some(cur);
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        let completed = completed.expect("download finished");
+        let saved = tokio::fs::read(completed.local_media_path.expect("path"))
+            .await
+            .expect("read downloaded file");
+        assert_eq!(saved, b"OFFLINE_MP4_BYTES");
+
+        engine
+            .delete_download(&dl.id)
+            .await
+            .expect("delete download");
+        let _ = tokio::fs::remove_dir_all(&dl_root).await;
         engine.shutdown().await;
     }
 }

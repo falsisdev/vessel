@@ -2,6 +2,8 @@
 
 pub mod actor;
 pub mod backup;
+pub mod downloads;
+pub mod iptv;
 pub mod library;
 pub mod metadata;
 pub mod plugins;
@@ -15,6 +17,11 @@ use vessel_domain::{VesselError, VesselPaths, VesselResult};
 
 pub use actor::StorageActor;
 pub use backup::{BACKUP_SCHEMA_VERSION, BackupImportMode, BackupPluginEntry, VesselBackup};
+pub use downloads::{DownloadKind, StoredDownload, StoredDownloadSegment};
+pub use iptv::{
+    NewIptvChannel, StoredEpgNowNext, StoredEpgProgram, StoredIptvChannel, StoredIptvKind,
+    StoredIptvProfile,
+};
 pub use metadata::MetadataOverride;
 pub use plugins::StoredPlugin;
 pub use secret::SqliteSecretStore;

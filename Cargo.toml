@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/vessel-domain", "crates/vessel-engine", "crates/vessel-metadata", "crates/vessel-player-mpv", "crates/vessel-plugin-rt", "crates/vessel-proxy", "crates/vessel-storage"]
+members = ["crates/vessel-domain", "crates/vessel-downloader", "crates/vessel-engine", "crates/vessel-iptv", "crates/vessel-metadata", "crates/vessel-player-mpv", "crates/vessel-plugin-rt", "crates/vessel-proxy", "crates/vessel-storage"]
 
 [workspace.package]
 version = "0.1.0"
@@ -23,6 +23,7 @@ getrandom = { version = "0.4", features = ["std"] }
 hmac = "0.13"
 md-5 = "0.11"
 oxc = { version = "0.159", features = ["codegen", "semantic", "transformer"] }
+quick-xml = "0.42"
 reqwest = { version = "0.13", default-features = false, features = ["charset", "http2", "json", "query", "rustls", "stream"] }
 rquickjs = { version = "0.14", features = ["futures", "loader", "macro", "parallel"] }
 rusqlite = { version = "0.43", features = ["bundled"] }
