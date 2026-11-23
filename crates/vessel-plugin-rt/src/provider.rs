@@ -224,6 +224,11 @@ impl ContentProvider for QuickJsContentProvider {
 }
 
 #[cfg(test)]
+pub(crate) fn provider_test_storage() -> std::sync::Arc<dyn vessel_domain::StoragePort> {
+    std::sync::Arc::new(tests::InMemoryTestStorage::default())
+}
+
+#[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
     use std::sync::{Arc, Mutex};
@@ -244,7 +249,7 @@ mod tests {
     use crate::{DomainPolicy, HostServices, PluginBundle, SandboxLimits, TsCompileCache};
 
     #[derive(Default)]
-    struct InMemoryTestStorage {
+    pub(super) struct InMemoryTestStorage {
         kv: Mutex<BTreeMap<(String, String), String>>,
         settings: Mutex<BTreeMap<String, String>>,
     }

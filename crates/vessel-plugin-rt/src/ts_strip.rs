@@ -26,14 +26,19 @@ pub struct CompiledScript {
     pub cache_hit: bool,
 }
 
-/// Computes the canonical SHA-256 hex digest used as `ts_compile_cache.source_hash`.
-pub fn hash_source(source: &str) -> String {
-    let digest = Sha256::digest(source.as_bytes());
+/// Computes lowercase SHA-256 hex digest for arbitrary bytes.
+pub fn sha256_hex(bytes: &[u8]) -> String {
+    let digest = Sha256::digest(bytes);
     let mut hex = String::with_capacity(digest.len() * 2);
     for byte in digest {
         let _ = write!(&mut hex, "{byte:02x}");
     }
     hex
+}
+
+/// Computes the canonical SHA-256 hex digest used as `ts_compile_cache.source_hash`.
+pub fn hash_source(source: &str) -> String {
+    sha256_hex(source.as_bytes())
 }
 
 fn source_type_for_filename(filename: &str) -> SourceType {
