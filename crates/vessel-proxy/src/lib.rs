@@ -11,9 +11,12 @@ use std::sync::Arc;
 use axum::body::Body;
 use axum::extract::{Path, Query, State};
 use axum::http::header::{
-    ACCEPT_RANGES, CONTENT_LENGTH, CONTENT_RANGE, CONTENT_TYPE, IF_RANGE, RANGE,
+    ACCEPT_RANGES, ACCESS_CONTROL_ALLOW_HEADERS, ACCESS_CONTROL_ALLOW_METHODS,
+    ACCESS_CONTROL_ALLOW_ORIGIN, ACCESS_CONTROL_EXPOSE_HEADERS, CONTENT_LENGTH, CONTENT_RANGE,
+    CONTENT_TYPE, IF_RANGE, RANGE,
 };
 use axum::http::{HeaderMap, HeaderName, HeaderValue, StatusCode};
+use axum::middleware;
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use axum::{Json, Router};
@@ -254,6 +257,24 @@ async fn stream_upstream_target(
     }
 }
 
+async fn add_cors_headers(mut resp: Response) -> Response {
+    let headers = resp.headers_mut();
+    headers.insert(ACCESS_CONTROL_ALLOW_ORIGIN, HeaderValue::from_static("*"));
+    headers.insert(
+        ACCESS_CONTROL_ALLOW_METHODS,
+        HeaderValue::from_static("GET, HEAD, OPTIONS"),
+    );
+    headers.insert(
+        ACCESS_CONTROL_ALLOW_HEADERS,
+        HeaderValue::from_static("Range, If-Range, Content-Type"),
+    );
+    headers.insert(
+        ACCESS_CONTROL_EXPOSE_HEADERS,
+        HeaderValue::from_static("Content-Length, Content-Range, Accept-Ranges, Content-Type"),
+    );
+    resp
+}
+
 /// Localhost-bound `axum` proxy server with shared `reqwest` (`rustls`) pool and HMAC key.
 #[derive(Debug)]
 pub struct ProxyServer {
@@ -291,7 +312,8 @@ impl ProxyServer {
             .route("/health", get(health_handler))
             .route("/s/{token}/master", get(master_stream_handler))
             .route("/s/{token}/seg", get(seg_stream_handler))
-            .with_state(state);
+            .with_state(state)
+            .layer(middleware::map_response(add_cors_headers));
         let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
 
         tokio::spawn(async move {

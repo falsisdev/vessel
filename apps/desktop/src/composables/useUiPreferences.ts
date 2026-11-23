@@ -20,6 +20,7 @@ export function defaultUiPreferences(): UiPreferences {
       continueWatchingLimit: 12,
       showRecentIptv: true,
       hiddenSections: [],
+      selectedPlugins: null,
     },
     cards: {
       aspectRatio: 'poster_2x3',

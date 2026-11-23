@@ -439,12 +439,13 @@ pub async fn resolve_source(
 pub async fn install_source(
     state: State<'_, AppState>,
     raw_input: String,
+    repo_id: Option<String>,
 ) -> Result<InstallResultDto, String> {
     let plugins_dir = state.paths.plugins_dir();
     let (id, badge) = map_err(
         state
             .engine
-            .install_package_persisted(&plugins_dir, &raw_input)
+            .install_package_persisted_with_repo(&plugins_dir, &raw_input, repo_id)
             .await,
     )?;
     Ok(InstallResultDto {
@@ -505,13 +506,27 @@ pub async fn set_plugin_settings(
 }
 
 #[tauri::command]
-pub async fn get_home_feeds(state: State<'_, AppState>) -> Result<Vec<HomeShelfResultDto>, String> {
+pub async fn get_home_feeds(
+    state: State<'_, AppState>,
+    plugin_ids: Option<Vec<String>>,
+) -> Result<Vec<HomeShelfResultDto>, String> {
     let plugins = map_err(state.engine.list_plugins().await)?;
+    let filter_set: Option<std::collections::HashSet<String>> =
+        plugin_ids.map(|ids| ids.into_iter().collect());
+    // Cap concurrent home scrapes to 4 so the 6-slot QuickJS LRU pool never thrashes evictions.
+    let sem = Arc::new(tokio::sync::Semaphore::new(4));
     let mut set = JoinSet::new();
 
-    for stored in plugins.into_iter().filter(|p| p.enabled) {
+    for stored in plugins.into_iter().filter(|p| {
+        p.enabled
+            && filter_set
+                .as_ref()
+                .is_none_or(|allowed| allowed.contains(p.manifest.id.as_str()))
+    }) {
         let engine = Arc::clone(&state.engine);
+        let sem = Arc::clone(&sem);
         set.spawn(async move {
+            let _permit = sem.acquire_owned().await;
             let pid = stored.manifest.id.clone();
             let pname = stored.manifest.name.clone();
             match engine.home_feed(&pid, None).await {
@@ -629,6 +644,14 @@ pub async fn delete_library_item(
     let pid = map_err(PluginId::new(plugin_id))?;
     let media = map_err(MediaRef::new(pid, native_id))?;
     map_err(state.engine.delete_library_item(&media).await)
+}
+
+#[tauri::command]
+pub async fn prepare_playback_url(
+    state: State<'_, AppState>,
+    candidate: StreamCandidate,
+) -> Result<String, String> {
+    map_err(state.engine.prepare_playback_url(&candidate))
 }
 
 #[tauri::command]

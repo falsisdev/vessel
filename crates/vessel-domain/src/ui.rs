@@ -187,6 +187,7 @@ pub struct HomePreferences {
     pub continue_watching_limit: u16,
     pub show_recent_iptv: bool,
     pub hidden_sections: Vec<String>,
+    pub selected_plugins: Option<Vec<String>>,
 }
 
 impl Default for HomePreferences {
@@ -198,6 +199,7 @@ impl Default for HomePreferences {
             continue_watching_limit: 12,
             show_recent_iptv: true,
             hidden_sections: Vec::new(),
+            selected_plugins: None,
         }
     }
 }

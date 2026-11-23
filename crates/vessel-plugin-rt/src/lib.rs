@@ -1,5 +1,6 @@
 //! Sandboxed QuickJS plugin runtime (`oxc` TS stripping, `ModuleLoader`, `.plugin.vessel`, `SourceResolver`, `vessel.*` SDK).
 
+pub mod compat;
 pub mod module_loader;
 pub mod package;
 pub mod provider;

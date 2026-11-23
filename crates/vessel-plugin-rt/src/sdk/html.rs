@@ -29,6 +29,103 @@ struct SelectFn {
     single: bool,
 }
 
+#[derive(Clone, Copy)]
+enum NodeOp {
+    Attrs,
+    Children,
+    Parent,
+    Next,
+    Prev,
+}
+
+struct NodeQueryFn {
+    doc: Rc<Html>,
+    node_id: NodeId,
+    op: NodeOp,
+}
+
+impl<'js> IntoJsFunc<'js, ()> for NodeQueryFn {
+    fn param_requirements() -> ParamRequirement {
+        ParamRequirement::none()
+    }
+
+    fn call(&self, params: Params<'_, 'js>) -> QjsResult<Value<'js>> {
+        let ctx = params.ctx().clone();
+        let Some(el) = element_from_node(&self.doc, self.node_id) else {
+            return Ok(Value::new_null(ctx));
+        };
+        match self.op {
+            NodeOp::Attrs => {
+                let map_obj = Object::new(ctx.clone())?;
+                for (k, v) in el.value().attrs() {
+                    map_obj.set(k, v)?;
+                }
+                map_obj.into_js(&ctx)
+            }
+            NodeOp::Children => {
+                let mut out = Vec::new();
+                for child in el.children() {
+                    if ElementRef::wrap(child).is_some() {
+                        out.push(build_element_obj(&ctx, Rc::clone(&self.doc), child.id())?);
+                    }
+                }
+                out.into_js(&ctx)
+            }
+            NodeOp::Parent => {
+                if let Some(parent_node) = el.parent()
+                    && ElementRef::wrap(parent_node).is_some()
+                {
+                    return build_element_obj(&ctx, Rc::clone(&self.doc), parent_node.id())?
+                        .into_js(&ctx);
+                }
+                Ok(Value::new_null(ctx))
+            }
+            NodeOp::Next => {
+                let mut cur = el.next_sibling();
+                while let Some(sib) = cur {
+                    if ElementRef::wrap(sib).is_some() {
+                        return build_element_obj(&ctx, Rc::clone(&self.doc), sib.id())?
+                            .into_js(&ctx);
+                    }
+                    cur = sib.next_sibling();
+                }
+                Ok(Value::new_null(ctx))
+            }
+            NodeOp::Prev => {
+                let mut cur = el.prev_sibling();
+                while let Some(sib) = cur {
+                    if ElementRef::wrap(sib).is_some() {
+                        return build_element_obj(&ctx, Rc::clone(&self.doc), sib.id())?
+                            .into_js(&ctx);
+                    }
+                    cur = sib.prev_sibling();
+                }
+                Ok(Value::new_null(ctx))
+            }
+        }
+    }
+}
+
+struct NodeMatchesFn {
+    doc: Rc<Html>,
+    node_id: NodeId,
+}
+
+impl<'js> IntoJsFunc<'js, (String,)> for NodeMatchesFn {
+    fn param_requirements() -> ParamRequirement {
+        <(String,)>::param_requirements()
+    }
+
+    fn call(&self, params: Params<'_, 'js>) -> QjsResult<Value<'js>> {
+        let ctx = params.ctx().clone();
+        let (css,) = <(String,)>::from_params(&mut params.access())?;
+        let selector = parse_selector(&ctx, &css)?;
+        let matched =
+            element_from_node(&self.doc, self.node_id).is_some_and(|el| selector.matches(&el));
+        matched.into_js(&ctx)
+    }
+}
+
 impl<'js> IntoJsFunc<'js, (String,)> for SelectFn {
     fn param_requirements() -> ParamRequirement {
         <(String,)>::param_requirements()
@@ -67,6 +164,90 @@ fn build_element_obj<'js>(
     node_id: NodeId,
 ) -> QjsResult<Object<'js>> {
     let obj = Object::new(ctx.clone())?;
+    obj.set("_nodeKey", format!("{node_id:?}"))?;
+
+    {
+        let doc = Rc::clone(&doc);
+        obj.set(
+            "tagName",
+            Function::new(ctx.clone(), move || -> String {
+                element_from_node(&doc, node_id)
+                    .map(|el| el.value().name().to_owned())
+                    .unwrap_or_default()
+            })?,
+        )?;
+    }
+
+    obj.set(
+        "attrs",
+        Function::new(
+            ctx.clone(),
+            NodeQueryFn {
+                doc: Rc::clone(&doc),
+                node_id,
+                op: NodeOp::Attrs,
+            },
+        )?,
+    )?;
+
+    obj.set(
+        "matches",
+        Function::new(
+            ctx.clone(),
+            NodeMatchesFn {
+                doc: Rc::clone(&doc),
+                node_id,
+            },
+        )?,
+    )?;
+
+    obj.set(
+        "children",
+        Function::new(
+            ctx.clone(),
+            NodeQueryFn {
+                doc: Rc::clone(&doc),
+                node_id,
+                op: NodeOp::Children,
+            },
+        )?,
+    )?;
+
+    obj.set(
+        "parent",
+        Function::new(
+            ctx.clone(),
+            NodeQueryFn {
+                doc: Rc::clone(&doc),
+                node_id,
+                op: NodeOp::Parent,
+            },
+        )?,
+    )?;
+
+    obj.set(
+        "next",
+        Function::new(
+            ctx.clone(),
+            NodeQueryFn {
+                doc: Rc::clone(&doc),
+                node_id,
+                op: NodeOp::Next,
+            },
+        )?,
+    )?;
+
+    obj.set(
+        "prev",
+        Function::new(
+            ctx.clone(),
+            NodeQueryFn {
+                doc: Rc::clone(&doc),
+                node_id,
+                op: NodeOp::Prev,
+            },
+        )?,
+    )?;
 
     {
         let doc = Rc::clone(&doc);
@@ -172,6 +353,14 @@ fn build_element_obj<'js>(
 
 fn build_doc_obj<'js>(ctx: &Ctx<'js>, doc: Rc<Html>) -> QjsResult<Object<'js>> {
     let doc_obj = Object::new(ctx.clone())?;
+
+    {
+        let doc = Rc::clone(&doc);
+        doc_obj.set(
+            "html",
+            Function::new(ctx.clone(), move || -> String { doc.root_element().html() })?,
+        )?;
+    }
 
     doc_obj.set(
         "select",

@@ -70,6 +70,7 @@ const hoverPercent = ref(0)
 const activeSubtitleIndex = ref<number>(-1)
 const subtitleDelayMs = ref(0)
 const pendingSeekSeconds = ref<number | null>(null)
+const playableSrc = ref<string>('')
 
 let hideTimer: number | null = null
 let progressTimer: number | null = null
@@ -533,13 +534,21 @@ async function ensureSessionLoaded(): Promise<void> {
 }
 
 watch(
-  () => activeStream.value?.url,
-  () => {
+  () => activeStream.value,
+  async (stream) => {
     playbackError.value = ''
     isBuffering.value = true
     currentTime.value = 0
     duration.value = 0
+    playableSrc.value = ''
+    if (!stream) return
+    try {
+      playableSrc.value = await vesselApi.preparePlaybackUrl(stream)
+    } catch {
+      playableSrc.value = stream.url
+    }
   },
+  { immediate: true },
 )
 
 onMounted(async () => {
@@ -579,10 +588,10 @@ onUnmounted(() => {
   >
     <!-- Video Surface -->
     <video
-      v-if="activeStream"
+      v-if="playableSrc"
       ref="videoRef"
-      :key="activeStream.url"
-      :src="activeStream.url"
+      :key="playableSrc"
+      :src="playableSrc"
       class="cs-video"
       :class="`fit-${fitMode}`"
       autoplay

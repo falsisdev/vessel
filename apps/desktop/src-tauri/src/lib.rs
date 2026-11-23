@@ -80,6 +80,7 @@ pub fn run() {
             commands::list_library,
             commands::upsert_library,
             commands::delete_library_item,
+            commands::prepare_playback_url,
             commands::play_candidate,
             commands::record_progress,
             commands::get_watch_progress,

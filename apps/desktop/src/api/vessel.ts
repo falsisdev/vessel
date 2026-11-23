@@ -63,8 +63,8 @@ export const vesselApi = {
 
   listPlugins: () => call<PluginListEntry[]>('list_plugins'),
   resolveSource: (rawInput: string) => call<ResolvedSource>('resolve_source', { rawInput }),
-  installSource: (rawInput: string) =>
-    call<{ pluginId: string; badge: string }>('install_source', { rawInput }),
+  installSource: (rawInput: string, repoId?: string) =>
+    call<{ pluginId: string; badge: string }>('install_source', { rawInput, repoId }),
   setPluginEnabled: (pluginId: string, enabled: boolean) =>
     call<void>('set_plugin_enabled', { pluginId, enabled }),
   uninstallPlugin: (pluginId: string) => call<void>('uninstall_plugin', { pluginId }),
@@ -75,7 +75,10 @@ export const vesselApi = {
   setPluginSettings: (pluginId: string, values: Record<string, unknown>) =>
     call<void>('set_plugin_settings', { pluginId, values }),
 
-  getHomeFeeds: () => call<HomeShelfResult[]>('get_home_feeds'),
+  getHomeFeeds: (pluginIds?: string[] | null) =>
+    call<HomeShelfResult[]>('get_home_feeds', {
+      pluginIds: pluginIds === null ? undefined : pluginIds,
+    }),
   searchAll: (query: string, filters?: Record<string, string>, page = 1) =>
     call<string>('search_all', { query, filters, page }),
   cancelSearch: () => call<void>('cancel_search'),
@@ -95,6 +98,8 @@ export const vesselApi = {
   deleteLibraryItem: (pluginId: string, nativeId: string) =>
     call<void>('delete_library_item', { pluginId, nativeId }),
 
+  preparePlaybackUrl: (candidate: StreamCandidate) =>
+    call<string>('prepare_playback_url', { candidate }),
   playCandidate: (payload: {
     pluginId: string
     nativeId: string

@@ -1,0 +1,19 @@
+<svg width="1024" height="1024" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="24" y2="24" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#131522"/>
+      <stop offset="100%" stop-color="#090a10"/>
+    </linearGradient>
+    <linearGradient id="hull" x1="3.5" y1="12" x2="20.5" y2="20.8" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#f4f6fc"/>
+      <stop offset="100%" stop-color="#cbd5f5"/>
+    </linearGradient>
+  </defs>
+  <rect x="0.5" y="0.5" width="23" height="23" rx="5.5" fill="url(#bg)" stroke="#ffffff" stroke-opacity="0.1" stroke-width="0.4"/>
+  <!-- Bow "V" Monolith cargo ship mark -->
+  <rect x="8.5" y="3.5" width="7" height="3" rx="0.9" fill="#cba6f7"/>
+  <rect x="6" y="7.5" width="5.5" height="3.2" rx="0.9" fill="#89b4fa"/>
+  <rect x="12.5" y="7.5" width="5.5" height="3.2" rx="0.9" fill="#f4f6fc" fill-opacity="0.94"/>
+  <path d="M3.5 12L12 20.8L20.5 12H16.2L12 16.4L7.8 12H3.5Z" fill="url(#hull)"/>
+  <path d="M12 12V20.5" stroke="#090a10" stroke-width="1.2"/>
+</svg>

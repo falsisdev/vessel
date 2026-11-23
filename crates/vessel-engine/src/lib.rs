@@ -363,12 +363,15 @@ impl VesselEngine {
         Ok(())
     }
 
-    /// Resolves `raw_input` and persists the package into `plugins_dir` (or tracks local Dev Mode dir).
-    pub async fn install_package_persisted(
+    /// Resolves `raw_input` and persists the package into `plugins_dir` (or tracks local Dev Mode dir),
+    /// tagging an optional `repo_id` group label when installed from a repository.
+    pub async fn install_package_persisted_with_repo(
         &self,
         plugins_dir: &Path,
         raw_input: &str,
+        repo_id: Option<String>,
     ) -> VesselResult<(PluginId, SourceTrustBadge)> {
+        let inferred_repo = repo_id.or_else(|| infer_repo_group(raw_input));
         match self.source_resolver.resolve(raw_input).await? {
             ResolvedSource::Package {
                 resolved_url,
@@ -378,7 +381,7 @@ impl VesselEngine {
                 let id = package.manifest.id.clone();
                 let dev_path = Path::new(&resolved_url);
                 if dev_path.is_dir() {
-                    self.install_package(package, None, "dev_dir", &resolved_url)
+                    self.install_package(package, inferred_repo, "dev_dir", &resolved_url)
                         .await?;
                 } else {
                     std::fs::create_dir_all(plugins_dir).map_err(|err| {
@@ -394,7 +397,7 @@ impl VesselEngine {
                         VesselError::Storage(format!("write plugin archive: {err}"))
                     })?;
                     let local_path = pkg_path.to_string_lossy().into_owned();
-                    self.install_package(package, None, "package", &local_path)
+                    self.install_package(package, inferred_repo, "package", &local_path)
                         .await?;
                 }
                 Ok((id, badge))
@@ -404,6 +407,16 @@ impl VesselEngine {
                 raw_input, repo.name
             ))),
         }
+    }
+
+    /// Resolves `raw_input` and persists the package into `plugins_dir` (or tracks local Dev Mode dir).
+    pub async fn install_package_persisted(
+        &self,
+        plugins_dir: &Path,
+        raw_input: &str,
+    ) -> VesselResult<(PluginId, SourceTrustBadge)> {
+        self.install_package_persisted_with_repo(plugins_dir, raw_input, None)
+            .await
     }
 
     /// Reloads all persisted plugins from SQLite and their local files/directories into the pool.
@@ -810,6 +823,12 @@ impl VesselEngine {
             };
         }
         Ok(track)
+    }
+
+    /// Resolves a playback URL through Smart Proxy (injecting headers / rewriting HLS) without launching `mpv`.
+    pub fn prepare_playback_url(&self, candidate: &StreamCandidate) -> VesselResult<String> {
+        self.proxy
+            .resolve_playback_url(candidate, self.always_proxy())
     }
 
     /// Routes `candidate` through Smart Proxy, merges subtitles, resolves resume offset,
@@ -1316,6 +1335,30 @@ async fn run_enrichment_and_emit(
     }
 
     Ok(None)
+}
+
+fn infer_repo_group(raw_input: &str) -> Option<String> {
+    let clean = raw_input
+        .trim()
+        .strip_prefix("nuvio-plugin://")
+        .unwrap_or(raw_input.trim());
+    if let Some(rest) = clean.strip_prefix("gh:") {
+        let mut parts = rest.split('/');
+        if let (Some(owner), Some(repo)) = (parts.next(), parts.next()) {
+            let repo_clean = repo.split('@').next().unwrap_or(repo);
+            return Some(format!("{owner}/{repo_clean}"));
+        }
+    }
+    if let Some(after_raw) = clean.strip_prefix("https://raw.githubusercontent.com/") {
+        let mut parts = after_raw.split('/');
+        if let (Some(owner), Some(repo)) = (parts.next(), parts.next()) {
+            return Some(format!("{owner}/{repo}"));
+        }
+    }
+    if clean.starts_with("stremio://") || clean.ends_with("/manifest.json") {
+        return Some("Stremio & External".into());
+    }
+    None
 }
 
 #[cfg(test)]

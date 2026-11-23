@@ -13,6 +13,10 @@ use vessel_domain::{
     PluginManifest, RegistryIndex, RepoIndex, RepoPluginEntry, VesselError, VesselResult,
 };
 
+use crate::compat::{
+    ExternalManifestKind, NUVIO_SCHEME_PREFIX, build_nuvio_scraper_package,
+    check_cloudstream_closed_plugins, parse_external_manifest, verify_open_source_js,
+};
 use crate::module_loader::PluginBundle;
 use crate::package::{
     LoadedPackage, collect_relative_imports, load_plugin_dir, load_plugin_package, verify_sha256,
@@ -49,6 +53,10 @@ pub enum ParsedSource {
         project_path: String,
         git_ref: Option<String>,
         subpath: String,
+    },
+    NuvioScraper {
+        manifest_url: String,
+        scraper_id: String,
     },
     Shortcode(String),
     LocalPath(PathBuf),
@@ -126,6 +134,31 @@ pub fn parse_source_input(raw: &str) -> VesselResult<ParsedSource> {
         return parse_source_input(&unwrapped);
     }
 
+    if let Some(nuvio_rest) = trimmed.strip_prefix(NUVIO_SCHEME_PREFIX) {
+        let Some((manifest_url, scraper_id)) = nuvio_rest.rsplit_once('#') else {
+            return Err(VesselError::InvalidInput(format!(
+                "invalid internal Nuvio scraper reference '{trimmed}'"
+            )));
+        };
+        if manifest_url.trim().is_empty() || scraper_id.trim().is_empty() {
+            return Err(VesselError::InvalidInput(format!(
+                "invalid internal Nuvio scraper reference '{trimmed}'"
+            )));
+        }
+        return Ok(ParsedSource::NuvioScraper {
+            manifest_url: manifest_url.to_owned(),
+            scraper_id: scraper_id.to_owned(),
+        });
+    }
+
+    if let Some(stremio_rest) = trimmed.strip_prefix("stremio://") {
+        let https_url = format!("https://{stremio_rest}");
+        let parsed = Url::parse(&https_url).map_err(|err| {
+            VesselError::InvalidInput(format!("invalid stremio:// URL '{trimmed}': {err}"))
+        })?;
+        return Ok(ParsedSource::DirectUrl(parsed.to_string()));
+    }
+
     if let Some(gh_rest) = trimmed.strip_prefix("gh:") {
         let clean = gh_rest.trim_matches('/');
         let Some((owner, after_owner)) = clean.split_once('/') else {
@@ -200,6 +233,32 @@ pub fn parse_source_input(raw: &str) -> VesselResult<ParsedSource> {
         let parsed = Url::parse(trimmed).map_err(|err| {
             VesselError::InvalidInput(format!("invalid source URL '{trimmed}': {err}"))
         })?;
+        // Convert plain `https://github.com/owner/repo[/tree/branch/subpath]` repository URLs
+        if parsed
+            .host_str()
+            .is_some_and(|h| h.eq_ignore_ascii_case("github.com"))
+        {
+            let segs: Vec<&str> = parsed
+                .path_segments()
+                .map(|s| s.filter(|p| !p.is_empty()).collect())
+                .unwrap_or_default();
+            if segs.len() == 2 {
+                return Ok(ParsedSource::GitHub {
+                    owner: segs[0].to_owned(),
+                    repo: segs[1].trim_end_matches(".git").to_owned(),
+                    git_ref: None,
+                    subpath: String::new(),
+                });
+            }
+            if segs.len() >= 4 && segs[2] == "tree" {
+                return Ok(ParsedSource::GitHub {
+                    owner: segs[0].to_owned(),
+                    repo: segs[1].trim_end_matches(".git").to_owned(),
+                    git_ref: Some(segs[3].to_owned()),
+                    subpath: segs[4..].join("/"),
+                });
+            }
+        }
         return Ok(ParsedSource::DirectUrl(parsed.to_string()));
     }
 
@@ -228,6 +287,15 @@ pub fn parse_source_input(raw: &str) -> VesselResult<ParsedSource> {
 pub fn badge_for_source(source: &ParsedSource) -> SourceTrustBadge {
     match source {
         ParsedSource::GitHub { owner, .. } if owner.eq_ignore_ascii_case("falsisdev") => {
+            SourceTrustBadge::Official
+        }
+        ParsedSource::NuvioScraper { manifest_url, .. } if manifest_url.contains("/falsisdev/") => {
+            SourceTrustBadge::Official
+        }
+        ParsedSource::DirectUrl(url)
+            if url.starts_with("https://raw.githubusercontent.com/falsisdev/")
+                || url.starts_with("https://falsisdev.github.io/") =>
+        {
             SourceTrustBadge::Official
         }
         _ => SourceTrustBadge::Community,
@@ -380,6 +448,13 @@ impl SourceResolver {
                 continue;
             }
 
+            if matches!(resp.status().as_u16(), 401 | 403) {
+                return Err(VesselError::InvalidInput(format!(
+                    "Source at '{}' is private or access-restricted (HTTP {}). Vessel only adds publicly accessible open-source plugins.",
+                    current,
+                    resp.status().as_u16()
+                )));
+            }
             if !resp.status().is_success() {
                 return Err(VesselError::NotFound(format!(
                     "HTTP {} fetching {}",
@@ -460,7 +535,67 @@ impl SourceResolver {
                 self.probe_git_raw_bases(&candidates, badge).await
             }
             ParsedSource::DirectUrl(url) => self.resolve_direct_url(&url, badge).await,
+            ParsedSource::NuvioScraper {
+                manifest_url,
+                scraper_id,
+            } => {
+                self.resolve_nuvio_scraper(&manifest_url, &scraper_id, badge)
+                    .await
+            }
         }
+    }
+
+    async fn resolve_nuvio_scraper(
+        &self,
+        manifest_url: &str,
+        scraper_id: &str,
+        badge: SourceTrustBadge,
+    ) -> VesselResult<ResolvedSource> {
+        let (final_manifest_url, manifest_bytes) = self.fetch_bytes_checked(manifest_url).await?;
+        let manifest_val: serde_json::Value = serde_json::from_slice(&manifest_bytes)
+            .map_err(|err| VesselError::InvalidInput(format!("invalid Nuvio manifest: {err}")))?;
+        let filename = manifest_val
+            .get("scrapers")
+            .and_then(|v| v.as_array())
+            .and_then(|arr| {
+                arr.iter()
+                    .find(|s| s.get("id").and_then(|v| v.as_str()) == Some(scraper_id))
+            })
+            .and_then(|s| s.get("filename").and_then(|v| v.as_str()))
+            .ok_or_else(|| {
+                VesselError::NotFound(format!(
+                    "scraper '{scraper_id}' missing filename in '{final_manifest_url}'"
+                ))
+            })?;
+
+        let js_url = if filename.starts_with("https://") || filename.starts_with("http://") {
+            filename.to_owned()
+        } else {
+            let base = dir_base_url(&final_manifest_url).ok_or_else(|| {
+                VesselError::InvalidInput("cannot resolve Nuvio scraper relative filename".into())
+            })?;
+            join_base_path(&base, filename)
+        };
+
+        let (final_js_url, js_bytes) = self.fetch_bytes_checked(&js_url).await?;
+        let raw_js = String::from_utf8(js_bytes).map_err(|err| {
+            VesselError::InvalidInput(format!(
+                "plugin source at '{final_js_url}' is not valid UTF-8 open-source text ({err}); Vessel refused to add it."
+            ))
+        })?;
+
+        let package = build_nuvio_scraper_package(
+            &manifest_val,
+            &final_manifest_url,
+            scraper_id,
+            &raw_js,
+            &final_js_url,
+        )?;
+        Ok(ResolvedSource::Package {
+            resolved_url: final_js_url,
+            package,
+            badge,
+        })
     }
 
     async fn lookup_shortcode(&self, code: &str) -> VesselResult<String> {
@@ -514,6 +649,25 @@ impl SourceResolver {
 
             let manifest_url = join_base_path(base, "manifest.json");
             if let Some((final_url, bytes)) = self.try_fetch_bytes(&manifest_url).await? {
+                if let Some(ext) = parse_external_manifest(&bytes, &final_url)? {
+                    match ext {
+                        ExternalManifestKind::NuvioRepo(repo) => {
+                            return Ok(ResolvedSource::Repository {
+                                resolved_url: final_url,
+                                base_raw_url: Some(base.clone()),
+                                repo: *repo,
+                                badge,
+                            });
+                        }
+                        ExternalManifestKind::StremioAddon(package) => {
+                            return Ok(ResolvedSource::Package {
+                                resolved_url: final_url,
+                                package: *package,
+                                badge,
+                            });
+                        }
+                    }
+                }
                 let manifest: PluginManifest = serde_json::from_slice(&bytes).map_err(|err| {
                     VesselError::InvalidInput(format!(
                         "invalid manifest.json at '{final_url}': {err}"
@@ -549,6 +703,7 @@ impl SourceResolver {
         }
 
         if let Ok(value) = serde_json::from_slice::<serde_json::Value>(&bytes) {
+            check_cloudstream_closed_plugins(&bytes, &final_url)?;
             let base = dir_base_url(&final_url);
             if value.get("plugins").is_some() || value.get("pluginLists").is_some() {
                 let repo = self.parse_and_expand_repo(&bytes, base.as_deref()).await?;
@@ -558,6 +713,25 @@ impl SourceResolver {
                     repo,
                     badge,
                 });
+            }
+            if let Some(ext) = parse_external_manifest(&bytes, &final_url)? {
+                match ext {
+                    ExternalManifestKind::NuvioRepo(repo) => {
+                        return Ok(ResolvedSource::Repository {
+                            resolved_url: final_url,
+                            base_raw_url: base,
+                            repo: *repo,
+                            badge,
+                        });
+                    }
+                    ExternalManifestKind::StremioAddon(package) => {
+                        return Ok(ResolvedSource::Package {
+                            resolved_url: final_url,
+                            package: *package,
+                            badge,
+                        });
+                    }
+                }
             }
             if value.get("entry").is_some() {
                 let manifest: PluginManifest = serde_json::from_value(value).map_err(|err| {
@@ -640,14 +814,52 @@ impl SourceResolver {
         bytes: &[u8],
         base_url: Option<&str>,
     ) -> VesselResult<RepoIndex> {
-        let mut repo: RepoIndex = serde_json::from_slice(bytes)
+        let raw_val: serde_json::Value = serde_json::from_slice(bytes)
             .map_err(|err| VesselError::InvalidInput(format!("invalid repo.json: {err}")))?;
-        if repo.schema_version != 1 {
-            return Err(VesselError::InvalidInput(format!(
-                "unsupported repo.json schemaVersion: {}",
-                repo.schema_version
-            )));
-        }
+
+        let mut repo: RepoIndex = if raw_val.get("schemaVersion").is_none()
+            && raw_val.get("pluginLists").is_some()
+        {
+            // CloudStream `repo.json` omits Vessel's `schemaVersion`
+            let name = raw_val
+                .get("name")
+                .and_then(|v| v.as_str())
+                .unwrap_or("CloudStream Repository")
+                .to_owned();
+            let lists: Vec<String> = raw_val
+                .get("pluginLists")
+                .and_then(|v| v.as_array())
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|v| v.as_str().map(str::to_owned))
+                        .collect()
+                })
+                .unwrap_or_default();
+            RepoIndex {
+                schema_version: 1,
+                id: name.to_ascii_lowercase().replace(' ', "-"),
+                name,
+                description: raw_val
+                    .get("description")
+                    .and_then(|v| v.as_str())
+                    .map(str::to_owned),
+                author: None,
+                website: None,
+                plugin_lists: lists,
+                shared_extractors: None,
+                plugins: Vec::new(),
+            }
+        } else {
+            let parsed: RepoIndex = serde_json::from_value(raw_val)
+                .map_err(|err| VesselError::InvalidInput(format!("invalid repo.json: {err}")))?;
+            if parsed.schema_version != 1 {
+                return Err(VesselError::InvalidInput(format!(
+                    "unsupported repo.json schemaVersion: {}",
+                    parsed.schema_version
+                )));
+            }
+            parsed
+        };
 
         // Follow `pluginLists` up to depth 1 per PLAN.md 7.1.
         if MAX_PLUGIN_LIST_DEPTH >= 1 && !repo.plugin_lists.is_empty() {
@@ -662,10 +874,11 @@ impl SourceResolver {
                 } else {
                     continue;
                 };
-                if let Some((_, list_bytes)) = self.try_fetch_bytes(&target_url).await?
-                    && let Ok(sub_repo) = serde_json::from_slice::<RepoIndex>(&list_bytes)
-                {
-                    repo.plugins.extend(sub_repo.plugins);
+                if let Some((_, list_bytes)) = self.try_fetch_bytes(&target_url).await? {
+                    check_cloudstream_closed_plugins(&list_bytes, &target_url)?;
+                    if let Ok(sub_repo) = serde_json::from_slice::<RepoIndex>(&list_bytes) {
+                        repo.plugins.extend(sub_repo.plugins);
+                    }
                 }
             }
         }
@@ -691,6 +904,7 @@ impl SourceResolver {
 
         while let Some(stem) = queue.pop_front() {
             let (resolved_rel, text) = self.fetch_module_with_extensions(base_url, &stem).await?;
+            verify_open_source_js(&text, &join_base_path(base_url, &resolved_rel))?;
             if !visited.insert(resolved_rel.clone()) {
                 continue;
             }

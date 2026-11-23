@@ -1,6 +1,12 @@
-# 🚢 Vessel
+<p align="center">
+  <img src="assets/vessel-logo.png" alt="Vessel Logo" width="144" height="144" />
+</p>
 
-*Most **ships** dread **Rust**. This **cargo vessel** runs on it — **shipped** with **Cargo**, engineered not to **rust**, **docking** plugins by **manifest** at local **ports**.*
+<h1 align="center">Vessel</h1>
+
+<p align="center">
+  <em>Most <strong>ships</strong> dread <strong>Rust</strong>. This <strong>cargo vessel</strong> runs on it — <strong>shipped</strong> with <strong>Cargo</strong>, engineered not to <strong>rust</strong>, <strong>docking</strong> plugins by <strong>manifest</strong> at local <strong>ports</strong>.</em>
+</p>
 
 **Vessel** is a local-first, cross-platform streaming and media center built from the ground up in **Rust**, **Tauri v2**, and **Vue 3 / TypeScript**.
 

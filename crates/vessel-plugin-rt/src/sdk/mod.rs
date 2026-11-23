@@ -1,5 +1,6 @@
 //! Host SDK bridge (`vessel.*`), Web standard polyfills, and sandboxed logging.
 
+pub mod compat_js;
 pub mod crypto;
 pub mod html;
 pub mod http;
@@ -9,6 +10,7 @@ pub mod unpack;
 use std::collections::BTreeMap;
 use std::sync::{Arc, RwLock};
 
+use rquickjs::prelude::Async;
 use rquickjs::{CatchResultExt, Ctx, Function, IntoJs, Object, Result as QjsResult, Value};
 use vessel_domain::{
     EngineEvent, EventSink, LogLevel, PluginId, StoragePort, VesselError, VesselResult,
@@ -42,10 +44,24 @@ impl<'js, T: IntoJs<'js>> IntoJs<'js> for HostResult<T> {
 pub(crate) const POLYFILLS_JS: &str = r##"
 (() => {
     if (typeof globalThis.atob !== "function") {
-        globalThis.atob = (input) => globalThis.vessel.crypto.base64Decode(String(input));
+        globalThis.atob = (input) => {
+            const bytes = globalThis.vessel.crypto.base64DecodeBytes(String(input));
+            let out = "";
+            for (let i = 0; i < bytes.length; i++) {
+                out += String.fromCharCode(bytes[i]);
+            }
+            return out;
+        };
     }
     if (typeof globalThis.btoa !== "function") {
-        globalThis.btoa = (input) => globalThis.vessel.crypto.base64Encode(String(input));
+        globalThis.btoa = (input) => {
+            const str = String(input);
+            const u8 = new Uint8Array(str.length);
+            for (let i = 0; i < str.length; i++) {
+                u8[i] = str.charCodeAt(i) & 0xff;
+            }
+            return globalThis.vessel.crypto.base64Encode(u8);
+        };
     }
     if (typeof globalThis.TextEncoder !== "function") {
         globalThis.TextEncoder = class TextEncoder {
@@ -276,6 +292,15 @@ fn attach_console<'js>(ctx: &Ctx<'js>, host: &Arc<HostServices>) -> QjsResult<()
 pub(crate) fn install_sdk<'js>(ctx: &Ctx<'js>, host: Arc<HostServices>) -> QjsResult<()> {
     let vessel_obj = Object::new(ctx.clone())?;
     vessel_obj.set("definePlugin", Function::new(ctx.clone(), define_plugin)?)?;
+    vessel_obj.set(
+        "__sleep",
+        Function::new(
+            ctx.clone(),
+            Async(|ms: u64| async move {
+                tokio::time::sleep(std::time::Duration::from_millis(ms.min(60_000))).await;
+            }),
+        )?,
+    )?;
     ctx.globals().set("vessel", vessel_obj.clone())?;
 
     http::attach_http(ctx, Arc::clone(&host), &vessel_obj)?;
@@ -287,6 +312,10 @@ pub(crate) fn install_sdk<'js>(ctx: &Ctx<'js>, host: Arc<HostServices>) -> QjsRe
     attach_console(ctx, &host)?;
 
     ctx.eval::<(), _>(POLYFILLS_JS)
+        .catch(ctx)
+        .map_err(|err| err.throw(ctx))?;
+
+    ctx.eval::<(), _>(compat_js::COMPAT_BRIDGE_JS)
         .catch(ctx)
         .map_err(|err| err.throw(ctx))?;
 

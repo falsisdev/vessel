@@ -112,8 +112,8 @@ fn map_qjs_err(plugin_id: &PluginId, err: rquickjs::Error) -> VesselError {
 pub struct PluginSandbox {
     plugin_id: PluginId,
     limits: SandboxLimits,
-    runtime: AsyncRuntime,
     context: AsyncContext,
+    runtime: AsyncRuntime,
     interrupt: Arc<InterruptState>,
 }
 
@@ -148,8 +148,8 @@ impl PluginSandbox {
         Ok(Self {
             plugin_id,
             limits,
-            runtime,
             context,
+            runtime,
             interrupt,
         })
     }
@@ -270,6 +270,7 @@ impl PluginSandbox {
         } = self;
         drop(context);
         runtime.idle().await;
+        runtime.run_gc().await;
     }
 }
 

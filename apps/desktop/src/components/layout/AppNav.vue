@@ -146,15 +146,16 @@ const showLabels = computed(() => isTop.value || isExpanded.value)
 }
 
 .brand-mark {
-  width: 36px;
-  height: 36px;
-  border-radius: 11px;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, rgba(203, 166, 247, 0.28), rgba(137, 180, 250, 0.18));
+  background: linear-gradient(145deg, rgba(203, 166, 247, 0.26), rgba(137, 180, 250, 0.14));
   color: #ffffff;
-  border: 1px solid rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow: 0 0 22px rgba(203, 166, 247, 0.22);
   flex-shrink: 0;
 }
 
@@ -172,6 +173,7 @@ const showLabels = computed(() => isTop.value || isExpanded.value)
 }
 
 .nav-pill {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -185,7 +187,7 @@ const showLabels = computed(() => isTop.value || isExpanded.value)
   transition:
     background-color 0.18s ease,
     color 0.18s ease,
-    transform 0.16s cubic-bezier(0.22, 1, 0.36, 1);
+    transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
   white-space: nowrap;
 }
 
@@ -198,13 +200,39 @@ const showLabels = computed(() => isTop.value || isExpanded.value)
 .nav-pill:hover {
   background: rgba(255, 255, 255, 0.08);
   color: #ffffff;
+  transform: translateX(2px);
+}
+
+.nuvio-nav.is-top .nav-pill:hover {
+  transform: translateY(-1px);
 }
 
 .nav-pill.is-active {
-  background: rgba(255, 255, 255, 0.14);
+  background: linear-gradient(90deg, rgba(203, 166, 247, 0.2), rgba(137, 180, 250, 0.08));
   color: #ffffff;
   font-weight: 600;
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(203, 166, 247, 0.32);
+}
+
+.nav-pill.is-active::before {
+  content: '';
+  position: absolute;
+  left: -4px;
+  top: 10px;
+  bottom: 10px;
+  width: 3px;
+  border-radius: 999px;
+  background: var(--vessel-accent);
+  box-shadow: 0 0 14px var(--vessel-accent);
+}
+
+.nuvio-nav.is-top .nav-pill.is-active::before {
+  left: 12px;
+  right: 12px;
+  top: auto;
+  bottom: -2px;
+  width: auto;
+  height: 3px;
 }
 
 .nav-icon {

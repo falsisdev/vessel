@@ -357,6 +357,7 @@ export interface UiPreferences {
     continueWatchingLimit: number
     showRecentIptv: boolean
     hiddenSections: string[]
+    selectedPlugins?: string[] | null
   }
   cards: {
     aspectRatio: CardAspectRatio
