@@ -1,0 +1,119 @@
+{
+  "app": {
+    "name": "Vessel",
+    "tagline": "Yerel Öncelikli Yayın ve Medya Merkezi"
+  },
+  "nav": {
+    "home": "Ana Sayfa",
+    "search": "Ara",
+    "library": "Kütüphane",
+    "live_tv": "Canlı TV",
+    "downloads": "İndirilenler",
+    "extensions": "Eklentiler",
+    "settings": "Ayarlar"
+  },
+  "common": {
+    "refresh": "Yenile",
+    "save": "Kaydet",
+    "cancel": "İptal",
+    "delete": "Sil",
+    "install": "Kur",
+    "uninstall": "Kaldır",
+    "enable": "Etkinleştir",
+    "disable": "Devre Dışı Bırak",
+    "enabled": "Etkin",
+    "disabled": "Devre Dışı",
+    "play": "Oynat",
+    "pause": "Duraklat",
+    "resume": "Sürdür",
+    "stop": "Durdur",
+    "search": "Ara",
+    "loading": "Yükleniyor…",
+    "empty": "Henüz burada bir şey yok.",
+    "reset": "Sıfırla",
+    "export": "Dışa Aktar",
+    "import": "İçe Aktar"
+  },
+  "home": {
+    "title": "Ana Sayfa",
+    "hero_title": "Kişisel Medya Merkeziniz",
+    "hero_subtitle": "Kurulu eklentiler ve IPTV kaynakları üzerinden hızlı, yerel öncelikli yayın.",
+    "empty_plugins": "Henüz etkin eklenti yok. Ana sayfa raflarını doldurmak için Eklentiler üzerinden bir depo veya geliştirici eklentisi kurun.",
+    "plugin_error": "Eklenti akışı başarısız"
+  },
+  "search": {
+    "title": "Ara",
+    "placeholder": "Eklentilerde anime, dizi, film ara…",
+    "empty": "Etkin eklentilerden canlı sonuç almak için bir arama yazın.",
+    "searching": "Aranıyor…",
+    "completed": "Arama tamamlandı"
+  },
+  "details": {
+    "episodes": "Bölümler",
+    "sources": "Kaynaklar",
+    "fix_match": "Eşleşmeyi Düzelt",
+    "canonical_hint": "Kanonik Kimlik (örn. anilist:918 veya tmdb:tv:1399)",
+    "library_status": "Kütüphane Durumu",
+    "download_episode": "İndir",
+    "select_stream": "Yayın Kaynağı Seç",
+    "no_episodes": "Bu içerik için bölüm listelenmedi."
+  },
+  "library": {
+    "title": "Kütüphane",
+    "all": "Tümü",
+    "watching": "İzleniyor",
+    "plan_to_watch": "İzlenecek",
+    "completed": "Tamamlandı",
+    "on_hold": "Beklemede",
+    "dropped": "Bırakıldı"
+  },
+  "iptv": {
+    "title": "Canlı TV & IPTV",
+    "add_profile": "IPTV Profili Ekle",
+    "sync_channels": "Kanalları Eşitle",
+    "sync_epg": "EPG Eşitle",
+    "search_channels": "Kanal ara (FTS5)…",
+    "favorites_only": "Sadece Favoriler",
+    "all_groups": "Tüm Gruplar",
+    "now": "Şimdi",
+    "next": "Sonraki"
+  },
+  "downloads": {
+    "title": "İndirilenler",
+    "empty": "Çevrimdışı indirme kuyruğunuz boş.",
+    "segments": "Parçalar"
+  },
+  "extensions": {
+    "title": "Eklentiler ve Depolar",
+    "source_placeholder": "https://…, gh:kullanici/depo, kısa kod, vessel://install?src=… veya yerel klasör",
+    "resolve": "Kaynağı İncele",
+    "install_now": "Eklentiyi Kur",
+    "official": "Resmî",
+    "community": "Topluluk",
+    "settings": "Eklenti Ayarları",
+    "domains": "İzin Verilen Alan Adları"
+  },
+  "settings": {
+    "title": "Ayarlar",
+    "appearance": "Görünüm ve Tema",
+    "language": "Dil ve Yerelleştirme",
+    "ui_customization": "Modüler Arayüz Tercihleri",
+    "playback_privacy": "Oynatma ve Gizlilik",
+    "backup": "Taşınabilir Yedek (.backup.vessel)",
+    "always_proxy": "Medya Akışlarını Her Zaman Proxy Üzerinden Geçir",
+    "metadata_enabled": "Arka Plan Meta Veri Zenginleştirmeyi Aç (AniList / TMDB / Cinemeta)",
+    "tmdb_key": "Kişisel TMDB API Anahtarı (İsteğe Bağlı)",
+    "reset_ui": "Tüm Arayüz Varsayılanlarını Sıfırla",
+    "export_backup": "Yedeği Dışa Aktar",
+    "import_smart_merge": "İçe Aktar (Akıllı Birleştirme)",
+    "import_reset": "İçe Aktar (Sıfırla ve Değiştir)"
+  },
+  "overlay": {
+    "domain_title": "Eklenti Alan Adı İzin İsteği",
+    "allow_once": "Bir Kez İzin Ver",
+    "allow_always": "Her Zaman İzin Ver",
+    "reject": "Reddet",
+    "subtitle_delay": "Altyazı Gecikmesi",
+    "now_playing": "Şimdi Oynatılıyor"
+  }
+}
