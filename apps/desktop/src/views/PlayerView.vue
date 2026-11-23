@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import Hls from 'hls.js'
+import mpegts from 'mpegts.js'
 import {
   ArrowLeft,
   Captions,
@@ -25,7 +27,9 @@ import {
   X,
 } from 'lucide-vue-next'
 import { vesselApi } from '@/api/vessel'
+import { useI18n } from '@/composables/useI18n'
 import { usePlayerSession } from '@/composables/usePlayerSession'
+import { useUiPreferences } from '@/composables/useUiPreferences'
 import { useVesselEvents } from '@/composables/useVesselEvents'
 import { parseSubtitles, type SubtitleCue } from '@/utils/subtitleParser'
 import type { Episode, StreamCandidate, SubtitleTrack } from '@/types/vessel'
@@ -37,7 +41,9 @@ const props = defineProps<{
 
 const route = useRoute()
 const router = useRouter()
+const { t } = useI18n()
 const { pushToast } = useVesselEvents()
+const { uiPreferences, savePreferences } = useUiPreferences()
 const { activeSession, setSession, updateEpisodeSession, setActiveStreamIndex } = usePlayerSession()
 
 type DrawerTab = 'episodes' | 'sources' | 'subtitles' | 'settings' | null
@@ -78,6 +84,71 @@ const playableSrc = ref<string>('')
 
 let hideTimer: number | null = null
 let progressTimer: number | null = null
+let subSaveTimer: number | null = null
+let hlsInstance: Hls | null = null
+let mpegtsPlayer: mpegts.Player | null = null
+let forceHlsJsNextTry = false
+
+function destroyMediaEngines(): void {
+  if (hlsInstance) {
+    hlsInstance.destroy()
+    hlsInstance = null
+  }
+  if (mpegtsPlayer) {
+    try {
+      mpegtsPlayer.pause()
+      mpegtsPlayer.unload()
+      mpegtsPlayer.detachMediaElement()
+      mpegtsPlayer.destroy()
+    } catch {
+      // Ignore cleanup errors on torn-down MSE instances
+    }
+    mpegtsPlayer = null
+  }
+}
+
+function scheduleSaveSubtitles(): void {
+  if (subSaveTimer !== null) window.clearTimeout(subSaveTimer)
+  subSaveTimer = window.setTimeout(() => {
+    void savePreferences(uiPreferences.value).catch(() => {})
+  }, 350)
+}
+
+const subtitleOverlayStyle = computed(() => {
+  const baseBottom = Math.max(12, Math.min(280, uiPreferences.value.subtitles.bottomOffsetPx ?? 56))
+  const raised = controlsVisible.value && !isLocked.value ? baseBottom + 84 : baseBottom
+  return {
+    bottom: `${raised}px`,
+  }
+})
+
+const subtitleLineStyle = computed(() => {
+  const subs = uiPreferences.value.subtitles
+  const alpha = Math.max(0, Math.min(100, subs.backgroundOpacity ?? 72)) / 100
+  const fontSize = `${Math.max(14, Math.min(56, subs.fontSizePx ?? 28))}px`
+  const fontFamilyMap: Record<string, string> = {
+    'system-ui': 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+    serif: 'Georgia, "Times New Roman", serif',
+    monospace: '"JetBrains Mono", "SFMono-Regular", Menlo, monospace',
+    rounded: '"Nunito", "SF Pro Rounded", system-ui, sans-serif',
+  }
+  const family = fontFamilyMap[subs.fontFamily] ?? (subs.fontFamily || fontFamilyMap['system-ui'])
+  const outlineStyle = subs.outlineStyle ?? 'outline'
+  const textShadow =
+    outlineStyle === 'none'
+      ? 'none'
+      : outlineStyle === 'shadow'
+        ? '0 2px 6px rgba(0,0,0,0.95), 0 4px 14px rgba(0,0,0,0.85)'
+        : '0 0 3px #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000, 0 2px 8px rgba(0,0,0,0.9)'
+  return {
+    fontSize,
+    fontFamily: family,
+    color: subs.textColor || '#ffffff',
+    fontWeight: subs.bold ? '700' : '600',
+    backgroundColor: outlineStyle === 'none' ? 'transparent' : `rgba(8, 9, 14, ${alpha})`,
+    textShadow,
+  }
+})
 
 async function persistWatchProgress(forceCompleted = false): Promise<void> {
   if (isLive.value) return
@@ -108,6 +179,10 @@ async function persistWatchProgress(forceCompleted = false): Promise<void> {
       season: ep.season,
       episode: ep.episode,
       absoluteEpisode: ep.absoluteEpisode,
+      title: d.title,
+      posterUrl: d.poster,
+      backdropUrl: d.backdrop,
+      episodeTitle: ep.title,
       positionMs,
       durationMs,
       completed,
@@ -563,23 +638,42 @@ function onTimeUpdate(): void {
 
 function onVideoError(): void {
   const el = videoRef.value
+  const src = playableSrc.value
+  const stream = activeStream.value
+  if (el && src && stream) {
+    const isHls =
+      stream.kind === 'hls' || src.toLowerCase().includes('.m3u8')
+    if (isHls && !forceHlsJsNextTry && Hls.isSupported() && !hlsInstance) {
+      forceHlsJsNextTry = true
+      playbackError.value = ''
+      isBuffering.value = true
+      void attachMediaSource(src, stream, true)
+      return
+    }
+    // Auto-try next stream candidate (e.g. Xtream HLS <-> MPEG-TS) when primary stream fails
+    const curIdx = session.value?.activeStreamIndex ?? 0
+    if (curIdx + 1 < streams.value.length) {
+      switchSource(curIdx + 1)
+      return
+    }
+  }
   const code = el?.error?.code
   playbackError.value =
     code === 4
-      ? 'This stream format is not supported by the built-in WebView player. Try another source or install mpv.'
-      : 'Stream failed to load or buffered out. Try another source or retry.'
+      ? t('player.error_unsupported')
+      : t('player.error_failed')
   isBuffering.value = false
   isPlaying.value = false
   controlsVisible.value = true
 }
 
 function retryStream(): void {
-  const el = videoRef.value
-  if (!el) return
+  const stream = activeStream.value
+  const src = playableSrc.value
+  if (!stream || !src) return
   playbackError.value = ''
   isBuffering.value = true
-  el.load()
-  void el.play().catch(() => {})
+  void attachMediaSource(src, stream, forceHlsJsNextTry)
 }
 
 function handleKeydown(ev: KeyboardEvent): void {
@@ -678,20 +772,114 @@ async function ensureSessionLoaded(): Promise<void> {
   }
 }
 
+async function attachMediaSource(
+  src: string,
+  stream: StreamCandidate,
+  preferHlsJs = false,
+): Promise<void> {
+  await nextTick()
+  const el = videoRef.value
+  if (!el || !src) return
+
+  destroyMediaEngines()
+  el.removeAttribute('src')
+  el.load()
+
+  const lowerSrc = src.toLowerCase()
+  const looksMpegTs =
+    stream.kind === 'mpeg_ts' ||
+    (lowerSrc.includes('.ts') && !lowerSrc.includes('.m3u8'))
+  const looksHls = stream.kind === 'hls' || lowerSrc.includes('.m3u8')
+
+  if (looksMpegTs && mpegts.isSupported()) {
+    try {
+      const player = mpegts.createPlayer(
+        {
+          type: 'mpegts',
+          isLive: isLive.value,
+          url: src,
+        },
+        {
+          enableWorker: true,
+          liveBufferLatencyChasing: isLive.value,
+        },
+      )
+      mpegtsPlayer = player
+      player.on(mpegts.Events.ERROR, () => {
+        const curIdx = session.value?.activeStreamIndex ?? 0
+        if (curIdx + 1 < streams.value.length) {
+          switchSource(curIdx + 1)
+        } else {
+          playbackError.value = t('player.error_failed')
+          isBuffering.value = false
+          isPlaying.value = false
+        }
+      })
+      player.attachMediaElement(el)
+      player.load()
+      void el.play().catch(() => {})
+      return
+    } catch {
+      destroyMediaEngines()
+    }
+  }
+
+  const canPlayNativeHls = el.canPlayType('application/vnd.apple.mpegurl') !== ''
+  if (looksHls && Hls.isSupported() && (preferHlsJs || !canPlayNativeHls)) {
+    const hls = new Hls({
+      enableWorker: true,
+      lowLatencyMode: isLive.value,
+    })
+    hlsInstance = hls
+    hls.on(Hls.Events.ERROR, (_ev, data) => {
+      if (data.fatal) {
+        if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
+          hls.startLoad()
+        } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+          hls.recoverMediaError()
+        } else {
+          destroyMediaEngines()
+          const curIdx = session.value?.activeStreamIndex ?? 0
+          if (curIdx + 1 < streams.value.length) {
+            switchSource(curIdx + 1)
+          } else {
+            playbackError.value = t('player.error_failed')
+            isBuffering.value = false
+            isPlaying.value = false
+          }
+        }
+      }
+    })
+    hls.loadSource(src)
+    hls.attachMedia(el)
+    void el.play().catch(() => {})
+    return
+  }
+
+  el.src = src
+  el.load()
+  void el.play().catch(() => {})
+}
+
 watch(
   () => activeStream.value,
   async (stream) => {
+    destroyMediaEngines()
+    forceHlsJsNextTry = false
     playbackError.value = ''
     isBuffering.value = true
     currentTime.value = 0
     duration.value = 0
     playableSrc.value = ''
     if (!stream) return
+    let resolved = stream.url
     try {
-      playableSrc.value = await vesselApi.preparePlaybackUrl(stream)
+      resolved = await vesselApi.preparePlaybackUrl(stream)
     } catch {
-      playableSrc.value = stream.url
+      resolved = stream.url
     }
+    playableSrc.value = resolved
+    await attachMediaSource(resolved, stream, false)
   },
   { immediate: true },
 )
@@ -703,6 +891,9 @@ onMounted(async () => {
   if (currentEpisode.value) {
     await restoreSavedProgress(currentEpisode.value)
   }
+  if (playableSrc.value && activeStream.value && !hlsInstance && !mpegtsPlayer) {
+    await attachMediaSource(playableSrc.value, activeStream.value, forceHlsJsNextTry)
+  }
   progressTimer = window.setInterval(() => {
     if (isPlaying.value) {
       void persistWatchProgress()
@@ -713,10 +904,12 @@ onMounted(async () => {
 
 onUnmounted(() => {
   void persistWatchProgress()
+  destroyMediaEngines()
   window.removeEventListener('keydown', handleKeydown)
   document.removeEventListener('fullscreenchange', onFullscreenChange)
   if (hideTimer !== null) window.clearTimeout(hideTimer)
   if (progressTimer !== null) window.clearInterval(progressTimer)
+  if (subSaveTimer !== null) window.clearTimeout(subSaveTimer)
   if (document.fullscreenElement) {
     void document.exitFullscreen().catch(() => {})
   }
@@ -733,10 +926,8 @@ onUnmounted(() => {
   >
     <!-- Video Surface -->
     <video
-      v-if="playableSrc"
+      v-show="playableSrc"
       ref="videoRef"
-      :key="playableSrc"
-      :src="playableSrc"
       class="cs-video"
       :class="`fit-${fitMode}`"
       autoplay
@@ -757,10 +948,15 @@ onUnmounted(() => {
     <div
       v-if="activeSubtitleLines.length && !isLive"
       class="cs-subtitle-overlay"
-      :class="{ 'controls-raised': controlsVisible && !isLocked }"
+      :style="subtitleOverlayStyle"
       aria-live="off"
     >
-      <span v-for="(line, i) in activeSubtitleLines" :key="i" class="cs-subtitle-line">
+      <span
+        v-for="(line, i) in activeSubtitleLines"
+        :key="i"
+        class="cs-subtitle-line"
+        :style="subtitleLineStyle"
+      >
         {{ line }}
       </span>
     </div>
@@ -1149,14 +1345,119 @@ onUnmounted(() => {
           </button>
         </div>
 
-        <!-- SUBTITLES & DELAY (VOD only) -->
+        <!-- SUBTITLES & APPEARANCE (VOD only) -->
         <div v-else-if="activeDrawer === 'subtitles' && !isLive" class="cs-drawer-body">
           <div class="cs-setting-block">
-            <span class="cs-setting-label">Subtitle Delay</span>
+            <span class="cs-setting-label">{{ t('player.subtitles_delay') }}</span>
             <div class="cs-delay-row">
               <button type="button" class="cs-mini-pill" @click="subtitleDelayMs -= 500">-500ms</button>
               <span class="cs-delay-val">{{ subtitleDelayMs }} ms</span>
               <button type="button" class="cs-mini-pill" @click="subtitleDelayMs += 500">+500ms</button>
+            </div>
+          </div>
+
+          <div class="cs-setting-block">
+            <span class="cs-setting-label">{{ t('subtitles.font_size') }} ({{ uiPreferences.subtitles.fontSizePx }}px)</span>
+            <input
+              v-model.number="uiPreferences.subtitles.fontSizePx"
+              type="range"
+              min="16"
+              max="52"
+              step="2"
+              class="cs-range"
+              @change="scheduleSaveSubtitles"
+            />
+          </div>
+
+          <div class="cs-setting-block">
+            <span class="cs-setting-label">{{ t('subtitles.bottom_offset') }} ({{ uiPreferences.subtitles.bottomOffsetPx }}px)</span>
+            <input
+              v-model.number="uiPreferences.subtitles.bottomOffsetPx"
+              type="range"
+              min="16"
+              max="220"
+              step="4"
+              class="cs-range"
+              @change="scheduleSaveSubtitles"
+            />
+          </div>
+
+          <div class="cs-setting-block">
+            <span class="cs-setting-label">{{ t('subtitles.bg_opacity') }} ({{ uiPreferences.subtitles.backgroundOpacity }}%)</span>
+            <input
+              v-model.number="uiPreferences.subtitles.backgroundOpacity"
+              type="range"
+              min="0"
+              max="100"
+              step="5"
+              class="cs-range"
+              @change="scheduleSaveSubtitles"
+            />
+          </div>
+
+          <div class="cs-setting-block">
+            <span class="cs-setting-label">{{ t('subtitles.font_family') }}</span>
+            <div class="cs-chip-grid">
+              <button
+                v-for="f in ([
+                  { id: 'system-ui', label: 'Sans' },
+                  { id: 'rounded', label: 'Rounded' },
+                  { id: 'serif', label: 'Serif' },
+                  { id: 'monospace', label: 'Mono' },
+                ] as const)"
+                :key="f.id"
+                type="button"
+                class="cs-chip-btn"
+                :class="{ active: uiPreferences.subtitles.fontFamily === f.id }"
+                @click="uiPreferences.subtitles.fontFamily = f.id; scheduleSaveSubtitles()"
+              >
+                {{ f.label }}
+              </button>
+            </div>
+          </div>
+
+          <div class="cs-setting-block">
+            <span class="cs-setting-label">{{ t('subtitles.outline_style') }}</span>
+            <div class="cs-chip-grid">
+              <button
+                v-for="st in ([
+                  { id: 'outline', label: t('subtitles.style_outline') },
+                  { id: 'shadow', label: t('subtitles.style_shadow') },
+                  { id: 'box', label: t('subtitles.style_box') },
+                  { id: 'none', label: t('subtitles.style_none') },
+                ] as const)"
+                :key="st.id"
+                type="button"
+                class="cs-chip-btn"
+                :class="{ active: uiPreferences.subtitles.outlineStyle === st.id }"
+                @click="uiPreferences.subtitles.outlineStyle = st.id; scheduleSaveSubtitles()"
+              >
+                {{ st.label }}
+              </button>
+            </div>
+          </div>
+
+          <div class="cs-setting-block">
+            <span class="cs-setting-label">{{ t('subtitles.text_color') }}</span>
+            <div class="cs-color-row">
+              <button
+                v-for="clr in ['#ffffff', '#fde047', '#67e8f9', '#f9a8d4', '#a7f3d0']"
+                :key="clr"
+                type="button"
+                class="cs-color-dot"
+                :style="{ background: clr }"
+                :class="{ active: uiPreferences.subtitles.textColor.toLowerCase() === clr }"
+                :aria-label="clr"
+                @click="uiPreferences.subtitles.textColor = clr; scheduleSaveSubtitles()"
+              />
+              <button
+                type="button"
+                class="cs-mini-pill"
+                :class="{ active: uiPreferences.subtitles.bold }"
+                @click="uiPreferences.subtitles.bold = !uiPreferences.subtitles.bold; scheduleSaveSubtitles()"
+              >
+                <strong>B</strong>
+              </button>
             </div>
           </div>
 
@@ -1166,7 +1467,7 @@ onUnmounted(() => {
             :class="{ active: activeSubtitleIndex === -1 }"
             @click="activeSubtitleIndex = -1"
           >
-            <span class="cs-item-title">Off (No Subtitles)</span>
+            <span class="cs-item-title">{{ t('player.subtitles_off') }}</span>
             <Check v-if="activeSubtitleIndex === -1" :size="16" class="cs-active-check" />
           </button>
 
@@ -1982,5 +2283,33 @@ onUnmounted(() => {
     opacity: 0.45;
     transform: scale(0.8);
   }
+}
+
+.cs-range {
+  width: 100%;
+  accent-color: var(--vessel-accent, #cba6f7);
+  cursor: pointer;
+}
+
+.cs-color-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.cs-color-dot {
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  border: 2px solid rgba(255, 255, 255, 0.28);
+  cursor: pointer;
+  transition: transform 0.16s ease, border-color 0.16s ease;
+}
+
+.cs-color-dot.active {
+  transform: scale(1.16);
+  border-color: var(--vessel-accent, #cba6f7);
+  box-shadow: 0 0 0 2px rgba(203, 166, 247, 0.35);
 }
 </style>

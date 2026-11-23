@@ -112,7 +112,7 @@ mod tests {
         let actor = StorageActor::open_in_memory()
             .await
             .expect("spawn in-memory actor");
-        assert_eq!(actor.schema_version().await.expect("schema version"), 1);
+        assert_eq!(actor.schema_version().await.expect("schema version"), 2);
 
         let mut tasks = JoinSet::new();
         for idx in 0..16_u32 {

@@ -263,11 +263,19 @@ impl PluginSandbox {
         }
     }
 
-    /// Drains remaining pending QuickJS jobs and tears down the context before runtime drop.
+    /// Drains remaining pending QuickJS jobs, clears cyclic globals, and tears down the context before runtime drop.
     pub async fn shutdown(self) {
+        let _ = self
+            .eval_with_timeout::<()>(
+                "try { delete globalThis.__vessel_provider; delete globalThis.__vessel_call; delete globalThis.vessel; } catch (_) {}",
+                Duration::from_millis(250),
+            )
+            .await;
         let Self {
             context, runtime, ..
         } = self;
+        runtime.idle().await;
+        runtime.run_gc().await;
         drop(context);
         runtime.idle().await;
         runtime.run_gc().await;

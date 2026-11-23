@@ -19,15 +19,28 @@ const query = shallowRef('')
 const mediaTypeFilter = shallowRef('')
 
 const TYPE_PILLS = [
-  { value: '', label: 'All' },
-  { value: 'movie', label: 'Movies' },
-  { value: 'series', label: 'Series' },
-  { value: 'anime', label: 'Anime' },
+  { value: '', labelKey: 'search.filter_all' },
+  { value: 'movie', labelKey: 'search.filter_movies' },
+  { value: 'series', labelKey: 'search.filter_series' },
+  { value: 'anime', labelKey: 'search.filter_anime' },
 ]
 
-const bucketEntries = computed(() =>
-  Object.entries(searchBuckets.value).filter(([, items]) => items.length > 0),
-)
+const bucketEntries = computed(() => {
+  const filter = mediaTypeFilter.value
+  return Object.entries(searchBuckets.value)
+    .map(([pluginId, items]) => {
+      const filtered = !filter
+        ? items
+        : items.filter((item) => {
+            if (filter === 'movie') return item.type === 'movie'
+            if (filter === 'anime') return item.isAnime === true
+            if (filter === 'series') return item.type === 'series' && !item.isAnime
+            return true
+          })
+      return [pluginId, filtered] as const
+    })
+    .filter(([, items]) => items.length > 0)
+})
 
 async function runSearch(): Promise<void> {
   const trimmed = query.value.trim()
@@ -82,13 +95,13 @@ function openDetails(pluginId: string, nativeId: string): void {
     <div class="type-pills" role="group" aria-label="Filter by media type">
       <button
         v-for="pill in TYPE_PILLS"
-        :key="pill.label"
+        :key="pill.value"
         type="button"
         class="v-btn v-btn-sm"
         :class="{ 'v-btn-primary': mediaTypeFilter === pill.value }"
         @click="mediaTypeFilter = pill.value"
       >
-        {{ pill.label }}
+        {{ t(pill.labelKey) }}
       </button>
     </div>
 

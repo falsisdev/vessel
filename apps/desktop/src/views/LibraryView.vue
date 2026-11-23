@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onActivated, onMounted, shallowRef } from 'vue'
 import { useRouter } from 'vue-router'
+import { X } from 'lucide-vue-next'
 import { isTauriRuntime, vesselApi } from '@/api/vessel'
 import MediaCard from '@/components/media/MediaCard.vue'
 import { useI18n } from '@/composables/useI18n'
@@ -40,6 +41,17 @@ function openDetails(pluginId: string, nativeId: string): void {
   void router.push({ name: 'details', params: { pluginId, nativeId } })
 }
 
+async function removeEntry(entry: LibraryItem): Promise<void> {
+  try {
+    await vesselApi.deleteLibraryItem(entry.media.pluginId, entry.media.nativeId)
+    items.value = items.value.filter(
+      (i) => !(i.media.pluginId === entry.media.pluginId && i.media.nativeId === entry.media.nativeId),
+    )
+  } catch (err) {
+    pushToast('error', String(err))
+  }
+}
+
 onMounted(() => {
   void loadLibrary('all')
 })
@@ -69,21 +81,34 @@ onActivated(() => {
     <div v-if="!items.length" class="v-card v-muted">{{ t('common.empty') }}</div>
 
     <div v-else class="v-grid">
-      <MediaCard
+      <div
         v-for="entry in items"
         :key="`${entry.media.pluginId}:${entry.media.nativeId}`"
-        :item="{
-          pluginId: entry.media.pluginId,
-          nativeId: entry.media.nativeId,
-          type: entry.mediaType,
-          isAnime: entry.isAnime,
-          title: entry.title,
-          poster: entry.posterUrl,
-          year: entry.year,
-        }"
-        :cards="uiPreferences.cards"
-        @open="openDetails"
-      />
+        class="lib-card-wrap"
+      >
+        <MediaCard
+          :item="{
+            pluginId: entry.media.pluginId,
+            nativeId: entry.media.nativeId,
+            type: entry.mediaType,
+            isAnime: entry.isAnime,
+            title: entry.title,
+            poster: entry.posterUrl,
+            year: entry.year,
+          }"
+          :cards="uiPreferences.cards"
+          @open="openDetails"
+        />
+        <button
+          type="button"
+          class="lib-remove-btn"
+          :title="t('library.remove_item')"
+          :aria-label="t('library.remove_item')"
+          @click.stop="removeEntry(entry)"
+        >
+          <X :size="14" aria-hidden="true" />
+        </button>
+      </div>
     </div>
   </section>
 </template>
@@ -99,5 +124,36 @@ onActivated(() => {
   display: flex;
   gap: 0.45rem;
   flex-wrap: wrap;
+}
+
+.lib-card-wrap {
+  position: relative;
+}
+
+.lib-remove-btn {
+  position: absolute;
+  top: 0.45rem;
+  right: 0.45rem;
+  z-index: 6;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(10, 11, 18, 0.84);
+  color: #ffffff;
+  opacity: 0;
+  cursor: pointer;
+  transition: opacity 0.18s ease, background-color 0.18s ease;
+}
+
+.lib-card-wrap:hover .lib-remove-btn {
+  opacity: 1;
+}
+
+.lib-remove-btn:hover {
+  background: rgba(239, 68, 68, 0.92);
 }
 </style>

@@ -109,24 +109,47 @@ fn parse_semver(raw: &str) -> Option<ParsedSemver> {
     })
 }
 
+fn compare_pre_segments(a: &str, b: &str) -> std::cmp::Ordering {
+    let mut a_parts = a.split('.').filter(|s| !s.is_empty());
+    let mut b_parts = b.split('.').filter(|s| !s.is_empty());
+    loop {
+        match (a_parts.next(), b_parts.next()) {
+            (None, None) => return std::cmp::Ordering::Equal,
+            (None, Some(_)) => return std::cmp::Ordering::Less,
+            (Some(_), None) => return std::cmp::Ordering::Greater,
+            (Some(ap), Some(bp)) => {
+                let ord = match (ap.parse::<u64>(), bp.parse::<u64>()) {
+                    (Ok(an), Ok(bn)) => an.cmp(&bn),
+                    (Ok(_), Err(_)) => std::cmp::Ordering::Less,
+                    (Err(_), Ok(_)) => std::cmp::Ordering::Greater,
+                    (Err(_), Err(_)) => ap.cmp(bp),
+                };
+                if ord != std::cmp::Ordering::Equal {
+                    return ord;
+                }
+            }
+        }
+    }
+}
+
+fn compare_semver(a: &ParsedSemver, b: &ParsedSemver) -> std::cmp::Ordering {
+    match (a.major, a.minor, a.patch).cmp(&(b.major, b.minor, b.patch)) {
+        std::cmp::Ordering::Equal => match (a.is_prerelease, b.is_prerelease) {
+            (false, false) => std::cmp::Ordering::Equal,
+            (true, false) => std::cmp::Ordering::Less,
+            (false, true) => std::cmp::Ordering::Greater,
+            (true, true) => compare_pre_segments(&a.pre, &b.pre),
+        },
+        non_eq => non_eq,
+    }
+}
+
 fn is_newer_version(current: &str, candidate: &str) -> bool {
     let (Some(cur), Some(cand)) = (parse_semver(current), parse_semver(candidate)) else {
         return normalize_version(candidate) != normalize_version(current)
             && !normalize_version(candidate).is_empty();
     };
-    match (cand.major, cand.minor, cand.patch).cmp(&(cur.major, cur.minor, cur.patch)) {
-        std::cmp::Ordering::Greater => true,
-        std::cmp::Ordering::Less => false,
-        std::cmp::Ordering::Equal => {
-            if cur.is_prerelease && !cand.is_prerelease {
-                true
-            } else if cur.is_prerelease && cand.is_prerelease {
-                cand.pre > cur.pre
-            } else {
-                false
-            }
-        }
-    }
+    compare_semver(&cand, &cur) == std::cmp::Ordering::Greater
 }
 
 fn select_best_asset<'a>(
@@ -293,68 +316,70 @@ pub async fn check_app_update(state: State<'_, AppState>) -> Result<AppUpdateInf
         .build()
         .map_err(|err| format!("[VesselNetworkError]: build updater client: {err}"))?;
 
-    let latest_url =
-        format!("https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/releases/latest");
+    let cur_is_prerelease = parse_semver(&current_version).is_some_and(|v| v.is_prerelease);
+    let list_url =
+        format!("https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/releases?per_page=20");
     let resp = client
-        .get(&latest_url)
+        .get(&list_url)
         .header(reqwest::header::ACCEPT, "application/vnd.github+json")
         .send()
         .await
         .map_err(|err| format!("[VesselNetworkError]: check GitHub releases failed: {err}"))?;
 
-    let release: Option<GithubRelease> = if resp.status() == reqwest::StatusCode::NOT_FOUND {
-        // Fallback to /releases in case only pre-releases or none exist yet
-        let list_url = format!(
-            "https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/releases?per_page=10"
-        );
-        let list_resp = client
-            .get(&list_url)
-            .header(reqwest::header::ACCEPT, "application/vnd.github+json")
-            .send()
-            .await
-            .map_err(|err| format!("[VesselNetworkError]: check GitHub releases list: {err}"))?;
-        if list_resp.status().is_success() {
-            let releases: Vec<GithubRelease> = list_resp
-                .json()
-                .await
-                .map_err(|err| format!("[VesselParseError]: decode GitHub releases: {err}"))?;
-            // Prefer latest stable release; fall back to latest pre-release while repo is in alpha/beta.
-            releases
-                .iter()
-                .find(|r| !r.draft && !r.prerelease)
-                .or_else(|| releases.iter().find(|r| !r.draft))
-                .map(|r| GithubRelease {
-                    tag_name: r.tag_name.clone(),
-                    name: r.name.clone(),
-                    body: r.body.clone(),
-                    published_at: r.published_at.clone(),
-                    html_url: r.html_url.clone(),
-                    draft: r.draft,
-                    prerelease: r.prerelease,
-                    assets: r
-                        .assets
-                        .iter()
-                        .map(|a| GithubAsset {
-                            name: a.name.clone(),
-                            size: a.size,
-                            browser_download_url: a.browser_download_url.clone(),
-                        })
-                        .collect(),
-                })
-        } else {
-            None
-        }
-    } else if resp.status().is_success() {
-        Some(
-            resp.json::<GithubRelease>()
-                .await
-                .map_err(|err| format!("[VesselParseError]: decode GitHub release: {err}"))?,
-        )
-    } else {
+    if !resp.status().is_success() {
         return Err(format!(
             "[VesselNetworkError]: GitHub releases returned HTTP {}",
             resp.status()
         ));
+    }
+
+    let releases: Vec<GithubRelease> = resp
+        .json()
+        .await
+        .map_err(|err| format!("[VesselParseError]: decode GitHub releases: {err}"))?;
+
+    let pick_highest = |candidates: Vec<GithubRelease>| -> Option<GithubRelease> {
+        candidates.into_iter().max_by(|a, b| {
+            match (parse_semver(&a.tag_name), parse_semver(&b.tag_name)) {
+                (Some(sa), Some(sb)) => compare_semver(&sa, &sb),
+                (Some(_), None) => std::cmp::Ordering::Greater,
+                (None, Some(_)) => std::cmp::Ordering::Less,
+                (None, None) => a.published_at.cmp(&b.published_at),
+            }
+        })
+    };
+
+    let stable_candidates: Vec<GithubRelease> = releases
+        .iter()
+        .filter(|r| !r.draft && !r.prerelease)
+        .map(|r| GithubRelease {
+            tag_name: r.tag_name.clone(),
+            name: r.name.clone(),
+            body: r.body.clone(),
+            published_at: r.published_at.clone(),
+            html_url: r.html_url.clone(),
+            draft: r.draft,
+            prerelease: r.prerelease,
+            assets: r
+                .assets
+                .iter()
+                .map(|a| GithubAsset {
+                    name: a.name.clone(),
+                    size: a.size,
+                    browser_download_url: a.browser_download_url.clone(),
+                })
+                .collect(),
+        })
+        .collect();
+
+    let all_candidates: Vec<GithubRelease> = releases.into_iter().filter(|r| !r.draft).collect();
+
+    let release: Option<GithubRelease> = if cur_is_prerelease {
+        pick_highest(all_candidates)
+    } else if !stable_candidates.is_empty() {
+        pick_highest(stable_candidates)
+    } else {
+        pick_highest(all_candidates)
     };
 
     let Some(rel) = release else {
@@ -522,6 +547,9 @@ mod tests {
         assert!(is_newer_version("0.1.0", "v0.1.1"));
         assert!(is_newer_version("0.1.0", "0.2.0"));
         assert!(is_newer_version("0.2.0-beta.1", "0.2.0"));
+        assert!(is_newer_version("0.1.1-alpha.1", "v0.1.1-alpha.2"));
+        assert!(is_newer_version("0.1.1-alpha.2", "v0.1.1-alpha.10"));
+        assert!(!is_newer_version("0.1.1-alpha.10", "v0.1.1-alpha.2"));
         assert!(!is_newer_version("0.2.0", "0.2.0-beta.1"));
         assert!(!is_newer_version("0.1.0", "0.1.0"));
         assert!(!is_newer_version("1.0.0", "v0.9.9"));

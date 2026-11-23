@@ -131,11 +131,11 @@ async function handleImportBackup(mode: 'smart_merge' | 'reset_and_import'): Pro
 
       <div class="v-setting-row">
         <div class="setting-copy">
-          <strong>Theme</strong>
-          <span class="v-muted">Choose built-in palette or import custom .theme.vessel JSON</span>
+          <strong>{{ t('settings.theme_label') }}</strong>
+          <span class="v-muted">{{ t('settings.theme_desc') }}</span>
         </div>
         <select
-          aria-label="Theme"
+          :aria-label="t('settings.theme_label')"
           :value="activeThemeId"
           class="v-select v-setting-control"
           @change="selectTheme(($event.target as HTMLSelectElement).value)"
@@ -148,11 +148,11 @@ async function handleImportBackup(mode: 'smart_merge' | 'reset_and_import'): Pro
 
       <div class="v-setting-row">
         <div class="setting-copy">
-          <strong>Locale</strong>
-          <span class="v-muted">Loaded from bundled English or &lt;VesselRoot&gt;/locales</span>
+          <strong>{{ t('settings.locale_label') }}</strong>
+          <span class="v-muted">{{ t('settings.locale_desc') }}</span>
         </div>
         <select
-          aria-label="Locale"
+          :aria-label="t('settings.locale_label')"
           :value="currentLang"
           class="v-select v-setting-control"
           @change="setLocale(($event.target as HTMLSelectElement).value)"
@@ -172,7 +172,7 @@ async function handleImportBackup(mode: 'smart_merge' | 'reset_and_import'): Pro
         placeholder="Paste .theme.vessel JSON here…"
       />
       <button type="button" class="v-btn v-btn-sm" @click="handleImportTheme">
-        <Upload :size="14" aria-hidden="true" /> Import .theme.vessel
+        <Upload :size="14" aria-hidden="true" /> {{ t('settings.import_theme') }}
       </button>
     </div>
 
@@ -184,70 +184,71 @@ async function handleImportBackup(mode: 'smart_merge' | 'reset_and_import'): Pro
 
       <div class="v-setting-row">
         <div class="setting-copy">
-          <strong>Navigation Layout</strong>
-          <span class="v-muted">Choose rail, expanded sidebar, top bar, or minimal mode</span>
+          <strong>{{ t('settings.nav_layout') }}</strong>
+          <span class="v-muted">{{ t('settings.nav_layout_desc') }}</span>
         </div>
         <select
           v-model="uiPreferences.shell.layout"
-          aria-label="Navigation Layout"
+          :aria-label="t('settings.nav_layout')"
           class="v-select v-setting-control"
         >
-          <option value="expanded_sidebar">Floating Expand Rail</option>
-          <option value="collapsed_rail">Compact Icon Rail</option>
-          <option value="top_navbar">Top Navbar</option>
-          <option value="hidden">Hidden</option>
+          <option value="expanded_sidebar">{{ t('settings.layout_floating') }}</option>
+          <option value="pinned_sidebar">{{ t('settings.layout_pinned') }}</option>
+          <option value="collapsed_rail">{{ t('settings.layout_compact') }}</option>
+          <option value="top_navbar">{{ t('settings.layout_top') }}</option>
+          <option value="hidden">{{ t('settings.layout_hidden') }}</option>
         </select>
       </div>
 
       <div class="v-setting-row">
         <div class="setting-copy">
-          <strong>Interface Density</strong>
-          <span class="v-muted">Adjust spacing rhythm across grids and rails</span>
+          <strong>{{ t('settings.density') }}</strong>
+          <span class="v-muted">{{ t('settings.density_desc') }}</span>
         </div>
         <select
           v-model="uiPreferences.shell.density"
-          aria-label="Interface Density"
+          :aria-label="t('settings.density')"
           class="v-select v-setting-control"
         >
-          <option value="compact">Compact</option>
-          <option value="comfortable">Comfortable</option>
-          <option value="spacious">Spacious</option>
+          <option value="compact">{{ t('settings.density_compact') }}</option>
+          <option value="comfortable">{{ t('settings.density_comfortable') }}</option>
+          <option value="spacious">{{ t('settings.density_spacious') }}</option>
         </select>
       </div>
 
       <div class="v-setting-row">
         <div class="setting-copy">
-          <strong>Corner Style</strong>
-          <span class="v-muted">Poster and panel roundness</span>
+          <strong>{{ t('settings.corner_style') }}</strong>
+          <span class="v-muted">{{ t('settings.corner_desc') }}</span>
         </div>
         <select
           v-model="uiPreferences.shell.cornerStyle"
-          aria-label="Corner Style"
+          :aria-label="t('settings.corner_style')"
           class="v-select v-setting-control"
         >
-          <option value="sharp">Sharp</option>
-          <option value="rounded">Rounded</option>
-          <option value="pill">Pill</option>
+          <option value="sharp">{{ t('settings.corner_sharp') }}</option>
+          <option value="rounded">{{ t('settings.corner_rounded') }}</option>
+          <option value="pill">{{ t('settings.corner_pill') }}</option>
         </select>
       </div>
 
       <div class="v-setting-row">
         <div class="setting-copy">
-          <strong>Play Click Behavior</strong>
-          <span class="v-muted">Auto-start best stream or ask source picker</span>
+          <strong>{{ t('settings.play_click') }}</strong>
+          <span class="v-muted">{{ t('settings.play_click_desc') }}</span>
         </div>
         <select
           v-model="uiPreferences.playback.clickBehavior"
-          aria-label="Play Click Behavior"
+          :aria-label="t('settings.play_click')"
           class="v-select v-setting-control"
         >
-          <option value="quick_start_best">Quick Start Best</option>
-          <option value="always_ask_source">Always Ask Source</option>
+          <option value="quick_start_best">{{ t('settings.play_quick') }}</option>
+          <option value="always_ask_source">{{ t('settings.play_ask') }}</option>
         </select>
       </div>
 
       <div class="v-setting-row">
-        <span class="setting-copy"><strong>Show Plugin Source on Cards</strong></span>
+        <span class="setting-copy"><strong>{{ t('settings.show_plugin_badge') }}</strong></span>
         <label class="v-switch">
           <input v-model="uiPreferences.cards.showPluginBadge" type="checkbox" class="v-switch-input" />
           <span class="v-switch-track" aria-hidden="true" />
@@ -255,7 +256,7 @@ async function handleImportBackup(mode: 'smart_merge' | 'reset_and_import'): Pro
       </div>
 
       <div class="v-setting-row">
-        <span class="setting-copy"><strong>Show Rating Chip</strong></span>
+        <span class="setting-copy"><strong>{{ t('settings.show_rating_chip') }}</strong></span>
         <label class="v-switch">
           <input v-model="uiPreferences.cards.showRating" type="checkbox" class="v-switch-input" />
           <span class="v-switch-track" aria-hidden="true" />
@@ -263,7 +264,7 @@ async function handleImportBackup(mode: 'smart_merge' | 'reset_and_import'): Pro
       </div>
 
       <div class="v-setting-row">
-        <span class="setting-copy"><strong>Spoiler-Free Episode Overviews</strong></span>
+        <span class="setting-copy"><strong>{{ t('settings.spoiler_free') }}</strong></span>
         <label class="v-switch">
           <input
             v-model="uiPreferences.details.hideEpisodeOverviews"
@@ -275,7 +276,7 @@ async function handleImportBackup(mode: 'smart_merge' | 'reset_and_import'): Pro
       </div>
 
       <div class="v-setting-row">
-        <span class="setting-copy"><strong>Enable Custom CSS Injection</strong></span>
+        <span class="setting-copy"><strong>{{ t('settings.custom_css') }}</strong></span>
         <label class="v-switch">
           <input
             v-model="uiPreferences.advanced.customCssEnabled"
@@ -294,6 +295,107 @@ async function handleImportBackup(mode: 'smart_merge' | 'reset_and_import'): Pro
         class="v-textarea"
         placeholder="/* Custom CSS injected safely on desktop */"
       />
+
+      <div class="sub-prefs-box">
+        <h4 class="sub-prefs-title">{{ t('settings.subtitles_title') }}</h4>
+
+        <div class="v-setting-row">
+          <div class="setting-copy">
+            <strong>{{ t('subtitles.font_size') }}</strong>
+            <span class="v-muted">{{ uiPreferences.subtitles.fontSizePx }}px</span>
+          </div>
+          <input
+            v-model.number="uiPreferences.subtitles.fontSizePx"
+            type="range"
+            min="16"
+            max="52"
+            step="2"
+            class="v-setting-control sub-range"
+          />
+        </div>
+
+        <div class="v-setting-row">
+          <div class="setting-copy">
+            <strong>{{ t('subtitles.bottom_offset') }}</strong>
+            <span class="v-muted">{{ uiPreferences.subtitles.bottomOffsetPx }}px</span>
+          </div>
+          <input
+            v-model.number="uiPreferences.subtitles.bottomOffsetPx"
+            type="range"
+            min="16"
+            max="220"
+            step="4"
+            class="v-setting-control sub-range"
+          />
+        </div>
+
+        <div class="v-setting-row">
+          <div class="setting-copy">
+            <strong>{{ t('subtitles.bg_opacity') }}</strong>
+            <span class="v-muted">{{ uiPreferences.subtitles.backgroundOpacity }}%</span>
+          </div>
+          <input
+            v-model.number="uiPreferences.subtitles.backgroundOpacity"
+            type="range"
+            min="0"
+            max="100"
+            step="5"
+            class="v-setting-control sub-range"
+          />
+        </div>
+
+        <div class="v-setting-row">
+          <span class="setting-copy"><strong>{{ t('subtitles.font_family') }}</strong></span>
+          <select
+            v-model="uiPreferences.subtitles.fontFamily"
+            :aria-label="t('subtitles.font_family')"
+            class="v-select v-setting-control"
+          >
+            <option value="system-ui">System Sans</option>
+            <option value="rounded">Rounded</option>
+            <option value="serif">Serif</option>
+            <option value="monospace">Monospace</option>
+          </select>
+        </div>
+
+        <div class="v-setting-row">
+          <span class="setting-copy"><strong>{{ t('subtitles.outline_style') }}</strong></span>
+          <select
+            v-model="uiPreferences.subtitles.outlineStyle"
+            :aria-label="t('subtitles.outline_style')"
+            class="v-select v-setting-control"
+          >
+            <option value="outline">{{ t('subtitles.style_outline') }}</option>
+            <option value="shadow">{{ t('subtitles.style_shadow') }}</option>
+            <option value="box">{{ t('subtitles.style_box') }}</option>
+            <option value="none">{{ t('subtitles.style_none') }}</option>
+          </select>
+        </div>
+
+        <div class="v-setting-row">
+          <span class="setting-copy"><strong>{{ t('subtitles.text_color') }}</strong></span>
+          <div class="sub-color-row v-setting-control">
+            <button
+              v-for="clr in ['#ffffff', '#fde047', '#67e8f9', '#f9a8d4', '#a7f3d0']"
+              :key="clr"
+              type="button"
+              class="sub-color-swatch"
+              :style="{ backgroundColor: clr }"
+              :class="{ active: uiPreferences.subtitles.textColor.toLowerCase() === clr }"
+              :aria-label="clr"
+              @click="uiPreferences.subtitles.textColor = clr"
+            />
+          </div>
+        </div>
+
+        <div class="v-setting-row">
+          <span class="setting-copy"><strong>{{ t('subtitles.bold') }}</strong></span>
+          <label class="v-switch">
+            <input v-model="uiPreferences.subtitles.bold" type="checkbox" class="v-switch-input" />
+            <span class="v-switch-track" aria-hidden="true" />
+          </label>
+        </div>
+      </div>
 
       <button type="button" class="v-btn v-btn-primary" @click="persistUi">
         {{ t('common.save') }}
@@ -325,7 +427,7 @@ async function handleImportBackup(mode: 'smart_merge' | 'reset_and_import'): Pro
       <div class="v-setting-row">
         <div class="setting-copy">
           <strong>{{ t('settings.metadata_enabled') }}</strong>
-          <span class="v-muted">Turn off for strict plugin-only zero external queries</span>
+          <span class="v-muted">{{ t('settings.metadata_desc') }}</span>
         </div>
         <label class="v-switch">
           <input
@@ -348,7 +450,7 @@ async function handleImportBackup(mode: 'smart_merge' | 'reset_and_import'): Pro
           class="v-input"
           :placeholder="t('settings.tmdb_key')"
         />
-        <button type="button" class="v-btn" @click="saveTmdbKey">Save API Key</button>
+        <button type="button" class="v-btn" @click="saveTmdbKey">{{ t('settings.save_api_key') }}</button>
       </div>
 
       <div v-if="engineInfo" class="v-muted paths-info">
@@ -365,8 +467,8 @@ async function handleImportBackup(mode: 'smart_merge' | 'reset_and_import'): Pro
 
       <div class="v-setting-row">
         <span class="setting-copy">
-          <strong>Include Stored Secrets in Export</strong>
-          <span class="v-muted">Omitted by default for safe sharing</span>
+          <strong>{{ t('settings.backup_secrets') }}</strong>
+          <span class="v-muted">{{ t('settings.backup_secrets_desc') }}</span>
         </span>
         <label class="v-switch">
           <input v-model="includeSecretsInBackup" type="checkbox" class="v-switch-input" />
@@ -382,7 +484,7 @@ async function handleImportBackup(mode: 'smart_merge' | 'reset_and_import'): Pro
           {{ t('settings.import_smart_merge') }}
         </button>
         <button type="button" class="v-btn v-btn-danger" @click="handleImportBackup('reset_and_import')">
-          {{ confirmResetImport ? 'Confirm Full Replace' : t('settings.import_reset') }}
+          {{ confirmResetImport ? t('common.confirm') : t('settings.import_reset') }}
         </button>
       </div>
 
@@ -399,15 +501,13 @@ async function handleImportBackup(mode: 'smart_merge' | 'reset_and_import'): Pro
     <div class="v-card section-card">
       <div class="section-title-row">
         <Sparkles :size="18" class="section-icon" aria-hidden="true" />
-        <h3>Updates &amp; Release Notes</h3>
+        <h3>{{ t('settings.updates_title') }}</h3>
       </div>
 
       <div class="v-setting-row">
         <div class="setting-copy">
-          <strong>Check GitHub Releases Automatically</strong>
-          <span class="v-muted">
-            Notify when a new macOS (.dmg) or Windows (.exe) release is published on GitHub
-          </span>
+          <strong>{{ t('settings.updates_auto') }}</strong>
+          <span class="v-muted">{{ t('settings.updates_auto_desc') }}</span>
         </div>
         <label class="v-switch">
           <input
@@ -428,7 +528,7 @@ async function handleImportBackup(mode: 'smart_merge' | 'reset_and_import'): Pro
           @click="checkForUpdates(false)"
         >
           <RefreshCw :size="14" :class="{ spin: checkingUpdate }" aria-hidden="true" />
-          {{ checkingUpdate ? 'Checking GitHub…' : 'Check for Updates' }}
+          {{ checkingUpdate ? t('settings.checking_updates') : t('settings.check_updates') }}
         </button>
         <span class="v-muted update-status-line">
           <template v-if="updateInfo">
@@ -448,7 +548,7 @@ async function handleImportBackup(mode: 'smart_merge' | 'reset_and_import'): Pro
             class="v-badge"
             :class="updateInfo.updateAvailable ? 'v-badge-accent' : 'v-badge-success'"
           >
-            {{ updateInfo.updateAvailable ? 'Update Available' : 'Up to Date' }}
+            {{ updateInfo.updateAvailable ? t('settings.update_available') : t('settings.up_to_date') }}
           </span>
         </div>
 
@@ -575,8 +675,52 @@ async function handleImportBackup(mode: 'smart_merge' | 'reset_and_import'): Pro
   gap: 0.65rem;
   padding: 0.9rem 1rem;
   border-radius: 12px;
-  background: rgba(10, 11, 18, 0.58);
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: var(--vessel-surface-input);
+  border: 1px solid var(--vessel-border);
+}
+
+.sub-prefs-box {
+  width: 100%;
+  margin-top: 0.5rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--vessel-border);
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.sub-prefs-title {
+  margin: 0 0 0.35rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--vessel-accent);
+}
+
+.sub-range {
+  accent-color: var(--vessel-accent);
+  cursor: pointer;
+}
+
+.sub-color-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.sub-color-swatch {
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  border: 2px solid var(--vessel-border-strong);
+  cursor: pointer;
+  transition: transform 0.16s ease, border-color 0.16s ease;
+}
+
+.sub-color-swatch.active {
+  transform: scale(1.18);
+  border-color: var(--vessel-accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--vessel-accent) 35%, transparent);
 }
 
 .release-notes-head {

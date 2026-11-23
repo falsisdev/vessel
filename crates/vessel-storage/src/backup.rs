@@ -82,6 +82,10 @@ struct RawBackupProgressRow {
     duration_ms: i64,
     completed: i64,
     last_watched_at: String,
+    title: Option<String>,
+    poster_url: Option<String>,
+    backdrop_url: Option<String>,
+    episode_title: Option<String>,
 }
 
 impl RawBackupProgressRow {
@@ -98,6 +102,10 @@ impl RawBackupProgressRow {
             duration_ms: row.get(8)?,
             completed: row.get(9)?,
             last_watched_at: row.get(10)?,
+            title: row.get(11)?,
+            poster_url: row.get(12)?,
+            backdrop_url: row.get(13)?,
+            episode_title: row.get(14)?,
         })
     }
 
@@ -111,6 +119,10 @@ impl RawBackupProgressRow {
             season: self.season,
             episode: self.episode,
             absolute_episode: self.absolute_episode,
+            title: self.title,
+            poster_url: self.poster_url,
+            backdrop_url: self.backdrop_url,
+            episode_title: self.episode_title,
             position_ms: i64_to_u64(self.position_ms, "position_ms")?,
             duration_ms: i64_to_u64(self.duration_ms, "duration_ms")?,
             completed: self.completed != 0,
@@ -198,7 +210,8 @@ fn export_watch_progress(conn: &Connection) -> VesselResult<Vec<PlaybackProgress
     let mut stmt = conn
         .prepare(
             "SELECT plugin_id, native_id, stream_id, canonical_id, season, episode,
-                    absolute_episode, position_ms, duration_ms, completed, last_watched_at
+                    absolute_episode, position_ms, duration_ms, completed, last_watched_at,
+                    title, poster_url, backdrop_url, episode_title
              FROM watch_progress
              ORDER BY plugin_id ASC, native_id ASC, season ASC, episode ASC",
         )
@@ -391,8 +404,9 @@ fn import_watch_progress(
         tx.execute(
             "INSERT INTO watch_progress (
                  id, plugin_id, native_id, stream_id, canonical_id, season, episode,
-                 absolute_episode, position_ms, duration_ms, completed, last_watched_at
-             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
+                 absolute_episode, position_ms, duration_ms, completed, last_watched_at,
+                 title, poster_url, backdrop_url, episode_title
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)
              ON CONFLICT(plugin_id, native_id, season, episode) DO UPDATE SET
                  stream_id = excluded.stream_id,
                  canonical_id = excluded.canonical_id,
@@ -400,8 +414,12 @@ fn import_watch_progress(
                  position_ms = excluded.position_ms,
                  duration_ms = excluded.duration_ms,
                  completed = excluded.completed,
-                 last_watched_at = excluded.last_watched_at",
-            (
+                 last_watched_at = excluded.last_watched_at,
+                 title = COALESCE(NULLIF(excluded.title, ''), watch_progress.title),
+                 poster_url = COALESCE(NULLIF(excluded.poster_url, ''), watch_progress.poster_url),
+                 backdrop_url = COALESCE(NULLIF(excluded.backdrop_url, ''), watch_progress.backdrop_url),
+                 episode_title = COALESCE(NULLIF(excluded.episode_title, ''), watch_progress.episode_title)",
+            rusqlite::params![
                 &row_id,
                 prog.media.plugin_id.as_str(),
                 &prog.media.native_id,
@@ -414,7 +432,11 @@ fn import_watch_progress(
                 duration_ms,
                 i32::from(prog.completed),
                 &prog.last_watched_at,
-            ),
+                &prog.title,
+                &prog.poster_url,
+                &prog.backdrop_url,
+                &prog.episode_title,
+            ],
         )
         .map_err(map_sql_err)?;
     }
@@ -530,6 +552,10 @@ mod tests {
             season: 1,
             episode,
             absolute_episode: Some(episode),
+            title: None,
+            poster_url: None,
+            backdrop_url: None,
+            episode_title: None,
             position_ms,
             duration_ms: 1_440_000,
             completed: false,

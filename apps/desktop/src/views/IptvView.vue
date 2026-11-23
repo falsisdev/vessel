@@ -135,34 +135,74 @@ async function toggleFavorite(ch: StoredIptvChannel): Promise<void> {
 }
 
 async function playChannel(ch: StoredIptvChannel): Promise<void> {
-  const toCandidate = (item: StoredIptvChannel): StreamCandidate => {
+  const buildChannelCandidates = (item: StoredIptvChannel): StreamCandidate[] => {
     const itemProf = profiles.value.find((p) => p.id === item.profileId)
     const itemHeaders: Record<string, string> = {}
     if (itemProf?.userAgent) itemHeaders['User-Agent'] = itemProf.userAgent
 
-    // Upgrade legacy saved Xtream `.ts` URLs to `.m3u8` for native WebKit HLS playback
-    let resolvedUrl = item.streamUrl
-    if (
-      item.streamId.startsWith('xtream-') &&
-      resolvedUrl.toLowerCase().endsWith('.ts') &&
-      resolvedUrl.includes('/live/')
-    ) {
-      resolvedUrl = `${resolvedUrl.slice(0, -3)}.m3u8`
+    const rawUrl = item.streamUrl
+    const lowerUrl = rawUrl.toLowerCase()
+    const isXtreamLive = item.streamId.startsWith('xtream-') && lowerUrl.includes('/live/')
+    const list: StreamCandidate[] = []
+
+    if (isXtreamLive && lowerUrl.endsWith('.ts')) {
+      const hlsUrl = `${rawUrl.slice(0, -3)}.m3u8`
+      list.push(
+        {
+          url: hlsUrl,
+          kind: 'hls',
+          label: `${item.name} (HLS)`,
+          flags: ['requires_proxy'],
+          headers: itemHeaders,
+          subtitles: [],
+        },
+        {
+          url: rawUrl,
+          kind: 'mpeg_ts',
+          label: `${item.name} (MPEG-TS)`,
+          flags: ['requires_proxy'],
+          headers: itemHeaders,
+          subtitles: [],
+        },
+      )
+    } else if (isXtreamLive && lowerUrl.endsWith('.m3u8')) {
+      const tsUrl = `${rawUrl.slice(0, -5)}.ts`
+      list.push(
+        {
+          url: rawUrl,
+          kind: 'hls',
+          label: `${item.name} (HLS)`,
+          flags: ['requires_proxy'],
+          headers: itemHeaders,
+          subtitles: [],
+        },
+        {
+          url: tsUrl,
+          kind: 'mpeg_ts',
+          label: `${item.name} (MPEG-TS)`,
+          flags: ['requires_proxy'],
+          headers: itemHeaders,
+          subtitles: [],
+        },
+      )
+    } else {
+      const isHls = lowerUrl.includes('.m3u8')
+      list.push({
+        url: rawUrl,
+        kind: isHls ? 'hls' : 'mpeg_ts',
+        label: isHls ? `${item.name} (HLS)` : `${item.name} (MPEG-TS)`,
+        flags: ['requires_proxy'],
+        headers: itemHeaders,
+        subtitles: [],
+      })
     }
-    const isHls = resolvedUrl.toLowerCase().includes('.m3u8')
-    return {
-      url: resolvedUrl,
-      kind: isHls ? 'hls' : 'mpeg_ts',
-      label: isHls ? `${item.name} (HLS)` : item.name,
-      flags: ['requires_proxy'],
-      headers: itemHeaders,
-      subtitles: [],
-    }
+    return list
   }
 
   const channelStreams: Record<string, StreamCandidate> = {}
   const episodes = channels.value.map((item, idx) => {
-    channelStreams[item.streamId] = toCandidate(item)
+    const candidates = buildChannelCandidates(item)
+    channelStreams[item.streamId] = candidates[0]
     return {
       streamId: item.streamId,
       season: 1,
@@ -183,8 +223,9 @@ async function playChannel(ch: StoredIptvChannel): Promise<void> {
       thumbnail: ch.logoUrl || undefined,
       tags: [],
     }
+  const activeCandidates = buildChannelCandidates(ch)
   if (!channelStreams[ch.streamId]) {
-    channelStreams[ch.streamId] = toCandidate(ch)
+    channelStreams[ch.streamId] = activeCandidates[0]
   }
 
   setSession({
@@ -204,7 +245,7 @@ async function playChannel(ch: StoredIptvChannel): Promise<void> {
       episodes,
     },
     episode: activeEp,
-    streams: [toCandidate(ch)],
+    streams: activeCandidates,
     subtitles: [],
     activeStreamIndex: 0,
     channelStreams,
@@ -432,8 +473,8 @@ onMounted(() => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: rgba(10, 11, 18, 0.78);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--vessel-surface-input);
+  border: 1px solid var(--vessel-border);
   overflow: hidden;
   padding: 4px;
   flex-shrink: 0;

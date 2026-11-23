@@ -1,4 +1,4 @@
-import { ref, watch } from 'vue'
+import { ref, shallowRef, watch } from 'vue'
 import { isTauriRuntime, vesselApi } from '@/api/vessel'
 import { applyCustomCss } from '@/composables/useTheme'
 import type { UiPreferences } from '@/types/vessel'
@@ -51,6 +51,15 @@ export function defaultUiPreferences(): UiPreferences {
       autoNextDelaySecs: 10,
       watchedThresholdPercent: 90,
     },
+    subtitles: {
+      fontSizePx: 28,
+      fontFamily: 'system-ui',
+      textColor: '#ffffff',
+      backgroundOpacity: 72,
+      outlineStyle: 'outline',
+      bottomOffsetPx: 56,
+      bold: false,
+    },
     advanced: {
       customCssEnabled: false,
       customCss: '',
@@ -59,6 +68,8 @@ export function defaultUiPreferences(): UiPreferences {
 }
 
 const uiPreferences = ref<UiPreferences>(defaultUiPreferences())
+const preferencesLoaded = shallowRef(false)
+let preferencesPromise: Promise<void> | null = null
 let watcherBound = false
 
 function applyRootPreferences(prefs: UiPreferences): void {
@@ -81,9 +92,33 @@ export function useUiPreferences() {
   }
 
   async function loadPreferences(): Promise<void> {
-    if (!isTauriRuntime()) return
-    const loaded = await vesselApi.getUiPreferences()
-    uiPreferences.value = loaded
+    if (!isTauriRuntime()) {
+      preferencesLoaded.value = true
+      return
+    }
+    if (preferencesPromise) {
+      return preferencesPromise
+    }
+    preferencesPromise = (async () => {
+      try {
+        const loaded = await vesselApi.getUiPreferences()
+        const defaults = defaultUiPreferences()
+        uiPreferences.value = {
+          ...defaults,
+          ...loaded,
+          shell: { ...defaults.shell, ...(loaded.shell ?? {}) },
+          home: { ...defaults.home, ...(loaded.home ?? {}) },
+          cards: { ...defaults.cards, ...(loaded.cards ?? {}) },
+          details: { ...defaults.details, ...(loaded.details ?? {}) },
+          playback: { ...defaults.playback, ...(loaded.playback ?? {}) },
+          subtitles: { ...defaults.subtitles, ...(loaded.subtitles ?? {}) },
+          advanced: { ...defaults.advanced, ...(loaded.advanced ?? {}) },
+        }
+      } finally {
+        preferencesLoaded.value = true
+      }
+    })()
+    return preferencesPromise
   }
 
   async function savePreferences(next: UiPreferences): Promise<void> {
@@ -99,6 +134,7 @@ export function useUiPreferences() {
 
   return {
     uiPreferences,
+    preferencesLoaded,
     loadPreferences,
     savePreferences,
     resetAllPreferences,

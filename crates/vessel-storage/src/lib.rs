@@ -29,9 +29,10 @@ pub use secret::SqliteSecretStore;
 pub use store::{SqliteStorage, UI_PREFERENCES_KEY};
 
 const MIGRATION_001_INIT: &str = include_str!("../migrations/001_init.sql");
+const MIGRATION_002_PROGRESS_META: &str = include_str!("../migrations/002_progress_meta.sql");
 
 /// Versioned SQL migrations embedded at compile time.
-const MIGRATIONS: &[(i64, &str)] = &[(1, MIGRATION_001_INIT)];
+const MIGRATIONS: &[(i64, &str)] = &[(1, MIGRATION_001_INIT), (2, MIGRATION_002_PROGRESS_META)];
 
 /// Converts a SQLite driver error into a domain `VesselError::Storage`.
 ///
@@ -182,7 +183,7 @@ mod tests {
     #[test]
     fn applies_initial_migration_and_supports_fts5_triggers() {
         let db = StorageDb::open_in_memory().expect("open in-memory storage");
-        assert_eq!(db.schema_version().expect("read schema version"), 1);
+        assert_eq!(db.schema_version().expect("read schema version"), 2);
 
         let conn = &db.conn;
         conn.execute(
@@ -228,7 +229,7 @@ mod tests {
         let paths = VesselPaths::new(&temp.0).expect("valid VesselPaths");
 
         let db = StorageDb::open_with_paths(&paths).expect("open StorageDb");
-        assert_eq!(db.schema_version().expect("version"), 1);
+        assert_eq!(db.schema_version().expect("version"), 2);
         for dir in paths.required_dirs() {
             assert!(dir.is_dir(), "expected dir {} to exist", dir.display());
         }
@@ -248,6 +249,6 @@ mod tests {
         drop(db);
 
         let reopened = StorageDb::open_with_paths(&paths).expect("reopen StorageDb idempotently");
-        assert_eq!(reopened.schema_version().expect("version after reopen"), 1);
+        assert_eq!(reopened.schema_version().expect("version after reopen"), 2);
     }
 }

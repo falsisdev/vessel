@@ -701,10 +701,15 @@ impl VesselEngine {
 
                     match outcome {
                         Ok(search_page) => {
+                            let filtered = filter_search_items(
+                                search_page.items,
+                                &q,
+                                f.get("mediaType").map(String::as_str),
+                            );
                             sink.emit(EngineEvent::SearchPartialResult {
                                 search_id: sid_inner,
                                 plugin_id,
-                                items: search_page.items,
+                                items: filtered,
                             });
                         }
                         Err(VesselError::DomainBlocked {
@@ -896,7 +901,9 @@ impl VesselEngine {
             .await?;
         self.storage
             .invalidate_metadata_cache(&media.plugin_id, &media.native_id)
-            .await
+            .await?;
+        self.clear_plugin_caches(&media.plugin_id).await;
+        Ok(())
     }
 
     /// Resolves playable stream candidates for an episode or movie from `plugin_id`.
@@ -1435,6 +1442,56 @@ async fn run_enrichment_and_emit(
     Ok(None)
 }
 
+fn filter_search_items(
+    items: Vec<vessel_domain::MediaSummary>,
+    query: &str,
+    media_type_filter: Option<&str>,
+) -> Vec<vessel_domain::MediaSummary> {
+    let type_filter = media_type_filter
+        .map(|s| s.trim().to_ascii_lowercase())
+        .filter(|s| !s.is_empty());
+
+    let after_type: Vec<vessel_domain::MediaSummary> = items
+        .into_iter()
+        .filter(|item| match type_filter.as_deref() {
+            Some("movie") => item.media_type == MediaType::Movie,
+            Some("anime") => item.is_anime,
+            Some("series") => item.media_type == MediaType::Series && !item.is_anime,
+            _ => true,
+        })
+        .collect();
+
+    let clean_q = query.trim().to_ascii_lowercase();
+    if clean_q.is_empty() || after_type.len() < 6 {
+        return after_type;
+    }
+
+    let tokens: Vec<&str> = clean_q
+        .split_whitespace()
+        .filter(|tok| tok.len() >= 2)
+        .collect();
+    let matches_query = |title: &str| -> bool {
+        let lc = title.to_ascii_lowercase();
+        if lc.contains(&clean_q) {
+            return true;
+        }
+        !tokens.is_empty() && tokens.iter().all(|tok| lc.contains(tok))
+    };
+
+    let hits = after_type
+        .iter()
+        .filter(|item| matches_query(&item.title))
+        .count();
+    if hits == 0 || (hits * 100) / after_type.len() < 40 {
+        after_type
+            .into_iter()
+            .filter(|item| matches_query(&item.title))
+            .collect()
+    } else {
+        after_type
+    }
+}
+
 fn infer_repo_group(raw_input: &str) -> Option<String> {
     let clean = raw_input
         .trim()
@@ -1755,6 +1812,10 @@ mod tests {
             season: 1,
             episode: 50,
             absolute_episode: Some(50),
+            title: None,
+            poster_url: None,
+            backdrop_url: None,
+            episode_title: None,
             position_ms: 42_000,
             duration_ms: 1_440_000,
             completed: false,
@@ -1925,6 +1986,10 @@ mod tests {
                 season: 2,
                 episode: 1,
                 absolute_episode: Some(50),
+                title: None,
+                poster_url: None,
+                backdrop_url: None,
+                episode_title: None,
                 position_ms: 123_456,
                 duration_ms: 1_440_000,
                 completed: false,

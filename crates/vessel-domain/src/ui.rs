@@ -87,6 +87,7 @@ impl Default for ThemeSpec {
 pub enum NavLayout {
     #[default]
     ExpandedSidebar,
+    PinnedSidebar,
     CollapsedRail,
     TopNavbar,
     Hidden,
@@ -318,6 +319,44 @@ impl Default for PlaybackPreferences {
     }
 }
 
+/// Subtitle outline/background rendering preset.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SubtitleOutlineStyle {
+    #[default]
+    Outline,
+    Shadow,
+    Box,
+    None,
+}
+
+/// Customizable subtitle typography, color, backdrop, and placement settings.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct SubtitlePreferences {
+    pub font_size_px: u8,
+    pub font_family: String,
+    pub text_color: String,
+    pub background_opacity: u8,
+    pub outline_style: SubtitleOutlineStyle,
+    pub bottom_offset_px: u16,
+    pub bold: bool,
+}
+
+impl Default for SubtitlePreferences {
+    fn default() -> Self {
+        Self {
+            font_size_px: 28,
+            font_family: "system-ui".into(),
+            text_color: "#ffffff".into(),
+            background_opacity: 72,
+            outline_style: SubtitleOutlineStyle::Outline,
+            bottom_offset_px: 56,
+            bold: false,
+        }
+    }
+}
+
 /// Power-user CSS customization preferences.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
@@ -335,6 +374,7 @@ pub struct UiPreferences {
     pub cards: CardPreferences,
     pub details: DetailsPreferences,
     pub playback: PlaybackPreferences,
+    pub subtitles: SubtitlePreferences,
     pub advanced: AdvancedUiPreferences,
 }
 

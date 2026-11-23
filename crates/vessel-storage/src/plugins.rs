@@ -232,14 +232,28 @@ impl SqliteStorage {
             .await
     }
 
-    /// Removes a plugin (cascading its allowed domains and KV entries via foreign keys).
+    /// Removes a plugin and cleans up orphaned library, progress, override, and metadata cache entries.
     pub async fn remove_plugin(&self, plugin_id: &PluginId) -> VesselResult<()> {
         let id = plugin_id.as_str().to_owned();
         self.actor()
             .execute(move |db| {
-                db.conn()
-                    .execute("DELETE FROM plugins WHERE id = ?1", [&id])
+                let tx = db.conn_mut().transaction().map_err(map_sql_err)?;
+                tx.execute("DELETE FROM library_items WHERE plugin_id = ?1", [&id])
                     .map_err(map_sql_err)?;
+                tx.execute("DELETE FROM watch_progress WHERE plugin_id = ?1", [&id])
+                    .map_err(map_sql_err)?;
+                tx.execute("DELETE FROM metadata_overrides WHERE plugin_id = ?1", [&id])
+                    .map_err(map_sql_err)?;
+                let meta_pattern = format!("meta:{id}:%");
+                let detail_pattern = format!("detail:{id}:%");
+                tx.execute(
+                    "DELETE FROM metadata_cache WHERE cache_key LIKE ?1 OR cache_key LIKE ?2",
+                    (&meta_pattern, &detail_pattern),
+                )
+                .map_err(map_sql_err)?;
+                tx.execute("DELETE FROM plugins WHERE id = ?1", [&id])
+                    .map_err(map_sql_err)?;
+                tx.commit().map_err(map_sql_err)?;
                 Ok(())
             })
             .await

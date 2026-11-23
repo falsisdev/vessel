@@ -114,6 +114,10 @@ pub(crate) struct RawProgressRow {
     stream_id: String,
     canonical_id: Option<String>,
     absolute_episode: Option<u32>,
+    title: Option<String>,
+    poster_url: Option<String>,
+    backdrop_url: Option<String>,
+    episode_title: Option<String>,
     position_ms: i64,
     duration_ms: i64,
     completed: i64,
@@ -130,6 +134,10 @@ impl RawProgressRow {
             duration_ms: row.get(4)?,
             completed: row.get(5)?,
             last_watched_at: row.get(6)?,
+            title: row.get(7)?,
+            poster_url: row.get(8)?,
+            backdrop_url: row.get(9)?,
+            episode_title: row.get(10)?,
         })
     }
 
@@ -146,6 +154,10 @@ impl RawProgressRow {
             season,
             episode,
             absolute_episode: self.absolute_episode,
+            title: self.title,
+            poster_url: self.poster_url,
+            backdrop_url: self.backdrop_url,
+            episode_title: self.episode_title,
             position_ms: i64_to_u64(self.position_ms, "position_ms")?,
             duration_ms: i64_to_u64(self.duration_ms, "duration_ms")?,
             completed: self.completed != 0,
@@ -265,7 +277,8 @@ impl SqliteStorage {
                     .conn()
                     .query_row(
                         "SELECT stream_id, canonical_id, absolute_episode, position_ms,
-                                duration_ms, completed, last_watched_at
+                                duration_ms, completed, last_watched_at,
+                                title, poster_url, backdrop_url, episode_title
                          FROM watch_progress
                          WHERE plugin_id = ?1 AND native_id = ?2 AND season = ?3 AND episode = ?4",
                         (media.plugin_id.as_str(), &media.native_id, season, episode),
@@ -301,7 +314,8 @@ impl SqliteStorage {
                     .query_row(
                         "SELECT plugin_id, native_id, season, episode,
                                 stream_id, canonical_id, absolute_episode, position_ms,
-                                duration_ms, completed, last_watched_at
+                                duration_ms, completed, last_watched_at,
+                                title, poster_url, backdrop_url, episode_title
                          FROM watch_progress
                          WHERE canonical_id = ?1 AND absolute_episode = ?2
                          ORDER BY last_watched_at DESC
@@ -320,6 +334,10 @@ impl SqliteStorage {
                                 duration_ms: row.get(8)?,
                                 completed: row.get(9)?,
                                 last_watched_at: row.get(10)?,
+                                title: row.get(11)?,
+                                poster_url: row.get(12)?,
+                                backdrop_url: row.get(13)?,
+                                episode_title: row.get(14)?,
                             };
                             Ok((plugin_raw, native_id, season, episode, raw))
                         },
@@ -355,8 +373,9 @@ impl SqliteStorage {
                     .execute(
                         "INSERT INTO watch_progress (
                              id, plugin_id, native_id, stream_id, canonical_id, season, episode,
-                             absolute_episode, position_ms, duration_ms, completed, last_watched_at
-                         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
+                             absolute_episode, position_ms, duration_ms, completed, last_watched_at,
+                             title, poster_url, backdrop_url, episode_title
+                         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)
                          ON CONFLICT(plugin_id, native_id, season, episode) DO UPDATE SET
                              stream_id = excluded.stream_id,
                              canonical_id = excluded.canonical_id,
@@ -364,8 +383,12 @@ impl SqliteStorage {
                              position_ms = excluded.position_ms,
                              duration_ms = excluded.duration_ms,
                              completed = excluded.completed,
-                             last_watched_at = excluded.last_watched_at",
-                        (
+                             last_watched_at = excluded.last_watched_at,
+                             title = COALESCE(NULLIF(excluded.title, ''), watch_progress.title),
+                             poster_url = COALESCE(NULLIF(excluded.poster_url, ''), watch_progress.poster_url),
+                             backdrop_url = COALESCE(NULLIF(excluded.backdrop_url, ''), watch_progress.backdrop_url),
+                             episode_title = COALESCE(NULLIF(excluded.episode_title, ''), watch_progress.episode_title)",
+                        rusqlite::params![
                             &row_id,
                             progress.media.plugin_id.as_str(),
                             &progress.media.native_id,
@@ -378,7 +401,11 @@ impl SqliteStorage {
                             duration_ms,
                             i32::from(progress.completed),
                             &progress.last_watched_at,
-                        ),
+                            &progress.title,
+                            &progress.poster_url,
+                            &progress.backdrop_url,
+                            &progress.episode_title,
+                        ],
                     )
                     .map_err(map_sql_err)?;
                 Ok(())
@@ -401,6 +428,7 @@ impl SqliteStorage {
                              wp.plugin_id, wp.native_id, wp.stream_id, wp.canonical_id,
                              wp.season, wp.episode, wp.absolute_episode,
                              wp.position_ms, wp.duration_ms, wp.completed, wp.last_watched_at,
+                             wp.title, wp.poster_url, wp.backdrop_url, wp.episode_title,
                              li.title, li.poster_url, li.media_type
                          FROM watch_progress wp
                          LEFT JOIN library_items li
@@ -439,22 +467,35 @@ impl SqliteStorage {
                     let completed = row.get::<_, i32>(9).map_err(map_sql_err)? != 0;
                     let last_watched_at: String = row.get(10).map_err(map_sql_err)?;
 
-                    let mut title: Option<String> = row.get(11).map_err(map_sql_err)?;
-                    let mut poster: Option<String> = row.get(12).map_err(map_sql_err)?;
-                    let mut backdrop: Option<String> = None;
+                    let wp_title: Option<String> = row.get(11).map_err(map_sql_err)?;
+                    let wp_poster: Option<String> = row.get(12).map_err(map_sql_err)?;
+                    let mut backdrop: Option<String> = row.get(13).map_err(map_sql_err)?;
+                    let mut episode_title: Option<String> = row.get(14).map_err(map_sql_err)?;
+                    let li_title: Option<String> = row.get(15).map_err(map_sql_err)?;
+                    let li_poster: Option<String> = row.get(16).map_err(map_sql_err)?;
                     let mut media_type = row
-                        .get::<_, Option<String>>(13)
+                        .get::<_, Option<String>>(17)
                         .map_err(map_sql_err)?
                         .and_then(|s| parse_media_type(&s).ok())
                         .unwrap_or(MediaType::Series);
-                    let mut episode_title: Option<String> = None;
 
-                    let cache_pattern = format!("detail:{plugin_raw}:{native_id}:%");
+                    let mut title = wp_title
+                        .filter(|s| !s.trim().is_empty())
+                        .or_else(|| li_title.filter(|s| !s.trim().is_empty()));
+                    let mut poster = wp_poster
+                        .filter(|s| !s.trim().is_empty())
+                        .or_else(|| li_poster.filter(|s| !s.trim().is_empty()));
+
+                    let meta_pattern = format!("meta:{plugin_raw}:{native_id}:%");
+                    let detail_pattern = format!("detail:{plugin_raw}:{native_id}:%");
                     let cached_json: Option<String> = db
                         .conn()
                         .query_row(
-                            "SELECT payload_json FROM metadata_cache WHERE cache_key LIKE ?1 LIMIT 1",
-                            [&cache_pattern],
+                            "SELECT payload_json FROM metadata_cache
+                             WHERE cache_key LIKE ?1 OR cache_key LIKE ?2
+                             ORDER BY cached_at DESC
+                             LIMIT 1",
+                            (&meta_pattern, &detail_pattern),
                             |r| r.get(0),
                         )
                         .optional()
@@ -464,26 +505,43 @@ impl SqliteStorage {
                         && let Ok(val) = serde_json::from_str::<serde_json::Value>(&json_str)
                     {
                         if title.is_none() {
-                            title = val.get("title").and_then(|v| v.as_str()).map(str::to_owned);
+                            title = val
+                                .get("title")
+                                .and_then(|v| v.as_str())
+                                .filter(|s| !s.trim().is_empty())
+                                .map(str::to_owned);
                         }
                         if poster.is_none() {
-                            poster = val.get("poster").and_then(|v| v.as_str()).map(str::to_owned);
+                            poster = val
+                                .get("poster")
+                                .and_then(|v| v.as_str())
+                                .filter(|s| !s.trim().is_empty())
+                                .map(str::to_owned);
                         }
-                        backdrop = val
-                            .get("backdrop")
-                            .and_then(|v| v.as_str())
-                            .map(str::to_owned);
+                        if backdrop.as_ref().is_none_or(|b| b.trim().is_empty()) {
+                            backdrop = val
+                                .get("backdrop")
+                                .and_then(|v| v.as_str())
+                                .filter(|s| !s.trim().is_empty())
+                                .map(str::to_owned);
+                        }
                         if let Some(t) = val.get("type").and_then(|v| v.as_str())
                             && let Ok(parsed) = parse_media_type(t)
                         {
                             media_type = parsed;
                         }
-                        if let Some(eps) = val.get("episodes").and_then(|v| v.as_array()) {
+                        if episode_title.as_ref().is_none_or(|t| t.trim().is_empty())
+                            && let Some(eps) = val.get("episodes").and_then(|v| v.as_array())
+                        {
                             episode_title = eps
                                 .iter()
                                 .find(|e| {
                                     e.get("streamId").and_then(|v| v.as_str())
                                         == Some(stream_id.as_str())
+                                        || (e.get("season").and_then(|v| v.as_u64())
+                                            == Some(u64::from(season))
+                                            && e.get("episode").and_then(|v| v.as_u64())
+                                                == Some(u64::from(episode)))
                                 })
                                 .and_then(|e| e.get("title").and_then(|v| v.as_str()))
                                 .map(str::to_owned);

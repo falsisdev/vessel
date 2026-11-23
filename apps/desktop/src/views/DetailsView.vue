@@ -375,7 +375,7 @@ onMounted(() => {
                 @click="openSourceResolver(firstEpisode)"
               >
                 <Play :size="16" fill="currentColor" aria-hidden="true" />
-                Watch S{{ firstEpisode.season }}:E{{ firstEpisode.episode }}
+                {{ t('details.watch') }} S{{ firstEpisode.season }}:E{{ firstEpisode.episode }}
               </button>
 
               <div class="library-picker">
@@ -425,7 +425,7 @@ onMounted(() => {
                 :class="{ 'v-btn-primary': selectedSeason === s }"
                 @click="selectedSeason = s"
               >
-                Season {{ s }}
+                {{ t('details.season') }} {{ s }}
               </button>
             </div>
 
@@ -543,7 +543,7 @@ onMounted(() => {
                 <div class="picker-title-group">
                   <h3 class="picker-title">{{ t('details.fix_match') }}</h3>
                   <span class="v-muted picker-sub">
-                    Bind an exact AniList, TMDB, or IMDb ID to refresh title, synopsis, artwork, and episodes.
+                    {{ t('details.fix_match_desc') }}
                   </span>
                 </div>
                 <button
@@ -577,7 +577,7 @@ onMounted(() => {
                 <label class="v-switch">
                   <input v-model="fixDisableEnrichment" type="checkbox" class="v-switch-input" />
                   <span class="v-switch-track" aria-hidden="true" />
-                  <span>Disable external metadata for this title</span>
+                  <span>{{ t('details.fix_match_disable') }}</span>
                 </label>
               </div>
 
@@ -591,7 +591,7 @@ onMounted(() => {
                   :disabled="savingFixMatch"
                   @click="applyFixMatch"
                 >
-                  {{ savingFixMatch ? t('common.loading') : 'Apply Match' }}
+                  {{ savingFixMatch ? t('common.loading') : t('details.fix_match_apply') }}
                 </button>
               </div>
             </div>
@@ -632,15 +632,15 @@ onMounted(() => {
 
               <div v-if="resolvingStreams" class="resolver-state">
                 <Loader2 :size="28" class="spin accent-icon" aria-hidden="true" />
-                <strong>Searching playable links…</strong>
-                <span class="v-muted">Resolving streams from {{ pluginId }}</span>
+                <strong>{{ t('details.searching_streams') }}</strong>
+                <span class="v-muted">{{ pluginId }}</span>
               </div>
 
               <div v-else-if="resolverError || !streamChoices.length" class="resolver-state">
                 <AlertTriangle :size="28" class="warn-icon" aria-hidden="true" />
-                <strong>No Streams Available</strong>
+                <strong>{{ t('details.no_streams') }}</strong>
                 <p class="v-muted resolver-err-msg">
-                  {{ resolverError || 'No stream links were returned for this episode.' }}
+                  {{ resolverError || t('details.no_streams') }}
                 </p>
                 <div class="resolver-err-actions">
                   <button
@@ -648,7 +648,7 @@ onMounted(() => {
                     class="v-btn v-btn-sm"
                     @click="openSourceResolver(resolverEpisode)"
                   >
-                    <RefreshCw :size="14" aria-hidden="true" /> Retry
+                    <RefreshCw :size="14" aria-hidden="true" /> {{ t('common.retry') }}
                   </button>
                   <button type="button" class="v-btn v-btn-sm" @click="closeSourceResolver">
                     {{ t('common.cancel') }}
@@ -748,17 +748,17 @@ onMounted(() => {
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(circle at 80% 25%, rgba(203, 166, 247, 0.08), transparent 45%),
+    radial-gradient(circle at 80% 25%, color-mix(in srgb, var(--vessel-accent) 10%, transparent), transparent 45%),
     linear-gradient(
       90deg,
       var(--vessel-bg-base) 0%,
-      rgba(10, 11, 16, 0.88) 45%,
-      rgba(10, 11, 16, 0.36) 100%
+      color-mix(in srgb, var(--vessel-bg-base) 88%, transparent) 45%,
+      color-mix(in srgb, var(--vessel-bg-base) 36%, transparent) 100%
     ),
     linear-gradient(
       180deg,
-      rgba(10, 11, 16, 0.3) 0%,
-      rgba(10, 11, 16, var(--scrim-dim, 0.78)) 64%,
+      color-mix(in srgb, var(--vessel-bg-base) 30%, transparent) 0%,
+      color-mix(in srgb, var(--vessel-bg-base) 78%, transparent) 64%,
       var(--vessel-bg-base) 100%
     );
   pointer-events: none;
@@ -933,7 +933,7 @@ onMounted(() => {
   align-items: center;
   padding: 0.2rem;
   border-radius: 999px;
-  background: rgba(18, 20, 30, 0.85);
+  background: var(--vessel-surface-input);
   border: 1px solid var(--vessel-border);
   gap: 0.15rem;
 }
@@ -1007,17 +1007,17 @@ onMounted(() => {
   gap: 1.15rem;
   padding: 0.75rem;
   border-radius: calc(var(--vessel-radius) + 2px);
-  background: rgba(18, 20, 30, 0.72);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: var(--vessel-surface-card);
+  border: 1px solid var(--vessel-border);
   transition:
-    background-color 0.18s ease,
-    border-color 0.18s ease,
-    transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+    background-color 0.22s ease,
+    border-color 0.22s ease,
+    transform 0.22s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .nuvio-ep-item:hover {
-  background: rgba(28, 31, 46, 0.85);
-  border-color: rgba(255, 255, 255, 0.16);
+  background: var(--vessel-surface-elevated);
+  border-color: var(--vessel-border-strong);
   transform: translateY(-1px);
 }
 
@@ -1079,6 +1079,7 @@ onMounted(() => {
   padding: 0.12rem 0.45rem;
   border-radius: 6px;
   background: rgba(10, 11, 16, 0.78);
+  color: #ffffff;
   font-size: 0.72rem;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
@@ -1109,7 +1110,7 @@ onMounted(() => {
   font-size: 0.86rem;
   line-height: 1.45;
   display: -webkit-box;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
@@ -1140,8 +1141,8 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 1.05rem;
-  background: rgba(16, 18, 28, 0.96);
-  border-color: rgba(255, 255, 255, 0.12);
+  background: var(--vessel-surface-overlay);
+  border-color: var(--vessel-border-strong);
 }
 
 .picker-head {
@@ -1232,13 +1233,13 @@ onMounted(() => {
   padding: 0.55rem 0.65rem;
   border-radius: var(--vessel-radius);
   border: 1px solid var(--vessel-border);
-  background: rgba(28, 31, 46, 0.72);
-  transition: border-color 0.16s ease, background-color 0.16s ease;
+  background: var(--vessel-surface-card);
+  transition: border-color 0.18s ease, background-color 0.18s ease;
 }
 
 .cs-source-row:hover {
-  border-color: rgba(203, 166, 247, 0.55);
-  background: rgba(36, 40, 58, 0.9);
+  border-color: color-mix(in srgb, var(--vessel-accent) 55%, transparent);
+  background: var(--vessel-surface-elevated);
 }
 
 .cs-source-play {

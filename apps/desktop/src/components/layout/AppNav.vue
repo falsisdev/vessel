@@ -43,8 +43,9 @@ const navItems = computed(() =>
 )
 
 const isTop = computed(() => props.layout === 'top_navbar')
+const isPinned = computed(() => props.layout === 'pinned_sidebar')
 const isExpanded = computed(
-  () => props.layout === 'expanded_sidebar' && hovering.value,
+  () => isPinned.value || (props.layout === 'expanded_sidebar' && hovering.value),
 )
 const showLabels = computed(() => isTop.value || isExpanded.value)
 </script>
@@ -53,7 +54,7 @@ const showLabels = computed(() => isTop.value || isExpanded.value)
   <aside
     v-if="layout !== 'hidden'"
     class="nuvio-nav"
-    :class="{ 'is-top': isTop, 'is-expanded': isExpanded }"
+    :class="{ 'is-top': isTop, 'is-expanded': isExpanded, 'is-pinned': isPinned }"
     aria-label="Primary navigation"
     @mouseenter="hovering = true"
     @mouseleave="hovering = false"
@@ -103,16 +104,16 @@ const showLabels = computed(() => isTop.value || isExpanded.value)
   align-items: center;
   width: 72px;
   flex-shrink: 0;
-  background: linear-gradient(180deg, rgba(14, 15, 24, 0.98), rgba(10, 11, 18, 0.99));
-  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  background: var(--vessel-surface-nav);
+  border-right: 1px solid var(--vessel-border);
   padding: 1.15rem 0.65rem;
   gap: 1.4rem;
   z-index: 30;
-  transition: width 0.24s cubic-bezier(0.22, 1, 0.36, 1);
+  transition: width 0.28s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .nuvio-nav.is-expanded {
-  width: 208px;
+  width: 220px;
   align-items: stretch;
   padding: 1.15rem 0.85rem;
 }
@@ -122,7 +123,7 @@ const showLabels = computed(() => isTop.value || isExpanded.value)
   flex-direction: row;
   align-items: center;
   border-right: none;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid var(--vessel-border);
   padding: 0.7rem 1.5rem;
 }
 
@@ -150,10 +151,10 @@ const showLabels = computed(() => isTop.value || isExpanded.value)
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(145deg, rgba(203, 166, 247, 0.26), rgba(137, 180, 250, 0.14));
-  color: #ffffff;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  box-shadow: 0 0 22px rgba(203, 166, 247, 0.22);
+  background: linear-gradient(145deg, color-mix(in srgb, var(--vessel-accent) 26%, transparent), color-mix(in srgb, var(--vessel-accent-secondary) 14%, transparent));
+  color: var(--vessel-text-primary);
+  border: 1px solid var(--vessel-border-strong);
+  box-shadow: 0 0 22px color-mix(in srgb, var(--vessel-accent) 22%, transparent);
   flex-shrink: 0;
 }
 
@@ -196,8 +197,8 @@ const showLabels = computed(() => isTop.value || isExpanded.value)
 }
 
 .nav-pill:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: #ffffff;
+  background: var(--vessel-surface-hover);
+  color: var(--vessel-text-primary);
   transform: translateX(2px);
 }
 
@@ -206,10 +207,10 @@ const showLabels = computed(() => isTop.value || isExpanded.value)
 }
 
 .nav-pill.is-active {
-  background: linear-gradient(90deg, rgba(203, 166, 247, 0.2), rgba(137, 180, 250, 0.08));
-  color: #ffffff;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--vessel-accent) 22%, transparent), color-mix(in srgb, var(--vessel-accent-secondary) 10%, transparent));
+  color: var(--vessel-text-primary);
   font-weight: 600;
-  box-shadow: inset 0 0 0 1px rgba(203, 166, 247, 0.32);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--vessel-accent) 34%, transparent);
 }
 
 .nav-pill.is-active::before {
@@ -241,7 +242,7 @@ const showLabels = computed(() => isTop.value || isExpanded.value)
   display: flex;
   flex-direction: column;
   padding-top: 0.65rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  border-top: 1px solid var(--vessel-border);
 }
 
 .nuvio-nav.is-top .nav-footer {

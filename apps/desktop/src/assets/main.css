@@ -7,6 +7,22 @@
   --vessel-accent: #cba6f7;
   --vessel-accent-secondary: #89b4fa;
   --vessel-border: rgba(255, 255, 255, 0.08);
+  --vessel-border-strong: rgba(255, 255, 255, 0.16);
+  --vessel-surface-card: linear-gradient(180deg, rgba(22, 24, 38, 0.88), rgba(15, 17, 27, 0.92));
+  --vessel-surface-control: linear-gradient(180deg, rgba(34, 37, 56, 0.92), rgba(22, 24, 38, 0.94));
+  --vessel-surface-input: rgba(16, 18, 29, 0.94);
+  --vessel-surface-elevated: rgba(28, 31, 46, 0.92);
+  --vessel-surface-nav: linear-gradient(180deg, rgba(14, 15, 24, 0.98), rgba(10, 11, 18, 0.99));
+  --vessel-surface-overlay: rgba(12, 13, 22, 0.92);
+  --vessel-surface-subtle: rgba(255, 255, 255, 0.05);
+  --vessel-surface-hover: rgba(255, 255, 255, 0.12);
+  --vessel-btn-primary-bg: #f4f6fc;
+  --vessel-btn-primary-fg: #0a0b10;
+  --vessel-switch-track: rgba(255, 255, 255, 0.14);
+  --vessel-switch-thumb: #ffffff;
+  --vessel-switch-thumb-checked: #0a0b10;
+  --vessel-scrollbar-thumb: rgba(255, 255, 255, 0.14);
+  --vessel-scrollbar-thumb-hover: rgba(255, 255, 255, 0.28);
   --vessel-success: #a6e3a1;
   --vessel-warning: #f9e2af;
   --vessel-danger: #f38ba8;
@@ -14,6 +30,26 @@
   --vessel-gap: 1.25rem;
   --vessel-font-scale: 1;
   color-scheme: dark;
+}
+
+:root[data-theme-mode='light'] {
+  --vessel-border-strong: rgba(15, 23, 42, 0.16);
+  --vessel-surface-card: linear-gradient(180deg, color-mix(in srgb, var(--vessel-bg-surface) 70%, #ffffff), color-mix(in srgb, var(--vessel-bg-surface) 92%, #ffffff));
+  --vessel-surface-control: linear-gradient(180deg, #ffffff, color-mix(in srgb, var(--vessel-bg-surface) 55%, #ffffff));
+  --vessel-surface-input: #ffffff;
+  --vessel-surface-elevated: color-mix(in srgb, var(--vessel-bg-elevated) 72%, #ffffff);
+  --vessel-surface-nav: linear-gradient(180deg, color-mix(in srgb, var(--vessel-bg-surface) 95%, #ffffff), var(--vessel-bg-surface));
+  --vessel-surface-overlay: color-mix(in srgb, var(--vessel-bg-base) 92%, #ffffff);
+  --vessel-surface-subtle: rgba(15, 23, 42, 0.05);
+  --vessel-surface-hover: rgba(15, 23, 42, 0.09);
+  --vessel-btn-primary-bg: var(--vessel-accent);
+  --vessel-btn-primary-fg: #ffffff;
+  --vessel-switch-track: rgba(15, 23, 42, 0.18);
+  --vessel-switch-thumb: #ffffff;
+  --vessel-switch-thumb-checked: #ffffff;
+  --vessel-scrollbar-thumb: rgba(15, 23, 42, 0.18);
+  --vessel-scrollbar-thumb-hover: rgba(15, 23, 42, 0.34);
+  color-scheme: light;
 }
 
 * {
@@ -137,22 +173,24 @@ textarea {
   height: 40px;
   padding: 0 1.2rem;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.13);
-  border-top-color: rgba(255, 255, 255, 0.22);
-  background: linear-gradient(180deg, rgba(34, 37, 56, 0.92), rgba(22, 24, 38, 0.94));
+  border: 1px solid var(--vessel-border);
+  border-top-color: var(--vessel-border-strong);
+  background: var(--vessel-surface-control);
+  color: var(--vessel-text-primary);
   cursor: pointer;
   font-size: 0.9rem;
   font-weight: 600;
   white-space: nowrap;
   transition:
-    transform 0.18s cubic-bezier(0.22, 1, 0.36, 1),
-    background-color 0.18s ease,
-    border-color 0.18s ease;
+    transform 0.22s cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 0.22s ease,
+    border-color 0.22s ease,
+    box-shadow 0.22s ease;
 }
 
 .v-btn:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.14);
-  border-color: rgba(255, 255, 255, 0.28);
+  background: var(--vessel-surface-hover);
+  border-color: var(--vessel-border-strong);
   transform: translateY(-1px);
 }
 
@@ -179,22 +217,23 @@ textarea {
 
 /* Primary CTA in crisp Nuvio high-contrast white/silver or vibrant pill */
 .v-btn-primary {
-  background: #f4f6fc;
-  color: #0a0b10;
+  background: var(--vessel-btn-primary-bg);
+  color: var(--vessel-btn-primary-fg);
   border-color: transparent;
   font-weight: 700;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.22);
 }
 
 .v-btn-primary:hover:not(:disabled) {
-  background: #ffffff;
+  background: var(--vessel-btn-primary-bg);
+  filter: brightness(1.06);
   border-color: transparent;
-  box-shadow: 0 10px 28px rgba(255, 255, 255, 0.18);
+  box-shadow: 0 10px 28px color-mix(in srgb, var(--vessel-accent) 26%, transparent);
 }
 
 .v-btn-accent {
   background: var(--vessel-accent);
-  color: #0a0b10;
+  color: var(--vessel-btn-primary-fg);
   border-color: transparent;
   font-weight: 700;
 }
@@ -228,8 +267,8 @@ textarea {
 }
 
 .v-select:hover {
-  border-color: rgba(255, 255, 255, 0.24);
-  background-color: rgba(28, 31, 46, 0.92);
+  border-color: var(--vessel-border-strong);
+  background-color: var(--vessel-surface-elevated);
 }
 
 .v-textarea {
@@ -242,11 +281,11 @@ textarea {
   width: 100%;
   border-radius: var(--vessel-radius);
   border: 1px solid var(--vessel-border);
-  background-color: rgba(16, 18, 29, 0.94);
+  background-color: var(--vessel-surface-input);
   color: var(--vessel-text-primary);
   transition:
-    border-color 0.18s ease,
-    background-color 0.18s ease;
+    border-color 0.2s ease,
+    background-color 0.2s ease;
 }
 
 .v-select option {
@@ -276,12 +315,12 @@ textarea {
   width: 42px;
   height: 24px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.14);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: var(--vessel-switch-track);
+  border: 1px solid var(--vessel-border);
   flex-shrink: 0;
   transition:
-    background-color 0.2s ease,
-    border-color 0.2s ease;
+    background-color 0.22s ease,
+    border-color 0.22s ease;
 }
 
 .v-switch-track::after {
@@ -292,9 +331,9 @@ textarea {
   width: 18px;
   height: 18px;
   border-radius: 999px;
-  background: #ffffff;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
-  transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+  background: var(--vessel-switch-thumb);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+  transition: transform 0.24s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .v-switch-input:checked + .v-switch-track {
@@ -304,7 +343,7 @@ textarea {
 
 .v-switch-input:checked + .v-switch-track::after {
   transform: translateX(18px);
-  background: #0a0b10;
+  background: var(--vessel-switch-thumb-checked);
 }
 
 .v-switch-input:focus-visible + .v-switch-track {
@@ -319,7 +358,7 @@ textarea {
   gap: 1.25rem;
   width: 100%;
   padding: 0.75rem 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid var(--vessel-surface-subtle);
 }
 
 .v-setting-row:last-child {
@@ -333,12 +372,12 @@ textarea {
 }
 
 .v-card {
-  background: linear-gradient(180deg, rgba(22, 24, 38, 0.88), rgba(15, 17, 27, 0.92));
+  background: var(--vessel-surface-card);
   border: 1px solid var(--vessel-border);
-  border-top-color: rgba(255, 255, 255, 0.13);
+  border-top-color: var(--vessel-border-strong);
   border-radius: var(--vessel-radius);
   padding: 1.15rem;
-  transition: border-color 0.2s ease, background-color 0.2s ease;
+  transition: border-color 0.22s ease, background-color 0.22s ease, box-shadow 0.22s ease;
 }
 
 .v-badge {
@@ -350,17 +389,17 @@ textarea {
   border-radius: 999px;
   font-size: 0.76rem;
   font-weight: 600;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--vessel-surface-subtle);
   color: var(--vessel-text-primary);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--vessel-border);
   font-variant-numeric: tabular-nums;
 }
 
 .v-badge-glass {
-  background: rgba(10, 11, 16, 0.68);
+  background: var(--vessel-surface-overlay);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
-  border-color: rgba(255, 255, 255, 0.12);
+  border-color: var(--vessel-border-strong);
 }
 
 .v-badge-accent {
@@ -431,12 +470,19 @@ textarea {
 
 .page-fade-enter-active,
 .page-fade-leave-active {
-  transition: opacity 0.09s ease;
+  transition:
+    opacity 0.22s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.22s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.page-fade-enter-from,
+.page-fade-enter-from {
+  opacity: 0;
+  transform: translateY(6px);
+}
+
 .page-fade-leave-to {
   opacity: 0;
+  transform: translateY(-4px);
 }
 
 .modal-pop-enter-active,
@@ -479,10 +525,10 @@ textarea {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.14);
+  background: var(--vessel-scrollbar-thumb);
   border-radius: 999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.28);
+  background: var(--vessel-scrollbar-thumb-hover);
 }

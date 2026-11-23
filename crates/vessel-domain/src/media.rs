@@ -164,6 +164,14 @@ pub struct PlaybackProgress {
     pub episode: u32,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub absolute_episode: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub poster_url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub backdrop_url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub episode_title: Option<String>,
     pub position_ms: u64,
     pub duration_ms: u64,
     pub completed: bool,
@@ -235,6 +243,10 @@ mod tests {
             season: 1,
             episode: 12,
             absolute_episode: Some(12),
+            title: None,
+            poster_url: None,
+            backdrop_url: None,
+            episode_title: None,
             position_ms: 0,
             duration_ms: 0,
             completed: false,

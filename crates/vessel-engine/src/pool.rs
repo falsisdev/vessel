@@ -11,10 +11,10 @@ use vessel_plugin_rt::{
 };
 
 /// Default number of warm isolated QuickJS runtimes kept in RAM simultaneously.
-pub const DEFAULT_MAX_WARM_PLUGINS: usize = 6;
+pub const DEFAULT_MAX_WARM_PLUGINS: usize = 18;
 
-/// Default inactivity window after which a warm QuickJS runtime is evicted (`3 min`).
-pub const DEFAULT_IDLE_TTL: Duration = Duration::from_secs(180);
+/// Default inactivity window after which a warm QuickJS runtime is evicted (`5 min`).
+pub const DEFAULT_IDLE_TTL: Duration = Duration::from_secs(300);
 
 struct RegisteredPlugin {
     manifest: PluginManifest,
@@ -379,10 +379,35 @@ async fn existing_or_clone(
         .ok_or_else(|| VesselError::NotFound(format!("plugin '{plugin_id}'")))
 }
 
-async fn shutdown_arc_provider(provider: Arc<QuickJsContentProvider>) {
-    if let Ok(owned) = Arc::try_unwrap(provider) {
-        owned.shutdown().await;
+async fn shutdown_arc_provider(mut provider: Arc<QuickJsContentProvider>) {
+    for _ in 0..150 {
+        match Arc::try_unwrap(provider) {
+            Ok(owned) => {
+                owned.shutdown().await;
+                return;
+            }
+            Err(still_shared) => {
+                provider = still_shared;
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+        }
     }
+    tokio::spawn(async move {
+        for _ in 0..1200 {
+            match Arc::try_unwrap(provider) {
+                Ok(owned) => {
+                    owned.shutdown().await;
+                    return;
+                }
+                Err(still_shared) => {
+                    provider = still_shared;
+                    tokio::time::sleep(Duration::from_millis(50)).await;
+                }
+            }
+        }
+        // Intentionally avoid raw synchronous Drop on a background QuickJS runtime if still wedged.
+        std::mem::forget(provider);
+    });
 }
 
 #[cfg(test)]

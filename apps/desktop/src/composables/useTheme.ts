@@ -46,6 +46,7 @@ export function applyThemeCssVars(theme: ThemeSpec): void {
   root.setProperty('--vessel-warning', theme.colors.warning)
   root.setProperty('--vessel-danger', theme.colors.danger)
   document.documentElement.dataset.theme = theme.id
+  document.documentElement.dataset.themeMode = theme.isDark ? 'dark' : 'light'
   document.documentElement.style.colorScheme = theme.isDark ? 'dark' : 'light'
 }
 

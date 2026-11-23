@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { Download, ExternalLink, Sparkles, X } from 'lucide-vue-next'
 import { formatBytes, useAppUpdater } from '@/composables/useAppUpdater'
+import { useI18n } from '@/composables/useI18n'
+
+const { t } = useI18n()
 
 const {
   updateInfo,
@@ -31,7 +34,7 @@ const {
             <div class="update-title-group">
               <span class="update-badge">
                 <Sparkles :size="14" aria-hidden="true" />
-                Update Available
+                {{ t('settings.update_available') }}
               </span>
               <h2 class="update-heading">
                 {{ updateInfo.releaseName || `Vessel ${updateInfo.tagName}` }}
@@ -54,7 +57,7 @@ const {
           </div>
 
           <div class="notes-panel">
-            <div class="notes-label">Patch Notes</div>
+            <div class="notes-label">{{ t('overlay.patch_notes') }}</div>
             <div class="notes-scroll">
               <template v-for="(line, idx) in parsedNotes" :key="idx">
                 <h4 v-if="line.kind === 'heading'" class="note-heading">{{ line.text }}</h4>
@@ -182,8 +185,8 @@ const {
   gap: 0.45rem;
   padding: 0.9rem 1rem;
   border-radius: 12px;
-  background: rgba(10, 11, 18, 0.68);
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: var(--vessel-surface-input);
+  border: 1px solid var(--vessel-border);
 }
 
 .notes-label {

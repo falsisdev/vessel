@@ -6,7 +6,7 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 use vessel_domain::{ExternalIds, MediaDetail, MediaType, VesselError, VesselResult};
 
-use crate::coordinates::SeasonSpan;
+use crate::coordinates::{CanonicalEpisodeMeta, SeasonSpan, season_episode_to_absolute};
 use crate::merge::{CanonicalMetadata, canonical_id_from_external_ids};
 
 /// Minimum similarity confidence required for heuristic matching without explicit `ExternalIds`.
@@ -34,6 +34,83 @@ impl Default for MetaEndpoints {
     }
 }
 
+fn clean_search_title(input: &str) -> String {
+    let mut s = input.trim().to_string();
+    // Strip trailing/inline bracketed and parenthesized annotations such as [TR], (2024), (Dub).
+    for (open, close) in [('(', ')'), ('[', ']')] {
+        while let Some(start) = s.find(open) {
+            let Some(end_rel) = s[start..].find(close) else {
+                break;
+            };
+            let inner = &s[start + 1..start + end_rel];
+            let inner_lc = inner.trim().to_ascii_lowercase();
+            let is_noise = inner_lc.len() <= 4 && inner_lc.chars().all(|c| c.is_ascii_digit())
+                || [
+                    "tr", "en", "sub", "dub", "dublaj", "altyazi", "altyazı", "hd", "fhd", "1080p",
+                    "720p", "4k", "tv", "ova",
+                ]
+                .iter()
+                .any(|tag| inner_lc.contains(tag));
+            if is_noise || start > 0 {
+                s.replace_range(start..=start + end_rel, " ");
+            } else {
+                break;
+            }
+        }
+    }
+
+    let noise_words = [
+        "1080p",
+        "720p",
+        "480p",
+        "2160p",
+        "4k",
+        "hdr",
+        "bluray",
+        "webrip",
+        "web-dl",
+        "türkçe",
+        "turkce",
+        "dublaj",
+        "altyazı",
+        "altyazi",
+        "altyazılı",
+        "izle",
+        "sezon",
+        "season",
+        "part",
+        "cour",
+    ];
+    let tokens: Vec<&str> = s
+        .split_whitespace()
+        .filter(|tok| {
+            let lc = tok
+                .trim_matches(|c: char| !c.is_alphanumeric())
+                .to_ascii_lowercase();
+            !lc.is_empty() && !noise_words.contains(&lc.as_str())
+        })
+        .collect();
+    let cleaned = tokens.join(" ");
+    if cleaned.is_empty() {
+        input.trim().to_owned()
+    } else {
+        cleaned
+    }
+}
+
+fn encode_path_segment(input: &str) -> String {
+    let mut out = String::with_capacity(input.len());
+    for byte in input.as_bytes() {
+        let ch = *byte as char;
+        if ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_' | '.' | '~') {
+            out.push(ch);
+        } else {
+            out.push_str(&format!("%{:02X}", byte));
+        }
+    }
+    out
+}
+
 fn normalize_tokens(input: &str) -> BTreeSet<String> {
     input
         .to_ascii_lowercase()
@@ -50,8 +127,10 @@ pub fn title_match_confidence(
     candidate_titles: &[&str],
     candidate_year: Option<u16>,
 ) -> f32 {
-    let q_tokens = normalize_tokens(query_title);
-    if q_tokens.is_empty() {
+    let cleaned_query = clean_search_title(query_title);
+    let q_tokens_raw = normalize_tokens(query_title);
+    let q_tokens_clean = normalize_tokens(&cleaned_query);
+    if q_tokens_raw.is_empty() && q_tokens_clean.is_empty() {
         return 0.0;
     }
 
@@ -61,14 +140,24 @@ pub fn title_match_confidence(
         if c_tokens.is_empty() {
             continue;
         }
-        let intersection = q_tokens.intersection(&c_tokens).count() as f32;
-        let union = q_tokens.union(&c_tokens).count() as f32;
-        let jaccard = if union > 0.0 {
-            intersection / union
-        } else {
-            0.0
-        };
-        best_text_score = best_text_score.max(jaccard);
+        for q_tokens in [&q_tokens_raw, &q_tokens_clean] {
+            if q_tokens.is_empty() {
+                continue;
+            }
+            let intersection = q_tokens.intersection(&c_tokens).count() as f32;
+            let union = q_tokens.union(&c_tokens).count() as f32;
+            let jaccard = if union > 0.0 {
+                intersection / union
+            } else {
+                0.0
+            };
+            best_text_score = best_text_score.max(jaccard);
+            // Boost clean subset containment when query is slightly noisier or shorter than canonical title.
+            if q_tokens.len() >= 2 && q_tokens.is_subset(&c_tokens) {
+                let ratio = (q_tokens.len() as f32 / c_tokens.len() as f32).max(0.72);
+                best_text_score = best_text_score.max(ratio);
+            }
+        }
     }
 
     match (query_year, candidate_year) {
@@ -114,6 +203,14 @@ struct AniListResponse {
 struct AniListData {
     #[serde(rename = "Media")]
     media: Option<AniListMedia>,
+    #[serde(rename = "Page")]
+    page: Option<AniListPage>,
+}
+
+#[derive(Deserialize)]
+struct AniListPage {
+    #[serde(default)]
+    media: Vec<AniListMedia>,
 }
 
 #[derive(Deserialize)]
@@ -164,17 +261,19 @@ query ($id: Int!) {
 
 const ANILIST_SEARCH_QUERY: &str = r#"
 query ($search: String!) {
-  Media(search: $search, type: ANIME, sort: [SEARCH_MATCH, POPULARITY_DESC]) {
-    id
-    idMal
-    title { romaji english native }
-    description(asHtml: false)
-    seasonYear
-    averageScore
-    genres
-    coverImage { extraLarge large }
-    bannerImage
-    episodes
+  Page(page: 1, perPage: 8) {
+    media(search: $search, type: ANIME, sort: [SEARCH_MATCH, POPULARITY_DESC]) {
+      id
+      idMal
+      title { romaji english native }
+      description(asHtml: false)
+      seasonYear
+      averageScore
+      genres
+      coverImage { extraLarge large }
+      bannerImage
+      episodes
+    }
   }
 }
 "#;
@@ -277,6 +376,21 @@ struct TmdbSearchItem {
 }
 
 #[derive(Deserialize)]
+struct TmdbSeasonDetail {
+    #[serde(default)]
+    episodes: Vec<TmdbEpisode>,
+}
+
+#[derive(Deserialize)]
+struct TmdbEpisode {
+    episode_number: u32,
+    name: Option<String>,
+    overview: Option<String>,
+    still_path: Option<String>,
+    air_date: Option<String>,
+}
+
+#[derive(Deserialize)]
 struct CinemetaMetaEnvelope {
     meta: Option<CinemetaMeta>,
 }
@@ -305,9 +419,15 @@ struct CinemetaMeta {
 }
 
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct CinemetaVideo {
     season: Option<u32>,
     episode: Option<u32>,
+    name: Option<String>,
+    title: Option<String>,
+    overview: Option<String>,
+    thumbnail: Option<String>,
+    released: Option<String>,
 }
 
 fn parse_year_prefix(s: Option<&str>) -> Option<u16> {
@@ -336,11 +456,48 @@ fn cinemeta_to_canonical(meta: CinemetaMeta) -> CanonicalMetadata {
             *season_counts.entry(season).or_insert(0) += 1;
         }
     }
-    let season_spans = season_counts
+    let season_spans: Vec<SeasonSpan> = season_counts
         .into_iter()
         .map(|(season, episode_count)| SeasonSpan {
             season,
             episode_count,
+        })
+        .collect();
+    let episodes: Vec<CanonicalEpisodeMeta> = meta
+        .videos
+        .into_iter()
+        .filter_map(|video| {
+            let season = video.season?;
+            let episode = video.episode?;
+            if season == 0 || episode == 0 {
+                return None;
+            }
+            let title = video
+                .title
+                .or(video.name)
+                .map(|t| t.trim().to_owned())
+                .filter(|t| !t.is_empty());
+            let overview = video
+                .overview
+                .map(|o| o.trim().to_owned())
+                .filter(|o| !o.is_empty());
+            let thumbnail = video
+                .thumbnail
+                .map(|t| t.trim().to_owned())
+                .filter(|t| !t.is_empty());
+            let air_date = video
+                .released
+                .map(|d| d.trim().to_owned())
+                .filter(|d| !d.is_empty());
+            Some(CanonicalEpisodeMeta {
+                season,
+                episode,
+                absolute_episode: season_episode_to_absolute(&season_spans, season, episode),
+                title,
+                overview,
+                thumbnail,
+                air_date,
+            })
         })
         .collect();
     let imdb = meta.id.starts_with("tt").then(|| meta.id.clone());
@@ -365,7 +522,7 @@ fn cinemeta_to_canonical(meta: CinemetaMeta) -> CanonicalMetadata {
         genres: meta.genres,
         rating,
         season_spans,
-        episodes: Vec::new(),
+        episodes,
     }
 }
 
@@ -449,11 +606,13 @@ impl MetadataClients {
     }
 
     async fn fetch_anilist_by_id(&self, id: u64) -> VesselResult<Option<CanonicalMetadata>> {
-        self.execute_anilist(AniListRequest {
-            query: ANILIST_BY_ID_QUERY,
-            variables: serde_json::json!({ "id": id }),
-        })
-        .await
+        let candidates = self
+            .execute_anilist_candidates(AniListRequest {
+                query: ANILIST_BY_ID_QUERY,
+                variables: serde_json::json!({ "id": id }),
+            })
+            .await?;
+        Ok(candidates.into_iter().next().map(anilist_to_canonical))
     }
 
     async fn search_anilist_confident(
@@ -461,32 +620,43 @@ impl MetadataClients {
         title: &str,
         year: Option<u16>,
     ) -> VesselResult<Option<CanonicalMetadata>> {
-        let Some(meta) = self
-            .execute_anilist(AniListRequest {
+        let clean = clean_search_title(title);
+        let candidates = self
+            .execute_anilist_candidates(AniListRequest {
                 query: ANILIST_SEARCH_QUERY,
-                variables: serde_json::json!({ "search": title }),
+                variables: serde_json::json!({ "search": clean }),
             })
-            .await?
-        else {
-            return Ok(None);
-        };
+            .await?;
 
-        let mut cand_titles = vec![meta.title.as_str()];
-        if let Some(ref orig) = meta.original_title {
-            cand_titles.push(orig.as_str());
-        }
-        let confidence = title_match_confidence(title, year, &cand_titles, meta.year);
-        if confidence >= MIN_MATCH_CONFIDENCE {
-            Ok(Some(meta))
-        } else {
-            Ok(None)
-        }
+        let best = candidates
+            .into_iter()
+            .filter_map(|media| {
+                let mut cand_titles: Vec<&str> = Vec::new();
+                if let Some(ref t) = media.title {
+                    if let Some(ref e) = t.english {
+                        cand_titles.push(e.as_str());
+                    }
+                    if let Some(ref r) = t.romaji {
+                        cand_titles.push(r.as_str());
+                    }
+                    if let Some(ref n) = t.native {
+                        cand_titles.push(n.as_str());
+                    }
+                }
+                let confidence =
+                    title_match_confidence(title, year, &cand_titles, media.season_year);
+                (confidence >= MIN_MATCH_CONFIDENCE)
+                    .then(|| (confidence, anilist_to_canonical(media)))
+            })
+            .max_by(|a, b| a.0.total_cmp(&b.0));
+
+        Ok(best.map(|(_, meta)| meta))
     }
 
-    async fn execute_anilist(
+    async fn execute_anilist_candidates(
         &self,
         body: AniListRequest,
-    ) -> VesselResult<Option<CanonicalMetadata>> {
+    ) -> VesselResult<Vec<AniListMedia>> {
         let resp = self
             .http
             .post(&self.endpoints.anilist_graphql)
@@ -495,13 +665,21 @@ impl MetadataClients {
             .await
             .map_err(|err| VesselError::Network(format!("AniList request failed: {err}")))?;
         if !resp.status().is_success() {
-            return Ok(None);
+            return Ok(Vec::new());
         }
         let parsed: AniListResponse = resp
             .json()
             .await
             .map_err(|err| VesselError::Network(format!("decode AniList response: {err}")))?;
-        Ok(parsed.data.and_then(|d| d.media).map(anilist_to_canonical))
+        let Some(data) = parsed.data else {
+            return Ok(Vec::new());
+        };
+        if let Some(page) = data.page
+            && !page.media.is_empty()
+        {
+            return Ok(page.media);
+        }
+        Ok(data.media.into_iter().collect())
     }
 
     async fn fetch_tmdb_by_id(
@@ -556,7 +734,7 @@ impl MetadataClients {
                 .as_deref()
                 .or(detail.first_air_date.as_deref()),
         );
-        let season_spans = detail
+        let season_spans: Vec<SeasonSpan> = detail
             .seasons
             .into_iter()
             .filter(|s| s.season_number > 0 && s.episode_count > 0)
@@ -565,6 +743,51 @@ impl MetadataClients {
                 episode_count: s.episode_count,
             })
             .collect();
+
+        let mut episodes: Vec<CanonicalEpisodeMeta> = Vec::new();
+        if kind == "tv" && !season_spans.is_empty() {
+            let mut set = tokio::task::JoinSet::new();
+            for span in season_spans.iter().take(5) {
+                let s_num = span.season;
+                let s_url = format!(
+                    "{}/tv/{}/season/{}?api_key={}&language={}",
+                    self.endpoints.tmdb_api_base, detail.id, s_num, api_key, lang
+                );
+                let http = self.http.clone();
+                let img_base = self.endpoints.tmdb_image_base.clone();
+                set.spawn(async move {
+                    let resp = http.get(&s_url).send().await.ok()?;
+                    if !resp.status().is_success() {
+                        return None;
+                    }
+                    let body: TmdbSeasonDetail = resp.json().await.ok()?;
+                    Some((s_num, img_base, body.episodes))
+                });
+            }
+            while let Some(res) = set.join_next().await {
+                if let Ok(Some((s_num, img_base, eps))) = res {
+                    for ep in eps {
+                        if ep.episode_number == 0 {
+                            continue;
+                        }
+                        episodes.push(CanonicalEpisodeMeta {
+                            season: s_num,
+                            episode: ep.episode_number,
+                            absolute_episode: season_episode_to_absolute(
+                                &season_spans,
+                                s_num,
+                                ep.episode_number,
+                            ),
+                            title: ep.name.filter(|s| !s.trim().is_empty()),
+                            overview: ep.overview.filter(|s| !s.trim().is_empty()),
+                            thumbnail: ep.still_path.map(|p| format!("{img_base}/w500{p}")),
+                            air_date: ep.air_date.filter(|s| !s.trim().is_empty()),
+                        });
+                    }
+                }
+            }
+            episodes.sort_by_key(|e| (e.season, e.episode));
+        }
 
         let synopsis_lang = detail
             .overview
@@ -588,7 +811,7 @@ impl MetadataClients {
             genres: detail.genres.into_iter().map(|g| g.name).collect(),
             rating: detail.vote_average,
             season_spans,
-            episodes: Vec::new(),
+            episodes,
         }))
     }
 
@@ -604,11 +827,16 @@ impl MetadataClients {
             MediaType::Movie => "movie",
             MediaType::Series | MediaType::Live => "tv",
         };
+        let clean = clean_search_title(title);
         let lang = map_tmdb_lang(preferred_lang);
         let resp = self
             .http
             .get(format!("{}/search/{kind}", self.endpoints.tmdb_api_base))
-            .query(&[("api_key", api_key), ("query", title), ("language", &lang)])
+            .query(&[
+                ("api_key", api_key),
+                ("query", clean.as_str()),
+                ("language", &lang),
+            ])
             .send()
             .await
             .map_err(|err| VesselError::Network(format!("TMDB search failed: {err}")))?;
@@ -688,10 +916,11 @@ impl MetadataClients {
             MediaType::Movie => "movie",
             MediaType::Series | MediaType::Live => "series",
         };
+        let clean = clean_search_title(title);
         let url = format!(
             "{}/catalog/{kind}/top/search={}.json",
             self.endpoints.cinemeta_base,
-            title.replace(' ', "%20")
+            encode_path_segment(&clean)
         );
         let resp = self
             .http

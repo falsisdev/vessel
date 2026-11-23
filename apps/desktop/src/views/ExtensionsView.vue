@@ -448,7 +448,7 @@ onMounted(() => {
             v-model="repoFilter"
             type="search"
             class="v-input repo-filter-input"
-            placeholder="Filter providers in repository..."
+            :placeholder="t('extensions.filter_repo')"
           />
           <button
             type="button"
@@ -457,7 +457,7 @@ onMounted(() => {
             @click="installAllRepoPlugins"
           >
             <Download :size="14" />
-            {{ batchInstalling ? `Installing (${batchProgress})...` : 'Install All Enabled' }}
+            {{ batchInstalling ? `${t('common.loading')} (${batchProgress})` : t('extensions.install_all') }}
           </button>
         </div>
 
@@ -472,7 +472,7 @@ onMounted(() => {
                 <strong>{{ rp.name }}</strong>
                 <span class="v-muted">v{{ rp.version }}</span>
                 <span v-if="installedPluginIds.has(rp.id)" class="v-badge v-badge-success">
-                  <Check :size="11" /> Installed
+                  <Check :size="11" /> {{ t('extensions.installed_badge') }}
                 </span>
               </div>
               <p v-if="rp.description" class="v-muted repo-plugin-desc">{{ rp.description }}</p>
@@ -491,9 +491,9 @@ onMounted(() => {
             >
               {{
                 installingTarget === (rp.downloadUrl ?? rp.sourcePath)
-                  ? 'Installing...'
+                  ? t('common.loading')
                   : installedPluginIds.has(rp.id)
-                    ? 'Reinstall'
+                    ? t('common.reinstall')
                     : t('common.install')
               }}
             </button>
@@ -516,7 +516,7 @@ onMounted(() => {
           v-model="installedFilter"
           type="search"
           class="v-input"
-          placeholder="Search inside installed plugins..."
+          :placeholder="t('extensions.filter_installed')"
         />
         <span class="v-badge v-badge-accent">
           <Home :size="12" /> {{ selectedHomeSet.size }} on Home
@@ -560,14 +560,14 @@ onMounted(() => {
                 @click="toggleGroupHome(group, group.homeCount === 0)"
               >
                 <Home :size="13" />
-                {{ group.homeCount === 0 ? 'Pin to Home' : 'Clear Home' }}
+                {{ group.homeCount === 0 ? t('extensions.pin_home') : t('extensions.clear_home') }}
               </button>
               <button
                 type="button"
                 class="v-btn v-btn-sm"
                 @click="setGroupEnabled(group, group.enabledCount < group.items.length)"
               >
-                {{ group.enabledCount < group.items.length ? 'Enable All' : 'Disable All' }}
+                {{ group.enabledCount < group.items.length ? t('extensions.enable_all') : t('extensions.disable_all') }}
               </button>
               <button
                 type="button"
@@ -575,7 +575,7 @@ onMounted(() => {
                 @click="removeGroup(group)"
               >
                 <Trash2 :size="13" />
-                {{ confirmRemoveGroup === group.name ? 'Confirm' : 'Remove' }}
+                {{ confirmRemoveGroup === group.name ? t('common.confirm') : t('common.remove') }}
               </button>
             </div>
           </div>
@@ -712,8 +712,8 @@ onMounted(() => {
   height: 34px;
   border-radius: 9px;
   object-fit: contain;
-  background: rgba(10, 11, 18, 0.75);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--vessel-surface-input);
+  border: 1px solid var(--vessel-border);
   padding: 2px;
   flex-shrink: 0;
 }
@@ -823,8 +823,8 @@ onMounted(() => {
 }
 
 .group-icon-box.has-logo {
-  background: rgba(10, 11, 18, 0.75);
-  border-color: rgba(255, 255, 255, 0.14);
+  background: var(--vessel-surface-input);
+  border-color: var(--vessel-border-strong);
   padding: 3px;
 }
 
@@ -840,8 +840,8 @@ onMounted(() => {
   height: 22px;
   border-radius: 6px;
   object-fit: contain;
-  background: rgba(10, 11, 18, 0.65);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--vessel-surface-input);
+  border: 1px solid var(--vessel-border);
   padding: 1px;
   flex-shrink: 0;
 }
@@ -881,8 +881,8 @@ onMounted(() => {
   flex-wrap: wrap;
   padding: 0.55rem 0.8rem;
   border-radius: 10px;
-  background: rgba(10, 11, 18, 0.48);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: var(--vessel-surface-input);
+  border: 1px solid var(--vessel-border);
 }
 
 .plugin-info {

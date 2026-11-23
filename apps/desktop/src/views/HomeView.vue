@@ -26,7 +26,7 @@ import type { ContinueWatchingEntry, MediaSummary, PluginListEntry } from '@/typ
 const router = useRouter()
 const { t } = useI18n()
 const { setSession } = usePlayerSession()
-const { uiPreferences, savePreferences } = useUiPreferences()
+const { uiPreferences, preferencesLoaded, loadPreferences, savePreferences } = useUiPreferences()
 const {
   cachedShelves: shelves,
   cachedContinueWatching: continueWatching,
@@ -172,6 +172,9 @@ const featuredItem = computed(() => {
 
 async function loadHome(forceRefresh = false): Promise<void> {
   if (!isTauriRuntime()) return
+  if (!preferencesLoaded.value) {
+    await loadPreferences()
+  }
   try {
     allPlugins.value = await vesselApi.listPlugins()
   } catch {
@@ -473,14 +476,14 @@ onUnmounted(() => {
                 class="v-btn v-btn-primary"
                 @click="openDetails(featuredItem.resolvedPluginId, featuredItem.nativeId)"
               >
-                <Play :size="16" fill="currentColor" aria-hidden="true" /> Watch Now
+                <Play :size="16" fill="currentColor" aria-hidden="true" /> {{ t('home.watch_now') }}
               </button>
               <button
                 type="button"
                 class="v-btn"
                 @click="openDetails(featuredItem.resolvedPluginId, featuredItem.nativeId)"
               >
-                <Info :size="16" aria-hidden="true" /> More Info
+                <Info :size="16" aria-hidden="true" /> {{ t('home.more_info') }}
               </button>
               <button
                 v-if="enabledPlugins.length"
@@ -489,7 +492,7 @@ onUnmounted(() => {
                 @click="showSourcePicker = true"
               >
                 <SlidersHorizontal :size="15" aria-hidden="true" />
-                Feeds ({{ activeHomePluginIds.length }}/{{ enabledPlugins.length }})
+                {{ t('home.feeds') }} ({{ activeHomePluginIds.length }}/{{ enabledPlugins.length }})
               </button>
               <button
                 type="button"
@@ -520,7 +523,7 @@ onUnmounted(() => {
                 @click="showSourcePicker = true"
               >
                 <SlidersHorizontal :size="15" aria-hidden="true" />
-                Choose Home Feeds ({{ activeHomePluginIds.length }})
+                {{ t('home.choose_feeds') }} ({{ activeHomePluginIds.length }})
               </button>
               <button type="button" class="v-btn" :disabled="loading" @click="loadHome(true)">
                 <RefreshCw :size="15" :class="{ spin: loading }" aria-hidden="true" />
@@ -553,8 +556,8 @@ onUnmounted(() => {
       >
         <div class="rail-head">
           <div class="rail-title-wrap">
-            <h2 class="rail-title">Continue Watching</h2>
-            <span class="rail-source v-muted">{{ continueWatching.length }} active</span>
+            <h2 class="rail-title">{{ t('home.continue_watching') }}</h2>
+            <span class="rail-source v-muted">{{ continueWatching.length }} {{ t('home.active_count') }}</span>
           </div>
           <div class="rail-arrows">
             <button
@@ -630,7 +633,7 @@ onUnmounted(() => {
         <p class="v-muted empty-text">
           {{
             enabledPlugins.length
-              ? 'No Home feeds are currently selected. Pick your favorite plugins for Home or explore Search.'
+              ? t('home.empty_selected')
               : t('home.empty_plugins')
           }}
         </p>
@@ -641,7 +644,7 @@ onUnmounted(() => {
             class="v-btn v-btn-primary"
             @click="showSourcePicker = true"
           >
-            <Layers :size="15" /> Select Home Sources
+            <Layers :size="15" /> {{ t('home.select_sources') }}
           </button>
           <RouterLink v-else to="/extensions" class="v-btn v-btn-primary">
             {{ t('nav.extensions') }}
@@ -719,15 +722,15 @@ onUnmounted(() => {
           <div class="v-card home-picker-modal">
             <div class="picker-head">
               <div>
-                <h3 class="picker-title">Select Home Catalog Feeds</h3>
+                <h3 class="picker-title">{{ t('home.modal_title') }}</h3>
                 <p class="v-muted picker-sub">
-                  Pick which plugins show shelves on Home. Unchecked plugins stay fast and active in Search.
+                  {{ t('home.modal_subtitle') }}
                 </p>
               </div>
               <button
                 type="button"
                 class="v-btn v-btn-icon"
-                aria-label="Close"
+                :aria-label="t('common.close')"
                 @click="showSourcePicker = false"
               >
                 <X :size="16" />
@@ -737,18 +740,18 @@ onUnmounted(() => {
             <div class="picker-groups">
               <div class="hero-source-section">
                 <div class="picker-group-head">
-                  <strong>Spotlight Hero Source</strong>
+                  <strong>{{ t('home.hero_source_title') }}</strong>
                   <button
                     type="button"
                     class="v-btn v-btn-sm"
                     :disabled="!activeHeroPluginIds.length"
                     @click="clearHeroPlugins"
                   >
-                    Auto (All Active Feeds)
+                    {{ t('home.hero_source_auto') }}
                   </button>
                 </div>
                 <p class="v-muted picker-hero-sub">
-                  Pick specific plugin(s) for the Hero banner, or leave Auto to pull from your top Home feeds.
+                  {{ t('home.hero_source_hint') }}
                 </p>
                 <div class="hero-chip-grid">
                   <button
@@ -767,8 +770,8 @@ onUnmounted(() => {
 
               <div v-if="activeHomePluginIds.length" class="order-section">
                 <div class="picker-group-head">
-                  <strong>Active Home Shelf Order (Top → Bottom)</strong>
-                  <span class="v-muted group-hint">Drag handle to reorder shelves</span>
+                  <strong>{{ t('home.shelf_order_title') }}</strong>
+                  <span class="v-muted group-hint">{{ t('home.shelf_order_hint') }}</span>
                 </div>
                 <div ref="orderListRef" class="order-list">
                   <div
@@ -902,15 +905,15 @@ onUnmounted(() => {
   background:
     linear-gradient(
       90deg,
-      rgba(10, 11, 16, 0.88) 0%,
-      rgba(10, 11, 16, 0.56) 36%,
-      rgba(10, 11, 16, 0.14) 68%,
+      color-mix(in srgb, var(--vessel-bg-base) 92%, transparent) 0%,
+      color-mix(in srgb, var(--vessel-bg-base) 65%, transparent) 38%,
+      color-mix(in srgb, var(--vessel-bg-base) 16%, transparent) 68%,
       transparent 100%
     ),
     linear-gradient(
       180deg,
-      rgba(10, 11, 16, 0.12) 0%,
-      rgba(10, 11, 16, 0.16) 54%,
+      color-mix(in srgb, var(--vessel-bg-base) 14%, transparent) 0%,
+      color-mix(in srgb, var(--vessel-bg-base) 22%, transparent) 54%,
       var(--vessel-bg-base) 100%
     );
   pointer-events: none;
@@ -923,7 +926,6 @@ onUnmounted(() => {
   flex-direction: column;
   gap: 0.95rem;
   max-width: 760px;
-  text-shadow: 0 2px 20px rgba(0, 0, 0, 0.85);
 }
 
 .hero-meta-line {
@@ -943,9 +945,9 @@ onUnmounted(() => {
   gap: 0.35rem;
   padding: 0.18rem 0.6rem;
   border-radius: 999px;
-  background: rgba(203, 166, 247, 0.2);
-  border: 1px solid rgba(203, 166, 247, 0.38);
-  color: #f4ecff;
+  background: color-mix(in srgb, var(--vessel-accent) 18%, transparent);
+  border: 1px solid color-mix(in srgb, var(--vessel-accent) 42%, transparent);
+  color: var(--vessel-accent);
   font-size: 0.72rem;
   letter-spacing: 0.08em;
 }
@@ -953,7 +955,7 @@ onUnmounted(() => {
 .source-tag {
   padding: 0.14rem 0.5rem;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--vessel-surface-subtle);
   color: var(--vessel-text-muted);
   font-size: 0.76rem;
 }
@@ -1122,8 +1124,8 @@ onUnmounted(() => {
   aspect-ratio: 16 / 9;
   border-radius: var(--vessel-radius);
   overflow: hidden;
-  background: linear-gradient(135deg, rgba(167, 139, 250, 0.2), rgba(20, 22, 34, 0.95));
-  border: 1px solid rgba(255, 255, 255, 0.09);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--vessel-accent) 18%, transparent), var(--vessel-bg-surface));
+  border: 1px solid var(--vessel-border);
 }
 
 .cw-card:hover .cw-thumb {
@@ -1336,19 +1338,19 @@ onUnmounted(() => {
   gap: 0.35rem;
   padding: 0.35rem 0.7rem;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(10, 11, 18, 0.65);
+  border: 1px solid var(--vessel-border);
+  background: var(--vessel-surface-input);
   color: var(--vessel-text-muted);
   font-size: 0.8rem;
   font-weight: 600;
   cursor: pointer;
-  transition: border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease;
+  transition: border-color 0.2s ease, background-color 0.2s ease, color 0.2s ease;
 }
 
 .hero-source-chip.checked {
   border-color: var(--vessel-accent);
-  background: rgba(203, 166, 247, 0.2);
-  color: #ffffff;
+  background: color-mix(in srgb, var(--vessel-accent) 20%, transparent);
+  color: var(--vessel-text-primary);
 }
 
 .group-hint {
@@ -1367,10 +1369,10 @@ onUnmounted(() => {
   gap: 0.55rem;
   padding: 0.42rem 0.65rem;
   border-radius: 9px;
-  background: rgba(10, 11, 18, 0.65);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: var(--vessel-surface-input);
+  border: 1px solid var(--vessel-border);
   user-select: none;
-  transition: border-color 0.15s ease, background-color 0.15s ease, transform 0.15s ease;
+  transition: border-color 0.18s ease, background-color 0.18s ease, transform 0.18s ease;
 }
 
 .order-row.is-dragging {
@@ -1456,12 +1458,12 @@ onUnmounted(() => {
   gap: 0.55rem;
   padding: 0.55rem 0.75rem;
   border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(10, 11, 18, 0.55);
+  border: 1px solid var(--vessel-border);
+  background: var(--vessel-surface-input);
   cursor: pointer;
   font-size: 0.86rem;
   font-weight: 500;
-  transition: border-color 0.16s ease, background-color 0.16s ease;
+  transition: border-color 0.18s ease, background-color 0.18s ease;
 }
 
 .picker-item.checked {

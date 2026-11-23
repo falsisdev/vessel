@@ -601,9 +601,35 @@ function mapMediaType(rawType, rawId) {{
     return "series";
 }}
 
-function isAnimePlugin() {{
-    const types = Array.isArray(META.supportedTypes) ? META.supportedTypes : [];
-    return types.some((t) => String(t).toLowerCase() === "anime");
+function isAnimeItem(it, fallbackType) {{
+    const rawT = String((it && it.type) || fallbackType || "").toLowerCase();
+    if (rawT === "anime") return true;
+    const types = Array.isArray(META.supportedTypes)
+        ? META.supportedTypes.map((t) => String(t).toLowerCase())
+        : [];
+    const onlyAnime = types.includes("anime") && !types.includes("series") && !types.includes("movie");
+    if (onlyAnime) return true;
+    if (it && Array.isArray(it.genres) && it.genres.some((g) => String(g).toLowerCase() === "anime")) {{
+        return true;
+    }}
+    return types.includes("anime") && mapMediaType(rawT, it && it.id) !== "movie" && !types.includes("series");
+}}
+
+function matchesQueryTokens(title, query) {{
+    const q = String(query || "").toLowerCase().trim();
+    if (!q) return true;
+    const t = String(title || "").toLowerCase();
+    if (t.includes(q)) return true;
+    const tokens = q.split(/\s+/).filter((tok) => tok.length >= 2);
+    return tokens.length > 0 && tokens.every((tok) => t.includes(tok));
+}}
+
+function matchesRequestedType(item, requestedType) {{
+    if (!requestedType) return true;
+    if (requestedType === "movie") return item.type === "movie";
+    if (requestedType === "anime") return item.isAnime === true;
+    if (requestedType === "series") return item.type === "series" && !item.isAnime;
+    return true;
 }}
 
 function mapSummary(it, fallbackType) {{
@@ -613,7 +639,7 @@ function mapSummary(it, fallbackType) {{
     return {{
         nativeId: String(it.id),
         type: mapMediaType(it.type || fallbackType, it.id),
-        isAnime: isAnimePlugin(),
+        isAnime: isAnimeItem(it, fallbackType),
         title: String(it.name),
         poster: it.poster ? String(it.poster) : undefined,
         year: Number.isFinite(rawYear) ? rawYear : undefined,
@@ -705,12 +731,23 @@ export default definePlugin({{
         return {{ sections }};
     }},
 
-    async search(query, _filters, _page) {{
+    async search(query, filters, _page) {{
         if (typeof provider.getCatalog !== "function") {{
             return {{ items: [], hasMore: false }};
         }}
         const q = String(query || "").trim();
-        const catalogs = normalizeCatalogTargets().slice(0, 3);
+        const requestedType = filters && filters.mediaType
+            ? String(filters.mediaType).trim().toLowerCase()
+            : "";
+        let catalogs = normalizeCatalogTargets();
+        if (requestedType === "movie") {{
+            const movieCats = catalogs.filter((c) => String(c.type || "").toLowerCase() === "movie");
+            if (movieCats.length > 0) catalogs = movieCats;
+        }} else if (requestedType === "series" || requestedType === "anime") {{
+            const seriesCats = catalogs.filter((c) => String(c.type || "").toLowerCase() !== "movie");
+            if (seriesCats.length > 0) catalogs = seriesCats;
+        }}
+        catalogs = catalogs.slice(0, 3);
         const seen = new Set();
         const items = [];
         for (const cat of catalogs) {{
@@ -722,12 +759,13 @@ export default definePlugin({{
                     extra: {{ search: q }},
                 }});
                 const list = Array.isArray(res) ? res : (res && Array.isArray(res.metas) ? res.metas : []);
-                const lowerQ = q.toLowerCase();
-                for (const raw of list) {{
-                    const mapped = mapSummary(raw, cat.type || "series");
-                    if (!mapped || seen.has(mapped.nativeId)) continue;
-                    // Client-side filter safety if a catalog ignores `search` and dumps the entire list
-                    if (list.length > 40 && lowerQ && !mapped.title.toLowerCase().includes(lowerQ)) continue;
+                const mappedList = list.map((raw) => mapSummary(raw, cat.type || "series")).filter(Boolean);
+                const hits = q ? mappedList.filter((m) => matchesQueryTokens(m.title, q)).length : mappedList.length;
+                const mustFilterByQuery = q.length > 0 && mappedList.length >= 6 && (hits === 0 || (hits * 100) / mappedList.length < 40);
+                for (const mapped of mappedList) {{
+                    if (seen.has(mapped.nativeId)) continue;
+                    if (!matchesRequestedType(mapped, requestedType)) continue;
+                    if (mustFilterByQuery && !matchesQueryTokens(mapped.title, q)) continue;
                     seen.add(mapped.nativeId);
                     items.push(mapped);
                     if (items.length >= 40) break;
@@ -793,7 +831,7 @@ export default definePlugin({{
         return {{
             nativeId: String((meta && meta.id) || nativeId),
             type: mediaType,
-            isAnime: isAnimePlugin(),
+            isAnime: isAnimeItem(meta, mediaType),
             title: String((meta && meta.name) || nativeId),
             year: Number.isFinite(rawYear) ? rawYear : undefined,
             synopsis: meta && meta.description ? String(meta.description) : undefined,
@@ -867,15 +905,26 @@ function mapType(rawType) {{
 function mapSummary(it, fallbackType) {{
     if (!it || !it.id || !it.name) return null;
     const year = it.releaseInfo ? parseInt(String(it.releaseInfo), 10) : undefined;
+    const rawType = String(it.type || fallbackType || "").toLowerCase();
+    const isAnime = rawType === "anime" || (Array.isArray(it.genres) && it.genres.some((g) => String(g).toLowerCase() === "anime"));
     return {{
         nativeId: `${{fallbackType}}::${{it.id}}`,
         type: mapType(it.type || fallbackType),
-        isAnime: false,
+        isAnime,
         title: String(it.name),
         poster: it.poster ? String(it.poster) : undefined,
         year: Number.isFinite(year) ? year : undefined,
         tags: [],
     }};
+}}
+
+function matchesStremioQuery(title, query) {{
+    const q = String(query || "").toLowerCase().trim();
+    if (!q) return true;
+    const t = String(title || "").toLowerCase();
+    if (t.includes(q)) return true;
+    const tokens = q.split(/\s+/).filter((tok) => tok.length >= 2);
+    return tokens.length > 0 && tokens.every((tok) => t.includes(tok));
 }}
 
 function splitTypedId(compositeId) {{
@@ -908,10 +957,20 @@ export default definePlugin({{
         return {{ sections }};
     }},
 
-    async search(query) {{
+    async search(query, filters, _page) {{
         const q = String(query || "").trim();
-        const lowerQ = q.toLowerCase();
-        const catalogs = Array.isArray(CFG.catalogs) ? CFG.catalogs.slice(0, 4) : [];
+        const requestedType = filters && filters.mediaType
+            ? String(filters.mediaType).trim().toLowerCase()
+            : "";
+        let catalogs = Array.isArray(CFG.catalogs) ? CFG.catalogs : [];
+        if (requestedType === "movie") {{
+            const movieCats = catalogs.filter((c) => String(c.type || "").toLowerCase() === "movie");
+            if (movieCats.length > 0) catalogs = movieCats;
+        }} else if (requestedType === "series" || requestedType === "anime") {{
+            const seriesCats = catalogs.filter((c) => String(c.type || "").toLowerCase() !== "movie");
+            if (seriesCats.length > 0) catalogs = seriesCats;
+        }}
+        catalogs = catalogs.slice(0, 4);
         const seen = new Set();
         const items = [];
         for (const cat of catalogs) {{
@@ -926,10 +985,15 @@ export default definePlugin({{
                 clientFilter = true;
             }}
             const metas = data && Array.isArray(data.metas) ? data.metas : [];
-            for (const m of metas) {{
-                const mapped = mapSummary(m, cat.type);
-                if (!mapped || seen.has(mapped.nativeId)) continue;
-                if (clientFilter && lowerQ && !mapped.title.toLowerCase().includes(lowerQ)) continue;
+            const mappedList = metas.map((m) => mapSummary(m, cat.type)).filter(Boolean);
+            const hits = q ? mappedList.filter((m) => matchesStremioQuery(m.title, q)).length : mappedList.length;
+            const mustFilter = clientFilter || (q.length > 0 && mappedList.length >= 6 && (hits === 0 || (hits * 100) / mappedList.length < 40));
+            for (const mapped of mappedList) {{
+                if (seen.has(mapped.nativeId)) continue;
+                if (requestedType === "movie" && mapped.type !== "movie") continue;
+                if (requestedType === "anime" && !mapped.isAnime) continue;
+                if (requestedType === "series" && (mapped.type !== "series" || mapped.isAnime)) continue;
+                if (mustFilter && q && !matchesStremioQuery(mapped.title, q)) continue;
                 seen.add(mapped.nativeId);
                 items.push(mapped);
                 if (items.length >= 40) break;

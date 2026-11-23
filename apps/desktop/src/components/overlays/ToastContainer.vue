@@ -42,8 +42,8 @@ defineProps<{
 
 .toast-item {
   font-size: 0.88rem;
-  background: rgba(20, 21, 33, 0.97);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  background: var(--vessel-surface-overlay);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
 }
 
 .tone-warn {

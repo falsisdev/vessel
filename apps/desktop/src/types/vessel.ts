@@ -12,7 +12,13 @@ export type SettingFieldType = 'text' | 'secret' | 'toggle' | 'select'
 export type IptvKind = 'xtream' | 'm3u'
 export type BackupImportMode = 'smart_merge' | 'reset_and_import'
 
-export type NavLayout = 'expanded_sidebar' | 'collapsed_rail' | 'top_navbar' | 'hidden'
+export type NavLayout =
+  | 'expanded_sidebar'
+  | 'pinned_sidebar'
+  | 'collapsed_rail'
+  | 'top_navbar'
+  | 'hidden'
+export type SubtitleOutlineStyle = 'outline' | 'shadow' | 'box' | 'none'
 export type NavModule = 'home' | 'search' | 'library' | 'live_tv' | 'downloads' | 'extensions'
 export type UiDensity = 'compact' | 'comfortable' | 'spacious'
 export type CornerStyle = 'sharp' | 'rounded' | 'pill'
@@ -142,6 +148,10 @@ export interface PlaybackProgress {
   season: number
   episode: number
   absoluteEpisode?: number
+  title?: string
+  posterUrl?: string
+  backdropUrl?: string
+  episodeTitle?: string
   positionMs: number
   durationMs: number
   completed: boolean
@@ -389,6 +399,15 @@ export interface UiPreferences {
     showLiveControlBar: boolean
     autoNextDelaySecs: number
     watchedThresholdPercent: number
+  }
+  subtitles: {
+    fontSizePx: number
+    fontFamily: string
+    textColor: string
+    backgroundOpacity: number
+    outlineStyle: SubtitleOutlineStyle
+    bottomOffsetPx: number
+    bold: boolean
   }
   advanced: {
     customCssEnabled: boolean
