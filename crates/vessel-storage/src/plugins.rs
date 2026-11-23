@@ -83,6 +83,25 @@ impl SqliteStorage {
 
         self.actor()
             .execute(move |db| {
+                let normalized_repo_id = plugin
+                    .repo_id
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+                    .map(str::to_owned);
+
+                if let Some(ref rid) = normalized_repo_id {
+                    let placeholder_src = format!("repo:{rid}");
+                    db.conn()
+                        .execute(
+                            "INSERT OR IGNORE INTO repositories (
+                                 id, source_input, resolved_url, name, is_official, updated_at
+                             ) VALUES (?1, ?2, ?3, ?1, 0, ?4)",
+                            (rid, &placeholder_src, &placeholder_src, &plugin.updated_at),
+                        )
+                        .map_err(map_sql_err)?;
+                }
+
                 db.conn()
                     .execute(
                         "INSERT INTO plugins (
@@ -105,7 +124,7 @@ impl SqliteStorage {
                              updated_at = excluded.updated_at",
                         (
                             plugin.manifest.id.as_str(),
-                            &plugin.repo_id,
+                            &normalized_repo_id,
                             &plugin.manifest.name,
                             &plugin.manifest.version,
                             &capabilities_json,
@@ -437,7 +456,8 @@ mod tests {
         let actor = StorageActor::open_in_memory().await.expect("open actor");
         let storage = SqliteStorage::new(actor);
 
-        let plugin = sample_plugin("anthology");
+        let mut plugin = sample_plugin("anthology");
+        plugin.repo_id = Some("Community Nuvio Repo".into());
         let plugin_id = plugin.manifest.id.clone();
 
         storage.upsert_plugin(plugin.clone()).await.expect("upsert");
