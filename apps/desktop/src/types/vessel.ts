@@ -15,6 +15,7 @@ export type BackupImportMode = 'smart_merge' | 'reset_and_import'
 export type NavLayout =
   | 'expanded_sidebar'
   | 'pinned_sidebar'
+  | 'floating_bottom'
   | 'collapsed_rail'
   | 'top_navbar'
   | 'hidden'

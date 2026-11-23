@@ -102,6 +102,10 @@
   },
   "iptv": {
     "title": "Canlı TV & IPTV",
+    "tab_playlists": "M3U / Xtream",
+    "tab_plugins": "Canlı TV Eklentileri",
+    "no_live_plugins": "Etkin Canlı TV eklentisi bulunamadı. Eklentiler üzerinden bir Canlı TV eklentisi veya depo kurun.",
+    "filter_channels": "Eklenti kanallarında ara…",
     "add_profile": "IPTV Profili Ekle",
     "sync_channels": "Kanalları Eşitle",
     "sync_epg": "EPG Eşitle",
@@ -148,6 +152,7 @@
     "nav_layout_desc": "Açılır kenar çubuğu, sabit tam menü, simge çubuğu veya üst menü seçin",
     "layout_floating": "Üstüne Gelince Açılan Menü",
     "layout_pinned": "Her Zaman Açık Sabit Kenar Çubuğu",
+    "layout_floating_bottom": "Yüzen Alt Dock Çubuğu",
     "layout_compact": "Sadece Simge Çubuğu",
     "layout_top": "Üst Menü Çubuğu",
     "layout_hidden": "Gizli",

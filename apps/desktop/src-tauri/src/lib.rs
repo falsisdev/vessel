@@ -122,6 +122,7 @@ pub fn run() {
             commands::delete_download,
             commands::export_backup_json,
             commands::import_backup_json,
+            commands::open_external_url,
             updater::get_update_preferences,
             updater::set_auto_check_updates,
             updater::skip_app_update_version,

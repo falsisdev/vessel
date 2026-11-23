@@ -105,7 +105,11 @@ function openDetails(pluginId: string, nativeId: string): void {
       </button>
     </div>
 
-    <div v-if="!bucketEntries.length && !isSearching" class="v-card v-muted">
+    <div v-if="isSearching && !bucketEntries.length" class="v-grid">
+      <div v-for="n in 8" :key="n" class="v-skeleton search-skeleton" />
+    </div>
+
+    <div v-else-if="!bucketEntries.length" class="v-card v-muted">
       {{ t('search.empty') }}
     </div>
 
@@ -156,6 +160,11 @@ function openDetails(pluginId: string, nativeId: string): void {
   display: flex;
   align-items: center;
   gap: 0.55rem;
+}
+
+.search-skeleton {
+  aspect-ratio: 2 / 3;
+  min-height: 240px;
 }
 
 .bucket-title {

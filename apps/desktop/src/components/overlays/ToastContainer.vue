@@ -33,7 +33,7 @@ defineProps<{
   position: fixed;
   right: 1.15rem;
   bottom: 1.15rem;
-  z-index: 70;
+  z-index: 300;
   display: flex;
   flex-direction: column;
   gap: 0.55rem;

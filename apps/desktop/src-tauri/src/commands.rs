@@ -1062,3 +1062,23 @@ pub async fn import_backup_json(
 ) -> Result<(), String> {
     map_err(state.engine.import_backup_json(&json, mode).await)
 }
+
+#[tauri::command]
+pub async fn open_external_url(url: String) -> Result<(), String> {
+    let trimmed = url.trim();
+    if !(trimmed.starts_with("https://") || trimmed.starts_with("http://")) {
+        return Err("[VesselInvalidInputError]: only http(s) URLs can be opened externally".into());
+    }
+
+    #[cfg(target_os = "macos")]
+    let status = std::process::Command::new("open").arg(trimmed).spawn();
+    #[cfg(target_os = "windows")]
+    let status = std::process::Command::new("cmd")
+        .args(["/C", "start", "", trimmed])
+        .spawn();
+    #[cfg(target_os = "linux")]
+    let status = std::process::Command::new("xdg-open").arg(trimmed).spawn();
+
+    status.map_err(|err| format!("[VesselSystemError]: failed to open external URL: {err}"))?;
+    Ok(())
+}

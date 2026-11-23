@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onActivated, onDeactivated, onMounted, onUnmounted, ref, shallowRef } from 'vue'
+import { computed, onActivated, onDeactivated, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   ChevronLeft,
@@ -57,13 +57,17 @@ const activeHomePluginIds = computed<string[]>(() => {
   if (sel && sel.length === 0) {
     return []
   }
-  // Default when user hasn't picked explicitly yet: smart curated starter set <= 5 plugins
-  const preferred = ['anizium', 'diziwatch', 'yabancidizi', 'animecix', 'seicode', 'anthology_spor']
+  // Default when user hasn't picked explicitly yet: smart curated starter set <= 5 VOD/anime plugins
+  const isPureLivePlugin = (p: PluginListEntry) =>
+    p.manifest.capabilities.includes('live_tv') && !p.manifest.capabilities.includes('vod')
+  const vodEnabled = enabledPlugins.value.filter((p) => !isPureLivePlugin(p))
+  const vodSet = new Set(vodEnabled.map((p) => p.manifest.id))
+  const preferred = ['anizium', 'diziwatch', 'yabancidizi', 'animecix', 'seicode']
   const picked: string[] = []
   for (const id of preferred) {
-    if (enabledSet.has(id) && picked.length < 5) picked.push(id)
+    if (vodSet.has(id) && picked.length < 5) picked.push(id)
   }
-  for (const p of enabledPlugins.value) {
+  for (const p of vodEnabled) {
     if (!picked.includes(p.manifest.id) && picked.length < 5) {
       picked.push(p.manifest.id)
     }
@@ -169,6 +173,27 @@ const featuredItem = computed(() => {
   const idx = heroIndex.value % spotlightPool.value.length
   return spotlightPool.value[idx]
 })
+
+watch(
+  spotlightPool,
+  (pool) => {
+    for (const item of pool) {
+      if (item.poster) {
+        const pre = new Image()
+        pre.decoding = 'async'
+        pre.src = item.poster
+      }
+    }
+  },
+  { immediate: true },
+)
+
+function stepHero(delta: -1 | 1): void {
+  const len = spotlightPool.value.length
+  if (len <= 1) return
+  heroIndex.value = (heroIndex.value + delta + len) % len
+  startHeroTimer()
+}
 
 async function loadHome(forceRefresh = false): Promise<void> {
   if (!isTauriRuntime()) return
@@ -433,117 +458,143 @@ onUnmounted(() => {
 
 <template>
   <section class="nuvio-home">
-    <!-- Full-bleed Luxury Cinema Spotlight Hero -->
+    <!-- Full-bleed Netflix-style Cinema Spotlight Hero with Overlapping Crossfade -->
     <header
       v-if="uiPreferences.home.heroBanner !== 'hidden'"
       class="nuvio-hero"
       :class="{ 'is-compact': uiPreferences.home.heroBanner === 'compact' }"
     >
-      <Transition name="hero-swap" mode="out-in">
-        <div v-if="featuredItem" :key="`${featuredItem.resolvedPluginId}:${featuredItem.nativeId}`" class="hero-stage">
-          <img
-            v-if="featuredItem.poster"
-            :src="featuredItem.poster"
-            :alt="featuredItem.title"
-            width="1440"
-            height="680"
-            fetchpriority="high"
-            decoding="async"
-            class="hero-art"
+      <div class="hero-stage-stack">
+        <Transition name="hero-crossfade">
+          <div
+            v-if="featuredItem"
+            :key="`${featuredItem.resolvedPluginId}:${featuredItem.nativeId}`"
+            class="hero-stage"
+          >
+            <img
+              v-if="featuredItem.poster"
+              :src="featuredItem.poster"
+              :alt="featuredItem.title"
+              width="1440"
+              height="680"
+              fetchpriority="high"
+              decoding="async"
+              class="hero-art"
+            />
+            <div class="hero-vignette" aria-hidden="true" />
+
+            <div class="hero-content">
+              <div class="hero-meta-line">
+                <span class="type-pill">
+                  <Sparkles :size="11" aria-hidden="true" />
+                  {{ featuredItem.isAnime ? 'ANIME' : featuredItem.type.toUpperCase() }}
+                </span>
+                <span v-if="featuredItem.year">{{ featuredItem.year }}</span>
+                <span v-if="featuredItem.rating !== undefined" class="hero-rating">
+                  <Star :size="13" fill="currentColor" aria-hidden="true" />
+                  {{ featuredItem.rating.toFixed(1) }}
+                </span>
+                <span class="source-tag">{{ featuredItem.resolvedPluginId }}</span>
+              </div>
+
+              <h1 class="hero-title">{{ featuredItem.title }}</h1>
+              <p class="hero-sub">{{ t('home.hero_subtitle') }}</p>
+
+              <div class="hero-actions">
+                <button
+                  type="button"
+                  class="v-btn v-btn-primary"
+                  @click="openDetails(featuredItem.resolvedPluginId, featuredItem.nativeId)"
+                >
+                  <Play :size="16" fill="currentColor" aria-hidden="true" /> {{ t('home.watch_now') }}
+                </button>
+                <button
+                  type="button"
+                  class="v-btn"
+                  @click="openDetails(featuredItem.resolvedPluginId, featuredItem.nativeId)"
+                >
+                  <Info :size="16" aria-hidden="true" /> {{ t('home.more_info') }}
+                </button>
+                <button
+                  v-if="enabledPlugins.length"
+                  type="button"
+                  class="v-btn"
+                  @click="showSourcePicker = true"
+                >
+                  <SlidersHorizontal :size="15" aria-hidden="true" />
+                  {{ t('home.feeds') }} ({{ activeHomePluginIds.length }}/{{ enabledPlugins.length }})
+                </button>
+                <button
+                  type="button"
+                  class="v-btn v-btn-icon"
+                  :aria-label="t('common.refresh')"
+                  :disabled="loading"
+                  @click="loadHome(true)"
+                >
+                  <RefreshCw :size="15" :class="{ spin: loading }" aria-hidden="true" />
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div v-else key="empty-hero" class="hero-stage">
+            <div class="hero-vignette" aria-hidden="true" />
+            <div class="hero-content">
+              <h1 class="hero-title">{{ t('home.hero_title') }}</h1>
+              <p class="hero-sub">{{ t('home.hero_subtitle') }}</p>
+              <div class="hero-actions">
+                <RouterLink to="/extensions" class="v-btn v-btn-primary">
+                  {{ t('nav.extensions') }}
+                </RouterLink>
+                <button
+                  v-if="enabledPlugins.length"
+                  type="button"
+                  class="v-btn"
+                  @click="showSourcePicker = true"
+                >
+                  <SlidersHorizontal :size="15" aria-hidden="true" />
+                  {{ t('home.choose_feeds') }} ({{ activeHomePluginIds.length }})
+                </button>
+                <button type="button" class="v-btn" :disabled="loading" @click="loadHome(true)">
+                  <RefreshCw :size="15" :class="{ spin: loading }" aria-hidden="true" />
+                  {{ t('common.refresh') }}
+                </button>
+              </div>
+            </div>
+          </div>
+        </Transition>
+      </div>
+
+      <div v-if="spotlightPool.length > 1" class="hero-controls-row">
+        <div class="hero-indicators">
+          <button
+            v-for="(item, idx) in spotlightPool"
+            :key="`${item.resolvedPluginId}:${item.nativeId}`"
+            type="button"
+            class="indicator-bar"
+            :class="{ 'is-active': idx === heroIndex }"
+            :aria-label="`Spotlight ${item.title}`"
+            @click="heroIndex = idx; startHeroTimer()"
           />
-          <div class="hero-vignette" aria-hidden="true" />
-
-          <div class="hero-content">
-            <div class="hero-meta-line">
-              <span class="type-pill">
-                <Sparkles :size="11" aria-hidden="true" />
-                {{ featuredItem.isAnime ? 'ANIME' : featuredItem.type.toUpperCase() }}
-              </span>
-              <span v-if="featuredItem.year">{{ featuredItem.year }}</span>
-              <span v-if="featuredItem.rating !== undefined" class="hero-rating">
-                <Star :size="13" fill="currentColor" aria-hidden="true" />
-                {{ featuredItem.rating.toFixed(1) }}
-              </span>
-              <span class="source-tag">{{ featuredItem.resolvedPluginId }}</span>
-            </div>
-
-            <h1 class="hero-title">{{ featuredItem.title }}</h1>
-            <p class="hero-sub">{{ t('home.hero_subtitle') }}</p>
-
-            <div class="hero-actions">
-              <button
-                type="button"
-                class="v-btn v-btn-primary"
-                @click="openDetails(featuredItem.resolvedPluginId, featuredItem.nativeId)"
-              >
-                <Play :size="16" fill="currentColor" aria-hidden="true" /> {{ t('home.watch_now') }}
-              </button>
-              <button
-                type="button"
-                class="v-btn"
-                @click="openDetails(featuredItem.resolvedPluginId, featuredItem.nativeId)"
-              >
-                <Info :size="16" aria-hidden="true" /> {{ t('home.more_info') }}
-              </button>
-              <button
-                v-if="enabledPlugins.length"
-                type="button"
-                class="v-btn"
-                @click="showSourcePicker = true"
-              >
-                <SlidersHorizontal :size="15" aria-hidden="true" />
-                {{ t('home.feeds') }} ({{ activeHomePluginIds.length }}/{{ enabledPlugins.length }})
-              </button>
-              <button
-                type="button"
-                class="v-btn v-btn-icon"
-                :aria-label="t('common.refresh')"
-                :disabled="loading"
-                @click="loadHome(true)"
-              >
-                <RefreshCw :size="15" :class="{ spin: loading }" aria-hidden="true" />
-              </button>
-            </div>
-          </div>
         </div>
-
-        <div v-else key="empty-hero" class="hero-stage">
-          <div class="hero-vignette" aria-hidden="true" />
-          <div class="hero-content">
-            <h1 class="hero-title">{{ t('home.hero_title') }}</h1>
-            <p class="hero-sub">{{ t('home.hero_subtitle') }}</p>
-            <div class="hero-actions">
-              <RouterLink to="/extensions" class="v-btn v-btn-primary">
-                {{ t('nav.extensions') }}
-              </RouterLink>
-              <button
-                v-if="enabledPlugins.length"
-                type="button"
-                class="v-btn"
-                @click="showSourcePicker = true"
-              >
-                <SlidersHorizontal :size="15" aria-hidden="true" />
-                {{ t('home.choose_feeds') }} ({{ activeHomePluginIds.length }})
-              </button>
-              <button type="button" class="v-btn" :disabled="loading" @click="loadHome(true)">
-                <RefreshCw :size="15" :class="{ spin: loading }" aria-hidden="true" />
-                {{ t('common.refresh') }}
-              </button>
-            </div>
-          </div>
+        <div class="hero-step-arrows">
+          <button
+            type="button"
+            class="v-btn v-btn-icon v-btn-sm"
+            aria-label="Previous featured item"
+            @click="stepHero(-1)"
+          >
+            <ChevronLeft :size="15" aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            class="v-btn v-btn-icon v-btn-sm"
+            aria-label="Next featured item"
+            @click="stepHero(1)"
+          >
+            <ChevronRight :size="15" aria-hidden="true" />
+          </button>
         </div>
-      </Transition>
-
-      <div v-if="spotlightPool.length > 1" class="hero-indicators">
-        <button
-          v-for="(item, idx) in spotlightPool"
-          :key="`${item.resolvedPluginId}:${item.nativeId}`"
-          type="button"
-          class="indicator-bar"
-          :class="{ 'is-active': idx === heroIndex }"
-          :aria-label="`Spotlight ${item.title}`"
-          @click="heroIndex = idx"
-        />
       </div>
     </header>
 
@@ -868,22 +919,35 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
-  padding: 3rem 3rem 2.35rem;
-  gap: 1.25rem;
+  padding: 0;
   overflow: hidden;
   flex-shrink: 0;
 }
 
 .nuvio-hero.is-compact {
   min-height: 335px;
-  padding: 1.9rem 2.75rem 1.45rem;
+}
+
+.hero-stage-stack {
+  position: relative;
+  flex: 1;
+  display: grid;
+  grid-template-areas: 'stage';
 }
 
 .hero-stage {
+  grid-area: stage;
+  position: relative;
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
-  min-height: 290px;
+  padding: 3rem 3rem 3.5rem;
+  min-height: clamp(540px, 64vh, 690px);
+}
+
+.nuvio-hero.is-compact .hero-stage {
+  min-height: 335px;
+  padding: 1.9rem 2.75rem 3.1rem;
 }
 
 .hero-art {
@@ -896,7 +960,8 @@ onUnmounted(() => {
   opacity: 0.92;
   filter: contrast(1.06) saturate(1.14);
   pointer-events: none;
-  transform: scale(1.03);
+  transform: scale(1.02);
+  transition: transform 6.5s ease-out;
 }
 
 .hero-vignette {
@@ -978,7 +1043,7 @@ onUnmounted(() => {
 
 .hero-sub {
   margin: 0;
-  color: rgba(244, 246, 252, 0.8);
+  color: var(--vessel-text-muted);
   font-size: 0.98rem;
   max-width: 54ch;
 }
@@ -991,9 +1056,25 @@ onUnmounted(() => {
   margin-top: 0.35rem;
 }
 
+.hero-controls-row {
+  position: absolute;
+  left: 3rem;
+  right: 3rem;
+  bottom: 1.35rem;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
 .hero-indicators {
-  position: relative;
-  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.hero-step-arrows {
   display: flex;
   align-items: center;
   gap: 0.45rem;
@@ -1005,27 +1086,29 @@ onUnmounted(() => {
   padding: 0;
   border: none;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.25);
+  background: color-mix(in srgb, var(--vessel-text-muted) 40%, transparent);
   cursor: pointer;
-  transition: width 0.24s cubic-bezier(0.22, 1, 0.36, 1), background-color 0.22s ease;
+  transition: width 0.28s cubic-bezier(0.22, 1, 0.36, 1), background-color 0.24s ease;
 }
 
 .indicator-bar.is-active {
-  width: 36px;
-  background: linear-gradient(90deg, #ffffff, var(--vessel-accent));
+  width: 38px;
+  background: linear-gradient(90deg, var(--vessel-text-primary), var(--vessel-accent));
 }
 
-.hero-swap-enter-active,
-.hero-swap-leave-active {
-  transition: opacity 0.28s ease, transform 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+.hero-crossfade-enter-active,
+.hero-crossfade-leave-active {
+  transition:
+    opacity 0.65s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.65s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.hero-swap-enter-from {
+.hero-crossfade-enter-from {
   opacity: 0;
-  transform: scale(0.99);
+  transform: scale(1.03);
 }
 
-.hero-swap-leave-to {
+.hero-crossfade-leave-to {
   opacity: 0;
 }
 

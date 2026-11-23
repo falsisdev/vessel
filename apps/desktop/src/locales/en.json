@@ -102,6 +102,10 @@
   },
   "iptv": {
     "title": "Live TV & IPTV",
+    "tab_playlists": "M3U / Xtream",
+    "tab_plugins": "Live TV Plugins",
+    "no_live_plugins": "No enabled Live TV plugins found. Install a Live TV plugin or repository from Extensions.",
+    "filter_channels": "Filter plugin channels…",
     "add_profile": "Add IPTV Profile",
     "sync_channels": "Sync Channels",
     "sync_epg": "Sync EPG",
@@ -148,6 +152,7 @@
     "nav_layout_desc": "Choose floating rail, pinned sidebar, compact rail, top bar, or hidden",
     "layout_floating": "Floating Expand Rail",
     "layout_pinned": "Pinned Always-Open Sidebar",
+    "layout_floating_bottom": "Floating Bottom Dock",
     "layout_compact": "Compact Icon Rail",
     "layout_top": "Top Navbar",
     "layout_hidden": "Hidden",

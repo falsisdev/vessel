@@ -191,6 +191,10 @@ export const vesselApi = {
   checkAppUpdate: () => call<AppUpdateInfo>('check_app_update'),
   downloadAndOpenUpdate: (downloadUrl: string, fileName: string) =>
     call<string>('download_and_open_update', { downloadUrl, fileName }),
+  openExternalUrl: (url: string) =>
+    isTauriRuntime()
+      ? call<void>('open_external_url', { url })
+      : Promise.resolve(void window.open(url, '_blank', 'noopener,noreferrer')),
 }
 
 export async function listenUpdateProgress(

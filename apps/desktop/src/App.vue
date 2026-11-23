@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted } from 'vue'
+import { computed, onMounted, onUnmounted, shallowRef } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppNav from '@/components/layout/AppNav.vue'
 import DomainPermissionModal from '@/components/overlays/DomainPermissionModal.vue'
@@ -15,6 +15,20 @@ import { useVesselEvents } from '@/composables/useVesselEvents'
 const route = useRoute()
 const router = useRouter()
 const isPlayerRoute = computed(() => route.name === 'player')
+const isRouteTransitioning = shallowRef(false)
+let routeTimer: number | null = null
+
+const unhookBefore = router.beforeEach((_to, _from, next) => {
+  isRouteTransitioning.value = true
+  if (routeTimer !== null) window.clearTimeout(routeTimer)
+  next()
+})
+
+const unhookAfter = router.afterEach(() => {
+  routeTimer = window.setTimeout(() => {
+    isRouteTransitioning.value = false
+  }, 220)
+})
 const { refreshThemes } = useTheme()
 const { refreshLocales, currentLang, setLocale } = useI18n()
 const { uiPreferences, loadPreferences } = useUiPreferences()
@@ -34,6 +48,7 @@ const shellClasses = computed(() => [
   `corners-${uiPreferences.value.shell.cornerStyle}`,
   {
     'is-top-nav': uiPreferences.value.shell.layout === 'top_navbar',
+    'is-floating-bottom': uiPreferences.value.shell.layout === 'floating_bottom',
     'reduced-motion': uiPreferences.value.shell.reducedMotion,
   },
 ])
@@ -62,6 +77,11 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  unhookBefore()
+  unhookAfter()
+  if (routeTimer !== null) {
+    window.clearTimeout(routeTimer)
+  }
   if (updateCheckTimer !== null) {
     window.clearTimeout(updateCheckTimer)
   }
@@ -72,6 +92,7 @@ onUnmounted(() => {
 
 <template>
   <div class="vessel-shell" :class="shellClasses">
+    <div v-if="isRouteTransitioning" class="route-progress-bar" aria-hidden="true" />
     <a href="#main-content" class="skip-link">Skip to content</a>
 
     <div class="shell-body">
@@ -143,5 +164,37 @@ onUnmounted(() => {
   overflow-y: auto;
   overflow-x: hidden;
   padding: 0;
+}
+
+.vessel-shell.is-floating-bottom .shell-main {
+  padding-bottom: 5.5rem;
+}
+
+.route-progress-bar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2.5px;
+  z-index: 250;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--vessel-accent) 45%,
+    var(--vessel-accent-secondary) 75%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: routeSlide 0.75s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+  pointer-events: none;
+}
+
+@keyframes routeSlide {
+  0% {
+    background-position: 120% 0;
+  }
+  100% {
+    background-position: -80% 0;
+  }
 }
 </style>

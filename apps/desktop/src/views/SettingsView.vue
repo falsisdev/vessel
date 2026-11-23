@@ -194,6 +194,7 @@ async function handleImportBackup(mode: 'smart_merge' | 'reset_and_import'): Pro
         >
           <option value="expanded_sidebar">{{ t('settings.layout_floating') }}</option>
           <option value="pinned_sidebar">{{ t('settings.layout_pinned') }}</option>
+          <option value="floating_bottom">{{ t('settings.layout_floating_bottom') }}</option>
           <option value="collapsed_rail">{{ t('settings.layout_compact') }}</option>
           <option value="top_navbar">{{ t('settings.layout_top') }}</option>
           <option value="hidden">{{ t('settings.layout_hidden') }}</option>
@@ -590,15 +591,14 @@ async function handleImportBackup(mode: 'smart_merge' | 'reset_and_import'): Pro
               ({{ formatBytes(updateInfo.assetSizeBytes) }})
             </template>
           </button>
-          <a
-            :href="updateInfo.htmlUrl"
-            target="_blank"
-            rel="noopener noreferrer"
+          <button
+            type="button"
             class="v-btn v-btn-sm"
+            @click="vesselApi.openExternalUrl(updateInfo.htmlUrl)"
           >
             <ExternalLink :size="14" aria-hidden="true" />
-            Open Releases Page
-          </a>
+            {{ t('settings.open_releases') }}
+          </button>
         </div>
       </div>
     </div>

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { Download, ExternalLink, Sparkles, X } from 'lucide-vue-next'
-import { formatBytes, useAppUpdater } from '@/composables/useAppUpdater'
+import { vesselApi } from '@/api/vessel'
+import { useAppUpdater, formatBytes } from '@/composables/useAppUpdater'
 import { useI18n } from '@/composables/useI18n'
 
 const { t } = useI18n()
@@ -91,15 +92,14 @@ const {
             <button type="button" class="v-btn v-btn-sm" @click="skipUpdateVersion">
               Skip v{{ updateInfo.latestVersion }}
             </button>
-            <a
-              :href="updateInfo.htmlUrl"
-              target="_blank"
-              rel="noopener noreferrer"
+            <button
+              type="button"
               class="v-btn v-btn-sm"
+              @click="vesselApi.openExternalUrl(updateInfo.htmlUrl)"
             >
               <ExternalLink :size="14" aria-hidden="true" />
               GitHub Release
-            </a>
+            </button>
             <button
               v-if="updateInfo.downloadUrl"
               type="button"

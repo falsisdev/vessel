@@ -81,6 +81,57 @@ fn subtitle_extension(format: SubtitleFormat) -> &'static str {
     }
 }
 
+/// Resolves `mpv` executable even when macOS/Windows GUI bundles launch with a stripped `PATH`.
+fn resolve_mpv_binary(configured: &Path) -> PathBuf {
+    if configured != Path::new("mpv") || configured.is_absolute() {
+        return configured.to_path_buf();
+    }
+
+    if let Some(path_var) = std::env::var_os("PATH") {
+        for dir in std::env::split_paths(&path_var) {
+            let candidate = dir.join(if cfg!(windows) { "mpv.exe" } else { "mpv" });
+            if candidate.is_file() {
+                return candidate;
+            }
+        }
+    }
+
+    let mut extra_candidates: Vec<PathBuf> = Vec::new();
+    #[cfg(target_os = "macos")]
+    {
+        extra_candidates.push(PathBuf::from("/opt/homebrew/bin/mpv"));
+        extra_candidates.push(PathBuf::from("/usr/local/bin/mpv"));
+        extra_candidates.push(PathBuf::from("/Applications/mpv.app/Contents/MacOS/mpv"));
+        if let Some(home) = std::env::var_os("HOME") {
+            extra_candidates
+                .push(PathBuf::from(home).join("Applications/mpv.app/Contents/MacOS/mpv"));
+        }
+    }
+    #[cfg(target_os = "linux")]
+    {
+        extra_candidates.push(PathBuf::from("/usr/bin/mpv"));
+        extra_candidates.push(PathBuf::from("/usr/local/bin/mpv"));
+        extra_candidates.push(PathBuf::from("/snap/bin/mpv"));
+    }
+    #[cfg(windows)]
+    {
+        if let Some(pf) = std::env::var_os("ProgramFiles") {
+            extra_candidates.push(PathBuf::from(pf).join("mpv/mpv.exe"));
+        }
+        if let Some(local) = std::env::var_os("LOCALAPPDATA") {
+            extra_candidates.push(PathBuf::from(local).join("Programs/mpv/mpv.exe"));
+        }
+        if let Some(profile) = std::env::var_os("USERPROFILE") {
+            extra_candidates.push(PathBuf::from(profile).join("scoop/shims/mpv.exe"));
+        }
+    }
+
+    extra_candidates
+        .into_iter()
+        .find(|p| p.is_file())
+        .unwrap_or_else(|| configured.to_path_buf())
+}
+
 impl MpvWindowBackend {
     /// Creates a desktop `mpv` window backend using `config` and forwarding state to `event_sink`.
     pub fn new(config: MpvConfig, event_sink: Option<Arc<dyn EventSink>>) -> Self {
@@ -129,7 +180,8 @@ impl MpvWindowBackend {
         let socket_path = self.config.runtime_dir.join(format!("mpv-{seq}.sock"));
         let _ = fs::remove_file(&socket_path);
 
-        let mut cmd = Command::new(&self.config.binary_path);
+        let resolved_bin = resolve_mpv_binary(&self.config.binary_path);
+        let mut cmd = Command::new(&resolved_bin);
         cmd.arg("--idle=yes")
             .arg("--force-window=yes")
             .arg("--no-terminal")
@@ -142,9 +194,19 @@ impl MpvWindowBackend {
         }
         cmd.kill_on_drop(true);
 
-        let mut child = cmd
-            .spawn()
-            .map_err(|err| VesselError::Player(format!("spawn mpv process: {err}")))?;
+        let mut child = cmd.spawn().map_err(|err| {
+            if err.kind() == std::io::ErrorKind::NotFound {
+                VesselError::Player(
+                    "mpv executable not found. Install mpv (e.g. 'brew install mpv' on macOS or winget/scoop on Windows) to launch external playback."
+                        .into(),
+                )
+            } else {
+                VesselError::Player(format!(
+                    "spawn mpv process ({}): {err}",
+                    resolved_bin.display()
+                ))
+            }
+        })?;
 
         let deadline = tokio::time::Instant::now() + SOCKET_CONNECT_TIMEOUT;
         let ipc = loop {

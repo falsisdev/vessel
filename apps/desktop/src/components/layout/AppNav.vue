@@ -44,6 +44,7 @@ const navItems = computed(() =>
 
 const isTop = computed(() => props.layout === 'top_navbar')
 const isPinned = computed(() => props.layout === 'pinned_sidebar')
+const isFloatingBottom = computed(() => props.layout === 'floating_bottom')
 const isExpanded = computed(
   () => isPinned.value || (props.layout === 'expanded_sidebar' && hovering.value),
 )
@@ -54,12 +55,17 @@ const showLabels = computed(() => isTop.value || isExpanded.value)
   <aside
     v-if="layout !== 'hidden'"
     class="nuvio-nav"
-    :class="{ 'is-top': isTop, 'is-expanded': isExpanded, 'is-pinned': isPinned }"
+    :class="{
+      'is-top': isTop,
+      'is-floating-bottom': isFloatingBottom,
+      'is-expanded': isExpanded,
+      'is-pinned': isPinned,
+    }"
     aria-label="Primary navigation"
     @mouseenter="hovering = true"
     @mouseleave="hovering = false"
   >
-    <div class="brand" translate="no">
+    <div v-if="!isFloatingBottom" class="brand" translate="no">
       <div class="brand-mark" aria-hidden="true">
         <VesselLogo :size="20" />
       </div>
@@ -127,6 +133,26 @@ const showLabels = computed(() => isTop.value || isExpanded.value)
   padding: 0.7rem 1.5rem;
 }
 
+.nuvio-nav.is-floating-bottom {
+  position: fixed;
+  left: 50%;
+  bottom: 1.1rem;
+  transform: translateX(-50%);
+  width: auto;
+  max-width: calc(100vw - 2rem);
+  flex-direction: row;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.45rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid var(--vessel-border-strong);
+  background: color-mix(in srgb, var(--vessel-bg-surface) 82%, transparent);
+  backdrop-filter: blur(22px) saturate(1.45);
+  -webkit-backdrop-filter: blur(22px) saturate(1.45);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.36);
+  z-index: 45;
+}
+
 .brand {
   display: flex;
   align-items: center;
@@ -165,10 +191,38 @@ const showLabels = computed(() => isTop.value || isExpanded.value)
   flex: 1;
 }
 
-.nuvio-nav.is-top .nav-list {
+.nuvio-nav.is-top .nav-list,
+.nuvio-nav.is-floating-bottom .nav-list {
   flex-direction: row;
   flex: 1;
   overflow-x: auto;
+}
+
+.nuvio-nav.is-floating-bottom .nav-pill {
+  height: 40px;
+  min-width: 40px;
+  padding: 0 0.65rem;
+  border-radius: 999px;
+}
+
+.nuvio-nav.is-floating-bottom .nav-pill:hover {
+  transform: translateY(-2px);
+}
+
+.nuvio-nav.is-floating-bottom .nav-pill.is-active::before {
+  left: 12px;
+  right: 12px;
+  top: auto;
+  bottom: 2px;
+  width: auto;
+  height: 3px;
+}
+
+.nuvio-nav.is-floating-bottom .nav-footer {
+  padding-top: 0;
+  padding-left: 0.45rem;
+  border-top: none;
+  border-left: 1px solid var(--vessel-border);
 }
 
 .nav-pill {

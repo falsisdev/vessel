@@ -88,6 +88,7 @@ pub enum NavLayout {
     #[default]
     ExpandedSidebar,
     PinnedSidebar,
+    FloatingBottom,
     CollapsedRail,
     TopNavbar,
     Hidden,
