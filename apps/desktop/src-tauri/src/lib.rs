@@ -46,6 +46,16 @@ pub fn run() {
                 {
                     eng.set_metadata_enabled(meta_enabled);
                 }
+                if let Ok(Some(custom_dl_dir)) = eng
+                    .storage()
+                    .get_json_setting::<String>("custom_download_dir")
+                    .await
+                {
+                    let trimmed = custom_dl_dir.trim();
+                    if !trimmed.is_empty() {
+                        let _ = eng.set_downloads_dir(trimmed);
+                    }
+                }
                 let _ = eng.bootstrap_plugins().await;
                 Ok::<_, vessel_domain::VesselError>(Arc::new(eng))
             })?;
@@ -120,6 +130,8 @@ pub fn run() {
             commands::pause_download,
             commands::resume_download,
             commands::delete_download,
+            commands::set_download_directory,
+            commands::pick_download_directory,
             commands::export_backup_json,
             commands::import_backup_json,
             commands::open_external_url,

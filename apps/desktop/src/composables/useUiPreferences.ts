@@ -50,6 +50,7 @@ export function defaultUiPreferences(): UiPreferences {
       showLiveControlBar: true,
       autoNextDelaySecs: 10,
       watchedThresholdPercent: 90,
+      naturalTouchpadScroll: false,
     },
     subtitles: {
       fontSizePx: 28,

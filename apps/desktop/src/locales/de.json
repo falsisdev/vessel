@@ -197,7 +197,12 @@
     "checking_updates": "Prüfe GitHub…",
     "update_available": "Update verfügbar",
     "up_to_date": "Aktuell",
-    "open_releases": "Releases-Seite öffnen"
+    "open_releases": "Releases-Seite öffnen",
+    "natural_scroll": "Natürliches Scrollen (Touchpad)",
+    "natural_scroll_desc": "Kehrt die Wischrichtung für Spulen und Lautstärke im Player um",
+    "download_dir": "Download-Speicherort",
+    "download_dir_desc": "Ordner für Offline-Videos, Audiospuren und Untertitel",
+    "choose_folder": "Ordner wählen"
   },
   "subtitles": {
     "preview_title": "Untertitel-Vorschau",

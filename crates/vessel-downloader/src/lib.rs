@@ -5,8 +5,8 @@ pub mod hls;
 
 use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
@@ -55,7 +55,7 @@ pub struct DownloadManager {
     storage: Arc<SqliteStorage>,
     http: reqwest::Client,
     event_sink: Arc<dyn EventSink>,
-    downloads_root: PathBuf,
+    downloads_root: Arc<RwLock<PathBuf>>,
     queue_semaphore: Arc<Semaphore>,
     active: Arc<Mutex<ActiveDownloadMap>>,
 }
@@ -63,7 +63,7 @@ pub struct DownloadManager {
 impl std::fmt::Debug for DownloadManager {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("DownloadManager")
-            .field("downloads_root", &self.downloads_root)
+            .field("downloads_root", &self.downloads_root())
             .finish_non_exhaustive()
     }
 }
@@ -194,16 +194,42 @@ impl DownloadManager {
             storage,
             http,
             event_sink,
-            downloads_root: downloads_root.into(),
+            downloads_root: Arc::new(RwLock::new(downloads_root.into())),
             queue_semaphore: Arc::new(Semaphore::new(MAX_CONCURRENT_DOWNLOADS)),
             active: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
-    /// Persists a download job as `Queued` and schedules it against the 2-slot queue semaphore.
+    /// Returns the currently configured base folder for newly queued offline downloads.
+    pub fn downloads_root(&self) -> PathBuf {
+        self.downloads_root
+            .read()
+            .map(|guard| guard.clone())
+            .unwrap_or_else(|poisoned| poisoned.into_inner().clone())
+    }
+
+    /// Updates the base folder for future offline downloads after verifying it is writable.
+    pub fn set_downloads_root(&self, new_root: impl Into<PathBuf>) -> VesselResult<()> {
+        let dir = new_root.into();
+        if dir.as_os_str().is_empty() {
+            return Err(VesselError::InvalidInput(
+                "download directory cannot be empty".into(),
+            ));
+        }
+        std::fs::create_dir_all(&dir)
+            .map_err(|err| VesselError::Storage(format!("create download directory: {err}")))?;
+        let mut guard = self
+            .downloads_root
+            .write()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        *guard = dir;
+        Ok(())
+    }
+
+    /// Persists a download job as `Queued` and schedules it against the 4-slot queue semaphore.
     pub async fn enqueue(&self, req: DownloadRequest) -> VesselResult<StoredDownload> {
         let id = req.id.unwrap_or_else(next_download_id);
-        let local_dir = self.downloads_root.join(&id);
+        let local_dir = self.downloads_root().join(&id);
         let record = StoredDownload {
             id: id.clone(),
             plugin_id: req.plugin_id,
@@ -322,7 +348,7 @@ impl DownloadManager {
         let existing = self.storage.get_download(download_id).await?;
         let dir_to_remove = existing
             .map(|r| PathBuf::from(r.local_dir))
-            .unwrap_or_else(|| self.downloads_root.join(download_id));
+            .unwrap_or_else(|| self.downloads_root().join(download_id));
 
         if fs::metadata(&dir_to_remove).await.is_ok() {
             fs::remove_dir_all(&dir_to_remove)

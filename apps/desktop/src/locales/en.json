@@ -197,7 +197,12 @@
     "checking_updates": "Checking GitHub…",
     "update_available": "Update Available",
     "up_to_date": "Up to Date",
-    "open_releases": "Open Releases Page"
+    "open_releases": "Open Releases Page",
+    "natural_scroll": "Natural Touchpad Scrolling",
+    "natural_scroll_desc": "Invert player swipe seek and volume direction for macOS/touchpad Natural Scrolling",
+    "download_dir": "Download Location",
+    "download_dir_desc": "Folder where offline videos, audio tracks, and subtitles are saved",
+    "choose_folder": "Choose Folder"
   },
   "subtitles": {
     "preview_title": "Subtitle Preview",

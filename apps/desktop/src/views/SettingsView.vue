@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, shallowRef } from 'vue'
-import { Download, ExternalLink, Palette, RefreshCw, RotateCcw, Shield, Sliders, Sparkles, Upload } from 'lucide-vue-next'
+import { Download, ExternalLink, FolderOpen, Palette, RefreshCw, RotateCcw, Shield, Sliders, Sparkles, Upload } from 'lucide-vue-next'
 import { isTauriRuntime, vesselApi } from '@/api/vessel'
 import { formatBytes, useAppUpdater } from '@/composables/useAppUpdater'
 import { useI18n } from '@/composables/useI18n'
@@ -29,6 +29,7 @@ const engineInfo = shallowRef<EngineInfo | null>(null)
 const alwaysProxy = shallowRef(false)
 const metadataEnabled = shallowRef(true)
 const tmdbApiKey = shallowRef('')
+const downloadDirInput = shallowRef('')
 const themeJsonInput = shallowRef('')
 const backupJsonInput = shallowRef('')
 const includeSecretsInBackup = shallowRef(false)
@@ -74,10 +75,40 @@ onMounted(async () => {
     engineInfo.value = info
     alwaysProxy.value = info.alwaysProxy
     metadataEnabled.value = info.metadataEnabled
+    downloadDirInput.value = info.downloadsDir
   } catch (err) {
     pushToast('error', String(err))
   }
 })
+
+async function chooseDownloadFolder(): Promise<void> {
+  try {
+    const picked = await vesselApi.pickDownloadDirectory()
+    if (!picked) return
+    const saved = await vesselApi.setDownloadDirectory(picked)
+    downloadDirInput.value = saved
+    if (engineInfo.value) {
+      engineInfo.value = { ...engineInfo.value, downloadsDir: saved }
+    }
+    pushToast('info', `${t('settings.download_dir')}: ${saved}`)
+  } catch (err) {
+    pushToast('error', String(err))
+  }
+}
+
+async function applyDownloadFolder(reset = false): Promise<void> {
+  try {
+    const target = reset ? null : downloadDirInput.value.trim() || null
+    const saved = await vesselApi.setDownloadDirectory(target)
+    downloadDirInput.value = saved
+    if (engineInfo.value) {
+      engineInfo.value = { ...engineInfo.value, downloadsDir: saved }
+    }
+    pushToast('info', `${t('settings.download_dir')}: ${saved}`)
+  } catch (err) {
+    pushToast('error', String(err))
+  }
+}
 
 async function toggleAlwaysProxy(): Promise<void> {
   alwaysProxy.value = !alwaysProxy.value
@@ -310,6 +341,22 @@ async function handleImportBackup(mode: 'smart_merge' | 'reset_and_import'): Pro
       </div>
 
       <div class="v-setting-row">
+        <div class="setting-copy">
+          <strong>{{ t('settings.natural_scroll') }}</strong>
+          <span class="v-muted">{{ t('settings.natural_scroll_desc') }}</span>
+        </div>
+        <label class="v-switch">
+          <input
+            v-model="uiPreferences.playback.naturalTouchpadScroll"
+            type="checkbox"
+            class="v-switch-input"
+            @change="persistUi"
+          />
+          <span class="v-switch-track" aria-hidden="true" />
+        </label>
+      </div>
+
+      <div class="v-setting-row">
         <span class="setting-copy"><strong>{{ t('settings.custom_css') }}</strong></span>
         <label class="v-switch">
           <input
@@ -492,6 +539,32 @@ async function handleImportBackup(mode: 'smart_merge' | 'reset_and_import'): Pro
           :placeholder="t('settings.tmdb_key')"
         />
         <button type="button" class="v-btn" @click="saveTmdbKey">{{ t('settings.save_api_key') }}</button>
+      </div>
+
+      <div class="download-dir-block">
+        <div class="setting-copy">
+          <strong>{{ t('settings.download_dir') }}</strong>
+          <span class="v-muted">{{ t('settings.download_dir_desc') }}</span>
+        </div>
+        <div class="inline-row">
+          <input
+            v-model="downloadDirInput"
+            type="text"
+            name="downloadDir"
+            autocomplete="off"
+            :aria-label="t('settings.download_dir')"
+            class="v-input"
+          />
+          <button type="button" class="v-btn" @click="chooseDownloadFolder">
+            <FolderOpen :size="14" aria-hidden="true" /> {{ t('settings.choose_folder') }}
+          </button>
+          <button type="button" class="v-btn v-btn-primary" @click="applyDownloadFolder(false)">
+            {{ t('common.save') }}
+          </button>
+          <button type="button" class="v-btn" @click="applyDownloadFolder(true)">
+            {{ t('common.reset') }}
+          </button>
+        </div>
       </div>
 
       <div v-if="engineInfo" class="v-muted paths-info">
@@ -702,6 +775,13 @@ async function handleImportBackup(mode: 'smart_merge' | 'reset_and_import'): Pro
 
 .paths-info {
   font-size: 0.82rem;
+}
+
+.download-dir-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding-top: 0.35rem;
 }
 
 .update-status-line {

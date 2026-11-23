@@ -252,6 +252,16 @@ impl VesselEngine {
         &self.ts_cache
     }
 
+    /// Current offline download base directory.
+    pub fn downloads_dir(&self) -> PathBuf {
+        self.downloader.downloads_root()
+    }
+
+    /// Updates the offline download base directory for future downloads.
+    pub fn set_downloads_dir(&self, path: impl Into<PathBuf>) -> VesselResult<()> {
+        self.downloader.set_downloads_root(path)
+    }
+
     /// Current `Always Proxy` routing override setting.
     pub fn always_proxy(&self) -> bool {
         self.always_proxy.load(Ordering::Acquire)

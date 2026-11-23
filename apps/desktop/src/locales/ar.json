@@ -197,7 +197,12 @@
     "checking_updates": "جارٍ فحص GitHub…",
     "update_available": "تحديث متاح",
     "up_to_date": "محدّث",
-    "open_releases": "فتح صفحة الإصدارات"
+    "open_releases": "فتح صفحة الإصدارات",
+    "natural_scroll": "التمرير الطبيعي (لوحة اللمس)",
+    "natural_scroll_desc": "عكس اتجاه التقديم والتحكم بالصوت عبر إيماءات لوحة اللمس في المشغل",
+    "download_dir": "موقع التنزيلات",
+    "download_dir_desc": "المجلد الذي تُحفظ فيه مقاطع الفيديو والصوتيات والترجمات دون اتصال",
+    "choose_folder": "اختر مجلداً"
   },
   "subtitles": {
     "preview_title": "معاينة الترجمة",

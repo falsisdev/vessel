@@ -400,6 +400,7 @@ export interface UiPreferences {
     showLiveControlBar: boolean
     autoNextDelaySecs: number
     watchedThresholdPercent: number
+    naturalTouchpadScroll: boolean
   }
   subtitles: {
     fontSizePx: number

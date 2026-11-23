@@ -197,7 +197,12 @@
     "checking_updates": "Vérification GitHub…",
     "update_available": "Mise à jour disponible",
     "up_to_date": "À jour",
-    "open_releases": "Ouvrir la page des versions"
+    "open_releases": "Ouvrir la page des versions",
+    "natural_scroll": "Défilement naturel (Pavé tactile)",
+    "natural_scroll_desc": "Inverse le sens du balayage pour l'avance rapide et le volume dans le lecteur",
+    "download_dir": "Emplacement des téléchargements",
+    "download_dir_desc": "Dossier où sont enregistrés vidéos hors ligne, pistes audio et sous-titres",
+    "choose_folder": "Choisir un dossier"
   },
   "subtitles": {
     "preview_title": "Aperçu des sous-titres",

@@ -307,6 +307,7 @@ pub struct PlaybackPreferences {
     pub show_live_control_bar: bool,
     pub auto_next_delay_secs: u16,
     pub watched_threshold_percent: u8,
+    pub natural_touchpad_scroll: bool,
 }
 
 impl Default for PlaybackPreferences {
@@ -316,6 +317,7 @@ impl Default for PlaybackPreferences {
             show_live_control_bar: true,
             auto_next_delay_secs: 10,
             watched_threshold_percent: 90,
+            natural_touchpad_scroll: false,
         }
     }
 }

@@ -197,7 +197,12 @@
     "checking_updates": "正在检查 GitHub…",
     "update_available": "发现新版本",
     "up_to_date": "已是最新",
-    "open_releases": "打开版本发布页"
+    "open_releases": "打开版本发布页",
+    "natural_scroll": "自然滚动（触控板）",
+    "natural_scroll_desc": "反转播放器中触控板手势快进与音量调节的方向",
+    "download_dir": "下载保存位置",
+    "download_dir_desc": "用于保存离线视频、音轨与字幕的文件夹",
+    "choose_folder": "选择文件夹"
   },
   "subtitles": {
     "preview_title": "字幕预览",

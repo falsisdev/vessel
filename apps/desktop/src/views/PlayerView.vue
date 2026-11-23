@@ -366,11 +366,15 @@ function handleTouchpadWheel(ev: WheelEvent): void {
     return
   }
 
-  const absX = Math.abs(ev.deltaX)
-  const absY = Math.abs(ev.deltaY)
+  const scrollSign = uiPreferences.value.playback.naturalTouchpadScroll ? -1 : 1
+  const dx = ev.deltaX * scrollSign
+  const dy = ev.deltaY * scrollSign
+
+  const absX = Math.abs(dx)
+  const absY = Math.abs(dy)
   if (absX > absY && absX > 2 && !isLive.value && duration.value > 0) {
     ev.preventDefault()
-    touchSeekDelta += ev.deltaX * 0.14
+    touchSeekDelta += dx * 0.14
     const rounded = Math.round(touchSeekDelta)
     if (rounded !== 0) {
       showGestureHud(rounded > 0 ? `+${rounded}s »` : `« ${rounded}s`)
@@ -388,7 +392,7 @@ function handleTouchpadWheel(ev: WheelEvent): void {
 
   if (absY > absX && absY > 2) {
     ev.preventDefault()
-    const nextVol = Math.min(1, Math.max(0, volume.value - ev.deltaY * 0.0018))
+    const nextVol = Math.min(1, Math.max(0, volume.value - dy * 0.0018))
     setVolumeLevel(nextVol)
     showGestureHud(`Volume ${Math.round(nextVol * 100)}%`)
   }

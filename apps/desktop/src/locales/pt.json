@@ -197,7 +197,12 @@
     "checking_updates": "Verificando GitHub…",
     "update_available": "Atualização disponível",
     "up_to_date": "Atualizado",
-    "open_releases": "Abrir página de versões"
+    "open_releases": "Abrir página de versões",
+    "natural_scroll": "Rolagem natural (Touchpad)",
+    "natural_scroll_desc": "Inverte a direção de avanço e volume pelos gestos do touchpad no player",
+    "download_dir": "Local de downloads",
+    "download_dir_desc": "Pasta onde vídeos offline, faixas de áudio e legendas serão salvos",
+    "choose_folder": "Escolher pasta"
   },
   "subtitles": {
     "preview_title": "Pré-visualização da legenda",

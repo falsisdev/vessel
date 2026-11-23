@@ -197,7 +197,12 @@
     "checking_updates": "GitHubを確認中…",
     "update_available": "アップデートあり",
     "up_to_date": "最新です",
-    "open_releases": "リリースページを開く"
+    "open_releases": "リリースページを開く",
+    "natural_scroll": "ナチュラルスクロール (タッチパッド)",
+    "natural_scroll_desc": "プレーヤーのタッチパッドによるシークと音量調整の方向を反転します",
+    "download_dir": "ダウンロード保存先",
+    "download_dir_desc": "オフライン動画・音声トラック・字幕を保存するフォルダー",
+    "choose_folder": "フォルダーを選択"
   },
   "subtitles": {
     "preview_title": "字幕プレビュー",

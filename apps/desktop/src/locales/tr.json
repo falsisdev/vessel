@@ -197,7 +197,12 @@
     "checking_updates": "GitHub Kontrol Ediliyor…",
     "update_available": "Yeni Güncelleme Var",
     "up_to_date": "Güncel",
-    "open_releases": "Sürümler Sayfasını Aç"
+    "open_releases": "Sürümler Sayfasını Aç",
+    "natural_scroll": "Doğal Kaydırma (Touchpad)",
+    "natural_scroll_desc": "Touchpad ile video sarma ve ses kontrolü yönünü sistem doğal kaydırmasına göre ters çevir",
+    "download_dir": "İndirme Konumu",
+    "download_dir_desc": "Çevrimdışı videoların, ses parçalarının ve altyazıların kaydedileceği klasör",
+    "choose_folder": "Klasör Seç"
   },
   "subtitles": {
     "preview_title": "Altyazı Önizleme",

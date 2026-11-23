@@ -197,7 +197,12 @@
     "checking_updates": "Comprobando GitHub…",
     "update_available": "Actualización disponible",
     "up_to_date": "Actualizado",
-    "open_releases": "Abrir página de versiones"
+    "open_releases": "Abrir página de versiones",
+    "natural_scroll": "Desplazamiento natural (Touchpad)",
+    "natural_scroll_desc": "Invierte la dirección de búsqueda y volumen con gestos del panel táctil",
+    "download_dir": "Ubicación de descargas",
+    "download_dir_desc": "Carpeta donde se guardan vídeos sin conexión, pistas de audio y subtítulos",
+    "choose_folder": "Elegir carpeta"
   },
   "subtitles": {
     "preview_title": "Vista previa de subtítulos",

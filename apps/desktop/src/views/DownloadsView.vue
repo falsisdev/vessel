@@ -10,6 +10,7 @@ const { t } = useI18n()
 const { downloadProgress } = useVesselEvents()
 
 const downloads = ref<StoredDownload[]>([])
+const downloadDir = shallowRef('')
 const confirmDeleteId = shallowRef<string>('')
 
 const mergedDownloads = computed(() =>
@@ -36,7 +37,12 @@ function formatBytes(bytes: number): string {
 async function refresh(): Promise<void> {
   if (!isTauriRuntime()) return
   try {
-    downloads.value = await vesselApi.listDownloads()
+    const [list, info] = await Promise.all([
+      vesselApi.listDownloads(),
+      vesselApi.getEngineInfo().catch(() => null),
+    ])
+    downloads.value = list
+    if (info) downloadDir.value = info.downloadsDir
   } catch (err) {
     pushToast('error', String(err))
   }
@@ -85,7 +91,12 @@ onMounted(() => {
 <template>
   <section class="downloads-view v-page-container">
     <header class="v-page-header">
-      <h1 class="v-page-title">{{ t('downloads.title') }}</h1>
+      <div>
+        <h1 class="v-page-title">{{ t('downloads.title') }}</h1>
+        <p v-if="downloadDir" class="v-muted dl-dir-line">
+          {{ t('settings.download_dir') }}: <code>{{ downloadDir }}</code>
+        </p>
+      </div>
       <button class="v-btn" @click="refresh">
         <RefreshCw :size="15" /> {{ t('common.refresh') }}
       </button>
@@ -156,6 +167,11 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 0.3rem;
+}
+
+.dl-dir-line {
+  margin: 0.25rem 0 0;
+  font-size: 0.8rem;
 }
 
 .dl-head,

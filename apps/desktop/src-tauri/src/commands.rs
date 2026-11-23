@@ -236,7 +236,7 @@ fn builtin_themes() -> Vec<ThemeSpec> {
 pub async fn get_engine_info(state: State<'_, AppState>) -> Result<EngineInfoDto, String> {
     Ok(EngineInfoDto {
         root_dir: state.paths.root().to_string_lossy().into_owned(),
-        downloads_dir: state.paths.downloads_dir().to_string_lossy().into_owned(),
+        downloads_dir: state.engine.downloads_dir().to_string_lossy().into_owned(),
         plugins_dir: state.paths.plugins_dir().to_string_lossy().into_owned(),
         themes_dir: state.paths.themes_dir().to_string_lossy().into_owned(),
         locales_dir: state.paths.locales_dir().to_string_lossy().into_owned(),
@@ -245,6 +245,103 @@ pub async fn get_engine_info(state: State<'_, AppState>) -> Result<EngineInfoDto
         always_proxy: state.engine.always_proxy(),
         metadata_enabled: state.engine.metadata_enabled(),
     })
+}
+
+#[tauri::command]
+pub async fn set_download_directory(
+    state: State<'_, AppState>,
+    path: Option<String>,
+) -> Result<String, String> {
+    let trimmed = path.as_deref().map(str::trim).unwrap_or("");
+    let target = if trimmed.is_empty() {
+        state.paths.downloads_dir()
+    } else {
+        std::path::PathBuf::from(trimmed)
+    };
+    map_err(state.engine.set_downloads_dir(target.clone()))?;
+    let persisted = if trimmed.is_empty() {
+        String::new()
+    } else {
+        target.to_string_lossy().into_owned()
+    };
+    map_err(
+        state
+            .engine
+            .storage()
+            .set_json_setting("custom_download_dir", &persisted)
+            .await,
+    )?;
+    Ok(state.engine.downloads_dir().to_string_lossy().into_owned())
+}
+
+#[tauri::command]
+pub async fn pick_download_directory() -> Result<Option<String>, String> {
+    #[cfg(target_os = "macos")]
+    {
+        let output = tokio::process::Command::new("osascript")
+            .args([
+                "-e",
+                "POSIX path of (choose folder with prompt \"Select Vessel Download Directory\")",
+            ])
+            .output()
+            .await
+            .map_err(|err| format!("Failed to open folder picker: {err}"))?;
+        if !output.status.success() {
+            return Ok(None);
+        }
+        let chosen = String::from_utf8_lossy(&output.stdout).trim().to_owned();
+        if chosen.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(chosen.trim_end_matches('/').to_owned()))
+        }
+    }
+    #[cfg(target_os = "windows")]
+    {
+        let script = r#"
+Add-Type -AssemblyName System.Windows.Forms
+$dlg = New-Object System.Windows.Forms.FolderBrowserDialog
+$dlg.Description = 'Select Vessel Download Directory'
+if ($dlg.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
+  Write-Output $dlg.SelectedPath
+}
+"#;
+        let output = tokio::process::Command::new("powershell")
+            .args(["-NoProfile", "-Command", script])
+            .output()
+            .await
+            .map_err(|err| format!("Failed to open folder picker: {err}"))?;
+        if !output.status.success() {
+            return Ok(None);
+        }
+        let chosen = String::from_utf8_lossy(&output.stdout).trim().to_owned();
+        if chosen.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(chosen))
+        }
+    }
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        let output = tokio::process::Command::new("zenity")
+            .args([
+                "--file-selection",
+                "--directory",
+                "--title=Select Vessel Download Directory",
+            ])
+            .output()
+            .await
+            .map_err(|err| format!("Failed to open folder picker: {err}"))?;
+        if !output.status.success() {
+            return Ok(None);
+        }
+        let chosen = String::from_utf8_lossy(&output.stdout).trim().to_owned();
+        if chosen.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(chosen))
+        }
+    }
 }
 
 #[tauri::command]

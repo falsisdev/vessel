@@ -197,7 +197,12 @@
     "checking_updates": "Controllo su GitHub…",
     "update_available": "Aggiornamento disponibile",
     "up_to_date": "Aggiornato",
-    "open_releases": "Apri pagina versioni"
+    "open_releases": "Apri pagina versioni",
+    "natural_scroll": "Scorrimento naturale (Touchpad)",
+    "natural_scroll_desc": "Inverte la direzione di ricerca e volume tramite gesti touchpad nel player",
+    "download_dir": "Cartella download",
+    "download_dir_desc": "Cartella in cui salvare video offline, tracce audio e sottotitoli",
+    "choose_folder": "Scegli cartella"
   },
   "subtitles": {
     "preview_title": "Anteprima sottotitoli",

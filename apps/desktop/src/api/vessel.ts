@@ -54,6 +54,9 @@ export const vesselApi = {
   setAlwaysProxy: (enabled: boolean) => call<void>('set_always_proxy', { enabled }),
   setMetadataEnabled: (enabled: boolean) => call<void>('set_metadata_enabled', { enabled }),
   setTmdbApiKey: (apiKey: string) => call<void>('set_tmdb_api_key', { apiKey }),
+  setDownloadDirectory: (path?: string | null) =>
+    call<string>('set_download_directory', { path: path ?? null }),
+  pickDownloadDirectory: () => call<string | null>('pick_download_directory'),
 
   getUiPreferences: () => call<UiPreferences>('get_ui_preferences'),
   setUiPreferences: (prefs: UiPreferences) => call<void>('set_ui_preferences', { prefs }),
