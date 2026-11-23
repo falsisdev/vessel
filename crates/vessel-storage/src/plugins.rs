@@ -148,6 +148,46 @@ impl SqliteStorage {
             .await
     }
 
+    /// Lists all installed plugins ordered by name.
+    pub async fn list_plugins(&self) -> VesselResult<Vec<StoredPlugin>> {
+        self.actor()
+            .execute(|db| {
+                let mut stmt = db
+                    .conn()
+                    .prepare(
+                        "SELECT id, repo_id, source_type, local_path, sha256, enabled,
+                                allow_dynamic_domains, manifest_json, installed_at, updated_at
+                         FROM plugins ORDER BY name ASC",
+                    )
+                    .map_err(map_sql_err)?;
+                let rows = stmt
+                    .query_map([], |row| {
+                        let id: String = row.get(0)?;
+                        let raw = RawPluginRow {
+                            repo_id: row.get(1)?,
+                            source_type: row.get(2)?,
+                            local_path: row.get(3)?,
+                            sha256: row.get(4)?,
+                            enabled: row.get(5)?,
+                            allow_dynamic_domains: row.get(6)?,
+                            manifest_json: row.get(7)?,
+                            installed_at: row.get(8)?,
+                            updated_at: row.get(9)?,
+                        };
+                        Ok((id, raw))
+                    })
+                    .map_err(map_sql_err)?;
+
+                let mut plugins = Vec::new();
+                for entry in rows {
+                    let (id, raw) = entry.map_err(map_sql_err)?;
+                    plugins.push(raw.into_stored(&id)?);
+                }
+                Ok(plugins)
+            })
+            .await
+    }
+
     /// Enables or disables an installed plugin.
     pub async fn set_plugin_enabled(
         &self,
@@ -239,6 +279,29 @@ impl SqliteStorage {
                     )
                     .map_err(map_sql_err)?;
                 Ok(())
+            })
+            .await
+    }
+
+    /// Lists all persisted allowed domains for `plugin_id`.
+    pub async fn list_allowed_domains(&self, plugin_id: &PluginId) -> VesselResult<Vec<String>> {
+        let id = plugin_id.as_str().to_owned();
+        self.actor()
+            .execute(move |db| {
+                let mut stmt = db
+                    .conn()
+                    .prepare(
+                        "SELECT domain FROM plugin_allowed_domains WHERE plugin_id = ?1 ORDER BY domain ASC",
+                    )
+                    .map_err(map_sql_err)?;
+                let rows = stmt
+                    .query_map([&id], |row| row.get(0))
+                    .map_err(map_sql_err)?;
+                let mut domains = Vec::new();
+                for item in rows {
+                    domains.push(item.map_err(map_sql_err)?);
+                }
+                Ok(domains)
             })
             .await
     }

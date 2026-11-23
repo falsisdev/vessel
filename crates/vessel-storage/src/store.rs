@@ -111,6 +111,51 @@ impl SqliteStorage {
     pub async fn set_ui_preferences(&self, prefs: &UiPreferences) -> VesselResult<()> {
         self.set_json_setting(UI_PREFERENCES_KEY, prefs).await
     }
+
+    /// Loads all persisted `ts_compile_cache` `(source_hash, compiled_js)` pairs.
+    pub async fn load_ts_compile_cache(&self) -> VesselResult<Vec<(String, String)>> {
+        self.actor
+            .execute(|db| {
+                let mut stmt = db
+                    .conn()
+                    .prepare("SELECT source_hash, compiled_js FROM ts_compile_cache")
+                    .map_err(map_sql_err)?;
+                let rows = stmt
+                    .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+                    .map_err(map_sql_err)?;
+                let mut entries = Vec::new();
+                for item in rows {
+                    entries.push(item.map_err(map_sql_err)?);
+                }
+                Ok(entries)
+            })
+            .await
+    }
+
+    /// Stores a compiled TypeScript output in `ts_compile_cache`.
+    pub async fn upsert_ts_compile_cache(
+        &self,
+        source_hash: &str,
+        compiled_js: &str,
+    ) -> VesselResult<()> {
+        let hash = source_hash.to_owned();
+        let js = compiled_js.to_owned();
+        self.actor
+            .execute(move |db| {
+                db.conn()
+                    .execute(
+                        "INSERT INTO ts_compile_cache (source_hash, compiled_js, updated_at)
+                         VALUES (?1, ?2, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+                         ON CONFLICT(source_hash) DO UPDATE SET
+                             compiled_js = excluded.compiled_js,
+                             updated_at = excluded.updated_at",
+                        (&hash, &js),
+                    )
+                    .map_err(map_sql_err)?;
+                Ok(())
+            })
+            .await
+    }
 }
 
 #[async_trait]
