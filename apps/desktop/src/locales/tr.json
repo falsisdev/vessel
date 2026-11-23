@@ -71,7 +71,8 @@
     "filter_all": "Tümü",
     "filter_movies": "Filmler",
     "filter_series": "Diziler",
-    "filter_anime": "Anime"
+    "filter_anime": "Anime",
+    "all_plugins": "Tüm Eklentiler"
   },
   "details": {
     "episodes": "Bölümler",
@@ -211,6 +212,10 @@
     "style_none": "Sade"
   },
   "player": {
+    "audio": "Ses",
+    "audio_tracks": "Ses Parçaları",
+    "audio_default_only": "Varsayılan ses akışı etkin. Farklı dublajlar için Kaynaklar sekmesine de göz atabilirsiniz.",
+    "audio_single_note": "Bu yayında yalnızca tek bir gömülü ses parçası bulunuyor.",
     "subtitles_delay": "Altyazı Gecikmesi",
     "subtitles_off": "Kapalı (Altyazısız)",
     "error_unsupported": "Bu yayın biçimi yerleşik WebView oynatıcı tarafından desteklenmiyor. Başka bir kaynak seçin veya mpv kurun.",

@@ -114,11 +114,15 @@ export function useVesselEvents() {
     }
   }
 
-  async function startSearch(query: string, filters?: Record<string, string>): Promise<void> {
+  async function startSearch(
+    query: string,
+    filters?: Record<string, string>,
+    pluginIds?: string[],
+  ): Promise<void> {
     searchBuckets.value = {}
     isSearching.value = true
     try {
-      const searchId = await vesselApi.searchAll(query, filters, 1)
+      const searchId = await vesselApi.searchAll(query, filters, 1, pluginIds)
       activeSearchId.value = searchId
     } catch (err) {
       isSearching.value = false

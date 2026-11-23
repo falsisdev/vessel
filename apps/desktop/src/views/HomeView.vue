@@ -225,6 +225,9 @@ async function loadHome(forceRefresh = false): Promise<void> {
   }
 
   loading.value = true
+  if (forceRefresh) {
+    shelves.value = []
+  }
   try {
     if (forceRefresh) {
       await vesselApi.clearRuntimeCaches().catch(() => {})
@@ -539,6 +542,22 @@ onUnmounted(() => {
             </div>
           </div>
 
+          <div v-else-if="loading" key="loading-hero" class="hero-stage">
+            <div class="hero-vignette" aria-hidden="true" />
+            <div class="hero-content">
+              <div class="hero-meta-line">
+                <span class="v-skeleton hero-sk-pill" />
+                <span class="v-skeleton hero-sk-tag" />
+              </div>
+              <div class="v-skeleton hero-sk-title" />
+              <div class="v-skeleton hero-sk-sub" />
+              <div class="hero-actions">
+                <span class="v-skeleton hero-sk-btn" />
+                <span class="v-skeleton hero-sk-btn secondary" />
+              </div>
+            </div>
+          </div>
+
           <div v-else key="empty-hero" class="hero-stage">
             <div class="hero-vignette" aria-hidden="true" />
             <div class="hero-content">
@@ -684,7 +703,11 @@ onUnmounted(() => {
             <div class="v-skeleton rail-title-skeleton" />
           </div>
           <div class="rail-track">
-            <div v-for="n in 7" :key="n" class="v-skeleton rail-skeleton" />
+            <div v-for="n in 7" :key="n" class="rail-skeleton-card">
+              <div class="v-skeleton rail-skeleton" />
+              <div class="v-skeleton rail-skeleton-line" />
+              <div class="v-skeleton rail-skeleton-line short" />
+            </div>
           </div>
         </div>
       </div>
@@ -950,13 +973,13 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
-  padding: 3rem 3rem 3.5rem;
+  padding: 3rem 3rem 4.85rem;
   min-height: clamp(540px, 64vh, 690px);
 }
 
 .nuvio-hero.is-compact .hero-stage {
   min-height: 335px;
-  padding: 1.9rem 2.75rem 3.1rem;
+  padding: 1.9rem 2.75rem 4.15rem;
 }
 
 .hero-art {
@@ -1069,12 +1092,46 @@ onUnmounted(() => {
   position: absolute;
   left: 3rem;
   right: 3rem;
-  bottom: 1.35rem;
+  bottom: 1.15rem;
   z-index: 4;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
+}
+
+.hero-sk-pill {
+  width: 72px;
+  height: 22px;
+  border-radius: 999px;
+}
+
+.hero-sk-tag {
+  width: 96px;
+  height: 20px;
+  border-radius: 6px;
+}
+
+.hero-sk-title {
+  width: min(440px, 72vw);
+  height: 44px;
+  border-radius: 10px;
+}
+
+.hero-sk-sub {
+  width: min(520px, 84vw);
+  height: 18px;
+  border-radius: 6px;
+}
+
+.hero-sk-btn {
+  width: 138px;
+  height: 40px;
+  border-radius: 999px;
+}
+
+.hero-sk-btn.secondary {
+  width: 118px;
 }
 
 .hero-indicators {
@@ -1193,12 +1250,27 @@ onUnmounted(() => {
 }
 
 .rail-card-slot,
-.rail-skeleton {
+.rail-skeleton-card {
   flex: 0 0 186px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
 }
 
 .rail-skeleton {
+  width: 100%;
   aspect-ratio: 2 / 3;
+}
+
+.rail-skeleton-line {
+  width: 82%;
+  height: 13px;
+  border-radius: 6px;
+}
+
+.rail-skeleton-line.short {
+  width: 48%;
+  height: 11px;
 }
 
 /* Continue Watching Landscape Cards */

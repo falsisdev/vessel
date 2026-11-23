@@ -71,7 +71,8 @@
     "filter_all": "All",
     "filter_movies": "Movies",
     "filter_series": "Series",
-    "filter_anime": "Anime"
+    "filter_anime": "Anime",
+    "all_plugins": "All Plugins"
   },
   "details": {
     "episodes": "Episodes",
@@ -211,6 +212,10 @@
     "style_none": "Clean"
   },
   "player": {
+    "audio": "Audio",
+    "audio_tracks": "Audio Tracks",
+    "audio_default_only": "Default audio stream active. Check Sources for alternate dubbed servers.",
+    "audio_single_note": "Only one embedded audio track is exposed in this stream.",
     "subtitles_delay": "Subtitle Delay",
     "subtitles_off": "Off (No Subtitles)",
     "error_unsupported": "This stream format is not supported by the built-in WebView player. Try another source or install mpv.",

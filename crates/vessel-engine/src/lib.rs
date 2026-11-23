@@ -624,6 +624,17 @@ impl VesselEngine {
         filters: BTreeMap<String, String>,
         page: u32,
     ) -> SearchHandle {
+        self.search_selected(query, filters, page, None).await
+    }
+
+    /// Runs a streaming search across either all enabled plugins or an explicit `plugin_ids` subset.
+    pub async fn search_selected(
+        &self,
+        query: &str,
+        filters: BTreeMap<String, String>,
+        page: u32,
+        target_plugins: Option<Vec<PluginId>>,
+    ) -> SearchHandle {
         self.cancel_active_search().await;
         self.pool.reset_cancellations().await;
 
@@ -634,7 +645,14 @@ impl VesselEngine {
             *active = Some((search_id.clone(), token.clone()));
         }
 
-        let plugin_ids = self.pool.enabled_plugin_ids().await;
+        let enabled = self.pool.enabled_plugin_ids().await;
+        let plugin_ids: Vec<PluginId> = match target_plugins {
+            Some(requested) if !requested.is_empty() => enabled
+                .into_iter()
+                .filter(|id| requested.contains(id))
+                .collect(),
+            _ => enabled,
+        };
         let query_owned = query.to_owned();
         let pool = Arc::clone(&self.pool);
         let sink = Arc::clone(&self.event_sink);

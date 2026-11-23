@@ -82,8 +82,12 @@ export const vesselApi = {
     call<HomeShelfResult[]>('get_home_feeds', {
       pluginIds: pluginIds === null ? undefined : pluginIds,
     }),
-  searchAll: (query: string, filters?: Record<string, string>, page = 1) =>
-    call<string>('search_all', { query, filters, page }),
+  searchAll: (
+    query: string,
+    filters?: Record<string, string>,
+    page = 1,
+    pluginIds?: string[],
+  ) => call<string>('search_all', { query, filters, page, pluginIds }),
   cancelSearch: () => call<void>('cancel_search'),
   getDetailsWithEnrichment: (pluginId: string, nativeId: string, preferredLang = 'en') =>
     call<MediaDetail>('get_details_with_enrichment', { pluginId, nativeId, preferredLang }),

@@ -1,12 +1,13 @@
 <script setup lang="ts">
-import { computed, shallowRef } from 'vue'
+import { computed, onActivated, onMounted, ref, shallowRef } from 'vue'
 import { useRouter } from 'vue-router'
 import { Loader2, Search as SearchIcon, X } from 'lucide-vue-next'
-import { vesselApi } from '@/api/vessel'
+import { isTauriRuntime, vesselApi } from '@/api/vessel'
 import MediaCard from '@/components/media/MediaCard.vue'
 import { useI18n } from '@/composables/useI18n'
 import { useUiPreferences } from '@/composables/useUiPreferences'
 import { pushToast, useVesselEvents } from '@/composables/useVesselEvents'
+import type { PluginListEntry } from '@/types/vessel'
 
 defineOptions({ name: 'SearchView' })
 
@@ -17,6 +18,10 @@ const { isSearching, searchBuckets, startSearch } = useVesselEvents()
 
 const query = shallowRef('')
 const mediaTypeFilter = shallowRef('')
+const selectedPluginId = shallowRef('')
+const plugins = ref<PluginListEntry[]>([])
+
+const enabledPlugins = computed(() => plugins.value.filter((p) => p.enabled))
 
 const TYPE_PILLS = [
   { value: '', labelKey: 'search.filter_all' },
@@ -25,9 +30,19 @@ const TYPE_PILLS = [
   { value: 'anime', labelKey: 'search.filter_anime' },
 ]
 
+const pluginNameMap = computed(() => {
+  const m = new Map<string, string>()
+  for (const p of plugins.value) {
+    m.set(p.manifest.id, p.manifest.name)
+  }
+  return m
+})
+
 const bucketEntries = computed(() => {
   const filter = mediaTypeFilter.value
+  const targetPlugin = selectedPluginId.value
   return Object.entries(searchBuckets.value)
+    .filter(([pluginId]) => !targetPlugin || pluginId === targetPlugin)
     .map(([pluginId, items]) => {
       const filtered = !filter
         ? items
@@ -42,16 +57,46 @@ const bucketEntries = computed(() => {
     .filter(([, items]) => items.length > 0)
 })
 
+async function refreshPlugins(): Promise<void> {
+  if (!isTauriRuntime()) return
+  try {
+    plugins.value = await vesselApi.listPlugins()
+    if (
+      selectedPluginId.value &&
+      !plugins.value.some((p) => p.enabled && p.manifest.id === selectedPluginId.value)
+    ) {
+      selectedPluginId.value = ''
+    }
+  } catch {
+    // Non-fatal
+  }
+}
+
+function onPluginFilterChange(): void {
+  if (query.value.trim()) {
+    void runSearch()
+  }
+}
+
 async function runSearch(): Promise<void> {
   const trimmed = query.value.trim()
   if (!trimmed) return
   try {
     const filters = mediaTypeFilter.value ? { mediaType: mediaTypeFilter.value } : undefined
-    await startSearch(trimmed, filters)
+    const targetPlugins = selectedPluginId.value ? [selectedPluginId.value] : undefined
+    await startSearch(trimmed, filters, targetPlugins)
   } catch (err) {
     pushToast('error', String(err))
   }
 }
+
+onMounted(() => {
+  void refreshPlugins()
+})
+
+onActivated(() => {
+  void refreshPlugins()
+})
 
 async function stopSearch(): Promise<void> {
   try {
@@ -87,6 +132,18 @@ function openDetails(pluginId: string, nativeId: string): void {
         class="v-input"
         :placeholder="t('search.placeholder')"
       />
+      <select
+        v-if="enabledPlugins.length"
+        v-model="selectedPluginId"
+        aria-label="Filter by plugin"
+        class="v-select search-plugin-select"
+        @change="onPluginFilterChange"
+      >
+        <option value="">{{ t('search.all_plugins') }}</option>
+        <option v-for="p in enabledPlugins" :key="p.manifest.id" :value="p.manifest.id">
+          {{ p.manifest.name }}
+        </option>
+      </select>
       <button type="submit" class="v-btn v-btn-primary" :disabled="isSearching">
         <Loader2 v-if="isSearching" :size="15" class="spin" aria-hidden="true" />
         <SearchIcon v-else :size="15" aria-hidden="true" />
@@ -113,7 +170,11 @@ function openDetails(pluginId: string, nativeId: string): void {
     </div>
 
     <div v-if="isSearching && !bucketEntries.length" class="v-grid">
-      <div v-for="n in 8" :key="n" class="v-skeleton search-skeleton" />
+      <div v-for="n in 8" :key="n" class="search-skeleton-card">
+        <div class="v-skeleton search-skeleton" />
+        <div class="v-skeleton search-skeleton-line" />
+        <div class="v-skeleton search-skeleton-line short" />
+      </div>
     </div>
 
     <div v-else-if="!bucketEntries.length" class="v-card v-muted">
@@ -122,7 +183,7 @@ function openDetails(pluginId: string, nativeId: string): void {
 
     <div v-for="[pluginId, items] in bucketEntries" :key="pluginId" class="bucket">
       <div class="bucket-head">
-        <h2 class="bucket-title">{{ pluginId }}</h2>
+        <h2 class="bucket-title">{{ pluginNameMap.get(pluginId) ?? pluginId }}</h2>
         <span class="v-badge">{{ items.length }}</span>
       </div>
       <div class="v-grid">
@@ -157,6 +218,12 @@ function openDetails(pluginId: string, nativeId: string): void {
   min-width: 240px;
 }
 
+.search-plugin-select {
+  width: auto;
+  min-width: 175px;
+  max-width: 240px;
+}
+
 .type-pills {
   display: flex;
   gap: 0.45rem;
@@ -169,9 +236,26 @@ function openDetails(pluginId: string, nativeId: string): void {
   gap: 0.55rem;
 }
 
+.search-skeleton-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
 .search-skeleton {
   aspect-ratio: 2 / 3;
   min-height: 240px;
+}
+
+.search-skeleton-line {
+  width: 80%;
+  height: 13px;
+  border-radius: 6px;
+}
+
+.search-skeleton-line.short {
+  width: 48%;
+  height: 11px;
 }
 
 .searching-pill {

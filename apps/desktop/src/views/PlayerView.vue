@@ -5,6 +5,7 @@ import Hls from 'hls.js'
 import mpegts from 'mpegts.js'
 import {
   ArrowLeft,
+  AudioLines,
   Captions,
   Check,
   ExternalLink,
@@ -46,8 +47,30 @@ const { pushToast } = useVesselEvents()
 const { uiPreferences, savePreferences } = useUiPreferences()
 const { activeSession, setSession, updateEpisodeSession, setActiveStreamIndex } = usePlayerSession()
 
-type DrawerTab = 'episodes' | 'sources' | 'subtitles' | 'settings' | null
+type DrawerTab = 'episodes' | 'sources' | 'audio' | 'subtitles' | 'settings' | null
 type FitMode = 'contain' | 'cover' | 'fill'
+
+interface AudioTrackOption {
+  id: number
+  label: string
+  lang?: string
+  meta?: string
+  active: boolean
+  source: 'hls' | 'native'
+}
+
+interface NativeAudioTrack {
+  id?: string
+  kind?: string
+  label?: string
+  language?: string
+  enabled: boolean
+}
+
+interface NativeAudioTrackList extends EventTarget {
+  length: number
+  [index: number]: NativeAudioTrack
+}
 
 const playerStageRef = ref<HTMLElement | null>(null)
 const videoRef = ref<HTMLVideoElement | null>(null)
@@ -82,6 +105,7 @@ const subtitleError = shallowRef('')
 const pendingSeekSeconds = ref<number | null>(null)
 const playableSrc = ref<string>('')
 const gestureLabel = ref<string>('')
+const audioTracks = ref<AudioTrackOption[]>([])
 
 let hideTimer: number | null = null
 let progressTimer: number | null = null
@@ -94,8 +118,107 @@ let hlsInstance: Hls | null = null
 let mpegtsPlayer: mpegts.Player | null = null
 let forceHlsJsNextTry = false
 let userExplicitPause = false
+let boundAudioTrackList: NativeAudioTrackList | null = null
+
+const handleNativeAudioTrackChange = (): void => {
+  syncAudioTracks()
+}
+
+function unbindNativeAudioListeners(): void {
+  if (!boundAudioTrackList) return
+  boundAudioTrackList.removeEventListener('addtrack', handleNativeAudioTrackChange)
+  boundAudioTrackList.removeEventListener('removetrack', handleNativeAudioTrackChange)
+  boundAudioTrackList.removeEventListener('change', handleNativeAudioTrackChange)
+  boundAudioTrackList = null
+}
+
+function bindNativeAudioListeners(el: HTMLVideoElement): void {
+  unbindNativeAudioListeners()
+  const list = (el as HTMLVideoElement & { audioTracks?: NativeAudioTrackList }).audioTracks
+  if (!list || typeof list.addEventListener !== 'function') return
+  boundAudioTrackList = list
+  list.addEventListener('addtrack', handleNativeAudioTrackChange)
+  list.addEventListener('removetrack', handleNativeAudioTrackChange)
+  list.addEventListener('change', handleNativeAudioTrackChange)
+}
+
+function syncAudioTracks(): void {
+  if (hlsInstance) {
+    const raw = hlsInstance.audioTracks ?? []
+    const currentId = hlsInstance.audioTrack
+    audioTracks.value = raw.map((trk, idx) => {
+      const lang = trk.lang?.trim() || undefined
+      const channels =
+        typeof trk.attrs?.CHANNELS === 'string' && trk.attrs.CHANNELS.trim()
+          ? `${trk.attrs.CHANNELS.trim()}ch`
+          : undefined
+      const metaParts = [lang?.toUpperCase(), channels, trk.audioCodec?.trim()].filter(
+        (v): v is string => Boolean(v),
+      )
+      return {
+        id: trk.id ?? idx,
+        label: trk.name?.trim() || lang?.toUpperCase() || `Track ${idx + 1}`,
+        lang,
+        meta: metaParts.join(' · ') || undefined,
+        active: (trk.id ?? idx) === currentId,
+        source: 'hls',
+      }
+    })
+    return
+  }
+
+  const el = videoRef.value as (HTMLVideoElement & { audioTracks?: NativeAudioTrackList }) | null
+  const nativeList = el?.audioTracks
+  if (nativeList && nativeList.length > 0) {
+    const items: AudioTrackOption[] = []
+    for (let i = 0; i < nativeList.length; i += 1) {
+      const trk = nativeList[i]
+      if (!trk) continue
+      const lang = trk.language?.trim() || undefined
+      const kind = trk.kind?.trim() && trk.kind !== 'main' ? trk.kind.trim() : undefined
+      const metaParts = [lang?.toUpperCase(), kind].filter((v): v is string => Boolean(v))
+      items.push({
+        id: i,
+        label: trk.label?.trim() || lang?.toUpperCase() || `Track ${i + 1}`,
+        lang,
+        meta: metaParts.join(' · ') || undefined,
+        active: trk.enabled,
+        source: 'native',
+      })
+    }
+    audioTracks.value = items
+    return
+  }
+
+  audioTracks.value = []
+}
+
+function switchAudioTrack(option: AudioTrackOption): void {
+  if (option.source === 'hls' && hlsInstance) {
+    hlsInstance.audioTrack = option.id
+    syncAudioTracks()
+    showGestureHud(`${t('player.audio')}: ${option.label}`)
+    scheduleHideControls()
+    return
+  }
+
+  if (option.source === 'native') {
+    const el = videoRef.value as (HTMLVideoElement & { audioTracks?: NativeAudioTrackList }) | null
+    const nativeList = el?.audioTracks
+    if (!nativeList) return
+    for (let i = 0; i < nativeList.length; i += 1) {
+      const trk = nativeList[i]
+      if (trk) trk.enabled = i === option.id
+    }
+    syncAudioTracks()
+    showGestureHud(`${t('player.audio')}: ${option.label}`)
+    scheduleHideControls()
+  }
+}
 
 function destroyMediaEngines(): void {
+  unbindNativeAudioListeners()
+  audioTracks.value = []
   if (hlsInstance) {
     hlsInstance.destroy()
     hlsInstance = null
@@ -671,6 +794,7 @@ function onLoadedMetadata(): void {
   el.playbackRate = isLive.value ? 1 : playbackRate.value
   el.volume = volume.value
   el.muted = isMuted.value
+  syncAudioTracks()
   if (
     pendingSeekSeconds.value !== null &&
     pendingSeekSeconds.value > 2 &&
@@ -701,6 +825,7 @@ function onSeeked(): void {
 function onCanPlay(): void {
   const el = videoRef.value
   if (!el) return
+  syncAudioTracks()
   if (pendingSeekSeconds.value !== null && pendingSeekSeconds.value > 2 && !hlsInstance) {
     const target = pendingSeekSeconds.value
     pendingSeekSeconds.value = null
@@ -921,8 +1046,11 @@ async function attachMediaSource(
     })
     hlsInstance = hls
     hls.on(Hls.Events.MANIFEST_PARSED, () => {
+      syncAudioTracks()
       void el.play().catch(() => {})
     })
+    hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, syncAudioTracks)
+    hls.on(Hls.Events.AUDIO_TRACK_SWITCHED, syncAudioTracks)
     hls.on(Hls.Events.ERROR, (_ev, data) => {
       if (data.fatal) {
         if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
@@ -947,6 +1075,7 @@ async function attachMediaSource(
     return
   }
 
+  bindNativeAudioListeners(el)
   pendingSeekSeconds.value = startSec > 2 ? startSec : null
   el.src = src
 }
@@ -1170,6 +1299,17 @@ onUnmounted(() => {
               <span>Sources ({{ streams.length }})</span>
             </button>
             <button
+              type="button"
+              class="cs-pill-btn"
+              :class="{ active: activeDrawer === 'audio' }"
+              @click="toggleDrawer('audio')"
+            >
+              <AudioLines :size="15" aria-hidden="true" />
+              <span>
+                {{ t('player.audio') }}<template v-if="audioTracks.length > 1"> ({{ audioTracks.length }})</template>
+              </span>
+            </button>
+            <button
               v-if="!isLive"
               type="button"
               class="cs-pill-btn"
@@ -1371,9 +1511,11 @@ onUnmounted(() => {
                   : `Episodes (${allEpisodes.length})`
                 : activeDrawer === 'sources'
                   ? `Sources (${streams.length})`
-                  : activeDrawer === 'subtitles'
-                    ? 'Subtitles & Sync'
-                    : 'Player Settings'
+                  : activeDrawer === 'audio'
+                    ? `${t('player.audio_tracks')}${audioTracks.length ? ` (${audioTracks.length})` : ''}`
+                    : activeDrawer === 'subtitles'
+                      ? 'Subtitles & Sync'
+                      : 'Player Settings'
             }}
           </h3>
           <button type="button" class="cs-icon-btn" @click="activeDrawer = null">
@@ -1443,6 +1585,38 @@ onUnmounted(() => {
               aria-hidden="true"
             />
           </button>
+        </div>
+
+        <!-- AUDIO TRACKS LIST -->
+        <div v-else-if="activeDrawer === 'audio'" class="cs-drawer-body">
+          <button
+            v-for="trk in audioTracks"
+            :key="`${trk.source}-${trk.id}`"
+            type="button"
+            class="cs-drawer-item"
+            :class="{ active: trk.active }"
+            @click="switchAudioTrack(trk)"
+          >
+            <div class="cs-item-main">
+              <span class="cs-item-title">{{ trk.label }}</span>
+              <div v-if="trk.meta" class="cs-source-tags">
+                <span class="cs-tag">{{ trk.meta }}</span>
+              </div>
+            </div>
+            <Check
+              v-if="trk.active"
+              :size="16"
+              class="cs-active-check"
+              aria-hidden="true"
+            />
+          </button>
+
+          <p v-if="!audioTracks.length" class="cs-empty-note">
+            {{ t('player.audio_default_only') }}
+          </p>
+          <p v-else-if="audioTracks.length === 1" class="cs-empty-note">
+            {{ t('player.audio_single_note') }}
+          </p>
         </div>
 
         <!-- SUBTITLES & APPEARANCE (VOD only) -->

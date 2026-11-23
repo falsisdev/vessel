@@ -449,7 +449,8 @@ textarea {
 .v-skeleton {
   position: relative;
   overflow: hidden;
-  background: var(--vessel-bg-surface);
+  background: var(--vessel-bg-elevated);
+  border: 1px solid var(--vessel-border);
   border-radius: var(--vessel-radius);
 }
 
@@ -458,8 +459,12 @@ textarea {
   position: absolute;
   inset: 0;
   transform: translateX(-100%);
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.05), transparent);
-  animation: v-shimmer 1.35s infinite;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.11), transparent);
+  animation: v-shimmer 1.25s infinite;
+}
+
+:root[data-theme-mode='light'] .v-skeleton::after {
+  background: linear-gradient(90deg, transparent, rgba(15, 23, 42, 0.08), transparent);
 }
 
 @keyframes v-shimmer {
@@ -515,20 +520,15 @@ textarea {
   transform: translateX(24px);
 }
 
-::-webkit-scrollbar {
-  width: 7px;
-  height: 7px;
+*,
+*::before,
+*::after {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
 
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-::-webkit-scrollbar-thumb {
-  background: var(--vessel-scrollbar-thumb);
-  border-radius: 999px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: var(--vessel-scrollbar-thumb-hover);
+*::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
 }

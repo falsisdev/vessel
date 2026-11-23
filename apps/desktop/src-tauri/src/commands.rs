@@ -562,10 +562,25 @@ pub async fn search_all(
     query: String,
     filters: Option<BTreeMap<String, String>>,
     page: Option<u32>,
+    plugin_ids: Option<Vec<String>>,
 ) -> Result<String, String> {
+    let parsed_plugins = match plugin_ids {
+        Some(ids) if !ids.is_empty() => Some(
+            ids.into_iter()
+                .map(PluginId::new)
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|e| e.to_string())?,
+        ),
+        _ => None,
+    };
     let handle = state
         .engine
-        .search_all(&query, filters.unwrap_or_default(), page.unwrap_or(1))
+        .search_selected(
+            &query,
+            filters.unwrap_or_default(),
+            page.unwrap_or(1),
+            parsed_plugins,
+        )
         .await;
     Ok(handle.search_id)
 }
