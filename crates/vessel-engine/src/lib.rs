@@ -4,7 +4,7 @@ pub mod pool;
 
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
@@ -12,19 +12,24 @@ use tokio::sync::Mutex;
 use tokio::task::{JoinHandle, JoinSet};
 use tokio_util::sync::CancellationToken;
 use vessel_domain::{
-    ContentProvider, DomainGrantSource, EngineEvent, EventSink, ExternalIds, HomeFeed, MediaDetail,
-    MediaRef, MediaType, PlaybackProgress, PlaybackRequest, PlayerBackend, PluginId, SecretStore,
-    StoragePort, StreamCandidate, StreamResult, SubtitleSource, SubtitleTrack, VesselError,
-    VesselPaths, VesselResult,
+    ContentProvider, DomainGrantSource, EngineEvent, EventSink, ExternalIds, HomeFeed, LibraryItem,
+    LibraryStatus, LogLevel, MediaDetail, MediaRef, MediaType, PlaybackProgress, PlaybackRequest,
+    PlayerBackend, PluginId, SecretStore, StoragePort, StreamCandidate, StreamResult,
+    SubtitleSource, SubtitleTrack, UiPreferences, VesselError, VesselPaths, VesselResult,
 };
 use vessel_iptv::{IptvClient, channel_to_stream_candidate, xtream::xtream_xmltv_url};
-use vessel_metadata::{CanonicalMetadata, MetaEndpoints, MetadataService, merge_detail};
-use vessel_plugin_rt::{LoadedPackage, ResolvedSource, SourceResolver, TsCompileCache};
+use vessel_metadata::{
+    CanonicalMetadata, MetaEndpoints, MetadataService, merge_detail_with_override,
+};
+use vessel_plugin_rt::{
+    LoadedPackage, ResolvedSource, SourceResolver, SourceTrustBadge, TsCompileCache,
+    load_plugin_dir, load_plugin_package, pack_plugin_package,
+};
 use vessel_proxy::ProxyServer;
 use vessel_storage::{
-    NewIptvChannel, SqliteSecretStore, SqliteStorage, StorageActor, StoredDownload,
-    StoredEpgNowNext, StoredEpgProgram, StoredIptvChannel, StoredIptvKind, StoredIptvProfile,
-    StoredPlugin,
+    BackupImportMode, ContinueWatchingEntry, NewIptvChannel, SqliteSecretStore, SqliteStorage,
+    StorageActor, StoredDownload, StoredEpgNowNext, StoredEpgProgram, StoredIptvChannel,
+    StoredIptvKind, StoredIptvProfile, StoredPlugin,
 };
 
 pub use pool::{DEFAULT_IDLE_TTL, DEFAULT_MAX_WARM_PLUGINS, PluginPool};
@@ -332,6 +337,247 @@ impl VesselEngine {
         Ok(())
     }
 
+    /// Lists all persisted plugins installed in SQLite.
+    pub async fn list_plugins(&self) -> VesselResult<Vec<StoredPlugin>> {
+        self.storage.list_plugins().await
+    }
+
+    /// Lists active (enabled) plugin IDs currently registered in the pool.
+    pub async fn enabled_plugin_ids(&self) -> Vec<PluginId> {
+        self.pool.enabled_plugin_ids().await
+    }
+
+    /// Lists approved HTTPS domains for `plugin_id`.
+    pub async fn list_allowed_domains(&self, plugin_id: &PluginId) -> VesselResult<Vec<String>> {
+        self.storage.list_allowed_domains(plugin_id).await
+    }
+
+    /// Enables or disables an installed plugin across SQLite and the warm QuickJS pool.
+    pub async fn set_plugin_enabled(
+        &self,
+        plugin_id: &PluginId,
+        enabled: bool,
+    ) -> VesselResult<()> {
+        self.storage.set_plugin_enabled(plugin_id, enabled).await?;
+        self.pool.set_enabled(plugin_id, enabled).await?;
+        Ok(())
+    }
+
+    /// Resolves `raw_input` and persists the package into `plugins_dir` (or tracks local Dev Mode dir).
+    pub async fn install_package_persisted(
+        &self,
+        plugins_dir: &Path,
+        raw_input: &str,
+    ) -> VesselResult<(PluginId, SourceTrustBadge)> {
+        match self.source_resolver.resolve(raw_input).await? {
+            ResolvedSource::Package {
+                resolved_url,
+                package,
+                badge,
+            } => {
+                let id = package.manifest.id.clone();
+                let dev_path = Path::new(&resolved_url);
+                if dev_path.is_dir() {
+                    self.install_package(package, None, "dev_dir", &resolved_url)
+                        .await?;
+                } else {
+                    std::fs::create_dir_all(plugins_dir).map_err(|err| {
+                        VesselError::Storage(format!("create plugins directory: {err}"))
+                    })?;
+                    let pkg_path = plugins_dir.join(format!("{}.plugin.vessel", id.as_str()));
+                    let bytes = pack_plugin_package(
+                        &package.manifest,
+                        package.bundle.files(),
+                        package.icon_png.as_deref(),
+                    )?;
+                    std::fs::write(&pkg_path, bytes).map_err(|err| {
+                        VesselError::Storage(format!("write plugin archive: {err}"))
+                    })?;
+                    let local_path = pkg_path.to_string_lossy().into_owned();
+                    self.install_package(package, None, "package", &local_path)
+                        .await?;
+                }
+                Ok((id, badge))
+            }
+            ResolvedSource::Repository { repo, .. } => Err(VesselError::InvalidInput(format!(
+                "source '{}' resolved to repository '{}' rather than a single plugin package",
+                raw_input, repo.name
+            ))),
+        }
+    }
+
+    /// Reloads all persisted plugins from SQLite and their local files/directories into the pool.
+    pub async fn bootstrap_plugins(&self) -> VesselResult<usize> {
+        let plugins = self.storage.list_plugins().await?;
+        let mut loaded_count = 0usize;
+        for stored in plugins {
+            let path = PathBuf::from(&stored.local_path);
+            let pkg_res = if stored.source_type == "dev_dir" || path.is_dir() {
+                load_plugin_dir(&path)
+            } else {
+                std::fs::read(&path)
+                    .map_err(|err| {
+                        VesselError::Storage(format!(
+                            "read plugin archive '{}': {err}",
+                            path.display()
+                        ))
+                    })
+                    .and_then(|bytes| load_plugin_package(&bytes, None))
+            };
+
+            match pkg_res {
+                Ok(pkg) => {
+                    let plugin_id = pkg.manifest.id.clone();
+                    let extra_domains = self.storage.list_allowed_domains(&plugin_id).await?;
+                    if let Err(err) = self
+                        .pool
+                        .register(
+                            pkg.manifest,
+                            Arc::new(pkg.bundle),
+                            extra_domains,
+                            stored.enabled,
+                        )
+                        .await
+                    {
+                        self.event_sink.emit(EngineEvent::PluginLog {
+                            plugin_id,
+                            level: LogLevel::Warn,
+                            message: format!("Failed registering plugin on startup: {err}"),
+                        });
+                    } else {
+                        if let Ok(settings) = self.get_plugin_settings(&plugin_id).await {
+                            let _ = self.pool.set_settings(&plugin_id, settings).await;
+                        }
+                        loaded_count += 1;
+                    }
+                }
+                Err(err) => {
+                    self.event_sink.emit(EngineEvent::PluginLog {
+                        plugin_id: stored.manifest.id,
+                        level: LogLevel::Warn,
+                        message: format!("Failed loading plugin on startup: {err}"),
+                    });
+                }
+            }
+        }
+        Ok(loaded_count)
+    }
+
+    /// Uninstalls `plugin_id`, removing packaged archives (never deleting Dev Mode folders) and DB rows.
+    pub async fn uninstall_plugin(&self, plugin_id: &PluginId) -> VesselResult<()> {
+        let existing = self.storage.get_plugin(plugin_id).await?;
+        self.pool.unregister(plugin_id).await;
+        if let Some(stored) = existing
+            && stored.source_type != "dev_dir"
+        {
+            let path = Path::new(&stored.local_path);
+            if path.is_file() {
+                let _ = std::fs::remove_file(path);
+            }
+        }
+        self.storage.remove_plugin(plugin_id).await
+    }
+
+    /// Reads declarative modular UI preferences (`ui_preferences`) from SQLite.
+    pub async fn get_ui_preferences(&self) -> VesselResult<UiPreferences> {
+        self.storage.get_ui_preferences().await
+    }
+
+    /// Persists declarative modular UI preferences (`ui_preferences`) into SQLite.
+    pub async fn set_ui_preferences(&self, prefs: &UiPreferences) -> VesselResult<()> {
+        self.storage.set_ui_preferences(prefs).await
+    }
+
+    /// Lists library items optionally filtered by `LibraryStatus`.
+    pub async fn list_library(
+        &self,
+        status: Option<LibraryStatus>,
+    ) -> VesselResult<Vec<LibraryItem>> {
+        self.storage.list_library_items(status).await
+    }
+
+    /// Inserts or updates a user library entry.
+    pub async fn upsert_library(&self, item: &LibraryItem) -> VesselResult<()> {
+        self.storage.upsert_library(item).await
+    }
+
+    /// Removes a media reference from the user library.
+    pub async fn delete_library_item(&self, media: &MediaRef) -> VesselResult<()> {
+        self.storage.delete_library_item(media).await
+    }
+
+    /// Exports a `.backup.vessel` JSON snapshot.
+    pub async fn export_backup_json(&self, include_secrets: bool) -> VesselResult<String> {
+        self.storage.export_backup_json(include_secrets).await
+    }
+
+    /// Imports a `.backup.vessel` JSON snapshot using `SmartMerge` or `ResetAndImport`.
+    pub async fn import_backup_json(&self, json: &str, mode: BackupImportMode) -> VesselResult<()> {
+        self.storage.import_backup_json(json, mode).await
+    }
+
+    /// Reads combined user settings (`settings` + `SecretStore` secret fields) for `plugin_id`.
+    pub async fn get_plugin_settings(
+        &self,
+        plugin_id: &PluginId,
+    ) -> VesselResult<BTreeMap<String, serde_json::Value>> {
+        let stored = self.storage.get_plugin(plugin_id).await?.ok_or_else(|| {
+            VesselError::NotFound(format!("plugin '{}' is not installed", plugin_id.as_str()))
+        })?;
+        let key = format!("plugin_settings:{}", plugin_id.as_str());
+        let mut map: BTreeMap<String, serde_json::Value> = self
+            .storage
+            .get_json_setting(&key)
+            .await?
+            .unwrap_or_default();
+
+        for field in &stored.manifest.settings_schema {
+            if field.field_type == vessel_domain::SettingFieldType::Secret {
+                let sec_key = format!("plugin:{}:{}", plugin_id.as_str(), field.key);
+                if let Some(val) = self.secrets.get(&sec_key).await? {
+                    map.insert(field.key.clone(), serde_json::Value::String(val));
+                }
+            }
+        }
+        Ok(map)
+    }
+
+    /// Persists user settings for `plugin_id` (`Secret` fields into `SecretStore`) and applies them live.
+    pub async fn set_plugin_settings(
+        &self,
+        plugin_id: &PluginId,
+        mut values: BTreeMap<String, serde_json::Value>,
+    ) -> VesselResult<()> {
+        let stored = self.storage.get_plugin(plugin_id).await?.ok_or_else(|| {
+            VesselError::NotFound(format!("plugin '{}' is not installed", plugin_id.as_str()))
+        })?;
+
+        let mut public_map = BTreeMap::new();
+        for field in &stored.manifest.settings_schema {
+            if field.field_type == vessel_domain::SettingFieldType::Secret {
+                let sec_key = format!("plugin:{}:{}", plugin_id.as_str(), field.key);
+                if let Some(val) = values.remove(&field.key) {
+                    let s = val.as_str().unwrap_or_default().to_owned();
+                    if s.is_empty() {
+                        self.secrets.delete(&sec_key).await?;
+                    } else {
+                        self.secrets.set(&sec_key, &s).await?;
+                    }
+                }
+            }
+        }
+        for (k, v) in values {
+            public_map.insert(k, v);
+        }
+
+        let key = format!("plugin_settings:{}", plugin_id.as_str());
+        self.storage.set_json_setting(&key, &public_map).await?;
+
+        let combined = self.get_plugin_settings(plugin_id).await?;
+        let _ = self.pool.set_settings(plugin_id, combined).await;
+        Ok(())
+    }
+
     /// Cancels any currently running multi-plugin search.
     pub async fn cancel_active_search(&self) {
         let prev = { self.active_search.lock().await.take() };
@@ -494,10 +740,17 @@ impl VesselEngine {
         let lang = preferred_lang.to_owned();
 
         let task = tokio::spawn(async move {
-            let _ = run_enrichment_and_emit(
+            if let Err(err) = run_enrichment_and_emit(
                 &storage, &secrets, &metadata, &sink, &pid, &raw_clone, &lang, enabled,
             )
-            .await;
+            .await
+            {
+                sink.emit(EngineEvent::PluginLog {
+                    plugin_id: pid,
+                    level: LogLevel::Warn,
+                    message: format!("Metadata enrichment error: {err}"),
+                });
+            }
         });
 
         Ok((raw, task))
@@ -510,8 +763,26 @@ impl VesselEngine {
         canonical_id: Option<&str>,
         is_disabled: bool,
     ) -> VesselResult<()> {
+        if let Some(cid) = canonical_id
+            && cid.starts_with("tmdb:")
+        {
+            let has_key = self
+                .secrets
+                .get(TMDB_API_KEY_SECRET)
+                .await?
+                .is_some_and(|k| !k.trim().is_empty());
+            if !has_key {
+                return Err(VesselError::InvalidInput(
+                    "TMDB IDs require a TMDB API key in Settings (or use IMDb / AniList ID without a key)"
+                        .into(),
+                ));
+            }
+        }
         self.storage
             .set_metadata_override(media, canonical_id, is_disabled)
+            .await?;
+        self.storage
+            .invalidate_metadata_cache(&media.plugin_id, &media.native_id)
             .await
     }
 
@@ -611,6 +882,35 @@ impl VesselEngine {
     /// Persists playback progress into SQLite (`watch_progress`).
     pub async fn record_progress(&self, progress: &PlaybackProgress) -> VesselResult<()> {
         self.storage.upsert_progress(progress).await
+    }
+
+    /// Reads saved watch progress for a specific `(plugin_id, native_id, season, episode)`.
+    pub async fn get_watch_progress(
+        &self,
+        media: &MediaRef,
+        season: u32,
+        episode: u32,
+    ) -> VesselResult<Option<PlaybackProgress>> {
+        self.storage.get_progress(media, season, episode).await
+    }
+
+    /// Lists recently watched incomplete items for the Home "Continue Watching" shelf.
+    pub async fn list_continue_watching(
+        &self,
+        limit: usize,
+    ) -> VesselResult<Vec<ContinueWatchingEntry>> {
+        self.storage.list_continue_watching(limit).await
+    }
+
+    /// Removes a title's watch progress from Continue Watching.
+    pub async fn delete_watch_progress(
+        &self,
+        plugin_id: &PluginId,
+        native_id: &str,
+    ) -> VesselResult<()> {
+        self.storage
+            .delete_watch_progress(plugin_id, native_id)
+            .await
     }
 
     /// Adds an external or inline subtitle track to the active player session.
@@ -922,21 +1222,24 @@ impl VesselEngine {
     }
 }
 
-fn apply_canonical_override_hint(external_ids: &mut ExternalIds, canonical_id: &str) {
+fn apply_canonical_override_hint(detail: &mut MediaDetail, canonical_id: &str) {
+    detail.external_ids = ExternalIds::default();
     if let Some(rest) = canonical_id.strip_prefix("anilist:") {
         if let Ok(id) = rest.parse::<u64>() {
-            external_ids.anilist = Some(id);
+            detail.external_ids.anilist = Some(id);
         }
     } else if let Some(rest) = canonical_id.strip_prefix("tmdb:movie:") {
         if let Ok(id) = rest.parse::<u64>() {
-            external_ids.tmdb = Some(id);
+            detail.external_ids.tmdb = Some(id);
+            detail.media_type = MediaType::Movie;
         }
     } else if let Some(rest) = canonical_id.strip_prefix("tmdb:tv:") {
         if let Ok(id) = rest.parse::<u64>() {
-            external_ids.tmdb = Some(id);
+            detail.external_ids.tmdb = Some(id);
+            detail.media_type = MediaType::Series;
         }
     } else if let Some(rest) = canonical_id.strip_prefix("imdb:") {
-        external_ids.imdb = Some(rest.to_owned());
+        detail.external_ids.imdb = Some(rest.to_owned());
     }
 }
 
@@ -957,13 +1260,15 @@ async fn run_enrichment_and_emit(
 
     let media_ref = MediaRef::new(plugin_id.clone(), raw.native_id.clone())?;
     let mut query_detail = raw.clone();
+    let mut has_override = false;
 
     if let Some(override_entry) = storage.get_metadata_override(&media_ref).await? {
         if override_entry.is_disabled {
             return Ok(None);
         }
         if let Some(ref cid) = override_entry.canonical_id {
-            apply_canonical_override_hint(&mut query_detail.external_ids, cid);
+            apply_canonical_override_hint(&mut query_detail, cid);
+            has_override = true;
         }
     }
 
@@ -976,7 +1281,7 @@ async fn run_enrichment_and_emit(
     if let Some(cached_json) = storage.get_metadata_cache(&cache_key).await?
         && let Ok(cached_canon) = serde_json::from_str::<CanonicalMetadata>(&cached_json)
     {
-        let merged = merge_detail(raw, &cached_canon, preferred_lang);
+        let merged = merge_detail_with_override(raw, &cached_canon, preferred_lang, has_override);
         sink.emit(EngineEvent::MetadataEnriched {
             plugin_id: plugin_id.clone(),
             native_id: raw.native_id.clone(),
@@ -995,21 +1300,19 @@ async fn run_enrichment_and_emit(
         )
         .await?;
 
-    if let Some(ref canonical) = outcome.canonical
-        && let Ok(json) = serde_json::to_string(canonical)
-    {
-        let _ = storage
-            .upsert_metadata_cache(&cache_key, &json, "2099-01-01T00:00:00Z")
-            .await;
-    }
-
-    if outcome.canonical.is_some() {
+    if let Some(ref canonical) = outcome.canonical {
+        if let Ok(json) = serde_json::to_string(canonical) {
+            let _ = storage
+                .upsert_metadata_cache(&cache_key, &json, "2099-01-01T00:00:00Z")
+                .await;
+        }
+        let merged = merge_detail_with_override(raw, canonical, preferred_lang, has_override);
         sink.emit(EngineEvent::MetadataEnriched {
             plugin_id: plugin_id.clone(),
             native_id: raw.native_id.clone(),
-            detail: Box::new(outcome.detail.clone()),
+            detail: Box::new(merged.clone()),
         });
-        return Ok(Some(outcome.detail));
+        return Ok(Some(merged));
     }
 
     Ok(None)

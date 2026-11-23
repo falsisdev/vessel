@@ -12,7 +12,9 @@ pub use coordinates::{
     CanonicalEpisodeMeta, SeasonSpan, absolute_to_season_episode, align_episode_metadata,
     season_episode_to_absolute,
 };
-pub use merge::{CanonicalMetadata, canonical_id_from_external_ids, merge_detail};
+pub use merge::{
+    CanonicalMetadata, canonical_id_from_external_ids, merge_detail, merge_detail_with_override,
+};
 
 /// Outcome of running metadata enrichment on a plugin's `MediaDetail`.
 #[derive(Debug, Clone, PartialEq)]

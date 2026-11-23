@@ -100,6 +100,11 @@ impl PluginBundle {
         self.files.get(normalized_path).map(String::as_str)
     }
 
+    /// Borrows all normalized module files inside this bundle.
+    pub fn files(&self) -> &BTreeMap<String, String> {
+        &self.files
+    }
+
     /// Resolves a manifest entry path (e.g. `"src/index.ts"` or `"./index.ts"`).
     pub fn resolve_entry(&self, entry: &str) -> VesselResult<String> {
         let base_normalized = normalize_path(entry)?;

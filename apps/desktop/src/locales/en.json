@@ -1,0 +1,119 @@
+{
+  "app": {
+    "name": "Vessel",
+    "tagline": "Local-First Streaming & Media Center"
+  },
+  "nav": {
+    "home": "Home",
+    "search": "Search",
+    "library": "Library",
+    "live_tv": "Live TV",
+    "downloads": "Downloads",
+    "extensions": "Extensions",
+    "settings": "Settings"
+  },
+  "common": {
+    "refresh": "Refresh",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "install": "Install",
+    "uninstall": "Uninstall",
+    "enable": "Enable",
+    "disable": "Disable",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "play": "Play",
+    "pause": "Pause",
+    "resume": "Resume",
+    "stop": "Stop",
+    "search": "Search",
+    "loading": "Loading…",
+    "empty": "Nothing here yet.",
+    "reset": "Reset",
+    "export": "Export",
+    "import": "Import"
+  },
+  "home": {
+    "title": "Home",
+    "hero_title": "Your Personal Media Hub",
+    "hero_subtitle": "Fast, local-first streaming across installed plugins and IPTV feeds.",
+    "empty_plugins": "No enabled plugins yet. Install a repository or Dev Mode plugin from Extensions to populate your home shelves.",
+    "plugin_error": "Plugin feed failed"
+  },
+  "search": {
+    "title": "Search",
+    "placeholder": "Search anime, series, movies across plugins…",
+    "empty": "Type a query to stream live results from enabled plugins.",
+    "searching": "Searching…",
+    "completed": "Search complete"
+  },
+  "details": {
+    "episodes": "Episodes",
+    "sources": "Streams",
+    "fix_match": "Fix Match",
+    "canonical_hint": "Canonical ID (e.g. anilist:918 or tmdb:tv:1399)",
+    "library_status": "Library Status",
+    "download_episode": "Download",
+    "select_stream": "Select Stream Source",
+    "no_episodes": "No episodes listed for this title."
+  },
+  "library": {
+    "title": "Library",
+    "all": "All",
+    "watching": "Watching",
+    "plan_to_watch": "Plan to Watch",
+    "completed": "Completed",
+    "on_hold": "On Hold",
+    "dropped": "Dropped"
+  },
+  "iptv": {
+    "title": "Live TV & IPTV",
+    "add_profile": "Add IPTV Profile",
+    "sync_channels": "Sync Channels",
+    "sync_epg": "Sync EPG",
+    "search_channels": "Search channels (FTS5)…",
+    "favorites_only": "Favorites Only",
+    "all_groups": "All Groups",
+    "now": "Now",
+    "next": "Next"
+  },
+  "downloads": {
+    "title": "Downloads",
+    "empty": "Your offline queue is empty.",
+    "segments": "Segments"
+  },
+  "extensions": {
+    "title": "Extensions & Repos",
+    "source_placeholder": "https://…, gh:user/repo, shortcode, vessel://install?src=…, or local folder",
+    "resolve": "Inspect Source",
+    "install_now": "Install Plugin",
+    "official": "Official",
+    "community": "Community",
+    "settings": "Plugin Settings",
+    "domains": "Allowed Domains"
+  },
+  "settings": {
+    "title": "Settings",
+    "appearance": "Appearance & Theme",
+    "language": "Language & Locales",
+    "ui_customization": "Modular UI Preferences",
+    "playback_privacy": "Playback & Privacy",
+    "backup": "Portable Backup (.backup.vessel)",
+    "always_proxy": "Always Proxy Media Streams",
+    "metadata_enabled": "Enable Background Metadata Enrichment (AniList / TMDB / Cinemeta)",
+    "tmdb_key": "Personal TMDB API Key (Optional)",
+    "reset_ui": "Reset All UI Defaults",
+    "export_backup": "Export Backup",
+    "import_smart_merge": "Import (Smart Merge)",
+    "import_reset": "Import (Reset & Replace)"
+  },
+  "overlay": {
+    "domain_title": "Plugin Domain Permission Request",
+    "allow_once": "Allow Once",
+    "allow_always": "Always Allow",
+    "reject": "Reject",
+    "subtitle_delay": "Sub Delay",
+    "now_playing": "Now Playing"
+  }
+}

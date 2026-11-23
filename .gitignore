@@ -10,3 +10,8 @@ Thumbs.db
 
 # Rust / Cargo
 /target/
+
+# Frontend / Tauri
+node_modules/
+apps/desktop/dist/
+apps/desktop/src-tauri/gen/

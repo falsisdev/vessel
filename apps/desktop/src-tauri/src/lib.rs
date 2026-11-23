@@ -1,0 +1,114 @@
+//! Tauri v2 desktop application bootstrapper binding `VesselEngine` and `MpvWindowBackend`.
+
+mod commands;
+mod events;
+
+use std::sync::Arc;
+
+use tauri::Manager;
+use vessel_domain::{EventSink, PlayerBackend, VesselPaths};
+use vessel_engine::VesselEngine;
+use vessel_player_mpv::{MpvConfig, MpvWindowBackend};
+
+use commands::AppState;
+use events::TauriEventSink;
+
+/// Runs the Vessel Tauri desktop shell.
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    tauri::Builder::default()
+        .setup(|app| {
+            let paths = VesselPaths::from_home_env().or_else(|_| {
+                let data_dir = app.path().app_data_dir()?;
+                VesselPaths::new(data_dir)
+                    .map_err(|err| Box::new(err) as Box<dyn std::error::Error>)
+            })?;
+
+            let event_sink: Arc<dyn EventSink> =
+                Arc::new(TauriEventSink::new(app.handle().clone()));
+            let player: Arc<dyn PlayerBackend> = Arc::new(MpvWindowBackend::new(
+                MpvConfig::default(),
+                Some(Arc::clone(&event_sink)),
+            ));
+
+            let engine = tauri::async_runtime::block_on(async {
+                let eng = VesselEngine::open(&paths, player, event_sink, false).await?;
+                if let Ok(Some(always_proxy)) =
+                    eng.storage().get_json_setting::<bool>("always_proxy").await
+                {
+                    eng.set_always_proxy(always_proxy);
+                }
+                if let Ok(Some(meta_enabled)) = eng
+                    .storage()
+                    .get_json_setting::<bool>("metadata_enabled")
+                    .await
+                {
+                    eng.set_metadata_enabled(meta_enabled);
+                }
+                let _ = eng.bootstrap_plugins().await;
+                Ok::<_, vessel_domain::VesselError>(Arc::new(eng))
+            })?;
+
+            app.manage(AppState { engine, paths });
+            Ok(())
+        })
+        .invoke_handler(tauri::generate_handler![
+            commands::get_engine_info,
+            commands::set_always_proxy,
+            commands::set_metadata_enabled,
+            commands::set_tmdb_api_key,
+            commands::get_ui_preferences,
+            commands::set_ui_preferences,
+            commands::list_themes,
+            commands::import_theme_json,
+            commands::list_custom_locales,
+            commands::load_custom_locale,
+            commands::list_plugins,
+            commands::resolve_source,
+            commands::install_source,
+            commands::set_plugin_enabled,
+            commands::uninstall_plugin,
+            commands::grant_plugin_domain,
+            commands::get_plugin_settings,
+            commands::set_plugin_settings,
+            commands::get_home_feeds,
+            commands::search_all,
+            commands::cancel_search,
+            commands::get_details_with_enrichment,
+            commands::get_streams,
+            commands::set_metadata_override,
+            commands::list_library,
+            commands::upsert_library,
+            commands::delete_library_item,
+            commands::play_candidate,
+            commands::record_progress,
+            commands::get_watch_progress,
+            commands::list_continue_watching,
+            commands::delete_watch_progress,
+            commands::player_play,
+            commands::player_pause,
+            commands::player_seek,
+            commands::player_stop,
+            commands::add_subtitle,
+            commands::set_subtitle_delay,
+            commands::list_iptv_profiles,
+            commands::upsert_iptv_profile,
+            commands::delete_iptv_profile,
+            commands::sync_iptv_profile,
+            commands::sync_iptv_epg,
+            commands::search_iptv_channels,
+            commands::list_iptv_groups,
+            commands::set_iptv_favorite,
+            commands::get_epg_now_next,
+            commands::play_iptv_channel,
+            commands::list_downloads,
+            commands::enqueue_download,
+            commands::pause_download,
+            commands::resume_download,
+            commands::delete_download,
+            commands::export_backup_json,
+            commands::import_backup_json,
+        ])
+        .run(tauri::generate_context!())
+        .expect("error while running Vessel desktop application");
+}

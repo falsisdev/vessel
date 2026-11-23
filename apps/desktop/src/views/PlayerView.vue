@@ -1,0 +1,1640 @@
+<script setup lang="ts">
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import {
+  ArrowLeft,
+  Captions,
+  Check,
+  ExternalLink,
+  FastForward,
+  Layers,
+  ListVideo,
+  Lock,
+  Maximize,
+  Minimize,
+  Pause,
+  Play,
+  RotateCcw,
+  RotateCw,
+  Settings,
+  SkipBack,
+  SkipForward,
+  Unlock,
+  Volume2,
+  VolumeX,
+  X,
+} from 'lucide-vue-next'
+import { vesselApi } from '@/api/vessel'
+import { usePlayerSession } from '@/composables/usePlayerSession'
+import { useVesselEvents } from '@/composables/useVesselEvents'
+import type { Episode, StreamCandidate, SubtitleTrack } from '@/types/vessel'
+
+const props = defineProps<{
+  pluginId: string
+  nativeId: string
+}>()
+
+const route = useRoute()
+const router = useRouter()
+const { pushToast } = useVesselEvents()
+const { activeSession, setSession, updateEpisodeSession, setActiveStreamIndex } = usePlayerSession()
+
+type DrawerTab = 'episodes' | 'sources' | 'subtitles' | 'settings' | null
+type FitMode = 'contain' | 'cover' | 'fill'
+
+const playerStageRef = ref<HTMLElement | null>(null)
+const videoRef = ref<HTMLVideoElement | null>(null)
+const progressBarRef = ref<HTMLElement | null>(null)
+
+const loadingInitial = ref(false)
+const switchingEpisode = ref(false)
+const playbackError = ref('')
+
+const isPlaying = ref(false)
+const isBuffering = ref(false)
+const isMuted = ref(false)
+const volume = ref(1)
+const currentTime = ref(0)
+const duration = ref(0)
+const bufferedEnd = ref(0)
+const playbackRate = ref(1)
+const fitMode = ref<FitMode>('contain')
+const isFullscreen = ref(false)
+
+const isLocked = ref(false)
+const controlsVisible = ref(true)
+const activeDrawer = ref<DrawerTab>(null)
+const hoverTime = ref<number | null>(null)
+const hoverPercent = ref(0)
+
+const activeSubtitleIndex = ref<number>(-1)
+const subtitleDelayMs = ref(0)
+const pendingSeekSeconds = ref<number | null>(null)
+
+let hideTimer: number | null = null
+let progressTimer: number | null = null
+
+async function persistWatchProgress(forceCompleted = false): Promise<void> {
+  const ep = currentEpisode.value
+  const d = detail.value
+  const el = videoRef.value
+  if (!ep || !d || !el) return
+  const posSec = Number.isFinite(el.currentTime) ? el.currentTime : currentTime.value
+  const durSec = Number.isFinite(el.duration) ? el.duration : duration.value
+  if (!forceCompleted && posSec < 2) return
+  const positionMs = Math.max(0, Math.floor(posSec * 1000))
+  const durationMs = Math.max(0, Math.floor((durSec || 0) * 1000))
+  const completed =
+    forceCompleted || (durationMs > 0 && positionMs / durationMs >= 0.92)
+  const canonicalId =
+    d.externalIds.tmdb
+      ? `tmdb:${d.externalIds.tmdb}`
+      : d.externalIds.imdb
+        ? `imdb:${d.externalIds.imdb}`
+        : d.externalIds.anilist
+          ? `anilist:${d.externalIds.anilist}`
+          : undefined
+  try {
+    await vesselApi.recordProgress({
+      media: { pluginId: props.pluginId, nativeId: props.nativeId },
+      streamId: ep.streamId,
+      canonicalId,
+      season: ep.season,
+      episode: ep.episode,
+      absoluteEpisode: ep.absoluteEpisode,
+      positionMs,
+      durationMs,
+      completed,
+      lastWatchedAt: new Date().toISOString(),
+    })
+  } catch {
+    // Non-fatal background persistence
+  }
+}
+
+async function restoreSavedProgress(ep: Episode): Promise<void> {
+  if (session.value?.startPositionMs && session.value.startPositionMs > 0) {
+    return
+  }
+  try {
+    const saved = await vesselApi.getWatchProgress(
+      props.pluginId,
+      props.nativeId,
+      ep.season,
+      ep.episode,
+    )
+    if (saved && !saved.completed && saved.positionMs > 2000) {
+      pendingSeekSeconds.value = saved.positionMs / 1000
+      const el = videoRef.value
+      if (el && el.readyState >= 1) {
+        el.currentTime = pendingSeekSeconds.value
+        pendingSeekSeconds.value = null
+      }
+    }
+  } catch {
+    // Ignore if unavailable
+  }
+}
+
+const session = computed(() => activeSession.value)
+const detail = computed(() => session.value?.detail ?? null)
+const currentEpisode = computed(() => session.value?.episode ?? null)
+const streams = computed(() => session.value?.streams ?? [])
+const activeStream = computed<StreamCandidate | null>(() => {
+  if (!session.value) return null
+  return session.value.streams[session.value.activeStreamIndex] ?? session.value.streams[0] ?? null
+})
+
+const availableSubtitles = computed<SubtitleTrack[]>(() => {
+  const fromStream = activeStream.value?.subtitles ?? []
+  const fromEpisode = session.value?.subtitles ?? []
+  return [...fromStream, ...fromEpisode]
+})
+
+const allEpisodes = computed<Episode[]>(() => detail.value?.episodes ?? [])
+const currentEpisodeIndex = computed(() => {
+  const ep = currentEpisode.value
+  if (!ep) return -1
+  return allEpisodes.value.findIndex((item) => item.streamId === ep.streamId)
+})
+const prevEpisode = computed(() =>
+  currentEpisodeIndex.value > 0 ? allEpisodes.value[currentEpisodeIndex.value - 1] : null,
+)
+const nextEpisode = computed(() =>
+  currentEpisodeIndex.value >= 0 && currentEpisodeIndex.value < allEpisodes.value.length - 1
+    ? allEpisodes.value[currentEpisodeIndex.value + 1]
+    : null,
+)
+
+const progressPercent = computed(() => {
+  if (!duration.value || duration.value <= 0) return 0
+  return Math.min(100, Math.max(0, (currentTime.value / duration.value) * 100))
+})
+
+const bufferedPercent = computed(() => {
+  if (!duration.value || duration.value <= 0) return 0
+  return Math.min(100, Math.max(0, (bufferedEnd.value / duration.value) * 100))
+})
+
+const fitLabel = computed(() => {
+  if (fitMode.value === 'cover') return 'Fill'
+  if (fitMode.value === 'fill') return 'Stretch'
+  return 'Fit'
+})
+
+function formatClock(sec: number): string {
+  if (!Number.isFinite(sec) || sec < 0) return '0:00'
+  const total = Math.floor(sec)
+  const hrs = Math.floor(total / 3600)
+  const mins = Math.floor((total % 3600) / 60)
+  const secs = total % 60
+  if (hrs > 0) {
+    return `${hrs}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
+  }
+  return `${mins}:${String(secs).padStart(2, '0')}`
+}
+
+function scheduleHideControls(): void {
+  if (hideTimer !== null) {
+    window.clearTimeout(hideTimer)
+    hideTimer = null
+  }
+  controlsVisible.value = true
+  if (isPlaying.value && !activeDrawer.value && !isLocked.value) {
+    hideTimer = window.setTimeout(() => {
+      controlsVisible.value = false
+    }, 3200)
+  }
+}
+
+function handleStagePointerMove(): void {
+  scheduleHideControls()
+}
+
+function togglePlay(): void {
+  const el = videoRef.value
+  if (!el || isLocked.value) return
+  if (el.paused) {
+    void el.play().catch((err) => {
+      playbackError.value = String(err)
+    })
+  } else {
+    el.pause()
+  }
+  scheduleHideControls()
+}
+
+function seekBy(deltaSec: number): void {
+  const el = videoRef.value
+  if (!el || isLocked.value) return
+  const target = Math.max(0, Math.min(el.duration || Infinity, el.currentTime + deltaSec))
+  el.currentTime = target
+  currentTime.value = target
+  scheduleHideControls()
+}
+
+function seekFromBar(ev: MouseEvent): void {
+  const bar = progressBarRef.value
+  const el = videoRef.value
+  if (!bar || !el || !duration.value || isLocked.value) return
+  const rect = bar.getBoundingClientRect()
+  const ratio = Math.min(1, Math.max(0, (ev.clientX - rect.left) / rect.width))
+  const target = ratio * duration.value
+  el.currentTime = target
+  currentTime.value = target
+  scheduleHideControls()
+}
+
+function updateHoverTime(ev: MouseEvent): void {
+  const bar = progressBarRef.value
+  if (!bar || !duration.value) {
+    hoverTime.value = null
+    return
+  }
+  const rect = bar.getBoundingClientRect()
+  const ratio = Math.min(1, Math.max(0, (ev.clientX - rect.left) / rect.width))
+  hoverPercent.value = ratio * 100
+  hoverTime.value = ratio * duration.value
+}
+
+function toggleMute(): void {
+  const el = videoRef.value
+  if (!el) return
+  el.muted = !el.muted
+  isMuted.value = el.muted
+  scheduleHideControls()
+}
+
+function setVolumeLevel(val: number): void {
+  const el = videoRef.value
+  if (!el) return
+  const clamped = Math.min(1, Math.max(0, val))
+  el.volume = clamped
+  el.muted = clamped === 0
+  volume.value = clamped
+  isMuted.value = clamped === 0
+  scheduleHideControls()
+}
+
+function setSpeed(rate: number): void {
+  const el = videoRef.value
+  playbackRate.value = rate
+  if (el) el.playbackRate = rate
+  scheduleHideControls()
+}
+
+function cycleFitMode(): void {
+  const order: FitMode[] = ['contain', 'cover', 'fill']
+  const idx = order.indexOf(fitMode.value)
+  fitMode.value = order[(idx + 1) % order.length]
+  scheduleHideControls()
+}
+
+function toggleDrawer(tab: DrawerTab): void {
+  if (isLocked.value) return
+  activeDrawer.value = activeDrawer.value === tab ? null : tab
+  scheduleHideControls()
+}
+
+function toggleLock(): void {
+  isLocked.value = !isLocked.value
+  if (isLocked.value) {
+    activeDrawer.value = null
+    controlsVisible.value = true
+  } else {
+    scheduleHideControls()
+  }
+}
+
+async function toggleFullscreen(): Promise<void> {
+  const stage = playerStageRef.value
+  if (!stage) return
+  try {
+    if (!document.fullscreenElement) {
+      await stage.requestFullscreen()
+      isFullscreen.value = true
+    } else {
+      await document.exitFullscreen()
+      isFullscreen.value = false
+    }
+  } catch {
+    // WebView may block fullscreen API in some contexts; ignore gracefully
+  }
+  scheduleHideControls()
+}
+
+function switchSource(index: number): void {
+  const el = videoRef.value
+  if (el && Number.isFinite(el.currentTime) && el.currentTime > 1) {
+    pendingSeekSeconds.value = el.currentTime
+  }
+  playbackError.value = ''
+  setActiveStreamIndex(index)
+  activeDrawer.value = null
+  scheduleHideControls()
+}
+
+async function switchEpisode(ep: Episode): Promise<void> {
+  if (!detail.value || switchingEpisode.value) return
+  await persistWatchProgress()
+  switchingEpisode.value = true
+  playbackError.value = ''
+  try {
+    const res = await vesselApi.getStreams(props.pluginId, ep.streamId)
+    if (!res.streams.length) {
+      pushToast('warn', `No playable streams found for Episode ${ep.episode}.`)
+      return
+    }
+    pendingSeekSeconds.value = 0
+    updateEpisodeSession(ep, res.streams, res.subtitles, 0)
+    await restoreSavedProgress(ep)
+    activeDrawer.value = null
+  } catch (err) {
+    pushToast('error', String(err))
+  } finally {
+    switchingEpisode.value = false
+    scheduleHideControls()
+  }
+}
+
+async function openInExternalMpv(): Promise<void> {
+  if (!detail.value || !currentEpisode.value || !activeStream.value) return
+  try {
+    await vesselApi.playCandidate({
+      pluginId: props.pluginId,
+      nativeId: props.nativeId,
+      season: currentEpisode.value.season,
+      episode: currentEpisode.value.episode,
+      absoluteEpisode: currentEpisode.value.absoluteEpisode,
+      mediaType: detail.value.type,
+      candidate: activeStream.value,
+      extraSubtitles: availableSubtitles.value,
+      startPositionMs: Math.floor(currentTime.value * 1000),
+      title: `${detail.value.title} — S${currentEpisode.value.season}:E${currentEpisode.value.episode}`,
+    })
+    videoRef.value?.pause()
+    pushToast('info', 'Handed off playback to external mpv')
+  } catch (err) {
+    pushToast('warn', String(err))
+  }
+}
+
+function goBack(): void {
+  void persistWatchProgress()
+  if (document.fullscreenElement) {
+    void document.exitFullscreen().catch(() => {})
+  }
+  if (window.history.length > 1) {
+    router.back()
+  } else {
+    void router.push({
+      name: 'details',
+      params: { pluginId: props.pluginId, nativeId: props.nativeId },
+    })
+  }
+}
+
+function onLoadedMetadata(): void {
+  const el = videoRef.value
+  if (!el) return
+  duration.value = Number.isFinite(el.duration) ? el.duration : 0
+  el.playbackRate = playbackRate.value
+  el.volume = volume.value
+  el.muted = isMuted.value
+  if (pendingSeekSeconds.value !== null && pendingSeekSeconds.value > 0) {
+    el.currentTime = pendingSeekSeconds.value
+    pendingSeekSeconds.value = null
+  } else if (session.value?.startPositionMs && session.value.startPositionMs > 0) {
+    el.currentTime = session.value.startPositionMs / 1000
+  }
+  isBuffering.value = false
+}
+
+function onTimeUpdate(): void {
+  const el = videoRef.value
+  if (!el) return
+  currentTime.value = el.currentTime
+  if (el.buffered.length > 0) {
+    bufferedEnd.value = el.buffered.end(el.buffered.length - 1)
+  }
+}
+
+function onVideoError(): void {
+  const el = videoRef.value
+  const code = el?.error?.code
+  playbackError.value =
+    code === 4
+      ? 'This stream format is not supported by the built-in WebView player. Try another source or install mpv.'
+      : 'Stream failed to load or buffered out. Try another source or retry.'
+  isBuffering.value = false
+  isPlaying.value = false
+  controlsVisible.value = true
+}
+
+function retryStream(): void {
+  const el = videoRef.value
+  if (!el) return
+  playbackError.value = ''
+  isBuffering.value = true
+  el.load()
+  void el.play().catch(() => {})
+}
+
+function handleKeydown(ev: KeyboardEvent): void {
+  if (ev.target instanceof HTMLInputElement || ev.target instanceof HTMLTextAreaElement) return
+  if (ev.key === 'Escape') {
+    if (activeDrawer.value) {
+      activeDrawer.value = null
+    } else if (isLocked.value) {
+      isLocked.value = false
+    } else if (document.fullscreenElement) {
+      void document.exitFullscreen().catch(() => {})
+    } else {
+      goBack()
+    }
+    return
+  }
+  if (isLocked.value) return
+  switch (ev.key.toLowerCase()) {
+    case ' ':
+    case 'k':
+      ev.preventDefault()
+      togglePlay()
+      break
+    case 'arrowleft':
+    case 'j':
+      ev.preventDefault()
+      seekBy(-10)
+      break
+    case 'arrowright':
+    case 'l':
+      ev.preventDefault()
+      seekBy(10)
+      break
+    case 'arrowup':
+      ev.preventDefault()
+      setVolumeLevel(volume.value + 0.05)
+      break
+    case 'arrowdown':
+      ev.preventDefault()
+      setVolumeLevel(volume.value - 0.05)
+      break
+    case 'm':
+      ev.preventDefault()
+      toggleMute()
+      break
+    case 'f':
+      ev.preventDefault()
+      void toggleFullscreen()
+      break
+  }
+}
+
+function onFullscreenChange(): void {
+  isFullscreen.value = Boolean(document.fullscreenElement)
+}
+
+async function ensureSessionLoaded(): Promise<void> {
+  if (activeSession.value && activeSession.value.pluginId === props.pluginId && activeSession.value.nativeId === props.nativeId) {
+    return
+  }
+  loadingInitial.value = true
+  playbackError.value = ''
+  try {
+    const loadedDetail = await vesselApi.getDetailsWithEnrichment(props.pluginId, props.nativeId, 'en')
+    const queryStreamId = typeof route.query.streamId === 'string' ? route.query.streamId : ''
+    const ep =
+      loadedDetail.episodes.find((item) => item.streamId === queryStreamId) ??
+      loadedDetail.episodes[0]
+    if (!ep) {
+      playbackError.value = 'No playable episodes available for this title.'
+      return
+    }
+    const res = await vesselApi.getStreams(props.pluginId, ep.streamId)
+    if (!res.streams.length) {
+      playbackError.value = `No playable streams found for Episode ${ep.episode}.`
+      return
+    }
+    const idx = Number(route.query.streamIndex ?? 0)
+    setSession({
+      pluginId: props.pluginId,
+      nativeId: props.nativeId,
+      detail: loadedDetail,
+      episode: ep,
+      streams: res.streams,
+      subtitles: res.subtitles,
+      activeStreamIndex: Number.isFinite(idx) && idx >= 0 && idx < res.streams.length ? idx : 0,
+    })
+  } catch (err) {
+    playbackError.value = String(err)
+  } finally {
+    loadingInitial.value = false
+  }
+}
+
+watch(
+  () => activeStream.value?.url,
+  () => {
+    playbackError.value = ''
+    isBuffering.value = true
+    currentTime.value = 0
+    duration.value = 0
+  },
+)
+
+onMounted(async () => {
+  window.addEventListener('keydown', handleKeydown)
+  document.addEventListener('fullscreenchange', onFullscreenChange)
+  await ensureSessionLoaded()
+  if (currentEpisode.value) {
+    await restoreSavedProgress(currentEpisode.value)
+  }
+  progressTimer = window.setInterval(() => {
+    if (isPlaying.value) {
+      void persistWatchProgress()
+    }
+  }, 5000)
+  scheduleHideControls()
+})
+
+onUnmounted(() => {
+  void persistWatchProgress()
+  window.removeEventListener('keydown', handleKeydown)
+  document.removeEventListener('fullscreenchange', onFullscreenChange)
+  if (hideTimer !== null) window.clearTimeout(hideTimer)
+  if (progressTimer !== null) window.clearInterval(progressTimer)
+  if (document.fullscreenElement) {
+    void document.exitFullscreen().catch(() => {})
+  }
+})
+</script>
+
+<template>
+  <div
+    ref="playerStageRef"
+    class="cs-player"
+    :class="{ 'hud-hidden': !controlsVisible && isPlaying && !activeDrawer && !isLocked }"
+    @mousemove="handleStagePointerMove"
+    @mousedown="scheduleHideControls"
+  >
+    <!-- Video Surface -->
+    <video
+      v-if="activeStream"
+      ref="videoRef"
+      :key="activeStream.url"
+      :src="activeStream.url"
+      class="cs-video"
+      :class="`fit-${fitMode}`"
+      autoplay
+      playsinline
+      @click="togglePlay"
+      @dblclick="toggleFullscreen"
+      @play="isPlaying = true; isBuffering = false; scheduleHideControls()"
+      @pause="isPlaying = false; scheduleHideControls(); void persistWatchProgress()"
+      @ended="isPlaying = false; void persistWatchProgress(true)"
+      @waiting="isBuffering = true"
+      @canplay="isBuffering = false"
+      @loadedmetadata="onLoadedMetadata"
+      @timeupdate="onTimeUpdate"
+      @error="onVideoError"
+    />
+
+    <!-- Top & Bottom Cinematic Vignettes -->
+    <div v-if="controlsVisible && !isLocked" class="cs-vignette-top" />
+    <div v-if="controlsVisible && !isLocked" class="cs-vignette-bottom" />
+
+    <!-- Buffering / Initial Loading Overlay -->
+    <div v-if="loadingInitial || switchingEpisode || (isBuffering && !playbackError)" class="cs-center-state">
+      <div class="cs-spinner" />
+      <span class="cs-state-label">
+        {{
+          loadingInitial
+            ? 'Loading title & resolving streams…'
+            : switchingEpisode
+              ? 'Loading next episode…'
+              : 'Buffering stream…'
+        }}
+      </span>
+    </div>
+
+    <!-- Error Overlay -->
+    <div v-if="playbackError" class="cs-error-overlay">
+      <div class="v-card cs-error-card">
+        <h3>Playback Issue</h3>
+        <p>{{ playbackError }}</p>
+        <div class="cs-error-actions">
+          <button type="button" class="v-btn v-btn-primary" @click="retryStream">Retry</button>
+          <button
+            v-if="streams.length > 1"
+            type="button"
+            class="v-btn v-btn-secondary"
+            @click="activeDrawer = 'sources'"
+          >
+            Switch Source ({{ streams.length }})
+          </button>
+          <button type="button" class="v-btn v-btn-ghost" @click="goBack">Back to Details</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Locked Screen Floating Unlock Pill -->
+    <Transition name="fade-fast">
+      <button
+        v-if="isLocked"
+        type="button"
+        class="cs-unlock-pill"
+        @click="toggleLock"
+      >
+        <Unlock :size="15" aria-hidden="true" />
+        <span>Screen Locked — Tap to Unlock</span>
+      </button>
+    </Transition>
+
+    <!-- HUD Overlay (Hidden automatically when playing & idle) -->
+    <Transition name="fade-fast">
+      <div v-if="controlsVisible && !isLocked" class="cs-hud">
+        <!-- TOP BAR -->
+        <header class="cs-top-bar">
+          <div class="cs-top-left">
+            <button type="button" class="cs-icon-btn" title="Back" @click="goBack">
+              <ArrowLeft :size="20" aria-hidden="true" />
+            </button>
+            <div class="cs-title-meta">
+              <div class="cs-show-title">{{ detail?.title ?? 'Vessel Player' }}</div>
+              <div class="cs-ep-sub">
+                <span v-if="currentEpisode">
+                  S{{ currentEpisode.season }} · E{{ currentEpisode.episode }}
+                  <template v-if="currentEpisode.title"> — {{ currentEpisode.title }}</template>
+                </span>
+                <span v-if="activeStream" class="cs-source-pill">
+                  {{ activeStream.label }} · {{ activeStream.quality ?? activeStream.kind.toUpperCase() }}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div class="cs-top-actions">
+            <button type="button" class="cs-pill-btn" title="Lock screen" @click="toggleLock">
+              <Lock :size="15" aria-hidden="true" />
+              <span>Lock</span>
+            </button>
+            <button
+              type="button"
+              class="cs-pill-btn"
+              :class="{ active: activeDrawer === 'episodes' }"
+              @click="toggleDrawer('episodes')"
+            >
+              <ListVideo :size="15" aria-hidden="true" />
+              <span>Episodes</span>
+            </button>
+            <button
+              type="button"
+              class="cs-pill-btn"
+              :class="{ active: activeDrawer === 'sources' }"
+              @click="toggleDrawer('sources')"
+            >
+              <Layers :size="15" aria-hidden="true" />
+              <span>Sources ({{ streams.length }})</span>
+            </button>
+            <button
+              type="button"
+              class="cs-pill-btn"
+              :class="{ active: activeDrawer === 'subtitles' }"
+              @click="toggleDrawer('subtitles')"
+            >
+              <Captions :size="15" aria-hidden="true" />
+              <span>Subtitles</span>
+            </button>
+            <button
+              type="button"
+              class="cs-pill-btn"
+              :class="{ active: activeDrawer === 'settings' }"
+              @click="toggleDrawer('settings')"
+            >
+              <Settings :size="15" aria-hidden="true" />
+              <span>Settings</span>
+            </button>
+            <button
+              type="button"
+              class="cs-pill-btn"
+              title="Open in external mpv (if installed)"
+              @click="openInExternalMpv"
+            >
+              <ExternalLink :size="15" aria-hidden="true" />
+              <span>MPV</span>
+            </button>
+          </div>
+        </header>
+
+        <!-- CENTER TRANSPORT CONTROLS -->
+        <div v-if="!playbackError" class="cs-center-controls">
+          <button
+            type="button"
+            class="cs-transport-btn"
+            :disabled="!prevEpisode"
+            title="Previous Episode"
+            @click="prevEpisode && switchEpisode(prevEpisode)"
+          >
+            <SkipBack :size="22" aria-hidden="true" />
+          </button>
+
+          <button type="button" class="cs-transport-btn" title="Rewind 10s (J)" @click="seekBy(-10)">
+            <RotateCcw :size="24" aria-hidden="true" />
+            <span class="cs-seek-tag">10</span>
+          </button>
+
+          <button type="button" class="cs-play-fab" title="Play / Pause (Space)" @click="togglePlay">
+            <Pause v-if="isPlaying" :size="30" aria-hidden="true" />
+            <Play v-else :size="30" class="cs-play-icon-offset" aria-hidden="true" />
+          </button>
+
+          <button type="button" class="cs-transport-btn" title="Forward 10s (L)" @click="seekBy(10)">
+            <RotateCw :size="24" aria-hidden="true" />
+            <span class="cs-seek-tag">10</span>
+          </button>
+
+          <button
+            type="button"
+            class="cs-transport-btn"
+            :disabled="!nextEpisode"
+            title="Next Episode"
+            @click="nextEpisode && switchEpisode(nextEpisode)"
+          >
+            <SkipForward :size="22" aria-hidden="true" />
+          </button>
+        </div>
+
+        <!-- BOTTOM BAR -->
+        <footer class="cs-bottom-bar">
+          <!-- Seek Scrubber -->
+          <div class="cs-scrubber-row">
+            <span class="cs-time">{{ formatClock(currentTime) }}</span>
+
+            <div
+              ref="progressBarRef"
+              class="cs-progress-track"
+              @click="seekFromBar"
+              @mousemove="updateHoverTime"
+              @mouseleave="hoverTime = null"
+            >
+              <div class="cs-progress-buffer" :style="{ width: `${bufferedPercent}%` }" />
+              <div class="cs-progress-fill" :style="{ width: `${progressPercent}%` }">
+                <span class="cs-progress-thumb" />
+              </div>
+              <div
+                v-if="hoverTime !== null"
+                class="cs-hover-tooltip"
+                :style="{ left: `${hoverPercent}%` }"
+              >
+                {{ formatClock(hoverTime) }}
+              </div>
+            </div>
+
+            <span class="cs-time">{{ formatClock(duration) }}</span>
+          </div>
+
+          <!-- Bottom Actions -->
+          <div class="cs-bottom-actions">
+            <div class="cs-bottom-left">
+              <button type="button" class="cs-icon-btn" @click="togglePlay">
+                <Pause v-if="isPlaying" :size="18" aria-hidden="true" />
+                <Play v-else :size="18" aria-hidden="true" />
+              </button>
+
+              <div class="cs-volume-group">
+                <button type="button" class="cs-icon-btn" title="Mute (M)" @click="toggleMute">
+                  <VolumeX v-if="isMuted || volume === 0" :size="18" aria-hidden="true" />
+                  <Volume2 v-else :size="18" aria-hidden="true" />
+                </button>
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.02"
+                  :value="isMuted ? 0 : volume"
+                  class="cs-volume-slider"
+                  aria-label="Volume"
+                  @input="setVolumeLevel(Number(($event.target as HTMLInputElement).value))"
+                />
+              </div>
+
+              <button
+                type="button"
+                class="cs-skip-intro-btn"
+                title="Skip Intro (+85s)"
+                @click="seekBy(85)"
+              >
+                <FastForward :size="14" aria-hidden="true" />
+                <span>+85s Intro</span>
+              </button>
+            </div>
+
+            <div class="cs-bottom-right">
+              <button type="button" class="cs-mini-pill" @click="toggleDrawer('settings')">
+                {{ playbackRate }}x
+              </button>
+              <button type="button" class="cs-mini-pill" title="Resize / Aspect Ratio" @click="cycleFitMode">
+                {{ fitLabel }}
+              </button>
+              <button
+                v-if="nextEpisode"
+                type="button"
+                class="cs-mini-pill cs-next-ep"
+                @click="switchEpisode(nextEpisode)"
+              >
+                <span>Next E{{ nextEpisode.episode }}</span>
+                <SkipForward :size="13" aria-hidden="true" />
+              </button>
+              <button type="button" class="cs-icon-btn" title="Fullscreen (F)" @click="toggleFullscreen">
+                <Minimize v-if="isFullscreen" :size="18" aria-hidden="true" />
+                <Maximize v-else :size="18" aria-hidden="true" />
+              </button>
+            </div>
+          </div>
+        </footer>
+      </div>
+    </Transition>
+
+    <!-- SLIDE-OVER RIGHT DRAWER (Episodes / Sources / Subtitles / Settings) -->
+    <Transition name="drawer-slide">
+      <aside v-if="activeDrawer && !isLocked" class="cs-drawer" @click.stop>
+        <div class="cs-drawer-head">
+          <h3>
+            {{
+              activeDrawer === 'episodes'
+                ? `Episodes (${allEpisodes.length})`
+                : activeDrawer === 'sources'
+                  ? `Sources (${streams.length})`
+                  : activeDrawer === 'subtitles'
+                    ? 'Subtitles & Sync'
+                    : 'Player Settings'
+            }}
+          </h3>
+          <button type="button" class="cs-icon-btn" @click="activeDrawer = null">
+            <X :size="18" aria-hidden="true" />
+          </button>
+        </div>
+
+        <!-- EPISODES LIST -->
+        <div v-if="activeDrawer === 'episodes'" class="cs-drawer-body">
+          <button
+            v-for="ep in allEpisodes"
+            :key="ep.streamId"
+            type="button"
+            class="cs-drawer-item"
+            :class="{ active: ep.streamId === currentEpisode?.streamId }"
+            @click="switchEpisode(ep)"
+          >
+            <div class="cs-item-main">
+              <span class="cs-item-code">S{{ ep.season }} · E{{ ep.episode }}</span>
+              <span class="cs-item-title">{{ ep.title ?? `Episode ${ep.episode}` }}</span>
+              <span v-if="ep.overview" class="cs-item-sub">{{ ep.overview }}</span>
+            </div>
+            <Check
+              v-if="ep.streamId === currentEpisode?.streamId"
+              :size="16"
+              class="cs-active-check"
+              aria-hidden="true"
+            />
+          </button>
+        </div>
+
+        <!-- SOURCES / SERVERS LIST -->
+        <div v-else-if="activeDrawer === 'sources'" class="cs-drawer-body">
+          <button
+            v-for="(stream, idx) in streams"
+            :key="`${stream.url}-${idx}`"
+            type="button"
+            class="cs-drawer-item"
+            :class="{ active: stream.url === activeStream?.url }"
+            @click="switchSource(idx)"
+          >
+            <div class="cs-item-main">
+              <span class="cs-item-title">{{ stream.label }}</span>
+              <div class="cs-source-tags">
+                <span class="cs-tag">{{ stream.kind.toUpperCase() }}</span>
+                <span v-if="stream.quality" class="cs-tag accent">{{ stream.quality }}</span>
+                <span v-if="stream.language" class="cs-tag">{{ stream.language }}</span>
+              </div>
+            </div>
+            <Check
+              v-if="stream.url === activeStream?.url"
+              :size="16"
+              class="cs-active-check"
+              aria-hidden="true"
+            />
+          </button>
+        </div>
+
+        <!-- SUBTITLES & DELAY -->
+        <div v-else-if="activeDrawer === 'subtitles'" class="cs-drawer-body">
+          <div class="cs-setting-block">
+            <span class="cs-setting-label">Subtitle Delay</span>
+            <div class="cs-delay-row">
+              <button type="button" class="cs-mini-pill" @click="subtitleDelayMs -= 500">-500ms</button>
+              <span class="cs-delay-val">{{ subtitleDelayMs }} ms</span>
+              <button type="button" class="cs-mini-pill" @click="subtitleDelayMs += 500">+500ms</button>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            class="cs-drawer-item"
+            :class="{ active: activeSubtitleIndex === -1 }"
+            @click="activeSubtitleIndex = -1"
+          >
+            <span class="cs-item-title">Off (No Subtitles)</span>
+            <Check v-if="activeSubtitleIndex === -1" :size="16" class="cs-active-check" />
+          </button>
+
+          <button
+            v-for="(sub, idx) in availableSubtitles"
+            :key="`${sub.label}-${idx}`"
+            type="button"
+            class="cs-drawer-item"
+            :class="{ active: activeSubtitleIndex === idx }"
+            @click="activeSubtitleIndex = idx"
+          >
+            <div class="cs-item-main">
+              <span class="cs-item-title">{{ sub.label }}</span>
+              <span class="cs-item-sub">{{ sub.lang.toUpperCase() }} · {{ sub.format.toUpperCase() }}</span>
+            </div>
+            <Check v-if="activeSubtitleIndex === idx" :size="16" class="cs-active-check" />
+          </button>
+
+          <p v-if="!availableSubtitles.length" class="cs-empty-note">
+            No subtitle tracks were provided by this source.
+          </p>
+        </div>
+
+        <!-- SETTINGS (Speed & Aspect Ratio) -->
+        <div v-else-if="activeDrawer === 'settings'" class="cs-drawer-body">
+          <div class="cs-setting-block">
+            <span class="cs-setting-label">Playback Speed</span>
+            <div class="cs-chip-grid">
+              <button
+                v-for="rate in [0.5, 0.75, 1, 1.25, 1.5, 2]"
+                :key="rate"
+                type="button"
+                class="cs-chip-btn"
+                :class="{ active: playbackRate === rate }"
+                @click="setSpeed(rate)"
+              >
+                {{ rate }}x
+              </button>
+            </div>
+          </div>
+
+          <div class="cs-setting-block">
+            <span class="cs-setting-label">Video Fit / Aspect</span>
+            <div class="cs-chip-grid">
+              <button
+                v-for="mode in ([
+                  { id: 'contain', label: 'Fit' },
+                  { id: 'cover', label: 'Fill' },
+                  { id: 'fill', label: 'Stretch' },
+                ] as const)"
+                :key="mode.id"
+                type="button"
+                class="cs-chip-btn"
+                :class="{ active: fitMode === mode.id }"
+                @click="fitMode = mode.id"
+              >
+                {{ mode.label }}
+              </button>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </Transition>
+  </div>
+</template>
+
+<style scoped>
+.cs-player {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  background: #000;
+  color: #f4f4f8;
+  overflow: hidden;
+  user-select: none;
+}
+
+.cs-player.hud-hidden {
+  cursor: none;
+}
+
+.cs-video {
+  width: 100%;
+  height: 100%;
+  display: block;
+  background: #000;
+}
+
+.cs-video.fit-contain {
+  object-fit: contain;
+}
+
+.cs-video.fit-cover {
+  object-fit: cover;
+}
+
+.cs-video.fit-fill {
+  object-fit: fill;
+}
+
+.cs-vignette-top {
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 160px;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.82) 0%, transparent 100%);
+  pointer-events: none;
+}
+
+.cs-vignette-bottom {
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 200px;
+  background: linear-gradient(0deg, rgba(0, 0, 0, 0.88) 0%, transparent 100%);
+  pointer-events: none;
+}
+
+.cs-hud {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 1.15rem 1.5rem 1.25rem;
+  pointer-events: none;
+}
+
+.cs-top-bar,
+.cs-center-controls,
+.cs-bottom-bar {
+  pointer-events: auto;
+}
+
+.cs-top-bar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.cs-top-left {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  min-width: 0;
+}
+
+.cs-title-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.22rem;
+  min-width: 0;
+}
+
+.cs-show-title {
+  font-size: 1.08rem;
+  font-weight: 700;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cs-ep-sub {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  font-size: 0.82rem;
+  color: rgba(244, 244, 248, 0.78);
+}
+
+.cs-source-pill {
+  padding: 0.14rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  background: rgba(167, 139, 250, 0.2);
+  border: 1px solid rgba(167, 139, 250, 0.4);
+  color: #ddd6fe;
+}
+
+.cs-top-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.45rem;
+}
+
+.cs-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(18, 18, 28, 0.65);
+  backdrop-filter: blur(10px);
+  color: #fff;
+  cursor: pointer;
+  transition: background 0.16s ease, transform 0.14s ease;
+}
+
+.cs-icon-btn:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.cs-pill-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  height: 36px;
+  padding: 0 0.85rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(18, 18, 28, 0.68);
+  backdrop-filter: blur(10px);
+  color: #f4f4f8;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.16s ease, border-color 0.16s ease;
+}
+
+.cs-pill-btn:hover,
+.cs-pill-btn.active {
+  background: rgba(167, 139, 250, 0.26);
+  border-color: rgba(167, 139, 250, 0.65);
+}
+
+.cs-center-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1.5rem;
+  margin: auto 0;
+}
+
+.cs-transport-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 50px;
+  height: 50px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(12, 12, 20, 0.6);
+  backdrop-filter: blur(10px);
+  color: #fff;
+  cursor: pointer;
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.cs-transport-btn:hover:not(:disabled) {
+  transform: scale(1.06);
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.cs-transport-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.cs-seek-tag {
+  position: absolute;
+  font-size: 0.62rem;
+  font-weight: 700;
+  bottom: 6px;
+}
+
+.cs-play-fab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 72px;
+  height: 72px;
+  border-radius: 999px;
+  border: none;
+  background: var(--vessel-accent, #a78bfa);
+  color: #0b0b12;
+  cursor: pointer;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
+  transition: transform 0.15s ease, filter 0.15s ease;
+}
+
+.cs-play-fab:hover {
+  transform: scale(1.07);
+  filter: brightness(1.06);
+}
+
+.cs-play-icon-offset {
+  margin-left: 3px;
+}
+
+.cs-bottom-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+.cs-scrubber-row {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+}
+
+.cs-time {
+  min-width: 48px;
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.cs-progress-track {
+  position: relative;
+  flex: 1;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.22);
+  cursor: pointer;
+  transition: height 0.12s ease;
+}
+
+.cs-progress-track:hover {
+  height: 9px;
+}
+
+.cs-progress-buffer {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.32);
+}
+
+.cs-progress-fill {
+  position: relative;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--vessel-accent, #a78bfa);
+}
+
+.cs-progress-thumb {
+  position: absolute;
+  right: -7px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: 0 0 8px rgba(0, 0, 0, 0.6);
+}
+
+.cs-hover-tooltip {
+  position: absolute;
+  bottom: 16px;
+  transform: translateX(-50%);
+  padding: 0.2rem 0.5rem;
+  border-radius: 6px;
+  background: rgba(15, 15, 24, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  font-size: 0.74rem;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+.cs-bottom-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.cs-bottom-left,
+.cs-bottom-right {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.cs-volume-group {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.cs-volume-slider {
+  width: 84px;
+  accent-color: var(--vessel-accent, #a78bfa);
+  cursor: pointer;
+}
+
+.cs-skip-intro-btn,
+.cs-mini-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  height: 32px;
+  padding: 0 0.72rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(18, 18, 28, 0.68);
+  color: #f4f4f8;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.cs-skip-intro-btn:hover,
+.cs-mini-pill:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.cs-next-ep {
+  background: rgba(167, 139, 250, 0.22);
+  border-color: rgba(167, 139, 250, 0.45);
+}
+
+/* Right Drawer */
+.cs-drawer {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  bottom: 1rem;
+  width: min(370px, calc(100vw - 2rem));
+  display: flex;
+  flex-direction: column;
+  border-radius: 18px;
+  background: rgba(16, 16, 26, 0.94);
+  backdrop-filter: blur(18px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.75);
+  z-index: 15;
+  overflow: hidden;
+}
+
+.cs-drawer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.cs-drawer-head h3 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.cs-drawer-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.cs-drawer-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  width: 100%;
+  text-align: left;
+  padding: 0.75rem 0.85rem;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: #f4f4f8;
+  cursor: pointer;
+  transition: background 0.14s ease, border-color 0.14s ease;
+}
+
+.cs-drawer-item:hover {
+  background: rgba(255, 255, 255, 0.09);
+}
+
+.cs-drawer-item.active {
+  background: rgba(167, 139, 250, 0.18);
+  border-color: rgba(167, 139, 250, 0.55);
+}
+
+.cs-item-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.22rem;
+  min-width: 0;
+}
+
+.cs-item-code {
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: #c4b5fd;
+}
+
+.cs-item-title {
+  font-size: 0.88rem;
+  font-weight: 600;
+}
+
+.cs-item-sub {
+  font-size: 0.76rem;
+  color: rgba(244, 244, 248, 0.65);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.cs-source-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.15rem;
+}
+
+.cs-tag {
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 0.12rem 0.45rem;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.cs-tag.accent {
+  background: rgba(167, 139, 250, 0.26);
+  color: #e9d5ff;
+}
+
+.cs-active-check {
+  color: #c4b5fd;
+  flex-shrink: 0;
+}
+
+.cs-setting-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.7rem 0.75rem;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.cs-setting-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: rgba(244, 244, 248, 0.78);
+}
+
+.cs-chip-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.cs-chip-btn {
+  padding: 0.38rem 0.75rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.cs-chip-btn.active {
+  background: var(--vessel-accent, #a78bfa);
+  color: #0b0b12;
+  border-color: transparent;
+}
+
+.cs-delay-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.cs-delay-val {
+  font-size: 0.84rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.cs-empty-note {
+  font-size: 0.82rem;
+  color: rgba(244, 244, 248, 0.6);
+  padding: 0.5rem;
+}
+
+.cs-center-state,
+.cs-error-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.85rem;
+  pointer-events: none;
+}
+
+.cs-error-overlay {
+  background: rgba(5, 5, 10, 0.85);
+  pointer-events: auto;
+  z-index: 10;
+}
+
+.cs-error-card {
+  max-width: 440px;
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.cs-error-card h3 {
+  margin: 0;
+}
+
+.cs-error-card p {
+  margin: 0;
+  font-size: 0.88rem;
+  color: var(--vessel-text-secondary);
+}
+
+.cs-error-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.cs-spinner {
+  width: 42px;
+  height: 42px;
+  border-radius: 999px;
+  border: 3px solid rgba(255, 255, 255, 0.18);
+  border-top-color: var(--vessel-accent, #a78bfa);
+  animation: spin 0.8s linear infinite;
+}
+
+.cs-state-label {
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.cs-unlock-pill {
+  position: absolute;
+  top: 1.2rem;
+  right: 1.5rem;
+  z-index: 20;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.5rem 0.95rem;
+  border-radius: 999px;
+  border: 1px solid rgba(167, 139, 250, 0.55);
+  background: rgba(16, 16, 26, 0.88);
+  color: #fff;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.fade-fast-enter-active,
+.fade-fast-leave-active {
+  transition: opacity 0.18s ease;
+}
+.fade-fast-enter-from,
+.fade-fast-leave-to {
+  opacity: 0;
+}
+
+.drawer-slide-enter-active,
+.drawer-slide-leave-active {
+  transition: transform 0.22s ease, opacity 0.22s ease;
+}
+.drawer-slide-enter-from,
+.drawer-slide-leave-to {
+  transform: translateX(24px);
+  opacity: 0;
+}
+</style>

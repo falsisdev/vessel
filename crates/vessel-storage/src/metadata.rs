@@ -60,6 +60,26 @@ impl SqliteStorage {
             .await
     }
 
+    /// Invalidates all cached metadata entries for `(plugin_id, native_id)` across languages.
+    pub async fn invalidate_metadata_cache(
+        &self,
+        plugin_id: &vessel_domain::PluginId,
+        native_id: &str,
+    ) -> VesselResult<()> {
+        let prefix = format!("meta:{}:{native_id}:%", plugin_id.as_str());
+        self.actor()
+            .execute(move |db| {
+                db.conn()
+                    .execute(
+                        "DELETE FROM metadata_cache WHERE cache_key LIKE ?1",
+                        [&prefix],
+                    )
+                    .map_err(map_sql_err)?;
+                Ok(())
+            })
+            .await
+    }
+
     /// Reads any user manual override or disable flag for `media`.
     pub async fn get_metadata_override(
         &self,

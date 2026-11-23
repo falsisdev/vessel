@@ -70,13 +70,34 @@ pub fn merge_detail(
     enriched: &CanonicalMetadata,
     preferred_lang: &str,
 ) -> MediaDetail {
+    merge_detail_with_override(raw, enriched, preferred_lang, false)
+}
+
+/// Merges `enriched` metadata into `raw`; when `force_replace` is `true` (manual Fix Match),
+/// title, year, synopsis, and external IDs from the matched source overwrite the plugin defaults.
+pub fn merge_detail_with_override(
+    raw: &MediaDetail,
+    enriched: &CanonicalMetadata,
+    preferred_lang: &str,
+    force_replace: bool,
+) -> MediaDetail {
     let mut merged = raw.clone();
 
-    if merged.original_title.is_none() {
-        merged.original_title = enriched.original_title.clone();
-    }
-    if merged.year.is_none() {
-        merged.year = enriched.year;
+    if force_replace {
+        if !enriched.title.trim().is_empty() {
+            merged.title = enriched.title.clone();
+        }
+        merged.original_title = enriched.original_title.clone().or(merged.original_title);
+        if enriched.year.is_some() {
+            merged.year = enriched.year;
+        }
+    } else {
+        if merged.original_title.is_none() {
+            merged.original_title = enriched.original_title.clone();
+        }
+        if merged.year.is_none() {
+            merged.year = enriched.year;
+        }
     }
 
     if let Some(ref ext_poster) = enriched.poster {
@@ -92,8 +113,6 @@ pub fn merge_detail(
         merged.rating = enriched.rating;
     }
 
-    // Synopsis language preservation: never overwrite a localized plugin synopsis with a missing
-    // or fallback-only synopsis unless the plugin had none or external matches `preferred_lang`.
     if let Some(ref ext_synopsis) = enriched.synopsis
         && !ext_synopsis.trim().is_empty()
     {
@@ -105,25 +124,28 @@ pub fn merge_detail(
             .synopsis_lang
             .as_deref()
             .is_some_and(|lang| lang.eq_ignore_ascii_case(preferred_lang));
-        if !raw_has_synopsis || ext_matches_pref {
+        if force_replace || !raw_has_synopsis || ext_matches_pref {
             merged.synopsis = Some(ext_synopsis.clone());
         }
     }
 
-    // Merge external IDs without dropping hints the plugin already supplied.
-    merged.external_ids.tmdb = merged.external_ids.tmdb.or(enriched.external_ids.tmdb);
-    merged.external_ids.imdb = merged
-        .external_ids
-        .imdb
-        .clone()
-        .or_else(|| enriched.external_ids.imdb.clone());
-    merged.external_ids.tvdb = merged.external_ids.tvdb.or(enriched.external_ids.tvdb);
-    merged.external_ids.anilist = merged
-        .external_ids
-        .anilist
-        .or(enriched.external_ids.anilist);
-    merged.external_ids.kitsu = merged.external_ids.kitsu.or(enriched.external_ids.kitsu);
-    merged.external_ids.mal = merged.external_ids.mal.or(enriched.external_ids.mal);
+    if force_replace {
+        merged.external_ids = enriched.external_ids.clone();
+    } else {
+        merged.external_ids.tmdb = merged.external_ids.tmdb.or(enriched.external_ids.tmdb);
+        merged.external_ids.imdb = merged
+            .external_ids
+            .imdb
+            .clone()
+            .or_else(|| enriched.external_ids.imdb.clone());
+        merged.external_ids.tvdb = merged.external_ids.tvdb.or(enriched.external_ids.tvdb);
+        merged.external_ids.anilist = merged
+            .external_ids
+            .anilist
+            .or(enriched.external_ids.anilist);
+        merged.external_ids.kitsu = merged.external_ids.kitsu.or(enriched.external_ids.kitsu);
+        merged.external_ids.mal = merged.external_ids.mal.or(enriched.external_ids.mal);
+    }
 
     align_episode_metadata(
         &mut merged.episodes,

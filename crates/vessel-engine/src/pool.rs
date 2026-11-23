@@ -176,6 +176,22 @@ impl PluginPool {
         policy.allow_domain(domain)
     }
 
+    /// Replaces user-configured settings exposed to `plugin_id` via `vessel.storage.getSetting`.
+    pub async fn set_settings(
+        &self,
+        plugin_id: &PluginId,
+        settings: BTreeMap<String, serde_json::Value>,
+    ) -> VesselResult<()> {
+        let host = {
+            let guard = self.inner.lock().await;
+            let Some(reg) = guard.registered.get(plugin_id) else {
+                return Err(VesselError::NotFound(format!("plugin '{plugin_id}'")));
+            };
+            Arc::clone(&reg.host)
+        };
+        host.set_settings(settings)
+    }
+
     /// Lists all currently enabled registered plugin IDs.
     pub async fn enabled_plugin_ids(&self) -> Vec<PluginId> {
         let guard = self.inner.lock().await;
@@ -334,6 +350,20 @@ impl PluginPool {
         for provider in all {
             shutdown_arc_provider(provider).await;
         }
+    }
+
+    /// Removes a plugin from the registry and shuts down any warm sandbox.
+    pub async fn unregister(&self, plugin_id: &PluginId) -> bool {
+        let (existed, warm) = {
+            let mut guard = self.inner.lock().await;
+            let existed = guard.registered.remove(plugin_id).is_some();
+            let warm = guard.warm.remove(plugin_id);
+            (existed, warm)
+        };
+        if let Some(entry) = warm {
+            shutdown_arc_provider(entry.provider).await;
+        }
+        existed
     }
 }
 

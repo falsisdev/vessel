@@ -1,6 +1,9 @@
 //! User library watchlist and dual-coordinate watch progress persistence.
 
+use std::collections::HashSet;
+
 use rusqlite::{OptionalExtension, Row};
+use serde::Serialize;
 use vessel_domain::{
     LibraryItem, LibraryStatus, MediaRef, MediaType, PlaybackProgress, PluginId, VesselError,
     VesselResult,
@@ -382,4 +385,181 @@ impl SqliteStorage {
             })
             .await
     }
+
+    /// Lists recently watched incomplete items (deduplicated per show/movie, newest first).
+    pub async fn list_continue_watching(
+        &self,
+        limit: usize,
+    ) -> VesselResult<Vec<ContinueWatchingEntry>> {
+        let cap = limit.clamp(1, 50);
+        self.actor()
+            .execute(move |db| {
+                let mut stmt = db
+                    .conn()
+                    .prepare(
+                        "SELECT
+                             wp.plugin_id, wp.native_id, wp.stream_id, wp.canonical_id,
+                             wp.season, wp.episode, wp.absolute_episode,
+                             wp.position_ms, wp.duration_ms, wp.completed, wp.last_watched_at,
+                             li.title, li.poster_url, li.media_type
+                         FROM watch_progress wp
+                         LEFT JOIN library_items li
+                           ON li.plugin_id = wp.plugin_id AND li.native_id = wp.native_id
+                         WHERE wp.completed = 0 AND wp.position_ms > 0
+                         ORDER BY wp.last_watched_at DESC
+                         LIMIT ?1",
+                    )
+                    .map_err(map_sql_err)?;
+
+                let raw_limit = (cap * 4) as i64;
+                let mut rows = stmt.query([raw_limit]).map_err(map_sql_err)?;
+                let mut seen: HashSet<(String, String)> = HashSet::new();
+                let mut out = Vec::new();
+
+                while let Some(row) = rows.next().map_err(map_sql_err)? {
+                    let plugin_raw: String = row.get(0).map_err(map_sql_err)?;
+                    let native_id: String = row.get(1).map_err(map_sql_err)?;
+                    if !seen.insert((plugin_raw.clone(), native_id.clone())) {
+                        continue;
+                    }
+
+                    let stream_id: String = row.get(2).map_err(map_sql_err)?;
+                    let canonical_id: Option<String> = row.get(3).map_err(map_sql_err)?;
+                    let season: u32 = row.get(4).map_err(map_sql_err)?;
+                    let episode: u32 = row.get(5).map_err(map_sql_err)?;
+                    let absolute_episode: Option<u32> = row.get(6).map_err(map_sql_err)?;
+                    let position_ms = row.get::<_, i64>(7).map_err(map_sql_err)?.max(0) as u64;
+                    let duration_ms = row.get::<_, i64>(8).map_err(map_sql_err)?.max(0) as u64;
+                    let completed = row.get::<_, i32>(9).map_err(map_sql_err)? != 0;
+                    let last_watched_at: String = row.get(10).map_err(map_sql_err)?;
+
+                    let mut title: Option<String> = row.get(11).map_err(map_sql_err)?;
+                    let mut poster: Option<String> = row.get(12).map_err(map_sql_err)?;
+                    let mut backdrop: Option<String> = None;
+                    let mut media_type = row
+                        .get::<_, Option<String>>(13)
+                        .map_err(map_sql_err)?
+                        .and_then(|s| parse_media_type(&s).ok())
+                        .unwrap_or(MediaType::Series);
+                    let mut episode_title: Option<String> = None;
+
+                    let cache_pattern = format!("detail:{plugin_raw}:{native_id}:%");
+                    let cached_json: Option<String> = db
+                        .conn()
+                        .query_row(
+                            "SELECT payload_json FROM metadata_cache WHERE cache_key LIKE ?1 LIMIT 1",
+                            [&cache_pattern],
+                            |r| r.get(0),
+                        )
+                        .optional()
+                        .map_err(map_sql_err)?;
+
+                    if let Some(json_str) = cached_json
+                        && let Ok(val) = serde_json::from_str::<serde_json::Value>(&json_str)
+                    {
+                        if title.is_none() {
+                            title = val.get("title").and_then(|v| v.as_str()).map(str::to_owned);
+                        }
+                        if poster.is_none() {
+                            poster = val.get("poster").and_then(|v| v.as_str()).map(str::to_owned);
+                        }
+                        backdrop = val
+                            .get("backdrop")
+                            .and_then(|v| v.as_str())
+                            .map(str::to_owned);
+                        if let Some(t) = val.get("type").and_then(|v| v.as_str())
+                            && let Ok(parsed) = parse_media_type(t)
+                        {
+                            media_type = parsed;
+                        }
+                        if let Some(eps) = val.get("episodes").and_then(|v| v.as_array()) {
+                            episode_title = eps
+                                .iter()
+                                .find(|e| {
+                                    e.get("streamId").and_then(|v| v.as_str())
+                                        == Some(stream_id.as_str())
+                                })
+                                .and_then(|e| e.get("title").and_then(|v| v.as_str()))
+                                .map(str::to_owned);
+                        }
+                    }
+
+                    let plugin_id = PluginId::new(plugin_raw)?;
+                    out.push(ContinueWatchingEntry {
+                        media: MediaRef {
+                            plugin_id,
+                            native_id: native_id.clone(),
+                        },
+                        title: title.unwrap_or(native_id),
+                        poster,
+                        backdrop,
+                        media_type,
+                        stream_id,
+                        canonical_id,
+                        season,
+                        episode,
+                        absolute_episode,
+                        episode_title,
+                        position_ms,
+                        duration_ms,
+                        completed,
+                        last_watched_at,
+                    });
+
+                    if out.len() >= cap {
+                        break;
+                    }
+                }
+
+                Ok(out)
+            })
+            .await
+    }
+
+    /// Removes saved watch progress for `(plugin_id, native_id)` from Continue Watching.
+    pub async fn delete_watch_progress(
+        &self,
+        plugin_id: &PluginId,
+        native_id: &str,
+    ) -> VesselResult<()> {
+        let plugin = plugin_id.as_str().to_owned();
+        let native = native_id.to_owned();
+        self.actor()
+            .execute(move |db| {
+                db.conn()
+                    .execute(
+                        "DELETE FROM watch_progress WHERE plugin_id = ?1 AND native_id = ?2",
+                        (&plugin, &native),
+                    )
+                    .map_err(map_sql_err)?;
+                Ok(())
+            })
+            .await
+    }
+}
+
+/// Enriched Continue Watching card entry backed by `watch_progress`, `library_items`, and `metadata_cache`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ContinueWatchingEntry {
+    pub media: MediaRef,
+    pub title: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub poster: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub backdrop: Option<String>,
+    pub media_type: MediaType,
+    pub stream_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub canonical_id: Option<String>,
+    pub season: u32,
+    pub episode: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub absolute_episode: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub episode_title: Option<String>,
+    pub position_ms: u64,
+    pub duration_ms: u64,
+    pub completed: bool,
+    pub last_watched_at: String,
 }

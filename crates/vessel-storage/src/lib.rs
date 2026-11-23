@@ -22,6 +22,7 @@ pub use iptv::{
     NewIptvChannel, StoredEpgNowNext, StoredEpgProgram, StoredIptvChannel, StoredIptvKind,
     StoredIptvProfile,
 };
+pub use library::ContinueWatchingEntry;
 pub use metadata::MetadataOverride;
 pub use plugins::StoredPlugin;
 pub use secret::SqliteSecretStore;
