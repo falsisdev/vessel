@@ -1,6 +1,16 @@
 import { ref, shallowRef } from 'vue'
+import arLocale from '@/locales/ar.json'
+import deLocale from '@/locales/de.json'
 import enLocale from '@/locales/en.json'
+import esLocale from '@/locales/es.json'
+import faLocale from '@/locales/fa.json'
+import frLocale from '@/locales/fr.json'
+import itLocale from '@/locales/it.json'
+import jaLocale from '@/locales/ja.json'
+import ptLocale from '@/locales/pt.json'
+import ruLocale from '@/locales/ru.json'
 import trLocale from '@/locales/tr.json'
+import zhLocale from '@/locales/zh.json'
 import { isTauriRuntime, vesselApi } from '@/api/vessel'
 
 type NestedDict = Record<string, unknown>
@@ -8,6 +18,16 @@ type NestedDict = Record<string, unknown>
 const BUNDLED_LOCALES: Record<string, NestedDict> = {
   en: enLocale,
   tr: trLocale,
+  es: esLocale,
+  de: deLocale,
+  fr: frLocale,
+  it: itLocale,
+  ru: ruLocale,
+  ja: jaLocale,
+  pt: ptLocale,
+  zh: zhLocale,
+  ar: arLocale,
+  fa: faLocale,
 }
 
 const currentLang = shallowRef<string>(
@@ -30,9 +50,30 @@ function lookupPath(source: NestedDict | null, dottedKey: string): string | null
   return typeof cur === 'string' ? cur : null
 }
 
+function applyDocumentLang(lang: string): void {
+  if (typeof document === 'undefined') return
+  document.documentElement.lang = lang
+}
+
 export function useI18n() {
   function t(key: string): string {
     return lookupPath(customDict.value, key) ?? lookupPath(enLocale, key) ?? key
+  }
+
+  function getLocaleLabel(code: string): string {
+    const key = `languages.${code}`
+    const translated = lookupPath(customDict.value, key) ?? lookupPath(enLocale, key)
+    if (translated) return translated
+    try {
+      if (typeof Intl !== 'undefined' && 'DisplayNames' in Intl) {
+        const dn = new Intl.DisplayNames([currentLang.value, 'en'], { type: 'language' })
+        const name = dn.of(code)
+        if (name) return name.charAt(0).toUpperCase() + name.slice(1)
+      }
+    } catch {
+      // Fallback to raw code if custom tag isn't valid BCP-47
+    }
+    return code
   }
 
   async function refreshLocales(): Promise<void> {
@@ -47,6 +88,7 @@ export function useI18n() {
 
   async function setLocale(lang: string): Promise<void> {
     currentLang.value = lang
+    applyDocumentLang(lang)
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem('vessel_locale', lang)
     }
@@ -63,6 +105,7 @@ export function useI18n() {
     currentLang,
     availableLocales,
     t,
+    getLocaleLabel,
     refreshLocales,
     setLocale,
   }

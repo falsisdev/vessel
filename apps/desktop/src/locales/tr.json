@@ -78,6 +78,7 @@
     "episodes": "Bölümler",
     "sources": "Kaynaklar",
     "watch": "İzle",
+    "resume": "Devam Et",
     "season": "Sezon",
     "fix_match": "Eşleşmeyi Düzelt",
     "fix_match_desc": "Başlık, özet, görsel ve bölümleri yenilemek için kesin AniList, TMDB veya IMDb ID girin.",
@@ -199,6 +200,8 @@
     "open_releases": "Sürümler Sayfasını Aç"
   },
   "subtitles": {
+    "preview_title": "Altyazı Önizleme",
+    "preview_sample": "Özel altyazı stilinizin ekranda nasıl görüneceğine göz atın.",
     "font_size": "Yazı Boyutu",
     "bottom_offset": "Alt Konum Yüksekliği",
     "bg_opacity": "Arka Plan Opaklığı",
@@ -229,5 +232,19 @@
     "subtitle_delay": "Altyazı Gecikmesi",
     "now_playing": "Şimdi Oynatılıyor",
     "patch_notes": "Sürüm Notları"
+  },
+  "languages": {
+    "en": "İngilizce",
+    "tr": "Türkçe",
+    "es": "İspanyolca",
+    "de": "Almanca",
+    "fr": "Fransızca",
+    "it": "İtalyanca",
+    "ru": "Rusça",
+    "ja": "Japonca",
+    "pt": "Portekizce",
+    "zh": "Çince",
+    "ar": "Arapça",
+    "fa": "Farsça"
   }
 }

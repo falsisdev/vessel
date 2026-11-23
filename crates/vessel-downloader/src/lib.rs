@@ -1,4 +1,4 @@
-//! Pure-Rust offline download manager (`Range` direct resume + 4-worker AES-128 HLS + subtitles).
+//! Pure-Rust offline download manager (`Range` direct resume + multi-worker parallel chunk/HLS + audio/subtitles).
 
 pub mod direct;
 pub mod hls;
@@ -12,7 +12,7 @@ use std::time::Duration;
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 use tokio::fs;
 use tokio::sync::{Mutex, Semaphore};
-use tokio::task::JoinHandle;
+use tokio::task::{JoinHandle, JoinSet};
 use tokio_util::sync::CancellationToken;
 use vessel_domain::{
     DownloadProgressSnapshot, DownloadStatus, EngineEvent, EventSink, SubtitleFormat,
@@ -23,7 +23,7 @@ use vessel_storage::{DownloadKind, SqliteStorage, StoredDownload};
 pub use hls::remux_local_hls_to_mp4;
 
 /// Maximum simultaneous download jobs (`PLAN.md` M5.3).
-pub const MAX_CONCURRENT_DOWNLOADS: usize = 2;
+pub const MAX_CONCURRENT_DOWNLOADS: usize = 4;
 
 static DL_SEQ: AtomicU64 = AtomicU64::new(1);
 
@@ -102,6 +102,13 @@ pub(crate) async fn bundle_subtitles(
     fallback_headers: &BTreeMap<String, String>,
     local_dir: &Path,
 ) -> VesselResult<()> {
+    if subtitles.is_empty() {
+        return Ok(());
+    }
+
+    let sem = Arc::new(Semaphore::new(4));
+    let mut join_set: JoinSet<VesselResult<()>> = JoinSet::new();
+
     for (idx, track) in subtitles.iter().enumerate() {
         let ext = subtitle_extension(track.format);
         let file_path = local_dir.join(format!("sub_{idx}.{ext}"));
@@ -113,28 +120,59 @@ pub(crate) async fn bundle_subtitles(
             }
             SubtitleSource::Url { url, headers } => {
                 let effective = if headers.is_empty() {
-                    fallback_headers
+                    fallback_headers.clone()
                 } else {
-                    headers
+                    headers.clone()
                 };
-                let resp = apply_headers(client.get(url), effective)
-                    .send()
+                let url = url.clone();
+                let client = client.clone();
+                let permit = Arc::clone(&sem)
+                    .acquire_owned()
                     .await
-                    .map_err(|err| {
-                        VesselError::Network(format!("subtitle fetch '{url}' failed: {err}"))
-                    })?;
-                if !resp.status().is_success() {
-                    return Err(VesselError::Network(format!(
-                        "subtitle fetch '{url}' returned HTTP {}",
-                        resp.status()
-                    )));
-                }
-                let bytes = resp.bytes().await.map_err(|err| {
-                    VesselError::Network(format!("read subtitle bytes '{url}': {err}"))
-                })?;
-                fs::write(&file_path, &bytes)
-                    .await
-                    .map_err(|err| VesselError::Storage(format!("write subtitle file: {err}")))?;
+                    .map_err(|_| VesselError::Cancelled)?;
+
+                join_set.spawn(async move {
+                    let _permit = permit;
+                    let resp = match apply_headers(client.get(&url), &effective).send().await {
+                        Ok(r) => r,
+                        Err(err) => {
+                            eprintln!("[vessel-downloader] subtitle fetch '{url}' skipped: {err}");
+                            return Ok(());
+                        }
+                    };
+                    if !resp.status().is_success() {
+                        eprintln!(
+                            "[vessel-downloader] subtitle fetch '{url}' returned HTTP {}, skipped",
+                            resp.status()
+                        );
+                        return Ok(());
+                    }
+                    match resp.bytes().await {
+                        Ok(bytes) => {
+                            fs::write(&file_path, &bytes).await.map_err(|err| {
+                                VesselError::Storage(format!("write subtitle file: {err}"))
+                            })?;
+                        }
+                        Err(err) => {
+                            eprintln!(
+                                "[vessel-downloader] read subtitle bytes '{url}' skipped: {err}"
+                            );
+                        }
+                    }
+                    Ok(())
+                });
+            }
+        }
+    }
+
+    while let Some(res) = join_set.join_next().await {
+        match res {
+            Ok(Ok(())) => {}
+            Ok(Err(err)) => return Err(err),
+            Err(err) => {
+                return Err(VesselError::Storage(format!(
+                    "subtitle download task failed: {err}"
+                )));
             }
         }
     }
@@ -705,6 +743,95 @@ mod tests {
             .expect("segs");
         assert_eq!(db_segments.len(), 2);
         assert!(db_segments.iter().all(|s| s.completed));
+
+        let _ = tokio::fs::remove_dir_all(&root).await;
+    }
+
+    #[tokio::test]
+    async fn hls_download_bundles_master_audio_and_subtitle_media_groups() {
+        let app = Router::new()
+            .route(
+                "/master.m3u8",
+                get(|| async {
+                    "#EXTM3U\n\
+                     #EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"aud\",NAME=\"Turkish\",LANGUAGE=\"tr\",DEFAULT=YES,AUTOSELECT=YES,URI=\"audio_tr.m3u8\"\n\
+                     #EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID=\"sub\",NAME=\"English\",LANGUAGE=\"en\",DEFAULT=NO,AUTOSELECT=YES,URI=\"subs_en.m3u8\"\n\
+                     #EXT-X-STREAM-INF:BANDWIDTH=2000000,AUDIO=\"aud\",SUBTITLES=\"sub\"\n\
+                     video.m3u8\n"
+                }),
+            )
+            .route(
+                "/video.m3u8",
+                get(|| async {
+                    "#EXTM3U\n#EXT-X-TARGETDURATION:6\n#EXTINF:5.0,\nv0.ts\n#EXT-X-ENDLIST\n"
+                }),
+            )
+            .route(
+                "/audio_tr.m3u8",
+                get(|| async {
+                    "#EXTM3U\n#EXT-X-TARGETDURATION:6\n#EXTINF:5.0,\na0.ts\n#EXT-X-ENDLIST\n"
+                }),
+            )
+            .route(
+                "/subs_en.m3u8",
+                get(|| async {
+                    "#EXTM3U\n#EXT-X-TARGETDURATION:6\n#EXTINF:5.0,\ns0.vtt\n#EXT-X-ENDLIST\n"
+                }),
+            )
+            .route("/v0.ts", get(|| async { b"VID_BYTES".to_vec() }))
+            .route("/a0.ts", get(|| async { b"AUD_TR_BYTES".to_vec() }))
+            .route(
+                "/s0.vtt",
+                get(|| async { b"WEBVTT\n\n00:00:00.000 --> 00:00:02.000\nHi\n".to_vec() }),
+            );
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
+        let addr = listener.local_addr().expect("addr");
+        tokio::spawn(async move {
+            let _ = axum::serve(listener, app).await;
+        });
+
+        let root = temp_dir("hls-aux");
+        let actor = StorageActor::open_in_memory().await.expect("db");
+        let storage = Arc::new(SqliteStorage::new(actor));
+        let sink = Arc::new(CollectorSink::default());
+        let manager = DownloadManager::new(Arc::clone(&storage), sink, root.clone());
+
+        manager
+            .enqueue(DownloadRequest {
+                id: Some("dl-hls-aux".into()),
+                plugin_id: "anthology".into(),
+                native_id: "ep3".into(),
+                title: "Anthology Ep 3".into(),
+                season: Some(1),
+                episode: Some(3),
+                kind: DownloadKind::Hls,
+                source_url: format!("http://{addr}/master.m3u8"),
+                headers: BTreeMap::new(),
+                subtitles: Vec::new(),
+            })
+            .await
+            .expect("enqueue hls aux");
+
+        let done = wait_until_status(&manager, "dl-hls-aux", DownloadStatus::Completed).await;
+        let local_m3u8_path = std::path::PathBuf::from(done.local_media_path.expect("local m3u8"));
+        let master = tokio::fs::read_to_string(&local_m3u8_path)
+            .await
+            .expect("read local master");
+        assert!(master.contains("TYPE=AUDIO"));
+        assert!(master.contains("audio_0/local.m3u8"));
+        assert!(master.contains("TYPE=SUBTITLES"));
+        assert!(master.contains("sub_hls_1/local.m3u8"));
+        assert!(master.contains("video.m3u8"));
+
+        let bundle_dir = local_m3u8_path.parent().expect("dir");
+        assert_eq!(
+            tokio::fs::read(bundle_dir.join("audio_0/seg_00000.ts"))
+                .await
+                .expect("audio seg"),
+            b"AUD_TR_BYTES"
+        );
+        assert!(bundle_dir.join("sub_hls_1/seg_00000.ts").exists());
 
         let _ = tokio::fs::remove_dir_all(&root).await;
     }

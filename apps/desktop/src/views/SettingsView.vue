@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, shallowRef } from 'vue'
+import { computed, onMounted, shallowRef } from 'vue'
 import { Download, ExternalLink, Palette, RefreshCw, RotateCcw, Shield, Sliders, Sparkles, Upload } from 'lucide-vue-next'
 import { isTauriRuntime, vesselApi } from '@/api/vessel'
 import { formatBytes, useAppUpdater } from '@/composables/useAppUpdater'
@@ -9,7 +9,7 @@ import { useUiPreferences } from '@/composables/useUiPreferences'
 import { pushToast } from '@/composables/useVesselEvents'
 import type { EngineInfo } from '@/types/vessel'
 
-const { t, currentLang, availableLocales, setLocale } = useI18n()
+const { t, currentLang, availableLocales, getLocaleLabel, setLocale } = useI18n()
 const { themes, activeThemeId, selectTheme, importTheme } = useTheme()
 const { uiPreferences, savePreferences, resetAllPreferences } = useUiPreferences()
 const {
@@ -33,6 +33,39 @@ const themeJsonInput = shallowRef('')
 const backupJsonInput = shallowRef('')
 const includeSecretsInBackup = shallowRef(false)
 const confirmResetImport = shallowRef(false)
+
+const subtitlePreviewLineStyle = computed(() => {
+  const subs = uiPreferences.value.subtitles
+  const alpha = Math.max(0, Math.min(100, subs.backgroundOpacity ?? 72)) / 100
+  const scaledSize = Math.round(Math.max(12, Math.min(34, (subs.fontSizePx ?? 28) * 0.68)))
+  const fontFamilyMap: Record<string, string> = {
+    'system-ui': 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+    serif: 'Georgia, "Times New Roman", serif',
+    monospace: '"JetBrains Mono", "SFMono-Regular", Menlo, monospace',
+    rounded: '"Nunito", "SF Pro Rounded", system-ui, sans-serif',
+  }
+  const family = fontFamilyMap[subs.fontFamily] ?? (subs.fontFamily || fontFamilyMap['system-ui'])
+  const outlineStyle = subs.outlineStyle ?? 'outline'
+  const textShadow =
+    outlineStyle === 'none'
+      ? 'none'
+      : outlineStyle === 'shadow'
+        ? '0 2px 10px rgba(0, 0, 0, 0.95), 0 1px 3px rgba(0, 0, 0, 0.9)'
+        : '0 2px 6px rgba(0,0,0,0.95), -1.5px -1.5px 0 rgba(0,0,0,0.88), 1.5px -1.5px 0 rgba(0,0,0,0.88), -1.5px 1.5px 0 rgba(0,0,0,0.88), 1.5px 1.5px 0 rgba(0,0,0,0.88)'
+  return {
+    fontSize: `${scaledSize}px`,
+    fontFamily: family,
+    color: subs.textColor || '#ffffff',
+    fontWeight: subs.bold ? '700' : '500',
+    backgroundColor: outlineStyle === 'none' ? 'transparent' : `rgba(8, 10, 16, ${alpha})`,
+    textShadow,
+  }
+})
+
+const subtitlePreviewStageOffset = computed(() => {
+  const raw = uiPreferences.value.subtitles.bottomOffsetPx ?? 56
+  return `${Math.max(8, Math.min(54, Math.round(raw * 0.24)))}px`
+})
 
 onMounted(async () => {
   if (!isTauriRuntime()) return
@@ -158,7 +191,7 @@ async function handleImportBackup(mode: 'smart_merge' | 'reset_and_import'): Pro
           @change="setLocale(($event.target as HTMLSelectElement).value)"
         >
           <option v-for="code in availableLocales" :key="code" :value="code">
-            {{ code }}
+            {{ getLocaleLabel(code) }}
           </option>
         </select>
       </div>
@@ -299,6 +332,13 @@ async function handleImportBackup(mode: 'smart_merge' | 'reset_and_import'): Pro
 
       <div class="sub-prefs-box">
         <h4 class="sub-prefs-title">{{ t('settings.subtitles_title') }}</h4>
+
+        <div class="sub-preview-stage" :style="{ paddingBottom: subtitlePreviewStageOffset }">
+          <span class="sub-preview-badge">{{ t('subtitles.preview_title') }}</span>
+          <span class="sub-preview-line" :style="subtitlePreviewLineStyle">
+            {{ t('subtitles.preview_sample') }}
+          </span>
+        </div>
 
         <div class="v-setting-row">
           <div class="setting-copy">
@@ -690,10 +730,48 @@ async function handleImportBackup(mode: 'smart_merge' | 'reset_and_import'): Pro
 }
 
 .sub-prefs-title {
-  margin: 0 0 0.35rem;
+  margin: 0 0 0.5rem;
   font-size: 0.95rem;
   font-weight: 700;
   color: var(--vessel-accent);
+}
+
+.sub-preview-stage {
+  position: relative;
+  min-height: 112px;
+  margin-bottom: 0.65rem;
+  padding: 2.2rem 1rem 0.85rem;
+  border-radius: 12px;
+  border: 1px solid var(--vessel-border);
+  background:
+    radial-gradient(circle at 25% 25%, rgba(203, 166, 247, 0.2), transparent 55%),
+    radial-gradient(circle at 80% 35%, rgba(137, 180, 250, 0.16), transparent 50%),
+    linear-gradient(180deg, #161829 0%, #090a12 100%);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  text-align: center;
+  overflow: hidden;
+  transition: padding-bottom 0.15s ease;
+}
+
+.sub-preview-badge {
+  position: absolute;
+  top: 0.5rem;
+  left: 0.65rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(244, 246, 252, 0.68);
+}
+
+.sub-preview-line {
+  display: inline-block;
+  max-width: 92%;
+  padding: 0.28em 0.68em;
+  border-radius: 8px;
+  line-height: 1.35;
 }
 
 .sub-range {

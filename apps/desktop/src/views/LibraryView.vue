@@ -15,6 +15,7 @@ const { uiPreferences } = useUiPreferences()
 
 const activeFilter = shallowRef<LibraryStatus | 'all'>('all')
 const items = shallowRef<LibraryItem[]>([])
+const loading = shallowRef(isTauriRuntime())
 
 defineOptions({ name: 'LibraryView' })
 
@@ -29,11 +30,17 @@ const FILTERS: Array<{ value: LibraryStatus | 'all'; key: string }> = [
 
 async function loadLibrary(filter = activeFilter.value): Promise<void> {
   activeFilter.value = filter
-  if (!isTauriRuntime()) return
+  if (!isTauriRuntime()) {
+    loading.value = false
+    return
+  }
+  loading.value = true
   try {
     items.value = await vesselApi.listLibrary(filter === 'all' ? undefined : filter)
   } catch (err) {
     pushToast('error', String(err))
+  } finally {
+    loading.value = false
   }
 }
 
@@ -78,7 +85,15 @@ onActivated(() => {
       </div>
     </header>
 
-    <div v-if="!items.length" class="v-card v-muted">{{ t('common.empty') }}</div>
+    <div v-if="loading && !items.length" class="v-grid">
+      <div v-for="n in 8" :key="n" class="lib-skeleton-card">
+        <div class="v-skeleton lib-skeleton-poster" />
+        <div class="v-skeleton lib-skeleton-line" />
+        <div class="v-skeleton lib-skeleton-line short" />
+      </div>
+    </div>
+
+    <div v-else-if="!items.length" class="v-card v-muted">{{ t('common.empty') }}</div>
 
     <div v-else class="v-grid">
       <div
@@ -128,6 +143,27 @@ onActivated(() => {
 
 .lib-card-wrap {
   position: relative;
+}
+
+.lib-skeleton-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.lib-skeleton-poster {
+  aspect-ratio: 2 / 3;
+}
+
+.lib-skeleton-line {
+  width: 82%;
+  height: 13px;
+  border-radius: 6px;
+}
+
+.lib-skeleton-line.short {
+  width: 50%;
+  height: 11px;
 }
 
 .lib-remove-btn {

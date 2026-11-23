@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, shallowRef, watch } from 'vue'
+import { computed, onActivated, onMounted, ref, shallowRef, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   AlertTriangle,
@@ -24,6 +24,7 @@ import { usePlayerSession } from '@/composables/usePlayerSession'
 import { useUiPreferences } from '@/composables/useUiPreferences'
 import { pushToast, useVesselEvents } from '@/composables/useVesselEvents'
 import type {
+  ContinueWatchingEntry,
   Episode,
   EpisodeListLayout,
   LibraryStatus,
@@ -44,6 +45,7 @@ const { uiPreferences, savePreferences } = useUiPreferences()
 const { lastEnrichedDetail } = useVesselEvents()
 
 const detail = ref<MediaDetail | null>(null)
+const resumeEntry = ref<ContinueWatchingEntry | null>(null)
 const selectedSeason = shallowRef<number>(1)
 const loading = shallowRef(false)
 
@@ -85,6 +87,17 @@ const filteredEpisodes = computed(() => {
 })
 
 const firstEpisode = computed(() => filteredEpisodes.value[0] ?? detail.value?.episodes[0] ?? null)
+const resumeEpisode = computed(() => {
+  const entry = resumeEntry.value
+  const eps = detail.value?.episodes ?? []
+  if (!entry || !eps.length) return firstEpisode.value
+  return (
+    eps.find((ep) => ep.streamId === entry.streamId) ??
+    eps.find((ep) => ep.season === entry.season && ep.episode === entry.episode) ??
+    firstEpisode.value
+  )
+})
+const ctaEpisode = computed(() => (resumeEntry.value ? resumeEpisode.value : firstEpisode.value))
 const episodeLayout = computed(() => uiPreferences.value.details.episodeLayout)
 
 watch(lastEnrichedDetail, (enriched) => {
@@ -109,17 +122,38 @@ async function setEpisodeLayout(layout: EpisodeListLayout): Promise<void> {
   }
 }
 
+async function refreshResumeState(): Promise<void> {
+  try {
+    const cw = await vesselApi.listContinueWatching(50)
+    const match = cw.find(
+      (entry) =>
+        entry.media.pluginId === props.pluginId &&
+        entry.media.nativeId === props.nativeId &&
+        entry.positionMs > 0,
+    )
+    resumeEntry.value = match ?? null
+    if (match && detail.value?.episodes.some((ep) => ep.season === match.season)) {
+      selectedSeason.value = match.season
+    }
+  } catch {
+    resumeEntry.value = null
+  }
+}
+
 async function loadDetails(): Promise<void> {
   loading.value = true
   try {
-    const res = await vesselApi.getDetailsWithEnrichment(
-      props.pluginId,
-      props.nativeId,
-      currentLang.value,
-    )
+    const [res] = await Promise.all([
+      vesselApi.getDetailsWithEnrichment(props.pluginId, props.nativeId, currentLang.value),
+      refreshResumeState(),
+    ])
     detail.value = res
     if (res.episodes.length) {
-      selectedSeason.value = res.episodes[0].season
+      const match = resumeEntry.value
+      selectedSeason.value =
+        match && res.episodes.some((ep) => ep.season === match.season)
+          ? match.season
+          : res.episodes[0].season
     }
   } catch (err) {
     pushToast('error', String(err))
@@ -289,12 +323,43 @@ async function downloadCandidate(ep: Episode, candidate: StreamCandidate): Promi
 onMounted(() => {
   void loadDetails()
 })
+
+onActivated(() => {
+  if (detail.value) {
+    void refreshResumeState()
+  }
+})
 </script>
 
 <template>
   <section class="nuvio-details">
     <div v-if="loading" class="hero-skeleton-wrap">
-      <div class="v-skeleton hero-skeleton" />
+      <div class="details-sk-hero">
+        <div class="v-skeleton details-sk-poster" />
+        <div class="details-sk-meta">
+          <div class="details-sk-chips">
+            <span class="v-skeleton details-sk-chip" />
+            <span class="v-skeleton details-sk-chip sm" />
+            <span class="v-skeleton details-sk-chip sm" />
+          </div>
+          <div class="v-skeleton details-sk-title" />
+          <div class="v-skeleton details-sk-sub" />
+          <div class="v-skeleton details-sk-para" />
+          <div class="v-skeleton details-sk-para short" />
+          <div class="details-sk-chips" style="margin-top: 0.5rem;">
+            <span class="v-skeleton details-sk-btn" />
+            <span class="v-skeleton details-sk-btn secondary" />
+          </div>
+        </div>
+      </div>
+
+      <div class="details-sk-eps">
+        <div v-for="n in 6" :key="n" class="details-sk-ep-card">
+          <div class="v-skeleton details-sk-ep-thumb" />
+          <div class="v-skeleton details-sk-ep-line" />
+          <div class="v-skeleton details-sk-ep-line short" />
+        </div>
+      </div>
     </div>
 
     <template v-else-if="detail">
@@ -375,13 +440,13 @@ onMounted(() => {
 
             <div class="cta-row">
               <button
-                v-if="firstEpisode"
+                v-if="ctaEpisode"
                 type="button"
                 class="v-btn v-btn-primary"
-                @click="openSourceResolver(firstEpisode)"
+                @click="openSourceResolver(ctaEpisode)"
               >
                 <Play :size="16" fill="currentColor" aria-hidden="true" />
-                {{ t('details.watch') }} S{{ firstEpisode.season }}:E{{ firstEpisode.episode }}
+                {{ resumeEntry ? t('details.resume') : t('details.watch') }} S{{ ctaEpisode.season }}:E{{ ctaEpisode.episode }}
               </button>
 
               <div class="library-picker">
@@ -737,10 +802,105 @@ onMounted(() => {
 
 .hero-skeleton-wrap {
   padding: 2rem 2.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2.25rem;
 }
 
-.hero-skeleton {
-  height: 440px;
+.details-sk-hero {
+  display: flex;
+  gap: 2.25rem;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+.details-sk-poster {
+  width: 216px;
+  aspect-ratio: 2 / 3;
+  flex-shrink: 0;
+}
+
+.details-sk-meta {
+  flex: 1;
+  min-width: 280px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.details-sk-chips {
+  display: flex;
+  gap: 0.6rem;
+}
+
+.details-sk-chip {
+  width: 92px;
+  height: 22px;
+  border-radius: 6px;
+}
+
+.details-sk-chip.sm {
+  width: 56px;
+}
+
+.details-sk-title {
+  width: min(420px, 75vw);
+  height: 40px;
+  border-radius: 10px;
+}
+
+.details-sk-sub {
+  width: min(260px, 55vw);
+  height: 18px;
+  border-radius: 6px;
+}
+
+.details-sk-para {
+  width: min(640px, 90%);
+  height: 15px;
+  border-radius: 6px;
+}
+
+.details-sk-para.short {
+  width: min(420px, 65%);
+}
+
+.details-sk-btn {
+  width: 148px;
+  height: 40px;
+  border-radius: 999px;
+}
+
+.details-sk-btn.secondary {
+  width: 126px;
+}
+
+.details-sk-eps {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 1.15rem;
+}
+
+.details-sk-ep-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.details-sk-ep-thumb {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+}
+
+.details-sk-ep-line {
+  width: 78%;
+  height: 14px;
+  border-radius: 6px;
+}
+
+.details-sk-ep-line.short {
+  width: 52%;
+  height: 12px;
 }
 
 .detail-hero {

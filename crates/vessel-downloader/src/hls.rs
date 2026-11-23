@@ -22,7 +22,25 @@ use vessel_storage::{SqliteStorage, StoredDownload, StoredDownloadSegment};
 use crate::{apply_headers, bundle_subtitles};
 
 /// Bounded worker count per active HLS download task (`PLAN.md` M5.3).
-pub const HLS_SEGMENT_CONCURRENCY: usize = 4;
+pub const HLS_SEGMENT_CONCURRENCY: usize = 8;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MasterMediaTrack {
+    pub media_type: String,
+    pub group_id: String,
+    pub name: String,
+    pub language: Option<String>,
+    pub is_default: bool,
+    pub autoselect: bool,
+    pub uri: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MasterPlaylistSelection {
+    pub variant_url: String,
+    pub bandwidth: u64,
+    pub media_tracks: Vec<MasterMediaTrack>,
+}
 
 type Aes128CbcDec = cbc::Decryptor<Aes128>;
 
@@ -124,35 +142,102 @@ fn parse_hex_iv(raw: &str) -> VesselResult<[u8; 16]> {
     Ok(iv)
 }
 
-/// Selects the highest-bandwidth stream URI from a master playlist, or `None` if already a media playlist.
-pub fn select_highest_variant(playlist: &str, base_url: &Url) -> VesselResult<Option<String>> {
-    let mut best: Option<(u64, String)> = None;
-    let mut pending_bandwidth: Option<u64> = None;
+/// Selects the highest-bandwidth stream URI and any matching `AUDIO`/`SUBTITLES` media groups.
+pub fn parse_master_playlist(
+    playlist: &str,
+    base_url: &Url,
+) -> VesselResult<Option<MasterPlaylistSelection>> {
+    let mut best: Option<(u64, String, Option<String>, Option<String>)> = None;
+    let mut pending: Option<(u64, Option<String>, Option<String>)> = None;
+    let mut all_media: Vec<MasterMediaTrack> = Vec::new();
 
     for raw in playlist.lines() {
         let line = raw.trim();
         if line.is_empty() {
             continue;
         }
-        if let Some(rest) = line.strip_prefix("#EXT-X-STREAM-INF:") {
+        if let Some(rest) = line.strip_prefix("#EXT-X-MEDIA:") {
             let attrs = parse_attr_list(rest);
-            pending_bandwidth = attrs
-                .get("BANDWIDTH")
-                .and_then(|v| v.parse::<u64>().ok())
-                .or(Some(0));
+            let media_type = attrs
+                .get("TYPE")
+                .map(|s| s.to_ascii_uppercase())
+                .unwrap_or_default();
+            if (media_type == "AUDIO" || media_type == "SUBTITLES")
+                && let Some(raw_uri) = attrs.get("URI")
+                && !raw_uri.trim().is_empty()
+                && let Ok(uri) = resolve_url(base_url, raw_uri)
+            {
+                all_media.push(MasterMediaTrack {
+                    media_type,
+                    group_id: attrs.get("GROUP-ID").cloned().unwrap_or_default(),
+                    name: attrs
+                        .get("NAME")
+                        .cloned()
+                        .unwrap_or_else(|| "Track".to_string()),
+                    language: attrs.get("LANGUAGE").cloned(),
+                    is_default: attrs
+                        .get("DEFAULT")
+                        .is_some_and(|v| v.eq_ignore_ascii_case("YES")),
+                    autoselect: attrs
+                        .get("AUTOSELECT")
+                        .is_some_and(|v| v.eq_ignore_ascii_case("YES")),
+                    uri,
+                });
+            }
             continue;
         }
-        if let Some(bw) = pending_bandwidth.take()
+        if let Some(rest) = line.strip_prefix("#EXT-X-STREAM-INF:") {
+            let attrs = parse_attr_list(rest);
+            let bw = attrs
+                .get("BANDWIDTH")
+                .and_then(|v| v.parse::<u64>().ok())
+                .unwrap_or(0);
+            pending = Some((
+                bw,
+                attrs.get("AUDIO").cloned(),
+                attrs.get("SUBTITLES").cloned(),
+            ));
+            continue;
+        }
+        if let Some((bw, audio_grp, sub_grp)) = pending.take()
             && !line.starts_with('#')
         {
             let resolved = resolve_url(base_url, line)?;
-            if best.as_ref().is_none_or(|(b, _)| bw > *b) {
-                best = Some((bw, resolved));
+            if best.as_ref().is_none_or(|(b, _, _, _)| bw > *b) {
+                best = Some((bw, resolved, audio_grp, sub_grp));
             }
         }
     }
 
-    Ok(best.map(|(_, url)| url))
+    let Some((bandwidth, variant_url, audio_grp, sub_grp)) = best else {
+        return Ok(None);
+    };
+
+    let media_tracks = all_media
+        .into_iter()
+        .filter(|m| {
+            if m.media_type == "AUDIO" {
+                audio_grp
+                    .as_ref()
+                    .is_none_or(|g| g.is_empty() || m.group_id == *g)
+            } else {
+                sub_grp
+                    .as_ref()
+                    .is_none_or(|g| g.is_empty() || m.group_id == *g)
+            }
+        })
+        .collect();
+
+    Ok(Some(MasterPlaylistSelection {
+        variant_url,
+        bandwidth,
+        media_tracks,
+    }))
+}
+
+/// Selects the highest-bandwidth stream URI from a master playlist, or `None` if already a media playlist.
+pub fn select_highest_variant(playlist: &str, base_url: &Url) -> VesselResult<Option<String>> {
+    Ok(parse_master_playlist(playlist, base_url)?.map(|sel| sel.variant_url))
 }
 
 /// Parses a resolved HLS media playlist including `#EXT-X-KEY` and `#EXT-X-MAP`.
@@ -346,10 +431,15 @@ pub(crate) async fn run_hls_download(
 
     let (base_url, raw_playlist) =
         fetch_text(client, &record.source_url, &record.headers, cancel).await?;
-    let (media_url, media_text) = match select_highest_variant(&raw_playlist, &base_url)? {
-        Some(variant_url) => fetch_text(client, &variant_url, &record.headers, cancel).await?,
-        None => (base_url, raw_playlist),
-    };
+    let (media_url, media_text, master_selection) =
+        match parse_master_playlist(&raw_playlist, &base_url)? {
+            Some(sel) => {
+                let (m_url, m_txt) =
+                    fetch_text(client, &sel.variant_url, &record.headers, cancel).await?;
+                (m_url, m_txt, Some(sel))
+            }
+            None => (base_url, raw_playlist, None),
+        };
     let playlist = parse_media_playlist(&media_text, &media_url)?;
     let total_segments = u32::try_from(playlist.segments.len()).unwrap_or(u32::MAX);
 
@@ -571,11 +661,59 @@ pub(crate) async fn run_hls_download(
         return Err(err);
     }
 
+    let mut downloaded_media_tracks: Vec<(MasterMediaTrack, String)> = Vec::new();
+    if let Some(ref master) = master_selection
+        && !master.media_tracks.is_empty()
+    {
+        for (idx, track) in master.media_tracks.iter().enumerate() {
+            if cancel.is_cancelled() {
+                return Err(VesselError::Cancelled);
+            }
+            let prefix = if track.media_type == "AUDIO" {
+                format!("audio_{idx}")
+            } else {
+                format!("sub_hls_{idx}")
+            };
+            let track_dir = local_dir.join(&prefix);
+            if let Ok(rel_uri) = download_aux_hls_media(
+                client,
+                track,
+                &record.headers,
+                &track_dir,
+                &prefix,
+                &worker_sem,
+                cancel,
+            )
+            .await
+            {
+                downloaded_media_tracks.push((track.clone(), rel_uri));
+            }
+        }
+    }
+
     let local_m3u8_path = local_dir.join("local.m3u8");
-    let local_m3u8_content = render_local_playlist(&playlist, has_init_map);
-    fs::write(&local_m3u8_path, local_m3u8_content.as_bytes())
-        .await
-        .map_err(|err| VesselError::Storage(format!("write local.m3u8: {err}")))?;
+    let video_playlist_content = render_local_playlist(&playlist, has_init_map);
+    if downloaded_media_tracks.is_empty() {
+        fs::write(&local_m3u8_path, video_playlist_content.as_bytes())
+            .await
+            .map_err(|err| VesselError::Storage(format!("write local.m3u8: {err}")))?;
+    } else {
+        let video_m3u8_path = local_dir.join("video.m3u8");
+        fs::write(&video_m3u8_path, video_playlist_content.as_bytes())
+            .await
+            .map_err(|err| VesselError::Storage(format!("write video.m3u8: {err}")))?;
+
+        let master_content = render_local_master_playlist(
+            master_selection
+                .as_ref()
+                .map(|s| s.bandwidth)
+                .unwrap_or(2_500_000),
+            &downloaded_media_tracks,
+        );
+        fs::write(&local_m3u8_path, master_content.as_bytes())
+            .await
+            .map_err(|err| VesselError::Storage(format!("write local.m3u8 master: {err}")))?;
+    }
 
     bundle_subtitles(client, &record.subtitles, &record.headers, &local_dir).await?;
 
@@ -626,4 +764,152 @@ pub async fn remux_local_hls_to_mp4(local_dir: &Path) -> VesselResult<PathBuf> {
         )));
     }
     Ok(output)
+}
+
+async fn download_aux_hls_media(
+    client: &reqwest::Client,
+    track: &MasterMediaTrack,
+    headers: &BTreeMap<String, String>,
+    track_dir: &Path,
+    prefix: &str,
+    worker_sem: &Arc<Semaphore>,
+    cancel: &CancellationToken,
+) -> VesselResult<String> {
+    fs::create_dir_all(track_dir)
+        .await
+        .map_err(|err| VesselError::Storage(format!("create HLS aux dir: {err}")))?;
+
+    let (base_url, text) = fetch_text(client, &track.uri, headers, cancel).await?;
+    let parsed = parse_media_playlist(&text, &base_url)?;
+    let has_init_map = if let Some(ref map_url) = parsed.map_url {
+        let init_bytes = fetch_bytes(client, map_url, headers, cancel).await?;
+        fs::write(track_dir.join("init.mp4"), &init_bytes)
+            .await
+            .map_err(|err| VesselError::Storage(format!("write aux init.mp4: {err}")))?;
+        true
+    } else {
+        false
+    };
+
+    let mut key_cache: HashMap<String, [u8; 16]> = HashMap::new();
+    for seg in &parsed.segments {
+        if let HlsKeySpec::Aes128 { key_url, .. } = &seg.key
+            && !key_cache.contains_key(key_url)
+        {
+            let key_bytes = fetch_bytes(client, key_url, headers, cancel).await?;
+            let key_arr: [u8; 16] = key_bytes
+                .as_slice()
+                .try_into()
+                .map_err(|_| VesselError::InvalidInput("invalid aux AES-128 key".into()))?;
+            key_cache.insert(key_url.clone(), key_arr);
+        }
+    }
+    let key_cache = Arc::new(key_cache);
+    let headers = Arc::new(headers.clone());
+    let mut join_set: JoinSet<VesselResult<()>> = JoinSet::new();
+
+    for seg in parsed.segments.iter().cloned() {
+        let permit = Arc::clone(worker_sem)
+            .acquire_owned()
+            .await
+            .map_err(|_| VesselError::Cancelled)?;
+        let client = client.clone();
+        let headers = Arc::clone(&headers);
+        let key_cache = Arc::clone(&key_cache);
+        let track_dir = track_dir.to_path_buf();
+        let cancel = cancel.clone();
+
+        join_set.spawn(async move {
+            let _permit = permit;
+            let raw = fetch_bytes(&client, &seg.url, &headers, &cancel).await?;
+            let out = match &seg.key {
+                HlsKeySpec::None => raw,
+                HlsKeySpec::Aes128 { key_url, iv } => {
+                    let key = key_cache
+                        .get(key_url)
+                        .ok_or_else(|| VesselError::InvalidInput("missing aux HLS key".into()))?;
+                    let eff_iv = iv.unwrap_or_else(|| default_media_seq_iv(seg.media_sequence));
+                    decrypt_aes128_cbc_segment(&raw, key, &eff_iv)?
+                }
+            };
+            fs::write(track_dir.join(&seg.file_name), &out)
+                .await
+                .map_err(|err| VesselError::Storage(format!("write aux seg: {err}")))?;
+            Ok(())
+        });
+    }
+
+    while let Some(res) = join_set.join_next().await {
+        match res {
+            Ok(Ok(())) => {}
+            Ok(Err(err)) => return Err(err),
+            Err(err) => {
+                return Err(VesselError::Storage(format!("aux HLS task failed: {err}")));
+            }
+        }
+    }
+
+    let aux_playlist = render_local_playlist(&parsed, has_init_map);
+    fs::write(track_dir.join("local.m3u8"), aux_playlist.as_bytes())
+        .await
+        .map_err(|err| VesselError::Storage(format!("write aux local.m3u8: {err}")))?;
+    Ok(format!("{prefix}/local.m3u8"))
+}
+
+fn render_local_master_playlist(
+    bandwidth: u64,
+    media_tracks: &[(MasterMediaTrack, String)],
+) -> String {
+    let mut out = String::new();
+    let _ = writeln!(&mut out, "#EXTM3U");
+    let _ = writeln!(&mut out, "#EXT-X-VERSION:4");
+
+    let mut audio_group: Option<String> = None;
+    let mut sub_group: Option<String> = None;
+
+    for (track, rel_uri) in media_tracks {
+        let gid = if track.group_id.is_empty() {
+            if track.media_type == "AUDIO" {
+                "audio".to_string()
+            } else {
+                "subs".to_string()
+            }
+        } else {
+            track.group_id.clone()
+        };
+        if track.media_type == "AUDIO" && audio_group.is_none() {
+            audio_group = Some(gid.clone());
+        }
+        if track.media_type == "SUBTITLES" && sub_group.is_none() {
+            sub_group = Some(gid.clone());
+        }
+        let mut attrs = format!(
+            "TYPE={},GROUP-ID=\"{}\",NAME=\"{}\"",
+            track.media_type,
+            gid.replace('"', ""),
+            track.name.replace('"', "")
+        );
+        if let Some(ref lang) = track.language {
+            let _ = write!(&mut attrs, ",LANGUAGE=\"{}\"", lang.replace('"', ""));
+        }
+        let _ = write!(
+            &mut attrs,
+            ",DEFAULT={},AUTOSELECT={},URI=\"{}\"",
+            if track.is_default { "YES" } else { "NO" },
+            if track.autoselect { "YES" } else { "NO" },
+            rel_uri
+        );
+        let _ = writeln!(&mut out, "#EXT-X-MEDIA:{attrs}");
+    }
+
+    let mut stream_inf = format!("#EXT-X-STREAM-INF:BANDWIDTH={}", bandwidth.max(1));
+    if let Some(ref ag) = audio_group {
+        let _ = write!(&mut stream_inf, ",AUDIO=\"{ag}\"");
+    }
+    if let Some(ref sg) = sub_group {
+        let _ = write!(&mut stream_inf, ",SUBTITLES=\"{sg}\"");
+    }
+    let _ = writeln!(&mut out, "{stream_inf}");
+    let _ = writeln!(&mut out, "video.m3u8");
+    out
 }

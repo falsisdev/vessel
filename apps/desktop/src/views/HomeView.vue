@@ -660,6 +660,11 @@ onUnmounted(() => {
             @click="resumeContinueWatching(entry)"
           >
             <div class="cw-thumb">
+              <div
+                v-if="entry.backdrop ?? entry.poster"
+                class="v-skeleton cw-thumb-skeleton"
+                aria-hidden="true"
+              />
               <img
                 v-if="entry.backdrop ?? entry.poster"
                 :src="entry.backdrop ?? entry.poster"
@@ -1306,15 +1311,26 @@ onUnmounted(() => {
 }
 
 .cw-img {
+  position: relative;
+  z-index: 1;
   width: 100%;
   height: 100%;
   object-fit: cover;
   display: block;
 }
 
+.cw-thumb-skeleton {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: 0;
+  border: none;
+}
+
 .cw-shade {
   position: absolute;
   inset: 0;
+  z-index: 2;
   background: linear-gradient(180deg, rgba(0, 0, 0, 0.08) 35%, rgba(0, 0, 0, 0.85) 100%);
 }
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, shallowRef, watch } from 'vue'
+import { computed, onMounted, ref, shallowRef, watch } from 'vue'
 import { Film, Play, Star } from 'lucide-vue-next'
 import type { CardPreferences, MediaSummary } from '@/types/vessel'
 
@@ -12,6 +12,7 @@ const emit = defineEmits<{
   open: [pluginId: string, nativeId: string]
 }>()
 
+const imgRef = ref<HTMLImageElement | null>(null)
 const imgLoaded = shallowRef(false)
 watch(
   () => props.item.poster,
@@ -19,6 +20,12 @@ watch(
     imgLoaded.value = false
   },
 )
+
+onMounted(() => {
+  if (imgRef.value?.complete && imgRef.value.naturalWidth > 0) {
+    imgLoaded.value = true
+  }
+})
 
 const ratioClass = computed(() => {
   if (props.cards.aspectRatio === 'wide_16x9') return 'ratio-wide'
@@ -48,6 +55,7 @@ function handleOpen(): void {
       <div v-if="item.poster && !imgLoaded" class="v-skeleton poster-shimmer" aria-hidden="true" />
       <img
         v-if="item.poster"
+        ref="imgRef"
         :src="item.poster"
         :alt="item.title"
         width="300"
@@ -156,7 +164,9 @@ function handleOpen(): void {
 .poster-shimmer {
   position: absolute;
   inset: 0;
+  z-index: 1;
   border-radius: 0;
+  border: none;
 }
 
 .poster-img {

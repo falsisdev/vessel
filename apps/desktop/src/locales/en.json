@@ -78,6 +78,7 @@
     "episodes": "Episodes",
     "sources": "Streams",
     "watch": "Watch",
+    "resume": "Resume",
     "season": "Season",
     "fix_match": "Fix Match",
     "fix_match_desc": "Bind an exact AniList, TMDB, or IMDb ID to refresh title, synopsis, artwork, and episodes.",
@@ -199,6 +200,8 @@
     "open_releases": "Open Releases Page"
   },
   "subtitles": {
+    "preview_title": "Subtitle Preview",
+    "preview_sample": "Look how crisp your custom captions appear on screen.",
     "font_size": "Font Size",
     "bottom_offset": "Bottom Position Offset",
     "bg_opacity": "Backdrop Opacity",
@@ -229,5 +232,19 @@
     "subtitle_delay": "Sub Delay",
     "now_playing": "Now Playing",
     "patch_notes": "Patch Notes"
+  },
+  "languages": {
+    "en": "English",
+    "tr": "Turkish",
+    "es": "Spanish",
+    "de": "German",
+    "fr": "French",
+    "it": "Italian",
+    "ru": "Russian",
+    "ja": "Japanese",
+    "pt": "Portuguese",
+    "zh": "Chinese",
+    "ar": "Arabic",
+    "fa": "Persian"
   }
 }
