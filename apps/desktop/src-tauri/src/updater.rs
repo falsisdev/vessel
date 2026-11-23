@@ -318,7 +318,29 @@ pub async fn check_app_update(state: State<'_, AppState>) -> Result<AppUpdateInf
                 .json()
                 .await
                 .map_err(|err| format!("[VesselParseError]: decode GitHub releases: {err}"))?;
-            releases.into_iter().find(|r| !r.draft && !r.prerelease)
+            // Prefer latest stable release; fall back to latest pre-release while repo is in alpha/beta.
+            releases
+                .iter()
+                .find(|r| !r.draft && !r.prerelease)
+                .or_else(|| releases.iter().find(|r| !r.draft))
+                .map(|r| GithubRelease {
+                    tag_name: r.tag_name.clone(),
+                    name: r.name.clone(),
+                    body: r.body.clone(),
+                    published_at: r.published_at.clone(),
+                    html_url: r.html_url.clone(),
+                    draft: r.draft,
+                    prerelease: r.prerelease,
+                    assets: r
+                        .assets
+                        .iter()
+                        .map(|a| GithubAsset {
+                            name: a.name.clone(),
+                            size: a.size,
+                            browser_download_url: a.browser_download_url.clone(),
+                        })
+                        .collect(),
+                })
         } else {
             None
         }
