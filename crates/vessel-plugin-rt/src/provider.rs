@@ -169,10 +169,19 @@ impl QuickJsContentProvider {
             })
             .await?;
 
-        serde_json::from_str::<R>(&raw_json).map_err(|err| VesselError::PluginRuntime {
-            plugin_id: self.plugin_id.to_string(),
-            message: format!("invalid return payload from '{method}': {err}"),
-        })
+        let parsed =
+            serde_json::from_str::<R>(&raw_json).map_err(|err| VesselError::PluginRuntime {
+                plugin_id: self.plugin_id.to_string(),
+                message: format!("invalid return payload from '{method}': {err}"),
+            })?;
+
+        // Reclaim transient cheerio/DOM objects promptly so QuickJS RAM stays lean.
+        let mem = self.sandbox.memory_stats().await;
+        if mem.memory_used_size > 6 * 1024 * 1024 {
+            self.sandbox.run_gc().await;
+        }
+
+        Ok(parsed)
     }
 }
 

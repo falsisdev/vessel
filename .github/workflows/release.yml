@@ -1,0 +1,125 @@
+name: Release Desktop Builds
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag name (e.g. v0.1.0). Defaults to current ref name.'
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build (${{ matrix.label }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: macOS Apple Silicon (.dmg)
+            os: macos-latest
+            rust_target: aarch64-apple-darwin
+            bundles: dmg
+            bundle_glob: target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
+            artifact_name: vessel-macos-aarch64
+          - label: macOS Intel (.dmg)
+            os: macos-latest
+            rust_target: x86_64-apple-darwin
+            bundles: dmg
+            bundle_glob: target/x86_64-apple-darwin/release/bundle/dmg/*.dmg
+            artifact_name: vessel-macos-x64
+          - label: Windows x64 (.exe)
+            os: windows-latest
+            rust_target: x86_64-pc-windows-msvc
+            bundles: nsis
+            bundle_glob: target/x86_64-pc-windows-msvc/release/bundle/nsis/*-setup.exe
+            artifact_name: vessel-windows-x64
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_target }}
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.rust_target }}
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Tauri installer bundle
+        env:
+          CI: true
+        run: pnpm --filter @vessel/desktop tauri build --bundles ${{ matrix.bundles }} --target ${{ matrix.rust_target }}
+
+      - name: Collect installers into staging directory
+        shell: bash
+        run: |
+          mkdir -p release-assets
+          shopt -s nullglob
+          for file in ${{ matrix.bundle_glob }}; do
+            cp "$file" release-assets/
+          done
+          ls -la release-assets/
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: release-assets/*
+          if-no-files-found: error
+
+  publish-release:
+    name: Publish GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download built installers
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: List release assets
+        run: ls -lh artifacts/
+
+      - name: Create GitHub Release with Patch Notes
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag || github.ref_name }}
+          name: Vessel ${{ inputs.tag || github.ref_name }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: artifacts/*

@@ -42,9 +42,7 @@ defineProps<{
 
 .toast-item {
   font-size: 0.88rem;
-  background: rgba(24, 25, 38, 0.94);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: rgba(20, 21, 33, 0.97);
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
 }
 

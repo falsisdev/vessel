@@ -10,6 +10,7 @@ export interface PlayerSession {
   subtitles: SubtitleTrack[]
   activeStreamIndex: number
   startPositionMs?: number
+  channelStreams?: Record<string, StreamCandidate>
 }
 
 const activeSession = ref<PlayerSession | null>(null)

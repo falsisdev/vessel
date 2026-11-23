@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import type {
+  AppUpdateInfo,
   BackupImportMode,
   ContinueWatchingEntry,
   DownloadKind,
@@ -24,6 +25,8 @@ import type {
   SubtitleTrack,
   ThemeSpec,
   UiPreferences,
+  UpdateDownloadProgress,
+  UpdatePreferences,
 } from '@/types/vessel'
 
 export function isTauriRuntime(): boolean {
@@ -100,6 +103,9 @@ export const vesselApi = {
 
   preparePlaybackUrl: (candidate: StreamCandidate) =>
     call<string>('prepare_playback_url', { candidate }),
+  clearRuntimeCaches: () => call<void>('clear_runtime_caches'),
+  fetchSubtitleText: (url: string, headers?: Record<string, string>) =>
+    call<string>('fetch_subtitle_text', { url, headers }),
   playCandidate: (payload: {
     pluginId: string
     nativeId: string
@@ -177,4 +183,21 @@ export const vesselApi = {
     call<string>('export_backup_json', { includeSecrets }),
   importBackupJson: (json: string, mode: BackupImportMode) =>
     call<void>('import_backup_json', { json, mode }),
+
+  getUpdatePreferences: () => call<UpdatePreferences>('get_update_preferences'),
+  setAutoCheckUpdates: (enabled: boolean) => call<void>('set_auto_check_updates', { enabled }),
+  skipAppUpdateVersion: (version?: string | null) =>
+    call<void>('skip_app_update_version', { version: version ?? null }),
+  checkAppUpdate: () => call<AppUpdateInfo>('check_app_update'),
+  downloadAndOpenUpdate: (downloadUrl: string, fileName: string) =>
+    call<string>('download_and_open_update', { downloadUrl, fileName }),
+}
+
+export async function listenUpdateProgress(
+  handler: (progress: UpdateDownloadProgress) => void,
+): Promise<UnlistenFn> {
+  if (!isTauriRuntime()) {
+    return () => {}
+  }
+  return listen<UpdateDownloadProgress>('vessel://update-progress', (msg) => handler(msg.payload))
 }

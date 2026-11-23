@@ -8,6 +8,8 @@ import { useI18n } from '@/composables/useI18n'
 import { useUiPreferences } from '@/composables/useUiPreferences'
 import { pushToast, useVesselEvents } from '@/composables/useVesselEvents'
 
+defineOptions({ name: 'SearchView' })
+
 const router = useRouter()
 const { t } = useI18n()
 const { uiPreferences } = useUiPreferences()

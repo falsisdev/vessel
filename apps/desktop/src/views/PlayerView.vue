@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   ArrowLeft,
@@ -27,6 +27,7 @@ import {
 import { vesselApi } from '@/api/vessel'
 import { usePlayerSession } from '@/composables/usePlayerSession'
 import { useVesselEvents } from '@/composables/useVesselEvents'
+import { parseSubtitles, type SubtitleCue } from '@/utils/subtitleParser'
 import type { Episode, StreamCandidate, SubtitleTrack } from '@/types/vessel'
 
 const props = defineProps<{
@@ -69,6 +70,9 @@ const hoverPercent = ref(0)
 
 const activeSubtitleIndex = ref<number>(-1)
 const subtitleDelayMs = ref(0)
+const activeCues = shallowRef<SubtitleCue[]>([])
+const loadingSubtitle = shallowRef(false)
+const subtitleError = shallowRef('')
 const pendingSeekSeconds = ref<number | null>(null)
 const playableSrc = ref<string>('')
 
@@ -76,6 +80,7 @@ let hideTimer: number | null = null
 let progressTimer: number | null = null
 
 async function persistWatchProgress(forceCompleted = false): Promise<void> {
+  if (isLive.value) return
   const ep = currentEpisode.value
   const d = detail.value
   const el = videoRef.value
@@ -114,7 +119,7 @@ async function persistWatchProgress(forceCompleted = false): Promise<void> {
 }
 
 async function restoreSavedProgress(ep: Episode): Promise<void> {
-  if (session.value?.startPositionMs && session.value.startPositionMs > 0) {
+  if (isLive.value || (session.value?.startPositionMs && session.value.startPositionMs > 0)) {
     return
   }
   try {
@@ -140,6 +145,21 @@ async function restoreSavedProgress(ep: Episode): Promise<void> {
 const session = computed(() => activeSession.value)
 const detail = computed(() => session.value?.detail ?? null)
 const currentEpisode = computed(() => session.value?.episode ?? null)
+const isLive = computed(() => {
+  if (detail.value?.type === 'live') return true
+  const sid = currentEpisode.value?.streamId?.toLowerCase() ?? ''
+  const nid = props.nativeId.toLowerCase()
+  return (
+    props.pluginId === 'iptv' ||
+    sid.startsWith('tv:') ||
+    sid.startsWith('tv_') ||
+    sid.startsWith('iptv_') ||
+    sid.startsWith('vns::tv::') ||
+    nid.startsWith('tv:') ||
+    nid.startsWith('tv_') ||
+    nid.startsWith('iptv_')
+  )
+})
 const streams = computed(() => session.value?.streams ?? [])
 const activeStream = computed<StreamCandidate | null>(() => {
   if (!session.value) return null
@@ -151,6 +171,99 @@ const availableSubtitles = computed<SubtitleTrack[]>(() => {
   const fromEpisode = session.value?.subtitles ?? []
   return [...fromStream, ...fromEpisode]
 })
+
+const activeSubtitleLines = computed<string[]>(() => {
+  if (isLive.value || activeSubtitleIndex.value < 0 || !activeCues.value.length) return []
+  const targetMs = currentTime.value * 1000 - subtitleDelayMs.value
+  const cues = activeCues.value
+  // Binary search first cue whose endMs >= targetMs, then collect active cues around that index
+  let lo = 0
+  let hi = cues.length - 1
+  let pos = cues.length
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1
+    if (cues[mid].endMs >= targetMs) {
+      pos = mid
+      hi = mid - 1
+    } else {
+      lo = mid + 1
+    }
+  }
+  const out: string[] = []
+  for (let i = pos; i < cues.length; i++) {
+    const cue = cues[i]
+    if (cue.startMs > targetMs) break
+    if (targetMs >= cue.startMs && targetMs <= cue.endMs) {
+      out.push(...cue.lines)
+    }
+  }
+  return out
+})
+
+watch(
+  availableSubtitles,
+  (tracks) => {
+    if (!tracks.length) {
+      activeSubtitleIndex.value = -1
+      return
+    }
+    if (activeSubtitleIndex.value >= tracks.length) {
+      activeSubtitleIndex.value = -1
+    }
+    if (activeSubtitleIndex.value === -1) {
+      const defIdx = tracks.findIndex((t) => t.isDefault)
+      if (defIdx >= 0) {
+        activeSubtitleIndex.value = defIdx
+      }
+    }
+  },
+  { immediate: true },
+)
+
+watch(
+  [activeSubtitleIndex, availableSubtitles],
+  async ([idx, tracks], _prev, onCleanup) => {
+    let cancelled = false
+    onCleanup(() => {
+      cancelled = true
+    })
+
+    subtitleError.value = ''
+    if (isLive.value || idx < 0 || !tracks[idx]) {
+      activeCues.value = []
+      loadingSubtitle.value = false
+      return
+    }
+
+    const track = tracks[idx]
+    if (track.source.kind === 'inline_content') {
+      activeCues.value = parseSubtitles(track.source.content, track.format)
+      loadingSubtitle.value = false
+      return
+    }
+
+    loadingSubtitle.value = true
+    try {
+      const raw = await vesselApi.fetchSubtitleText(track.source.url, track.source.headers)
+      if (cancelled) return
+      const cues = parseSubtitles(raw, track.format)
+      activeCues.value = cues
+      if (!cues.length) {
+        subtitleError.value = 'Subtitle file contained no readable timed cues.'
+      }
+    } catch (err) {
+      if (!cancelled) {
+        activeCues.value = []
+        subtitleError.value = String(err)
+      }
+    } finally {
+      if (!cancelled) {
+        loadingSubtitle.value = false
+      }
+    }
+  },
+  { immediate: true },
+)
 
 const allEpisodes = computed<Episode[]>(() => detail.value?.episodes ?? [])
 const currentEpisodeIndex = computed(() => {
@@ -227,7 +340,7 @@ function togglePlay(): void {
 
 function seekBy(deltaSec: number): void {
   const el = videoRef.value
-  if (!el || isLocked.value) return
+  if (!el || isLocked.value || isLive.value) return
   const target = Math.max(0, Math.min(el.duration || Infinity, el.currentTime + deltaSec))
   el.currentTime = target
   currentTime.value = target
@@ -341,14 +454,38 @@ async function switchEpisode(ep: Episode): Promise<void> {
   switchingEpisode.value = true
   playbackError.value = ''
   try {
+    const directCandidate = activeSession.value?.channelStreams?.[ep.streamId]
+    if (directCandidate) {
+      pendingSeekSeconds.value = 0
+      setSession({
+        ...activeSession.value!,
+        detail: {
+          ...detail.value,
+          title: ep.title ?? detail.value.title,
+        },
+        episode: ep,
+        streams: [directCandidate],
+        subtitles: [],
+        activeStreamIndex: 0,
+      })
+      activeDrawer.value = null
+      return
+    }
     const res = await vesselApi.getStreams(props.pluginId, ep.streamId)
     if (!res.streams.length) {
-      pushToast('warn', `No playable streams found for Episode ${ep.episode}.`)
+      pushToast(
+        'warn',
+        isLive.value
+          ? `No playable streams found for ${ep.title ?? `Channel ${ep.episode}`}.`
+          : `No playable streams found for Episode ${ep.episode}.`,
+      )
       return
     }
     pendingSeekSeconds.value = 0
     updateEpisodeSession(ep, res.streams, res.subtitles, 0)
-    await restoreSavedProgress(ep)
+    if (!isLive.value) {
+      await restoreSavedProgress(ep)
+    }
     activeDrawer.value = null
   } catch (err) {
     pushToast('error', String(err))
@@ -369,9 +506,11 @@ async function openInExternalMpv(): Promise<void> {
       absoluteEpisode: currentEpisode.value.absoluteEpisode,
       mediaType: detail.value.type,
       candidate: activeStream.value,
-      extraSubtitles: availableSubtitles.value,
-      startPositionMs: Math.floor(currentTime.value * 1000),
-      title: `${detail.value.title} — S${currentEpisode.value.season}:E${currentEpisode.value.episode}`,
+      extraSubtitles: isLive.value ? [] : availableSubtitles.value,
+      startPositionMs: isLive.value ? 0 : Math.floor(currentTime.value * 1000),
+      title: isLive.value
+        ? (currentEpisode.value.title ?? detail.value.title)
+        : `${detail.value.title} — S${currentEpisode.value.season}:E${currentEpisode.value.episode}`,
     })
     videoRef.value?.pause()
     pushToast('info', 'Handed off playback to external mpv')
@@ -387,6 +526,8 @@ function goBack(): void {
   }
   if (window.history.length > 1) {
     router.back()
+  } else if (props.pluginId === 'iptv') {
+    void router.push({ name: 'iptv' })
   } else {
     void router.push({
       name: 'details',
@@ -399,7 +540,7 @@ function onLoadedMetadata(): void {
   const el = videoRef.value
   if (!el) return
   duration.value = Number.isFinite(el.duration) ? el.duration : 0
-  el.playbackRate = playbackRate.value
+  el.playbackRate = isLive.value ? 1 : playbackRate.value
   el.volume = volume.value
   el.muted = isMuted.value
   if (pendingSeekSeconds.value !== null && pendingSeekSeconds.value > 0) {
@@ -497,6 +638,10 @@ function onFullscreenChange(): void {
 
 async function ensureSessionLoaded(): Promise<void> {
   if (activeSession.value && activeSession.value.pluginId === props.pluginId && activeSession.value.nativeId === props.nativeId) {
+    return
+  }
+  if (props.pluginId === 'iptv') {
+    playbackError.value = 'Return to Live TV to pick a channel.'
     return
   }
   loadingInitial.value = true
@@ -608,6 +753,18 @@ onUnmounted(() => {
       @error="onVideoError"
     />
 
+    <!-- In-App Rendered Subtitle Overlay (SRT / VTT / ASS / Inline + Sync Delay) -->
+    <div
+      v-if="activeSubtitleLines.length && !isLive"
+      class="cs-subtitle-overlay"
+      :class="{ 'controls-raised': controlsVisible && !isLocked }"
+      aria-live="off"
+    >
+      <span v-for="(line, i) in activeSubtitleLines" :key="i" class="cs-subtitle-line">
+        {{ line }}
+      </span>
+    </div>
+
     <!-- Top & Bottom Cinematic Vignettes -->
     <div v-if="controlsVisible && !isLocked" class="cs-vignette-top" />
     <div v-if="controlsVisible && !isLocked" class="cs-vignette-bottom" />
@@ -669,9 +826,19 @@ onUnmounted(() => {
               <ArrowLeft :size="20" aria-hidden="true" />
             </button>
             <div class="cs-title-meta">
-              <div class="cs-show-title">{{ detail?.title ?? 'Vessel Player' }}</div>
+              <div class="cs-show-title-row">
+                <span v-if="isLive" class="cs-live-badge">
+                  <span class="cs-live-dot" />
+                  LIVE
+                </span>
+                <div class="cs-show-title">{{ detail?.title ?? 'Vessel Player' }}</div>
+              </div>
               <div class="cs-ep-sub">
-                <span v-if="currentEpisode">
+                <template v-if="isLive">
+                  <span v-if="currentEpisode?.overview">{{ currentEpisode.overview }}</span>
+                  <span v-else-if="detail?.genres.length">{{ detail.genres.join(' · ') }}</span>
+                </template>
+                <span v-else-if="currentEpisode">
                   S{{ currentEpisode.season }} · E{{ currentEpisode.episode }}
                   <template v-if="currentEpisode.title"> — {{ currentEpisode.title }}</template>
                 </span>
@@ -688,13 +855,14 @@ onUnmounted(() => {
               <span>Lock</span>
             </button>
             <button
+              v-if="!isLive || allEpisodes.length > 1"
               type="button"
               class="cs-pill-btn"
               :class="{ active: activeDrawer === 'episodes' }"
               @click="toggleDrawer('episodes')"
             >
               <ListVideo :size="15" aria-hidden="true" />
-              <span>Episodes</span>
+              <span>{{ isLive ? `Channels (${allEpisodes.length})` : 'Episodes' }}</span>
             </button>
             <button
               type="button"
@@ -706,6 +874,7 @@ onUnmounted(() => {
               <span>Sources ({{ streams.length }})</span>
             </button>
             <button
+              v-if="!isLive"
               type="button"
               class="cs-pill-btn"
               :class="{ active: activeDrawer === 'subtitles' }"
@@ -738,16 +907,23 @@ onUnmounted(() => {
         <!-- CENTER TRANSPORT CONTROLS -->
         <div v-if="!playbackError" class="cs-center-controls">
           <button
+            v-if="!isLive || allEpisodes.length > 1"
             type="button"
             class="cs-transport-btn"
             :disabled="!prevEpisode"
-            title="Previous Episode"
+            :title="isLive ? 'Previous Channel' : 'Previous Episode'"
             @click="prevEpisode && switchEpisode(prevEpisode)"
           >
             <SkipBack :size="22" aria-hidden="true" />
           </button>
 
-          <button type="button" class="cs-transport-btn" title="Rewind 10s (J)" @click="seekBy(-10)">
+          <button
+            v-if="!isLive"
+            type="button"
+            class="cs-transport-btn"
+            title="Rewind 10s (J)"
+            @click="seekBy(-10)"
+          >
             <RotateCcw :size="24" aria-hidden="true" />
             <span class="cs-seek-tag">10</span>
           </button>
@@ -757,16 +933,23 @@ onUnmounted(() => {
             <Play v-else :size="30" class="cs-play-icon-offset" aria-hidden="true" />
           </button>
 
-          <button type="button" class="cs-transport-btn" title="Forward 10s (L)" @click="seekBy(10)">
+          <button
+            v-if="!isLive"
+            type="button"
+            class="cs-transport-btn"
+            title="Forward 10s (L)"
+            @click="seekBy(10)"
+          >
             <RotateCw :size="24" aria-hidden="true" />
             <span class="cs-seek-tag">10</span>
           </button>
 
           <button
+            v-if="!isLive || allEpisodes.length > 1"
             type="button"
             class="cs-transport-btn"
             :disabled="!nextEpisode"
-            title="Next Episode"
+            :title="isLive ? 'Next Channel' : 'Next Episode'"
             @click="nextEpisode && switchEpisode(nextEpisode)"
           >
             <SkipForward :size="22" aria-hidden="true" />
@@ -775,8 +958,8 @@ onUnmounted(() => {
 
         <!-- BOTTOM BAR -->
         <footer class="cs-bottom-bar">
-          <!-- Seek Scrubber -->
-          <div class="cs-scrubber-row">
+          <!-- Seek Scrubber (VOD only) -->
+          <div v-if="!isLive" class="cs-scrubber-row">
             <span class="cs-time">{{ formatClock(currentTime) }}</span>
 
             <div
@@ -800,6 +983,16 @@ onUnmounted(() => {
             </div>
 
             <span class="cs-time">{{ formatClock(duration) }}</span>
+          </div>
+
+          <!-- Live Broadcast Indicator Bar -->
+          <div v-else class="cs-live-bar">
+            <span class="cs-live-badge">
+              <span class="cs-live-dot" />
+              LIVE BROADCAST
+            </span>
+            <div class="cs-live-rail" />
+            <span v-if="activeStream?.quality" class="cs-live-meta">{{ activeStream.quality }}</span>
           </div>
 
           <!-- Bottom Actions -->
@@ -828,6 +1021,7 @@ onUnmounted(() => {
               </div>
 
               <button
+                v-if="!isLive"
                 type="button"
                 class="cs-skip-intro-btn"
                 title="Skip Intro (+85s)"
@@ -839,14 +1033,19 @@ onUnmounted(() => {
             </div>
 
             <div class="cs-bottom-right">
-              <button type="button" class="cs-mini-pill" @click="toggleDrawer('settings')">
+              <button
+                v-if="!isLive"
+                type="button"
+                class="cs-mini-pill"
+                @click="toggleDrawer('settings')"
+              >
                 {{ playbackRate }}x
               </button>
               <button type="button" class="cs-mini-pill" title="Resize / Aspect Ratio" @click="cycleFitMode">
                 {{ fitLabel }}
               </button>
               <button
-                v-if="nextEpisode"
+                v-if="nextEpisode && !isLive"
                 type="button"
                 class="cs-mini-pill cs-next-ep"
                 @click="switchEpisode(nextEpisode)"
@@ -864,14 +1063,16 @@ onUnmounted(() => {
       </div>
     </Transition>
 
-    <!-- SLIDE-OVER RIGHT DRAWER (Episodes / Sources / Subtitles / Settings) -->
+    <!-- SLIDE-OVER RIGHT DRAWER (Episodes or Channels / Sources / Subtitles / Settings) -->
     <Transition name="drawer-slide">
       <aside v-if="activeDrawer && !isLocked" class="cs-drawer" @click.stop>
         <div class="cs-drawer-head">
           <h3>
             {{
               activeDrawer === 'episodes'
-                ? `Episodes (${allEpisodes.length})`
+                ? isLive
+                  ? `Channels (${allEpisodes.length})`
+                  : `Episodes (${allEpisodes.length})`
                 : activeDrawer === 'sources'
                   ? `Sources (${streams.length})`
                   : activeDrawer === 'subtitles'
@@ -884,7 +1085,7 @@ onUnmounted(() => {
           </button>
         </div>
 
-        <!-- EPISODES LIST -->
+        <!-- EPISODES OR CHANNELS LIST -->
         <div v-if="activeDrawer === 'episodes'" class="cs-drawer-body">
           <button
             v-for="ep in allEpisodes"
@@ -895,8 +1096,12 @@ onUnmounted(() => {
             @click="switchEpisode(ep)"
           >
             <div class="cs-item-main">
-              <span class="cs-item-code">S{{ ep.season }} · E{{ ep.episode }}</span>
-              <span class="cs-item-title">{{ ep.title ?? `Episode ${ep.episode}` }}</span>
+              <span class="cs-item-code">{{
+                isLive ? `CH ${ep.episode}` : `S${ep.season} · E${ep.episode}`
+              }}</span>
+              <span class="cs-item-title">{{
+                ep.title ?? (isLive ? `Channel ${ep.episode}` : `Episode ${ep.episode}`)
+              }}</span>
               <span v-if="ep.overview" class="cs-item-sub">{{ ep.overview }}</span>
             </div>
             <Check
@@ -935,8 +1140,8 @@ onUnmounted(() => {
           </button>
         </div>
 
-        <!-- SUBTITLES & DELAY -->
-        <div v-else-if="activeDrawer === 'subtitles'" class="cs-drawer-body">
+        <!-- SUBTITLES & DELAY (VOD only) -->
+        <div v-else-if="activeDrawer === 'subtitles' && !isLive" class="cs-drawer-body">
           <div class="cs-setting-block">
             <span class="cs-setting-label">Subtitle Delay</span>
             <div class="cs-delay-row">
@@ -971,6 +1176,11 @@ onUnmounted(() => {
             <Check v-if="activeSubtitleIndex === idx" :size="16" class="cs-active-check" />
           </button>
 
+          <p v-if="loadingSubtitle" class="cs-empty-note">Loading subtitle track…</p>
+          <p v-else-if="subtitleError" class="cs-empty-note cs-sub-error">{{ subtitleError }}</p>
+          <p v-else-if="activeSubtitleIndex >= 0 && activeCues.length" class="cs-empty-note">
+            Loaded {{ activeCues.length }} subtitle cues.
+          </p>
           <p v-if="!availableSubtitles.length" class="cs-empty-note">
             No subtitle tracks were provided by this source.
           </p>
@@ -978,7 +1188,7 @@ onUnmounted(() => {
 
         <!-- SETTINGS (Speed & Aspect Ratio) -->
         <div v-else-if="activeDrawer === 'settings'" class="cs-drawer-body">
-          <div class="cs-setting-block">
+          <div v-if="!isLive" class="cs-setting-block">
             <span class="cs-setting-label">Playback Speed</span>
             <div class="cs-chip-grid">
               <button
@@ -1645,5 +1855,104 @@ onUnmounted(() => {
 .drawer-slide-leave-to {
   transform: translateX(24px);
   opacity: 0;
+}
+
+.cs-show-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.cs-live-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.16rem 0.55rem;
+  border-radius: 999px;
+  background: rgba(239, 68, 68, 0.22);
+  border: 1px solid rgba(248, 113, 113, 0.55);
+  color: #fecaca;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  flex-shrink: 0;
+}
+
+.cs-live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: #ef4444;
+  box-shadow: 0 0 8px rgba(239, 68, 68, 0.9);
+  animation: livePulse 1.4s ease-in-out infinite;
+}
+
+.cs-live-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.cs-live-rail {
+  flex: 1;
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, rgba(239, 68, 68, 0.85), rgba(167, 139, 250, 0.5));
+}
+
+.cs-live-meta {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.cs-subtitle-overlay {
+  position: absolute;
+  left: 50%;
+  bottom: 2.4rem;
+  transform: translateX(-50%);
+  z-index: 6;
+  max-width: min(82%, 820px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  text-align: center;
+  pointer-events: none;
+  transition: bottom 0.2s ease;
+}
+
+.cs-subtitle-overlay.controls-raised {
+  bottom: 7.4rem;
+}
+
+.cs-subtitle-line {
+  display: inline-block;
+  padding: 0.22rem 0.65rem;
+  border-radius: 6px;
+  background: rgba(8, 9, 14, 0.72);
+  color: #ffffff;
+  font-size: clamp(1rem, 2.1vw, 1.38rem);
+  font-weight: 600;
+  line-height: 1.35;
+  text-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.95),
+    0 2px 10px rgba(0, 0, 0, 0.85);
+}
+
+.cs-sub-error {
+  color: #fda4af;
+}
+
+@keyframes livePulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.45;
+    transform: scale(0.8);
+  }
 }
 </style>

@@ -2,6 +2,7 @@
 
 mod commands;
 mod events;
+mod updater;
 
 use std::sync::Arc;
 
@@ -49,6 +50,16 @@ pub fn run() {
                 Ok::<_, vessel_domain::VesselError>(Arc::new(eng))
             })?;
 
+            let reaper_engine = Arc::clone(&engine);
+            tauri::async_runtime::spawn(async move {
+                let mut interval = tokio::time::interval(std::time::Duration::from_secs(45));
+                interval.tick().await;
+                loop {
+                    interval.tick().await;
+                    let _ = reaper_engine.evict_idle_plugins().await;
+                }
+            });
+
             app.manage(AppState { engine, paths });
             Ok(())
         })
@@ -80,6 +91,8 @@ pub fn run() {
             commands::list_library,
             commands::upsert_library,
             commands::delete_library_item,
+            commands::clear_runtime_caches,
+            commands::fetch_subtitle_text,
             commands::prepare_playback_url,
             commands::play_candidate,
             commands::record_progress,
@@ -109,7 +122,18 @@ pub fn run() {
             commands::delete_download,
             commands::export_backup_json,
             commands::import_backup_json,
+            updater::get_update_preferences,
+            updater::set_auto_check_updates,
+            updater::skip_app_update_version,
+            updater::check_app_update,
+            updater::download_and_open_update,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running Vessel desktop application");
+        .build(tauri::generate_context!())
+        .expect("error while building Vessel desktop application")
+        .run(|app_handle, event| {
+            if let tauri::RunEvent::Exit = event {
+                let engine = Arc::clone(&app_handle.state::<AppState>().engine);
+                tauri::async_runtime::block_on(engine.shutdown());
+            }
+        });
 }

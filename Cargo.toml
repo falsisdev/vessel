@@ -37,3 +37,6 @@ tokio = { version = "1.54", features = ["io-util", "macros", "net", "process", "
 tokio-util = "0.7"
 url = "2"
 zip = { version = "9.8", default-features = false, features = ["deflate"] }
+
+[profile.dev.package."*"]
+opt-level = 2

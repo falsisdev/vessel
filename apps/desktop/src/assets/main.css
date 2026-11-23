@@ -144,7 +144,6 @@ textarea {
   font-size: 0.9rem;
   font-weight: 600;
   white-space: nowrap;
-  will-change: transform;
   transition:
     transform 0.18s cubic-bezier(0.22, 1, 0.36, 1),
     background-color 0.18s ease,
@@ -432,19 +431,12 @@ textarea {
 
 .page-fade-enter-active,
 .page-fade-leave-active {
-  transition:
-    opacity 0.2s cubic-bezier(0.22, 1, 0.36, 1),
-    transform 0.24s cubic-bezier(0.22, 1, 0.36, 1);
+  transition: opacity 0.09s ease;
 }
 
-.page-fade-enter-from {
-  opacity: 0;
-  transform: translateY(10px);
-}
-
+.page-fade-enter-from,
 .page-fade-leave-to {
   opacity: 0;
-  transform: translateY(-6px);
 }
 
 .modal-pop-enter-active,

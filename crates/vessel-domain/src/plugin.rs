@@ -189,6 +189,13 @@ pub struct RepoIndex {
     pub author: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub website: Option<String>,
+    #[serde(
+        default,
+        alias = "icon",
+        alias = "logo",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub icon_url: Option<String>,
     #[serde(default)]
     pub plugin_lists: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]

@@ -397,7 +397,7 @@ impl SqliteStorage {
                 let mut stmt = db
                     .conn()
                     .prepare(
-                        "SELECT
+                        r"SELECT
                              wp.plugin_id, wp.native_id, wp.stream_id, wp.canonical_id,
                              wp.season, wp.episode, wp.absolute_episode,
                              wp.position_ms, wp.duration_ms, wp.completed, wp.last_watched_at,
@@ -405,7 +405,13 @@ impl SqliteStorage {
                          FROM watch_progress wp
                          LEFT JOIN library_items li
                            ON li.plugin_id = wp.plugin_id AND li.native_id = wp.native_id
-                         WHERE wp.completed = 0 AND wp.position_ms > 0
+                         WHERE wp.completed = 0
+                           AND wp.position_ms > 0
+                           AND COALESCE(li.media_type, '') != 'live'
+                           AND wp.stream_id NOT LIKE 'tv:%'
+                           AND wp.stream_id NOT LIKE 'tv\_%' ESCAPE '\'
+                           AND wp.stream_id NOT LIKE 'iptv\_%' ESCAPE '\'
+                           AND wp.stream_id NOT LIKE 'vns::tv::%'
                          ORDER BY wp.last_watched_at DESC
                          LIMIT ?1",
                     )
@@ -482,6 +488,10 @@ impl SqliteStorage {
                                 .and_then(|e| e.get("title").and_then(|v| v.as_str()))
                                 .map(str::to_owned);
                         }
+                    }
+
+                    if media_type == MediaType::Live {
+                        continue;
                     }
 
                     let plugin_id = PluginId::new(plugin_raw)?;

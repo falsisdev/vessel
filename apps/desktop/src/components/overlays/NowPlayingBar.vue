@@ -99,9 +99,7 @@ async function shiftDelay(deltaMs: number): Promise<void> {
   justify-content: space-between;
   gap: 0.75rem;
   padding: 0.65rem 1.35rem;
-  background: rgba(24, 25, 38, 0.92);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  background: rgba(18, 19, 30, 0.97);
   border-top: 1px solid var(--vessel-border);
 }
 

@@ -211,6 +211,7 @@ export interface RepoPluginEntry {
   version: string
   description?: string
   capabilities: PluginCapability[]
+  iconUrl?: string
   downloadUrl?: string
   sourcePath?: string
   sha256?: string
@@ -223,6 +224,7 @@ export interface RepoIndex {
   description?: string
   author?: string
   website?: string
+  iconUrl?: string
   pluginLists: string[]
   plugins: RepoPluginEntry[]
 }
@@ -358,6 +360,7 @@ export interface UiPreferences {
     showRecentIptv: boolean
     hiddenSections: string[]
     selectedPlugins?: string[] | null
+    heroPlugins?: string[] | null
   }
   cards: {
     aspectRatio: CardAspectRatio
@@ -460,3 +463,31 @@ export type EngineEvent =
       level: 'debug' | 'info' | 'warn' | 'error'
       message: string
     }
+
+export interface AppUpdateInfo {
+  currentVersion: string
+  latestVersion: string
+  tagName: string
+  updateAvailable: boolean
+  releaseName?: string
+  releaseNotes: string
+  publishedAt?: string
+  htmlUrl: string
+  assetName?: string
+  assetSizeBytes?: number
+  downloadUrl?: string
+  autoCheckEnabled: boolean
+  skippedVersion?: string
+}
+
+export interface UpdatePreferences {
+  autoCheckEnabled: boolean
+  skippedVersion?: string
+}
+
+export interface UpdateDownloadProgress {
+  fileName: string
+  downloadedBytes: number
+  totalBytes?: number
+  percent?: number
+}

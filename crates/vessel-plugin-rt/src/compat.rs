@@ -324,6 +324,16 @@ pub fn parse_external_manifest(
             )));
         }
 
+        let repo_icon = obj
+            .get("iconUrl")
+            .or_else(|| obj.get("icon"))
+            .or_else(|| obj.get("logo"))
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_owned)
+            .or_else(|| plugins.iter().find_map(|p| p.icon_url.clone()));
+
         return Ok(Some(ExternalManifestKind::NuvioRepo(Box::new(RepoIndex {
             schema_version: 1,
             id: if repo_id.is_empty() {
@@ -338,6 +348,7 @@ pub fn parse_external_manifest(
                 .map(str::to_owned),
             author: obj.get("author").and_then(Value::as_str).map(str::to_owned),
             website: None,
+            icon_url: repo_icon,
             plugin_lists: Vec::new(),
             shared_extractors: None,
             plugins,
@@ -579,7 +590,11 @@ import provider from "./provider_shim.js";
 
 const META = {meta_json};
 
-function mapMediaType(rawType) {{
+function mapMediaType(rawType, rawId) {{
+    const id = String(rawId || "").toLowerCase();
+    if (id.startsWith("tv:") || id.startsWith("tv_") || id.startsWith("iptv_") || id.startsWith("vns::tv::")) {{
+        return "live";
+    }}
     const t = String(rawType || "").toLowerCase();
     if (t === "movie") return "movie";
     if (t === "channel" || t === "live" || t === "livetv") return "live";
@@ -597,7 +612,7 @@ function mapSummary(it, fallbackType) {{
     const parsedRating = it.imdbRating !== undefined ? parseFloat(String(it.imdbRating)) : undefined;
     return {{
         nativeId: String(it.id),
-        type: mapMediaType(it.type || fallbackType),
+        type: mapMediaType(it.type || fallbackType, it.id),
         isAnime: isAnimePlugin(),
         title: String(it.name),
         poster: it.poster ? String(it.poster) : undefined,
@@ -746,7 +761,7 @@ export default definePlugin({{
             }}
         }}
 
-        const mediaType = mapMediaType((meta && meta.type) || fallbackType);
+        const mediaType = mapMediaType((meta && meta.type) || fallbackType, (meta && meta.id) || nativeId);
         const rawVideos = meta && Array.isArray(meta.videos) ? meta.videos : [];
         const episodes = rawVideos.map((v, idx) => {{
             const s = parseInt(v.season, 10) || 1;

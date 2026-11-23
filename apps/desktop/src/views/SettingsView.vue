@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { onMounted, shallowRef } from 'vue'
-import { Download, Palette, RotateCcw, Shield, Sliders, Upload } from 'lucide-vue-next'
+import { Download, ExternalLink, Palette, RefreshCw, RotateCcw, Shield, Sliders, Sparkles, Upload } from 'lucide-vue-next'
 import { isTauriRuntime, vesselApi } from '@/api/vessel'
+import { formatBytes, useAppUpdater } from '@/composables/useAppUpdater'
 import { useI18n } from '@/composables/useI18n'
 import { useTheme } from '@/composables/useTheme'
 import { useUiPreferences } from '@/composables/useUiPreferences'
@@ -11,6 +12,18 @@ import type { EngineInfo } from '@/types/vessel'
 const { t, currentLang, availableLocales, setLocale } = useI18n()
 const { themes, activeThemeId, selectTheme, importTheme } = useTheme()
 const { uiPreferences, savePreferences, resetAllPreferences } = useUiPreferences()
+const {
+  updateInfo,
+  parsedNotes,
+  checkingUpdate,
+  downloadingUpdate,
+  downloadProgress,
+  autoCheckEnabled,
+  loadUpdatePreferences,
+  checkForUpdates,
+  toggleAutoCheck,
+  downloadAndInstallUpdate,
+} = useAppUpdater()
 
 const engineInfo = shallowRef<EngineInfo | null>(null)
 const alwaysProxy = shallowRef(false)
@@ -24,7 +37,7 @@ const confirmResetImport = shallowRef(false)
 onMounted(async () => {
   if (!isTauriRuntime()) return
   try {
-    const info = await vesselApi.getEngineInfo()
+    const [info] = await Promise.all([vesselApi.getEngineInfo(), loadUpdatePreferences()])
     engineInfo.value = info
     alwaysProxy.value = info.alwaysProxy
     metadataEnabled.value = info.metadataEnabled
@@ -382,6 +395,113 @@ async function handleImportBackup(mode: 'smart_merge' | 'reset_and_import'): Pro
         placeholder="Exported or pasted .backup.vessel JSON…"
       />
     </div>
+
+    <div class="v-card section-card">
+      <div class="section-title-row">
+        <Sparkles :size="18" class="section-icon" aria-hidden="true" />
+        <h3>Updates &amp; Release Notes</h3>
+      </div>
+
+      <div class="v-setting-row">
+        <div class="setting-copy">
+          <strong>Check GitHub Releases Automatically</strong>
+          <span class="v-muted">
+            Notify when a new macOS (.dmg) or Windows (.exe) release is published on GitHub
+          </span>
+        </div>
+        <label class="v-switch">
+          <input
+            :checked="autoCheckEnabled"
+            type="checkbox"
+            class="v-switch-input"
+            @change="toggleAutoCheck(!autoCheckEnabled)"
+          />
+          <span class="v-switch-track" aria-hidden="true" />
+        </label>
+      </div>
+
+      <div class="inline-row">
+        <button
+          type="button"
+          class="v-btn v-btn-primary"
+          :disabled="checkingUpdate"
+          @click="checkForUpdates(false)"
+        >
+          <RefreshCw :size="14" :class="{ spin: checkingUpdate }" aria-hidden="true" />
+          {{ checkingUpdate ? 'Checking GitHub…' : 'Check for Updates' }}
+        </button>
+        <span class="v-muted update-status-line">
+          <template v-if="updateInfo">
+            Current: <code>v{{ updateInfo.currentVersion }}</code> · Latest:
+            <code>v{{ updateInfo.latestVersion }}</code>
+          </template>
+          <template v-else>Repository: <code>falsisdev/vessel</code></template>
+        </span>
+      </div>
+
+      <div v-if="updateInfo" class="release-notes-box">
+        <div class="release-notes-head">
+          <strong>
+            {{ updateInfo.releaseName || `Vessel ${updateInfo.tagName}` }}
+          </strong>
+          <span
+            class="v-badge"
+            :class="updateInfo.updateAvailable ? 'v-badge-accent' : 'v-badge-success'"
+          >
+            {{ updateInfo.updateAvailable ? 'Update Available' : 'Up to Date' }}
+          </span>
+        </div>
+
+        <div class="release-notes-list">
+          <template v-for="(line, idx) in parsedNotes" :key="idx">
+            <h4 v-if="line.kind === 'heading'" class="release-note-h">{{ line.text }}</h4>
+            <div v-else-if="line.kind === 'bullet'" class="release-note-li">
+              • {{ line.text }}
+            </div>
+            <p v-else class="release-note-p">{{ line.text }}</p>
+          </template>
+        </div>
+
+        <div v-if="downloadingUpdate && downloadProgress" class="update-progress-wrap">
+          <div class="inline-row">
+            <span class="v-muted">
+              Downloading {{ downloadProgress.fileName }} ({{ downloadProgress.percent ?? 0 }}%)
+            </span>
+          </div>
+          <div class="update-progress-track">
+            <div
+              class="update-progress-fill"
+              :style="{ width: `${downloadProgress.percent ?? 8}%` }"
+            />
+          </div>
+        </div>
+
+        <div class="inline-row">
+          <button
+            v-if="updateInfo.updateAvailable && updateInfo.downloadUrl"
+            type="button"
+            class="v-btn v-btn-primary v-btn-sm"
+            :disabled="downloadingUpdate"
+            @click="downloadAndInstallUpdate"
+          >
+            <Download :size="14" aria-hidden="true" />
+            Download &amp; Install {{ updateInfo.assetName }}
+            <template v-if="updateInfo.assetSizeBytes">
+              ({{ formatBytes(updateInfo.assetSizeBytes) }})
+            </template>
+          </button>
+          <a
+            :href="updateInfo.htmlUrl"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="v-btn v-btn-sm"
+          >
+            <ExternalLink :size="14" aria-hidden="true" />
+            Open Releases Page
+          </a>
+        </div>
+      </div>
+    </div>
   </section>
 </template>
 
@@ -442,5 +562,79 @@ async function handleImportBackup(mode: 'smart_merge' | 'reset_and_import'): Pro
 
 .paths-info {
   font-size: 0.82rem;
+}
+
+.update-status-line {
+  font-size: 0.84rem;
+}
+
+.release-notes-box {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  padding: 0.9rem 1rem;
+  border-radius: 12px;
+  background: rgba(10, 11, 18, 0.58);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.release-notes-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.release-notes-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.32rem;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.release-note-h {
+  margin: 0.25rem 0 0;
+  font-size: 0.88rem;
+  color: var(--vessel-accent);
+}
+
+.release-note-li,
+.release-note-p {
+  margin: 0;
+  font-size: 0.84rem;
+  color: var(--vessel-text-muted);
+}
+
+.update-progress-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.update-progress-track {
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  overflow: hidden;
+}
+
+.update-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--vessel-accent-secondary), var(--vessel-accent));
+  transition: width 0.18s ease;
+}
+
+.spin {
+  animation: v-spin 0.9s linear infinite;
+}
+
+@keyframes v-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 </style>

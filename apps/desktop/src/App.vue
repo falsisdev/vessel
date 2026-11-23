@@ -5,6 +5,8 @@ import AppNav from '@/components/layout/AppNav.vue'
 import DomainPermissionModal from '@/components/overlays/DomainPermissionModal.vue'
 import NowPlayingBar from '@/components/overlays/NowPlayingBar.vue'
 import ToastContainer from '@/components/overlays/ToastContainer.vue'
+import UpdateModal from '@/components/overlays/UpdateModal.vue'
+import { useAppUpdater } from '@/composables/useAppUpdater'
 import { useI18n } from '@/composables/useI18n'
 import { useTheme } from '@/composables/useTheme'
 import { useUiPreferences } from '@/composables/useUiPreferences'
@@ -16,6 +18,8 @@ const isPlayerRoute = computed(() => route.name === 'player')
 const { refreshThemes } = useTheme()
 const { refreshLocales, currentLang, setLocale } = useI18n()
 const { uiPreferences, loadPreferences } = useUiPreferences()
+const { autoCheckEnabled, loadUpdatePreferences, checkForUpdates } = useAppUpdater()
+let updateCheckTimer: number | null = null
 const {
   playerState,
   pendingDomain,
@@ -48,10 +52,19 @@ onMounted(async () => {
     refreshThemes(),
     refreshLocales().then(() => setLocale(currentLang.value)),
     loadPreferences(),
+    loadUpdatePreferences(),
   ])
+  if (autoCheckEnabled.value) {
+    updateCheckTimer = window.setTimeout(() => {
+      void checkForUpdates(true)
+    }, 2500)
+  }
 })
 
 onUnmounted(() => {
+  if (updateCheckTimer !== null) {
+    window.clearTimeout(updateCheckTimer)
+  }
   window.removeEventListener('keydown', handleGlobalShortcut)
   stopListening()
 })
@@ -68,9 +81,18 @@ onUnmounted(() => {
         :visible-modules="uiPreferences.shell.visibleModules"
       />
       <main id="main-content" class="shell-main" tabindex="-1">
-        <RouterView v-slot="{ Component, route }">
+        <RouterView v-slot="{ Component, route: currentRoute }">
           <Transition name="page-fade" mode="out-in">
-            <component :is="Component" :key="route.fullPath" />
+            <KeepAlive :include="['HomeView', 'SearchView', 'LibraryView', 'ExtensionsView']">
+              <component
+                :is="Component"
+                :key="
+                  currentRoute.name === 'details' || currentRoute.name === 'player'
+                    ? currentRoute.fullPath
+                    : String(currentRoute.name)
+                "
+              />
+            </KeepAlive>
           </Transition>
         </RouterView>
       </main>
@@ -86,6 +108,8 @@ onUnmounted(() => {
       :prompt="pendingDomain"
       @resolve="(allow, permanent) => resolveDomainPrompt(allow, permanent)"
     />
+
+    <UpdateModal />
 
     <ToastContainer :items="toasts" />
   </div>

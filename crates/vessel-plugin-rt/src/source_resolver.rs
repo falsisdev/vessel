@@ -845,6 +845,14 @@ impl SourceResolver {
                     .map(str::to_owned),
                 author: None,
                 website: None,
+                icon_url: raw_val
+                    .get("iconUrl")
+                    .or_else(|| raw_val.get("icon"))
+                    .or_else(|| raw_val.get("logo"))
+                    .and_then(|v| v.as_str())
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+                    .map(str::to_owned),
                 plugin_lists: lists,
                 shared_extractors: None,
                 plugins: Vec::new(),
@@ -881,6 +889,10 @@ impl SourceResolver {
                     }
                 }
             }
+        }
+
+        if repo.icon_url.is_none() {
+            repo.icon_url = repo.plugins.iter().find_map(|p| p.icon_url.clone());
         }
 
         Ok(repo)

@@ -188,6 +188,7 @@ pub struct HomePreferences {
     pub show_recent_iptv: bool,
     pub hidden_sections: Vec<String>,
     pub selected_plugins: Option<Vec<String>>,
+    pub hero_plugins: Option<Vec<String>>,
 }
 
 impl Default for HomePreferences {
@@ -200,6 +201,7 @@ impl Default for HomePreferences {
             show_recent_iptv: true,
             hidden_sections: Vec::new(),
             selected_plugins: None,
+            hero_plugins: None,
         }
     }
 }

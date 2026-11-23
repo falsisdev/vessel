@@ -2,11 +2,12 @@
 
 pub mod pool;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::time::{Duration, Instant};
 
 use tokio::sync::Mutex;
 use tokio::task::{JoinHandle, JoinSet};
@@ -76,6 +77,14 @@ pub struct SearchHandle {
     pub done: JoinHandle<()>,
 }
 
+const HOME_FEED_CACHE_TTL: Duration = Duration::from_secs(180);
+const DETAILS_CACHE_TTL: Duration = Duration::from_secs(300);
+const MAX_HOME_FEED_CACHE_ENTRIES: usize = 24;
+const MAX_DETAILS_CACHE_ENTRIES: usize = 32;
+
+type HomeFeedCacheMap = HashMap<(PluginId, Option<String>), (Instant, HomeFeed)>;
+type DetailsCacheMap = HashMap<(PluginId, String), (Instant, MediaDetail)>;
+
 /// Pure core facade orchestrating storage, proxy, isolated QuickJS plugins, and `PlayerBackend`.
 pub struct VesselEngine {
     storage: Arc<SqliteStorage>,
@@ -92,6 +101,8 @@ pub struct VesselEngine {
     always_proxy: AtomicBool,
     metadata_enabled: AtomicBool,
     active_search: Arc<Mutex<Option<(String, CancellationToken)>>>,
+    home_feed_cache: Arc<Mutex<HomeFeedCacheMap>>,
+    details_cache: Arc<Mutex<DetailsCacheMap>>,
 }
 
 impl std::fmt::Debug for VesselEngine {
@@ -191,6 +202,8 @@ impl VesselEngine {
             always_proxy: AtomicBool::new(always_proxy),
             metadata_enabled: AtomicBool::new(true),
             active_search: Arc::new(Mutex::new(None)),
+            home_feed_cache: Arc::new(Mutex::new(HashMap::new())),
+            details_cache: Arc::new(Mutex::new(HashMap::new())),
         })
     }
 
@@ -358,6 +371,7 @@ impl VesselEngine {
         plugin_id: &PluginId,
         enabled: bool,
     ) -> VesselResult<()> {
+        self.clear_plugin_caches(plugin_id).await;
         self.storage.set_plugin_enabled(plugin_id, enabled).await?;
         self.pool.set_enabled(plugin_id, enabled).await?;
         Ok(())
@@ -478,6 +492,7 @@ impl VesselEngine {
 
     /// Uninstalls `plugin_id`, removing packaged archives (never deleting Dev Mode folders) and DB rows.
     pub async fn uninstall_plugin(&self, plugin_id: &PluginId) -> VesselResult<()> {
+        self.clear_plugin_caches(plugin_id).await;
         let existing = self.storage.get_plugin(plugin_id).await?;
         self.pool.unregister(plugin_id).await;
         if let Some(stored) = existing
@@ -714,24 +729,95 @@ impl VesselEngine {
         }
     }
 
-    /// Fetches home feed shelves from a single plugin.
+    /// Clears in-memory `home_feed` and `details` caches (used when user hits manual Refresh).
+    pub async fn clear_runtime_caches(&self) {
+        self.home_feed_cache.lock().await.clear();
+        self.details_cache.lock().await.clear();
+    }
+
+    async fn clear_plugin_caches(&self, plugin_id: &PluginId) {
+        self.home_feed_cache
+            .lock()
+            .await
+            .retain(|(pid, _), _| pid != plugin_id);
+        self.details_cache
+            .lock()
+            .await
+            .retain(|(pid, _), _| pid != plugin_id);
+    }
+
+    /// Fetches home feed shelves from a single plugin (serving fresh entries from a 3-min RAM cache).
     pub async fn home_feed(
         &self,
         plugin_id: &PluginId,
         cursor: Option<&str>,
     ) -> VesselResult<HomeFeed> {
+        let key = (plugin_id.clone(), cursor.map(str::to_owned));
+        let now = Instant::now();
+        {
+            let cache = self.home_feed_cache.lock().await;
+            if let Some((cached_at, feed)) = cache.get(&key)
+                && now.saturating_duration_since(*cached_at) < HOME_FEED_CACHE_TTL
+            {
+                return Ok(feed.clone());
+            }
+        }
+
         let provider = self.pool.get_or_load(plugin_id).await?;
-        provider.home_feed(cursor).await
+        let feed = provider.home_feed(cursor).await?;
+
+        let mut cache = self.home_feed_cache.lock().await;
+        if cache.len() >= MAX_HOME_FEED_CACHE_ENTRIES {
+            let cutoff = Instant::now();
+            cache.retain(|_, (ts, _)| cutoff.saturating_duration_since(*ts) < HOME_FEED_CACHE_TTL);
+            if cache.len() >= MAX_HOME_FEED_CACHE_ENTRIES
+                && let Some(oldest) = cache
+                    .iter()
+                    .min_by_key(|(_, (ts, _))| *ts)
+                    .map(|(k, _)| k.clone())
+            {
+                cache.remove(&oldest);
+            }
+        }
+        cache.insert(key, (Instant::now(), feed.clone()));
+        Ok(feed)
     }
 
-    /// Fetches full item metadata & episode tree directly from `plugin_id`.
+    /// Fetches full item metadata & episode tree from `plugin_id` (with a 5-min RAM cache).
     pub async fn details(
         &self,
         plugin_id: &PluginId,
         native_id: &str,
     ) -> VesselResult<MediaDetail> {
+        let key = (plugin_id.clone(), native_id.to_owned());
+        let now = Instant::now();
+        {
+            let cache = self.details_cache.lock().await;
+            if let Some((cached_at, detail)) = cache.get(&key)
+                && now.saturating_duration_since(*cached_at) < DETAILS_CACHE_TTL
+            {
+                return Ok(detail.clone());
+            }
+        }
+
         let provider = self.pool.get_or_load(plugin_id).await?;
-        provider.details(native_id).await
+        let detail = provider.details(native_id).await?;
+
+        let mut cache = self.details_cache.lock().await;
+        if cache.len() >= MAX_DETAILS_CACHE_ENTRIES {
+            let cutoff = Instant::now();
+            cache.retain(|_, (ts, _)| cutoff.saturating_duration_since(*ts) < DETAILS_CACHE_TTL);
+            if cache.len() >= MAX_DETAILS_CACHE_ENTRIES
+                && let Some(oldest) = cache
+                    .iter()
+                    .min_by_key(|(_, (ts, _))| *ts)
+                    .map(|(k, _)| k.clone())
+            {
+                cache.remove(&oldest);
+            }
+        }
+        cache.insert(key, (Instant::now(), detail.clone()));
+        Ok(detail)
     }
 
     /// Returns the plugin's immediate `MediaDetail` (0 ms UI latency) and runs background

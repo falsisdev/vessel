@@ -1,13 +1,17 @@
 <script setup lang="ts">
 import { onMounted, ref, shallowRef } from 'vue'
+import { useRouter } from 'vue-router'
 import { Play, RefreshCw, Star, Trash2 } from 'lucide-vue-next'
 import { isTauriRuntime, vesselApi } from '@/api/vessel'
 import IptvProfileForm from '@/components/iptv/IptvProfileForm.vue'
 import { useI18n } from '@/composables/useI18n'
+import { usePlayerSession } from '@/composables/usePlayerSession'
 import { pushToast } from '@/composables/useVesselEvents'
-import type { EpgNowNext, IptvKind, StoredIptvChannel, StoredIptvProfile } from '@/types/vessel'
+import type { EpgNowNext, IptvKind, StoredIptvChannel, StoredIptvProfile, StreamCandidate } from '@/types/vessel'
 
+const router = useRouter()
 const { t } = useI18n()
+const { setSession } = usePlayerSession()
 
 const profiles = ref<StoredIptvProfile[]>([])
 const activeProfileId = shallowRef<string>('')
@@ -123,12 +127,75 @@ async function toggleFavorite(ch: StoredIptvChannel): Promise<void> {
 }
 
 async function playChannel(ch: StoredIptvChannel): Promise<void> {
-  const prof = profiles.value.find((p) => p.id === ch.profileId)
-  try {
-    await vesselApi.playIptvChannel(ch, prof?.userAgent)
-  } catch (err) {
-    pushToast('error', String(err))
+  const toCandidate = (item: StoredIptvChannel): StreamCandidate => {
+    const itemProf = profiles.value.find((p) => p.id === item.profileId)
+    const itemHeaders: Record<string, string> = {}
+    if (itemProf?.userAgent) itemHeaders['User-Agent'] = itemProf.userAgent
+    return {
+      url: item.streamUrl,
+      kind: item.streamUrl.toLowerCase().includes('.m3u8') ? 'hls' : 'mpeg_ts',
+      label: item.name,
+      flags: ['requires_proxy'],
+      headers: itemHeaders,
+      subtitles: [],
+    }
   }
+
+  const channelStreams: Record<string, StreamCandidate> = {}
+  const episodes = channels.value.map((item, idx) => {
+    channelStreams[item.streamId] = toCandidate(item)
+    return {
+      streamId: item.streamId,
+      season: 1,
+      episode: idx + 1,
+      title: item.name,
+      overview: item.groupTitle || undefined,
+      thumbnail: item.logoUrl || undefined,
+      tags: [],
+    }
+  })
+  const activeEp =
+    episodes.find((e) => e.streamId === ch.streamId) ?? {
+      streamId: ch.streamId,
+      season: 1,
+      episode: 1,
+      title: ch.name,
+      overview: ch.groupTitle || undefined,
+      thumbnail: ch.logoUrl || undefined,
+      tags: [],
+    }
+  if (!channelStreams[ch.streamId]) {
+    channelStreams[ch.streamId] = toCandidate(ch)
+  }
+
+  setSession({
+    pluginId: 'iptv',
+    nativeId: ch.streamId,
+    detail: {
+      nativeId: ch.streamId,
+      pluginId: 'iptv',
+      type: 'live',
+      isAnime: false,
+      title: ch.name,
+      poster: ch.logoUrl || undefined,
+      backdrop: ch.logoUrl || undefined,
+      synopsis: epg.value?.now ? `Now: ${epg.value.now.title}` : ch.groupTitle || undefined,
+      genres: ch.groupTitle ? [ch.groupTitle] : ['Live TV'],
+      externalIds: {},
+      episodes,
+    },
+    episode: activeEp,
+    streams: [toCandidate(ch)],
+    subtitles: [],
+    activeStreamIndex: 0,
+    channelStreams,
+  })
+
+  await router.push({
+    name: 'player',
+    params: { pluginId: 'iptv', nativeId: ch.streamId },
+    query: { streamId: ch.streamId },
+  })
 }
 
 onMounted(() => {

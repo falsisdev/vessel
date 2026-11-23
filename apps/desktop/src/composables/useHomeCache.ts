@@ -1,9 +1,9 @@
-import { ref, shallowRef } from 'vue'
+import { shallowRef } from 'vue'
 import type { ContinueWatchingEntry, HomeShelfResult, PluginListEntry } from '@/types/vessel'
 
-const cachedShelves = ref<HomeShelfResult[]>([])
-const cachedContinueWatching = ref<ContinueWatchingEntry[]>([])
-const cachedPlugins = ref<PluginListEntry[]>([])
+const cachedShelves = shallowRef<HomeShelfResult[]>([])
+const cachedContinueWatching = shallowRef<ContinueWatchingEntry[]>([])
+const cachedPlugins = shallowRef<PluginListEntry[]>([])
 const cachedFilterKey = shallowRef<string>('')
 const hasLoadedOnce = shallowRef(false)
 

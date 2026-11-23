@@ -43,7 +43,7 @@ function handleOpen(): void {
         :alt="item.title"
         width="300"
         height="450"
-        loading="lazy"
+        loading="eager"
         decoding="async"
         class="poster-img"
       />
@@ -100,9 +100,8 @@ function handleOpen(): void {
   border-radius: var(--vessel-radius);
   background: linear-gradient(155deg, rgba(28, 31, 48, 0.9), rgba(14, 15, 24, 0.98));
   border: 1px solid rgba(255, 255, 255, 0.08);
-  will-change: transform;
   transition:
-    transform 0.26s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.24s cubic-bezier(0.22, 1, 0.36, 1),
     border-color 0.22s ease;
 }
 

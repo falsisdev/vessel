@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, shallowRef } from 'vue'
+import { computed, onActivated, onDeactivated, onMounted, onUnmounted, ref, shallowRef } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   ChevronLeft,
   ChevronRight,
+  GripVertical,
   Info,
   Layers,
   Play,
@@ -38,8 +39,12 @@ const loading = shallowRef(false)
 const resumingKey = shallowRef<string | null>(null)
 const heroIndex = shallowRef(0)
 const showSourcePicker = shallowRef(false)
+const orderListRef = ref<HTMLElement | null>(null)
+const draggingPluginIndex = shallowRef<number | null>(null)
 
 let heroAutoTimer: number | null = null
+
+defineOptions({ name: 'HomeView' })
 
 const enabledPlugins = computed(() => allPlugins.value.filter((p) => p.enabled))
 
@@ -66,10 +71,34 @@ const activeHomePluginIds = computed<string[]>(() => {
   return picked
 })
 
+const activeHeroPluginIds = computed<string[]>(() => {
+  const enabledSet = new Set(enabledPlugins.value.map((p) => p.manifest.id))
+  const sel = uiPreferences.value.home.heroPlugins
+  if (!sel || sel.length === 0) return []
+  return sel.filter((id) => enabledSet.has(id))
+})
+
+function resolveGroupName(p: PluginListEntry): string {
+  if (p.repoId?.trim()) return p.repoId.trim()
+  const domains = p.allowedDomains ?? []
+  if (
+    domains.includes('raw.githubusercontent.com') &&
+    (p.manifest.author === 'falsisdev' ||
+      p.manifest.author === 'metemel' ||
+      p.manifest.id.startsWith('anthology') ||
+      p.manifest.id === 'm3u.anthology.addon')
+  ) {
+    return 'Anthology'
+  }
+  if (p.manifest.id.startsWith('community.anthology')) return 'Anthology'
+  if (p.sourceType === 'dev_dir') return 'Local Dev Plugins'
+  return 'Standalone Plugins'
+}
+
 const groupedEnabledPlugins = computed(() => {
   const buckets = new Map<string, PluginListEntry[]>()
   for (const p of enabledPlugins.value) {
-    const group = p.repoId?.trim() || 'Standalone & Local'
+    const group = resolveGroupName(p)
     const arr = buckets.get(group)
     if (arr) arr.push(p)
     else buckets.set(group, [p])
@@ -77,9 +106,37 @@ const groupedEnabledPlugins = computed(() => {
   return Array.from(buckets.entries()).map(([name, items]) => ({ name, items }))
 })
 
+const pluginNameById = computed(() => {
+  const map = new Map<string, string>()
+  for (const p of allPlugins.value) {
+    map.set(p.manifest.id, p.manifest.name)
+  }
+  return map
+})
+
+const orderedShelves = computed(() => {
+  const order = activeHomePluginIds.value
+  const allowed = new Set(order)
+  return shelves.value
+    .filter((s) => allowed.has(s.pluginId))
+    .slice()
+    .sort((a, b) => {
+      const ia = order.indexOf(a.pluginId)
+      const ib = order.indexOf(b.pluginId)
+      return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib)
+    })
+})
+
 const spotlightPool = computed<Array<MediaSummary & { resolvedPluginId: string }>>(() => {
+  const heroIds = activeHeroPluginIds.value
+  const sourceShelves =
+    heroIds.length > 0
+      ? shelves.value.filter((s) => heroIds.includes(s.pluginId))
+      : orderedShelves.value
+  const candidateShelves = sourceShelves.length > 0 ? sourceShelves : shelves.value
+
   const collected: Array<MediaSummary & { resolvedPluginId: string }> = []
-  for (const shelf of shelves.value) {
+  for (const shelf of candidateShelves) {
     for (const section of shelf.sections) {
       for (const item of section.items) {
         if (!item.poster) continue
@@ -92,7 +149,7 @@ const spotlightPool = computed<Array<MediaSummary & { resolvedPluginId: string }
     }
   }
   if (!collected.length) {
-    for (const shelf of shelves.value) {
+    for (const shelf of candidateShelves) {
       for (const section of shelf.sections) {
         for (const item of section.items) {
           collected.push({
@@ -121,8 +178,8 @@ async function loadHome(forceRefresh = false): Promise<void> {
     // Non-fatal
   }
 
-  const targetIds = activeHomePluginIds.value
-  const targetKey = targetIds.slice().sort().join(',')
+  const targetIds = Array.from(new Set([...activeHomePluginIds.value, ...activeHeroPluginIds.value]))
+  const targetKey = `${activeHomePluginIds.value.slice().sort().join(',')}|${activeHeroPluginIds.value.slice().sort().join(',')}`
 
   // Always silently refresh Continue Watching so Home return feels instant and accurate
   const cwPromise = vesselApi
@@ -139,6 +196,9 @@ async function loadHome(forceRefresh = false): Promise<void> {
 
   loading.value = true
   try {
+    if (forceRefresh) {
+      await vesselApi.clearRuntimeCaches().catch(() => {})
+    }
     const [feeds] = await Promise.all([
       targetIds.length > 0 ? vesselApi.getHomeFeeds(targetIds) : Promise.resolve([]),
       cwPromise,
@@ -158,12 +218,76 @@ function isHomeSelected(pluginId: string): boolean {
   return activeHomePluginIds.value.includes(pluginId)
 }
 
+function isHeroSelected(pluginId: string): boolean {
+  return activeHeroPluginIds.value.includes(pluginId)
+}
+
 async function toggleHomePlugin(pluginId: string): Promise<void> {
-  const next = new Set(activeHomePluginIds.value)
-  if (next.has(pluginId)) next.delete(pluginId)
-  else next.add(pluginId)
-  uiPreferences.value.home.selectedPlugins = Array.from(next)
+  const next = activeHomePluginIds.value.slice()
+  const idx = next.indexOf(pluginId)
+  if (idx >= 0) next.splice(idx, 1)
+  else next.push(pluginId)
+  uiPreferences.value.home.selectedPlugins = next
   await savePreferences(uiPreferences.value)
+}
+
+async function toggleHeroPlugin(pluginId: string): Promise<void> {
+  const next = activeHeroPluginIds.value.slice()
+  const idx = next.indexOf(pluginId)
+  if (idx >= 0) next.splice(idx, 1)
+  else next.push(pluginId)
+  uiPreferences.value.home.heroPlugins = next.length > 0 ? next : null
+  heroIndex.value = 0
+  await savePreferences(uiPreferences.value)
+}
+
+async function clearHeroPlugins(): Promise<void> {
+  uiPreferences.value.home.heroPlugins = null
+  heroIndex.value = 0
+  await savePreferences(uiPreferences.value)
+}
+
+function startOrderDrag(index: number, ev: PointerEvent): void {
+  if (ev.button !== 0) return
+  ev.preventDefault()
+  draggingPluginIndex.value = index
+
+  const onMove = (moveEv: PointerEvent) => {
+    const listEl = orderListRef.value
+    const curIdx = draggingPluginIndex.value
+    if (!listEl || curIdx === null) return
+    const rows = Array.from(listEl.children) as HTMLElement[]
+    let targetIdx = curIdx
+    for (let i = 0; i < rows.length; i++) {
+      const rect = rows[i].getBoundingClientRect()
+      const midY = rect.top + rect.height / 2
+      if (moveEv.clientY < midY) {
+        targetIdx = i
+        break
+      }
+      targetIdx = i
+    }
+    if (targetIdx !== curIdx) {
+      const next = activeHomePluginIds.value.slice()
+      const [moved] = next.splice(curIdx, 1)
+      if (!moved) return
+      next.splice(targetIdx, 0, moved)
+      uiPreferences.value.home.selectedPlugins = next
+      draggingPluginIndex.value = targetIdx
+    }
+  }
+
+  const onUp = () => {
+    window.removeEventListener('pointermove', onMove)
+    window.removeEventListener('pointerup', onUp)
+    window.removeEventListener('pointercancel', onUp)
+    draggingPluginIndex.value = null
+    void savePreferences(uiPreferences.value)
+  }
+
+  window.addEventListener('pointermove', onMove)
+  window.addEventListener('pointerup', onUp)
+  window.addEventListener('pointercancel', onUp)
 }
 
 async function applyHomeSources(): Promise<void> {
@@ -273,13 +397,30 @@ function scrollRail(railId: string, dir: -1 | 1): void {
   }
 }
 
-onMounted(() => {
-  void loadHome(false)
+function startHeroTimer(): void {
+  if (heroAutoTimer !== null) window.clearInterval(heroAutoTimer)
   heroAutoTimer = window.setInterval(() => {
     if (spotlightPool.value.length > 1 && !showSourcePicker.value) {
       heroIndex.value = (heroIndex.value + 1) % spotlightPool.value.length
     }
   }, 9000)
+}
+
+onMounted(() => {
+  void loadHome(false)
+  startHeroTimer()
+})
+
+onActivated(() => {
+  void loadHome(false)
+  startHeroTimer()
+})
+
+onDeactivated(() => {
+  if (heroAutoTimer !== null) {
+    window.clearInterval(heroAutoTimer)
+    heroAutoTimer = null
+  }
 })
 
 onUnmounted(() => {
@@ -448,7 +589,7 @@ onUnmounted(() => {
                 v-if="entry.backdrop ?? entry.poster"
                 :src="entry.backdrop ?? entry.poster"
                 :alt="entry.title"
-                loading="lazy"
+                loading="eager"
                 decoding="async"
                 class="cw-img"
               />
@@ -509,7 +650,7 @@ onUnmounted(() => {
       </div>
 
       <div v-else class="shelf-stack">
-        <div v-for="shelf in shelves" :key="shelf.pluginId" class="plugin-block">
+        <div v-for="shelf in orderedShelves" :key="shelf.pluginId" class="plugin-block">
           <div v-if="shelf.error" class="v-card error-shelf">
             <strong>{{ shelf.pluginName }}</strong> — {{ t('home.plugin_error') }}:
             <span class="v-muted">{{ shelf.error }}</span>
@@ -594,6 +735,71 @@ onUnmounted(() => {
             </div>
 
             <div class="picker-groups">
+              <div class="hero-source-section">
+                <div class="picker-group-head">
+                  <strong>Spotlight Hero Source</strong>
+                  <button
+                    type="button"
+                    class="v-btn v-btn-sm"
+                    :disabled="!activeHeroPluginIds.length"
+                    @click="clearHeroPlugins"
+                  >
+                    Auto (All Active Feeds)
+                  </button>
+                </div>
+                <p class="v-muted picker-hero-sub">
+                  Pick specific plugin(s) for the Hero banner, or leave Auto to pull from your top Home feeds.
+                </p>
+                <div class="hero-chip-grid">
+                  <button
+                    v-for="p in enabledPlugins"
+                    :key="`hero-${p.manifest.id}`"
+                    type="button"
+                    class="hero-source-chip"
+                    :class="{ checked: isHeroSelected(p.manifest.id) }"
+                    @click="toggleHeroPlugin(p.manifest.id)"
+                  >
+                    <Sparkles :size="12" aria-hidden="true" />
+                    <span>{{ p.manifest.name }}</span>
+                  </button>
+                </div>
+              </div>
+
+              <div v-if="activeHomePluginIds.length" class="order-section">
+                <div class="picker-group-head">
+                  <strong>Active Home Shelf Order (Top → Bottom)</strong>
+                  <span class="v-muted group-hint">Drag handle to reorder shelves</span>
+                </div>
+                <div ref="orderListRef" class="order-list">
+                  <div
+                    v-for="(pid, idx) in activeHomePluginIds"
+                    :key="pid"
+                    class="order-row"
+                    :class="{ 'is-dragging': draggingPluginIndex === idx }"
+                  >
+                    <button
+                      type="button"
+                      class="drag-handle"
+                      title="Drag to reorder"
+                      aria-label="Drag to reorder"
+                      @pointerdown="startOrderDrag(idx, $event)"
+                    >
+                      <GripVertical :size="15" aria-hidden="true" />
+                    </button>
+                    <span class="order-index">{{ idx + 1 }}</span>
+                    <span class="order-name">{{ pluginNameById.get(pid) ?? pid }}</span>
+                    <button
+                      type="button"
+                      class="v-btn v-btn-icon"
+                      title="Remove from Home"
+                      @click="toggleHomePlugin(pid)"
+                    >
+                      <X :size="14" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
               <div v-for="group in groupedEnabledPlugins" :key="group.name" class="picker-group">
                 <div class="picker-group-head">
                   <strong>{{ group.name }}</strong>
@@ -655,24 +861,26 @@ onUnmounted(() => {
 
 .nuvio-hero {
   position: relative;
-  min-height: 455px;
+  min-height: clamp(540px, 64vh, 690px);
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
-  padding: 2.5rem 2.75rem 2rem;
-  gap: 1.15rem;
+  padding: 3rem 3rem 2.35rem;
+  gap: 1.25rem;
   overflow: hidden;
+  flex-shrink: 0;
 }
 
 .nuvio-hero.is-compact {
-  min-height: 295px;
-  padding: 1.75rem 2.75rem 1.35rem;
+  min-height: 335px;
+  padding: 1.9rem 2.75rem 1.45rem;
 }
 
 .hero-stage {
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
+  min-height: 290px;
 }
 
 .hero-art {
@@ -682,19 +890,10 @@ onUnmounted(() => {
   height: 100%;
   object-fit: cover;
   object-position: center 22%;
-  opacity: 0.52;
+  opacity: 0.92;
+  filter: contrast(1.06) saturate(1.14);
   pointer-events: none;
-  will-change: transform;
-  animation: hero-kenburns 28s ease-in-out infinite alternate;
-}
-
-@keyframes hero-kenburns {
-  from {
-    transform: scale(1.02) translate3d(0, 0, 0);
-  }
-  to {
-    transform: scale(1.1) translate3d(-1%, -1%, 0);
-  }
+  transform: scale(1.03);
 }
 
 .hero-vignette {
@@ -703,14 +902,15 @@ onUnmounted(() => {
   background:
     linear-gradient(
       90deg,
-      var(--vessel-bg-base) 0%,
-      rgba(10, 11, 16, 0.84) 44%,
-      rgba(10, 11, 16, 0.28) 100%
+      rgba(10, 11, 16, 0.88) 0%,
+      rgba(10, 11, 16, 0.56) 36%,
+      rgba(10, 11, 16, 0.14) 68%,
+      transparent 100%
     ),
     linear-gradient(
       180deg,
-      rgba(10, 11, 16, 0.25) 0%,
-      rgba(10, 11, 16, 0.65) 58%,
+      rgba(10, 11, 16, 0.12) 0%,
+      rgba(10, 11, 16, 0.16) 54%,
       var(--vessel-bg-base) 100%
     );
   pointer-events: none;
@@ -721,8 +921,9 @@ onUnmounted(() => {
   z-index: 2;
   display: flex;
   flex-direction: column;
-  gap: 0.85rem;
-  max-width: 650px;
+  gap: 0.95rem;
+  max-width: 760px;
+  text-shadow: 0 2px 20px rgba(0, 0, 0, 0.85);
 }
 
 .hero-meta-line {
@@ -766,10 +967,10 @@ onUnmounted(() => {
 
 .hero-title {
   margin: 0;
-  font-size: clamp(2.1rem, 3.2vw, 2.95rem);
+  font-size: clamp(2.35rem, 3.8vw, 3.45rem);
   font-weight: 850;
   letter-spacing: -0.035em;
-  line-height: 1.06;
+  line-height: 1.05;
   text-wrap: balance;
 }
 
@@ -840,13 +1041,11 @@ onUnmounted(() => {
   gap: 2rem;
 }
 
-/* content-visibility skips layout/paint cost for off-screen shelves at 120fps */
+/* Keep rails always painted (no content-visibility culling flicker in WKWebView) */
 .nuvio-rail {
   display: flex;
   flex-direction: column;
   gap: 0.85rem;
-  content-visibility: auto;
-  contain-intrinsic-size: auto 340px;
 }
 
 .rail-head {
@@ -884,14 +1083,15 @@ onUnmounted(() => {
   display: flex;
   gap: var(--vessel-gap);
   overflow-x: auto;
-  padding: 0.55rem 0.25rem 0.9rem;
-  scroll-snap-type: x proximity;
+  overflow-y: visible;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  padding: 0.65rem 0.35rem 1rem;
 }
 
 .rail-card-slot,
 .rail-skeleton {
   flex: 0 0 186px;
-  scroll-snap-align: start;
 }
 
 .rail-skeleton {
@@ -901,12 +1101,10 @@ onUnmounted(() => {
 /* Continue Watching Landscape Cards */
 .cw-card {
   flex: 0 0 280px;
-  scroll-snap-align: start;
   display: flex;
   flex-direction: column;
   gap: 0.55rem;
   cursor: pointer;
-  will-change: transform;
   transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.2s ease;
 }
 
@@ -1108,6 +1306,130 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 0.55rem;
+}
+
+.order-section,
+.hero-source-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  padding: 0.85rem;
+  border-radius: 12px;
+  background: rgba(203, 166, 247, 0.06);
+  border: 1px solid rgba(203, 166, 247, 0.22);
+}
+
+.picker-hero-sub {
+  margin: 0;
+  font-size: 0.78rem;
+}
+
+.hero-chip-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.hero-source-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(10, 11, 18, 0.65);
+  color: var(--vessel-text-muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease;
+}
+
+.hero-source-chip.checked {
+  border-color: var(--vessel-accent);
+  background: rgba(203, 166, 247, 0.2);
+  color: #ffffff;
+}
+
+.group-hint {
+  font-size: 0.78rem;
+}
+
+.order-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.order-row {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.42rem 0.65rem;
+  border-radius: 9px;
+  background: rgba(10, 11, 18, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  user-select: none;
+  transition: border-color 0.15s ease, background-color 0.15s ease, transform 0.15s ease;
+}
+
+.order-row.is-dragging {
+  border-color: var(--vessel-accent);
+  background: rgba(203, 166, 247, 0.16);
+  transform: scale(1.015);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+.drag-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--vessel-text-muted);
+  cursor: grab;
+  touch-action: none;
+}
+
+.drag-handle:hover {
+  color: var(--vessel-text-primary);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+}
+
+.order-index {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.76rem;
+  font-weight: 700;
+  background: rgba(203, 166, 247, 0.18);
+  color: var(--vessel-accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.order-name {
+  flex: 1;
+  font-size: 0.88rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.order-btns {
+  display: flex;
+  gap: 0.3rem;
 }
 
 .picker-group-head {

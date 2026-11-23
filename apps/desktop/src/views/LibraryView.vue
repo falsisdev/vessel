@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref, shallowRef } from 'vue'
+import { onActivated, onMounted, shallowRef } from 'vue'
 import { useRouter } from 'vue-router'
 import { isTauriRuntime, vesselApi } from '@/api/vessel'
 import MediaCard from '@/components/media/MediaCard.vue'
@@ -13,7 +13,9 @@ const { t } = useI18n()
 const { uiPreferences } = useUiPreferences()
 
 const activeFilter = shallowRef<LibraryStatus | 'all'>('all')
-const items = ref<LibraryItem[]>([])
+const items = shallowRef<LibraryItem[]>([])
+
+defineOptions({ name: 'LibraryView' })
 
 const FILTERS: Array<{ value: LibraryStatus | 'all'; key: string }> = [
   { value: 'all', key: 'library.all' },
@@ -40,6 +42,10 @@ function openDetails(pluginId: string, nativeId: string): void {
 
 onMounted(() => {
   void loadLibrary('all')
+})
+
+onActivated(() => {
+  void loadLibrary(activeFilter.value)
 })
 </script>
 

@@ -21,6 +21,7 @@ export function defaultUiPreferences(): UiPreferences {
       showRecentIptv: true,
       hiddenSections: [],
       selectedPlugins: null,
+      heroPlugins: null,
     },
     cards: {
       aspectRatio: 'poster_2x3',

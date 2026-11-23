@@ -5,6 +5,7 @@ import {
   ChevronDown,
   ChevronRight,
   Download,
+  Globe,
   Home,
   Package,
   RefreshCw,
@@ -20,6 +21,8 @@ import { useI18n } from '@/composables/useI18n'
 import { useUiPreferences } from '@/composables/useUiPreferences'
 import { pushToast } from '@/composables/useVesselEvents'
 import type { PluginListEntry, PluginManifest, ResolvedSource } from '@/types/vessel'
+
+defineOptions({ name: 'ExtensionsView' })
 
 const { t } = useI18n()
 const { uiPreferences, savePreferences } = useUiPreferences()
@@ -38,36 +41,86 @@ const expandedGroups = ref<Record<string, boolean>>({})
 const activeSettingsManifest = ref<PluginManifest | null>(null)
 const confirmUninstallId = shallowRef<string>('')
 const confirmRemoveGroup = shallowRef<string>('')
+const failedImageUrls = ref<Record<string, boolean>>({})
+
+function markImageFailed(url?: string): void {
+  if (!url) return
+  failedImageUrls.value = { ...failedImageUrls.value, [url]: true }
+}
+
+function canShowImage(url?: string): url is string {
+  return Boolean(url && !failedImageUrls.value[url])
+}
 
 const installedPluginIds = computed(() => new Set(plugins.value.map((p) => p.manifest.id)))
 
 const selectedHomeSet = computed<Set<string>>(() => {
   const sel = uiPreferences.value.home.selectedPlugins
   if (sel) return new Set(sel)
-  // Legacy fallback: all enabled plugins (capped cleanly if many)
-  return new Set(plugins.value.filter((p) => p.enabled).slice(0, 6).map((p) => p.manifest.id))
+  return new Set(plugins.value.filter((p) => p.enabled).slice(0, 5).map((p) => p.manifest.id))
 })
+
+function resolveGroupName(entry: PluginListEntry): string {
+  if (entry.repoId?.trim()) return entry.repoId.trim()
+  // Backwards-compatible grouping for plugins installed before repoId persistence
+  const domains = entry.allowedDomains ?? []
+  if (
+    domains.includes('raw.githubusercontent.com') &&
+    (entry.manifest.author === 'falsisdev' ||
+      entry.manifest.author === 'metemel' ||
+      entry.manifest.id.startsWith('anthology') ||
+      entry.manifest.id === 'm3u.anthology.addon')
+  ) {
+    return 'Anthology'
+  }
+  if (entry.manifest.id.startsWith('community.anthology')) {
+    return 'Anthology'
+  }
+  if (entry.sourceType === 'dev_dir') {
+    return 'Local Dev Plugins'
+  }
+  return 'Standalone Plugins'
+}
 
 interface PluginGroup {
   name: string
   items: PluginListEntry[]
   enabledCount: number
   homeCount: number
+  iconUrl?: string
+}
+
+function resolveGroupIcon(items: PluginListEntry[]): string | undefined {
+  const counts = new Map<string, number>()
+  for (const item of items) {
+    const icon = item.manifest.icon?.trim()
+    if (!icon) continue
+    counts.set(icon, (counts.get(icon) ?? 0) + 1)
+  }
+  let bestUrl: string | undefined
+  let bestCount = 0
+  for (const [url, count] of counts.entries()) {
+    if (count > bestCount) {
+      bestUrl = url
+      bestCount = count
+    }
+  }
+  return bestUrl
 }
 
 const groupedPlugins = computed<PluginGroup[]>(() => {
   const q = installedFilter.value.trim().toLowerCase()
   const buckets = new Map<string, PluginListEntry[]>()
   for (const entry of plugins.value) {
+    const groupName = resolveGroupName(entry)
     if (
       q &&
       !entry.manifest.name.toLowerCase().includes(q) &&
       !entry.manifest.id.toLowerCase().includes(q) &&
-      !(entry.repoId ?? '').toLowerCase().includes(q)
+      !groupName.toLowerCase().includes(q)
     ) {
       continue
     }
-    const groupName = entry.repoId?.trim() || 'Standalone & Local'
     const arr = buckets.get(groupName)
     if (arr) arr.push(entry)
     else buckets.set(groupName, [entry])
@@ -80,6 +133,7 @@ const groupedPlugins = computed<PluginGroup[]>(() => {
       items,
       enabledCount: items.filter((i) => i.enabled).length,
       homeCount: items.filter((i) => i.enabled && selectedHomeSet.value.has(i.manifest.id)).length,
+      iconUrl: resolveGroupIcon(items),
     })
   }
   return out
@@ -103,8 +157,8 @@ function isGroupExpanded(group: PluginGroup): boolean {
   if (Object.prototype.hasOwnProperty.call(expandedGroups.value, group.name)) {
     return expandedGroups.value[group.name]
   }
-  // Keep standalone/small groups open by default; collapse big 40-plugin repos cleanly
-  return group.items.length <= 6
+  // Start multi-plugin repositories collapsed under their single clean Plugin Repo header
+  return group.items.length === 1
 }
 
 function toggleGroupExpanded(groupName: string, current: boolean): void {
@@ -131,7 +185,7 @@ async function toggleGroupHome(group: PluginGroup, showAll: boolean): Promise<vo
     else next.delete(entry.manifest.id)
   }
   await saveHomeSelection(Array.from(next))
-  pushToast('info', showAll ? `Pinned ${group.name} to Home` : `Removed ${group.name} from Home`)
+  pushToast('info', showAll ? `Pinned ${group.name} to Home` : `Cleared ${group.name} from Home`)
 }
 
 async function setGroupEnabled(group: PluginGroup, enabled: boolean): Promise<void> {
@@ -159,13 +213,13 @@ async function removeGroup(group: PluginGroup): Promise<void> {
     nextHome.delete(entry.manifest.id)
     await vesselApi.uninstallPlugin(entry.manifest.id)
   }
-  if (uiPreferences.value.home.selectedPlugins !== null && uiPreferences.value.home.selectedPlugins !== undefined) {
+  if (uiPreferences.value.home.selectedPlugins) {
     await saveHomeSelection(Array.from(nextHome))
   } else {
     invalidateHomeCache()
   }
   await refreshPlugins()
-  pushToast('info', `Removed repository group '${group.name}'`)
+  pushToast('info', `Removed '${group.name}'`)
 }
 
 async function refreshPlugins(): Promise<void> {
@@ -242,7 +296,6 @@ async function installAllRepoPlugins(): Promise<void> {
   batchProgress.value = ''
   batchInstalling.value = false
 
-  // Smart default: pin up to 5 starter plugins to Home so Home loads instantaneously
   const existingSel = uiPreferences.value.home.selectedPlugins
   if (!existingSel || existingSel.length === 0) {
     await saveHomeSelection(starterHome)
@@ -252,7 +305,7 @@ async function installAllRepoPlugins(): Promise<void> {
   await refreshPlugins()
   pushToast(
     failCount > 0 ? 'warn' : 'info',
-    `Installed ${okCount} plugin(s) under ${repoName}${failCount > 0 ? ` (${failCount} failed/blocked)` : ''}. Select Home feeds anytime.`,
+    `Installed ${okCount} provider(s) under ${repoName}${failCount > 0 ? ` (${failCount} failed/blocked)` : ''}.`,
   )
 }
 
@@ -304,7 +357,7 @@ onMounted(() => {
       <div>
         <h1 class="v-page-title">{{ t('extensions.title') }}</h1>
         <p class="v-muted header-sub">
-          Grouped by repository — choose which plugins feed your Home screen without slowing down search.
+          Installed repositories and plugins. Click a plugin bundle to expand or manage individual providers.
         </p>
       </div>
       <button class="v-btn" @click="refreshPlugins">
@@ -329,13 +382,33 @@ onMounted(() => {
 
     <div v-if="resolvedPreview" class="v-card preview-card">
       <div class="preview-head">
-        <strong>
-          {{
-            resolvedPreview.kind === 'repository'
-              ? `${resolvedPreview.repo.name} (${resolvedPreview.repo.plugins.length})`
-              : resolvedPreview.manifest.name
-          }}
-        </strong>
+        <div class="preview-title-wrap">
+          <img
+            v-if="
+              resolvedPreview.kind === 'repository' && canShowImage(resolvedPreview.repo.iconUrl)
+            "
+            :src="resolvedPreview.repo.iconUrl"
+            alt=""
+            class="preview-repo-logo"
+            @error="markImageFailed(resolvedPreview.repo.iconUrl)"
+          />
+          <img
+            v-else-if="
+              resolvedPreview.kind === 'package' && canShowImage(resolvedPreview.manifest.icon)
+            "
+            :src="resolvedPreview.manifest.icon"
+            alt=""
+            class="preview-repo-logo"
+            @error="markImageFailed(resolvedPreview.manifest.icon)"
+          />
+          <strong>
+            {{
+              resolvedPreview.kind === 'repository'
+                ? `${resolvedPreview.repo.name} (${resolvedPreview.repo.plugins.length})`
+                : resolvedPreview.manifest.name
+            }}
+          </strong>
+        </div>
         <div class="preview-head-actions">
           <span
             class="v-badge"
@@ -375,7 +448,7 @@ onMounted(() => {
             v-model="repoFilter"
             type="search"
             class="v-input repo-filter-input"
-            placeholder="Filter plugins in repository..."
+            placeholder="Filter providers in repository..."
           />
           <button
             type="button"
@@ -397,7 +470,7 @@ onMounted(() => {
             <div class="repo-plugin-info">
               <div class="repo-plugin-title">
                 <strong>{{ rp.name }}</strong>
-                <span class="v-muted"> v{{ rp.version }}</span>
+                <span class="v-muted">v{{ rp.version }}</span>
                 <span v-if="installedPluginIds.has(rp.id)" class="v-badge v-badge-success">
                   <Check :size="11" /> Installed
                 </span>
@@ -443,7 +516,7 @@ onMounted(() => {
           v-model="installedFilter"
           type="search"
           class="v-input"
-          placeholder="Search installed plugins or repositories..."
+          placeholder="Search inside installed plugins..."
         />
         <span class="v-badge v-badge-accent">
           <Home :size="12" /> {{ selectedHomeSet.size }} on Home
@@ -462,10 +535,22 @@ onMounted(() => {
             <div class="repo-group-title">
               <ChevronDown v-if="isGroupExpanded(group)" :size="18" class="group-chevron" />
               <ChevronRight v-else :size="18" class="group-chevron" />
-              <Package :size="18" class="group-icon" />
-              <strong>{{ group.name }}</strong>
-              <span class="v-badge">{{ group.enabledCount }} / {{ group.items.length }} active</span>
-              <span class="v-badge v-badge-accent">{{ group.homeCount }} Home</span>
+              <span class="group-icon-box" :class="{ 'has-logo': canShowImage(group.iconUrl) }">
+                <img
+                  v-if="canShowImage(group.iconUrl)"
+                  :src="group.iconUrl"
+                  alt=""
+                  class="group-logo-img"
+                  @error="markImageFailed(group.iconUrl)"
+                />
+                <Package v-else :size="17" class="group-icon" />
+              </span>
+              <div class="group-title-text">
+                <strong>{{ group.name }}</strong>
+                <span class="v-muted group-meta">
+                  {{ group.enabledCount }} / {{ group.items.length }} active · {{ group.homeCount }} on Home
+                </span>
+              </div>
             </div>
 
             <div class="repo-group-actions" @click.stop>
@@ -475,7 +560,7 @@ onMounted(() => {
                 @click="toggleGroupHome(group, group.homeCount === 0)"
               >
                 <Home :size="13" />
-                {{ group.homeCount === 0 ? 'Pin Repo to Home' : 'Clear Home' }}
+                {{ group.homeCount === 0 ? 'Pin to Home' : 'Clear Home' }}
               </button>
               <button
                 type="button"
@@ -490,30 +575,40 @@ onMounted(() => {
                 @click="removeGroup(group)"
               >
                 <Trash2 :size="13" />
-                {{ confirmRemoveGroup === group.name ? 'Confirm Remove All' : 'Remove All' }}
+                {{ confirmRemoveGroup === group.name ? 'Confirm' : 'Remove' }}
               </button>
             </div>
           </div>
 
-          <div v-if="isGroupExpanded(group)" class="plugin-list">
-            <div v-for="entry in group.items" :key="entry.manifest.id" class="plugin-row">
+          <div v-if="isGroupExpanded(group)" class="plugin-sublist">
+            <div v-for="entry in group.items" :key="entry.manifest.id" class="plugin-subrow">
               <div class="plugin-info">
                 <div class="plugin-head">
+                  <img
+                    v-if="canShowImage(entry.manifest.icon)"
+                    :src="entry.manifest.icon"
+                    alt=""
+                    class="plugin-mini-logo"
+                    @error="markImageFailed(entry.manifest.icon)"
+                  />
                   <strong>{{ entry.manifest.name }}</strong>
-                  <span class="v-badge">v{{ entry.manifest.version }}</span>
+                  <span class="sub-ver v-muted">v{{ entry.manifest.version }}</span>
                   <span
-                    class="v-badge"
-                    :class="entry.enabled ? 'v-badge-success' : ''"
+                    class="status-dot"
+                    :class="{ active: entry.enabled }"
+                    :title="entry.enabled ? t('common.enabled') : t('common.disabled')"
+                  />
+                  <span
+                    v-if="entry.allowedDomains.length"
+                    class="domain-chip v-muted"
+                    :title="entry.allowedDomains.join(', ')"
                   >
-                    {{ entry.enabled ? t('common.enabled') : t('common.disabled') }}
+                    <Globe :size="11" /> {{ entry.allowedDomains.length }} domain(s)
                   </span>
                 </div>
                 <p v-if="entry.manifest.description" class="v-muted plugin-desc">
                   {{ entry.manifest.description }}
                 </p>
-                <div class="domain-row v-muted">
-                  <span>{{ t('extensions.domains') }}: {{ entry.allowedDomains.join(', ') || 'none' }}</span>
-                </div>
               </div>
 
               <div class="plugin-actions">
@@ -541,16 +636,18 @@ onMounted(() => {
                   class="v-btn v-btn-sm"
                   @click="activeSettingsManifest = entry.manifest"
                 >
-                  <Settings2 :size="13" /> {{ t('extensions.settings') }}
+                  <Settings2 :size="13" />
                 </button>
                 <button class="v-btn v-btn-sm" @click="toggleEnabled(entry)">
                   {{ entry.enabled ? t('common.disable') : t('common.enable') }}
                 </button>
-                <button type="button" class="v-btn v-btn-sm v-btn-danger" @click="removePlugin(entry.manifest.id)">
+                <button
+                  type="button"
+                  class="v-btn v-btn-icon v-btn-danger"
+                  :title="confirmUninstallId === entry.manifest.id ? 'Confirm uninstall' : t('common.uninstall')"
+                  @click="removePlugin(entry.manifest.id)"
+                >
                   <Trash2 :size="13" aria-hidden="true" />
-                  {{
-                    confirmUninstallId === entry.manifest.id ? 'Confirm' : t('common.uninstall')
-                  }}
                 </button>
               </div>
             </div>
@@ -601,6 +698,24 @@ onMounted(() => {
   align-items: center;
   gap: 0.75rem;
   width: 100%;
+}
+
+.preview-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  min-width: 0;
+}
+
+.preview-repo-logo {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  object-fit: contain;
+  background: rgba(10, 11, 18, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 2px;
+  flex-shrink: 0;
 }
 
 .preview-head-actions {
@@ -670,7 +785,7 @@ onMounted(() => {
 .repo-group-card {
   display: flex;
   flex-direction: column;
-  gap: 0.85rem;
+  gap: 0.75rem;
 }
 
 .repo-group-head {
@@ -686,16 +801,60 @@ onMounted(() => {
 .repo-group-title {
   display: flex;
   align-items: center;
-  gap: 0.55rem;
-  flex-wrap: wrap;
+  gap: 0.7rem;
 }
 
 .group-chevron {
   color: var(--vessel-text-muted);
 }
 
-.group-icon {
+.group-icon-box {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(203, 166, 247, 0.14);
+  border: 1px solid rgba(203, 166, 247, 0.28);
   color: var(--vessel-accent);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.group-icon-box.has-logo {
+  background: rgba(10, 11, 18, 0.75);
+  border-color: rgba(255, 255, 255, 0.14);
+  padding: 3px;
+}
+
+.group-logo-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 6px;
+}
+
+.plugin-mini-logo {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  object-fit: contain;
+  background: rgba(10, 11, 18, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 1px;
+  flex-shrink: 0;
+}
+
+.group-title-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.group-meta {
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
 }
 
 .repo-group-actions {
@@ -705,30 +864,31 @@ onMounted(() => {
   flex-wrap: wrap;
 }
 
-.plugin-list {
+.plugin-sublist {
   display: flex;
   flex-direction: column;
-  gap: 0.55rem;
-  padding-top: 0.6rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  gap: 0.45rem;
+  margin-left: 1rem;
+  padding-left: 1rem;
+  border-left: 2px solid rgba(203, 166, 247, 0.22);
 }
 
-.plugin-row {
+.plugin-subrow {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 1rem;
+  gap: 0.9rem;
   flex-wrap: wrap;
-  padding: 0.7rem 0.85rem;
+  padding: 0.55rem 0.8rem;
   border-radius: 10px;
-  background: rgba(10, 11, 18, 0.55);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(10, 11, 18, 0.48);
+  border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .plugin-info {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: 0.18rem;
   min-width: 0;
   flex: 1;
 }
@@ -737,17 +897,38 @@ onMounted(() => {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 0.45rem;
+  gap: 0.5rem;
+}
+
+.sub-ver {
+  font-size: 0.78rem;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.status-dot.active {
+  background: var(--vessel-success);
+  box-shadow: 0 0 8px rgba(166, 227, 161, 0.55);
+}
+
+.domain-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.74rem;
 }
 
 .plugin-desc {
   margin: 0;
-  font-size: 0.84rem;
-}
-
-.domain-row {
-  font-size: 0.78rem;
-  word-break: break-word;
+  font-size: 0.8rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .plugin-actions {
@@ -758,7 +939,7 @@ onMounted(() => {
 }
 
 .home-toggle-label {
-  font-size: 0.78rem;
+  font-size: 0.76rem;
   font-weight: 600;
   color: var(--vessel-text-muted);
 }

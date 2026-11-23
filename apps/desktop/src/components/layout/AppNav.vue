@@ -103,9 +103,7 @@ const showLabels = computed(() => isTop.value || isExpanded.value)
   align-items: center;
   width: 72px;
   flex-shrink: 0;
-  background: rgba(12, 13, 20, 0.88);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  background: linear-gradient(180deg, rgba(14, 15, 24, 0.98), rgba(10, 11, 18, 0.99));
   border-right: 1px solid rgba(255, 255, 255, 0.06);
   padding: 1.15rem 0.65rem;
   gap: 1.4rem;

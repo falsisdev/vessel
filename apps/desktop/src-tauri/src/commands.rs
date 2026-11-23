@@ -647,6 +647,112 @@ pub async fn delete_library_item(
 }
 
 #[tauri::command]
+pub async fn clear_runtime_caches(state: State<'_, AppState>) -> Result<(), String> {
+    state.engine.clear_runtime_caches().await;
+    Ok(())
+}
+
+fn decode_subtitle_bytes(bytes: &[u8]) -> String {
+    if let Ok(utf8) = std::str::from_utf8(bytes) {
+        return utf8.trim_start_matches('\u{feff}').to_owned();
+    }
+    // Windows-1254 (Turkish) fallback for legacy SRT/ASS files
+    let mut out = String::with_capacity(bytes.len());
+    for &b in bytes {
+        let ch = match b {
+            0x80..=0x9F => match b {
+                0x80 => '€',
+                0x85 => '…',
+                0x91 | 0x92 => '\'',
+                0x93 | 0x94 => '"',
+                0x96 | 0x97 => '-',
+                _ => ' ',
+            },
+            0xD0 => 'Ğ',
+            0xDD => 'İ',
+            0xDE => 'Ş',
+            0xF0 => 'ğ',
+            0xFD => 'ı',
+            0xFE => 'ş',
+            _ => char::from(b),
+        };
+        out.push(ch);
+    }
+    out
+}
+
+#[tauri::command]
+pub async fn fetch_subtitle_text(
+    state: State<'_, AppState>,
+    url: String,
+    headers: Option<BTreeMap<String, String>>,
+) -> Result<String, String> {
+    let parsed = url::Url::parse(url.trim())
+        .map_err(|err| format!("[VesselInvalidInputError]: invalid subtitle URL: {err}"))?;
+    if !matches!(parsed.scheme(), "http" | "https") {
+        return Err("[VesselSecurityError]: unsupported subtitle URL scheme".into());
+    }
+
+    let proxy_base = state.engine.proxy().base_url();
+    let is_local_proxy = url.starts_with(&proxy_base);
+    if !is_local_proxy && let Some(host) = parsed.host_str() {
+        if let Ok(ip) = host.parse::<std::net::IpAddr>()
+            && vessel_plugin_rt::security::is_forbidden_ip(ip)
+        {
+            return Err(format!(
+                "[VesselSecurityError]: blocked private subtitle host '{host}'"
+            ));
+        }
+        if let Ok(addrs) =
+            tokio::net::lookup_host((host, parsed.port_or_known_default().unwrap_or(443))).await
+        {
+            for addr in addrs {
+                if vessel_plugin_rt::security::is_forbidden_ip(addr.ip()) {
+                    return Err(format!(
+                        "[VesselSecurityError]: blocked resolved private subtitle IP for '{host}'"
+                    ));
+                }
+            }
+        }
+    }
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(12))
+        .user_agent("Vessel-Desktop/1.0")
+        .build()
+        .map_err(|err| format!("[VesselNetworkError]: build subtitle client: {err}"))?;
+
+    let mut req = client.get(parsed);
+    if let Some(hdrs) = headers {
+        for (k, v) in hdrs {
+            if let (Ok(name), Ok(val)) = (
+                reqwest::header::HeaderName::from_bytes(k.as_bytes()),
+                reqwest::header::HeaderValue::from_str(&v),
+            ) {
+                req = req.header(name, val);
+            }
+        }
+    }
+
+    let resp = req
+        .send()
+        .await
+        .map_err(|err| format!("[VesselNetworkError]: fetch subtitle failed: {err}"))?;
+    if !resp.status().is_success() {
+        return Err(format!(
+            "[VesselNetworkError]: subtitle server returned HTTP {}",
+            resp.status()
+        ));
+    }
+
+    let bytes = resp
+        .bytes()
+        .await
+        .map_err(|err| format!("[VesselNetworkError]: read subtitle payload: {err}"))?;
+    Ok(decode_subtitle_bytes(&bytes))
+}
+
+#[tauri::command]
 pub async fn prepare_playback_url(
     state: State<'_, AppState>,
     candidate: StreamCandidate,
