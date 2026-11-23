@@ -64,6 +64,24 @@ vessel/
 
 ---
 
+## Installation (Prebuilt Desktop Releases)
+
+Prebuilt desktop installers for **macOS** (`.dmg` for Apple Silicon & Intel) and **Windows** (`-setup.exe`) are published on the [GitHub Releases](https://github.com/falsisdev/vessel/releases) page.
+
+### macOS Note ("Vessel is damaged and can't be opened")
+Because Vessel is an open-source app distributed without a paid Apple Developer ID notarization certificate, macOS Gatekeeper flags downloaded `.dmg` apps with a quarantine attribute. After dragging **Vessel.app** into **Applications**, run this once in Terminal:
+
+```bash
+xattr -cr /Applications/Vessel.app
+```
+
+Then launch **Vessel** normally.
+
+### Windows Note (SmartScreen)
+If Windows SmartScreen shows *"Windows protected your PC"* on unsigned alpha/beta installers, click **More info → Run anyway**.
+
+---
+
 ## Getting Started
 
 ### Prerequisites
