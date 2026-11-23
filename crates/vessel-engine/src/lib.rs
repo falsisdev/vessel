@@ -643,6 +643,8 @@ impl VesselEngine {
         let sid = search_id.clone();
 
         let done = tokio::spawn(async move {
+            // Cap concurrent plugin searches to 4 so the 6-slot QuickJS LRU pool never thrashes evictions.
+            let sem = Arc::new(tokio::sync::Semaphore::new(4));
             let mut set = JoinSet::new();
 
             for plugin_id in plugin_ids {
@@ -652,8 +654,20 @@ impl VesselEngine {
                 let q = query_owned.clone();
                 let f = filters.clone();
                 let sid_inner = sid.clone();
+                let sem = Arc::clone(&sem);
 
                 set.spawn(async move {
+                    if token.is_cancelled() {
+                        return;
+                    }
+                    let _permit = tokio::select! {
+                        biased;
+                        () = token.cancelled() => return,
+                        res = sem.acquire_owned() => match res {
+                            Ok(permit) => permit,
+                            Err(_) => return,
+                        },
+                    };
                     if token.is_cancelled() {
                         return;
                     }

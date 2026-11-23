@@ -25,7 +25,9 @@ const TYPE_PILLS = [
   { value: 'anime', label: 'Anime' },
 ]
 
-const bucketEntries = computed(() => Object.entries(searchBuckets.value))
+const bucketEntries = computed(() =>
+  Object.entries(searchBuckets.value).filter(([, items]) => items.length > 0),
+)
 
 async function runSearch(): Promise<void> {
   const trimmed = query.value.trim()

@@ -117,8 +117,13 @@ export function useVesselEvents() {
   async function startSearch(query: string, filters?: Record<string, string>): Promise<void> {
     searchBuckets.value = {}
     isSearching.value = true
-    const searchId = await vesselApi.searchAll(query, filters, 1)
-    activeSearchId.value = searchId
+    try {
+      const searchId = await vesselApi.searchAll(query, filters, 1)
+      activeSearchId.value = searchId
+    } catch (err) {
+      isSearching.value = false
+      throw err
+    }
   }
 
   async function resolveDomainPrompt(allow: boolean, permanent: boolean): Promise<void> {

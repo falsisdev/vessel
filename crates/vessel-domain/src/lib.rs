@@ -52,6 +52,7 @@ mod tests {
 
     #[test]
     fn domain_version_matches_workspace() {
-        assert_eq!(domain_version(), "0.1.0");
+        assert!(!domain_version().is_empty());
+        assert_eq!(domain_version(), env!("CARGO_PKG_VERSION"));
     }
 }
