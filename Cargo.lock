@@ -2079,6 +2079,7 @@ dependencies = [
  "rustls-platform-verifier",
  "serde",
  "serde_json",
+ "serde_urlencoded",
  "sync_wrapper",
  "tokio",
  "tokio-rustls",
@@ -2975,9 +2976,22 @@ dependencies = [
  "tokio",
  "tokio-util",
  "vessel-domain",
+ "vessel-metadata",
  "vessel-plugin-rt",
  "vessel-proxy",
  "vessel-storage",
+]
+
+[[package]]
+name = "vessel-metadata"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tokio",
+ "vessel-domain",
 ]
 
 [[package]]

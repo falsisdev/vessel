@@ -1,0 +1,17 @@
+[package]
+name = "vessel-metadata"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+vessel-domain = { path = "../vessel-domain" }
+
+[dev-dependencies]
+axum.workspace = true

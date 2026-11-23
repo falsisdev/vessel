@@ -11,11 +11,12 @@ use tokio::sync::Mutex;
 use tokio::task::{JoinHandle, JoinSet};
 use tokio_util::sync::CancellationToken;
 use vessel_domain::{
-    ContentProvider, DomainGrantSource, EngineEvent, EventSink, HomeFeed, MediaDetail, MediaRef,
-    MediaType, PlaybackProgress, PlaybackRequest, PlayerBackend, PluginId, StoragePort,
-    StreamCandidate, StreamResult, SubtitleSource, SubtitleTrack, VesselError, VesselPaths,
-    VesselResult,
+    ContentProvider, DomainGrantSource, EngineEvent, EventSink, ExternalIds, HomeFeed, MediaDetail,
+    MediaRef, MediaType, PlaybackProgress, PlaybackRequest, PlayerBackend, PluginId, SecretStore,
+    StoragePort, StreamCandidate, StreamResult, SubtitleSource, SubtitleTrack, VesselError,
+    VesselPaths, VesselResult,
 };
+use vessel_metadata::{CanonicalMetadata, MetaEndpoints, MetadataService, merge_detail};
 use vessel_plugin_rt::{LoadedPackage, ResolvedSource, SourceResolver, TsCompileCache};
 use vessel_proxy::ProxyServer;
 use vessel_storage::{SqliteSecretStore, SqliteStorage, StorageActor, StoredPlugin};
@@ -35,12 +36,17 @@ fn next_unique_id(prefix: &str) -> String {
     format!("{prefix}-{seq}-{hex}")
 }
 
+/// Secret key name used when a user optionally configures their own TMDB v3 API key.
+pub const TMDB_API_KEY_SECRET: &str = "tmdb_api_key";
+
 /// Parameters for resolving a `StreamCandidate` and starting playback cleanly.
 #[derive(Debug, Clone)]
 pub struct PlayCandidateRequest {
     pub media: MediaRef,
+    pub canonical_id: Option<String>,
     pub season: u32,
     pub episode: u32,
+    pub absolute_episode: Option<u32>,
     pub media_type: MediaType,
     pub candidate: StreamCandidate,
     pub extra_subtitles: Vec<SubtitleTrack>,
@@ -66,8 +72,10 @@ pub struct VesselEngine {
     event_sink: Arc<dyn EventSink>,
     ts_cache: Arc<TsCompileCache>,
     source_resolver: SourceResolver,
+    metadata: MetadataService,
     pool: Arc<PluginPool>,
     always_proxy: AtomicBool,
+    metadata_enabled: AtomicBool,
     active_search: Arc<Mutex<Option<(String, CancellationToken)>>>,
 }
 
@@ -132,10 +140,27 @@ impl VesselEngine {
             event_sink,
             ts_cache,
             source_resolver,
+            metadata: MetadataService::default(),
             pool,
             always_proxy: AtomicBool::new(always_proxy),
+            metadata_enabled: AtomicBool::new(true),
             active_search: Arc::new(Mutex::new(None)),
         })
+    }
+
+    /// Replaces metadata service endpoints (useful for tests or mirror overrides).
+    pub fn set_metadata_endpoints(&mut self, endpoints: MetaEndpoints) {
+        self.metadata = MetadataService::new(endpoints);
+    }
+
+    /// Returns whether background external metadata enrichment (AniList/TMDB/Cinemeta) is active.
+    pub fn metadata_enabled(&self) -> bool {
+        self.metadata_enabled.load(Ordering::Acquire)
+    }
+
+    /// Privacy toggle disabling/enabling all outbound metadata enrichment requests.
+    pub fn set_metadata_enabled(&self, enabled: bool) {
+        self.metadata_enabled.store(enabled, Ordering::Release);
     }
 
     /// Borrows the SQLite persistence repository.
@@ -409,6 +434,46 @@ impl VesselEngine {
         provider.details(native_id).await
     }
 
+    /// Returns the plugin's immediate `MediaDetail` (0 ms UI latency) and runs background
+    /// enrichment (`AniList` / `TMDB` / `Cinemeta`), emitting `EngineEvent::MetadataEnriched`.
+    pub async fn details_with_enrichment(
+        &self,
+        plugin_id: &PluginId,
+        native_id: &str,
+        preferred_lang: &str,
+    ) -> VesselResult<(MediaDetail, JoinHandle<()>)> {
+        let raw = self.details(plugin_id, native_id).await?;
+        let storage = Arc::clone(&self.storage);
+        let secrets = Arc::clone(&self.secrets);
+        let metadata = self.metadata.clone();
+        let sink = Arc::clone(&self.event_sink);
+        let enabled = self.metadata_enabled();
+        let pid = plugin_id.clone();
+        let raw_clone = raw.clone();
+        let lang = preferred_lang.to_owned();
+
+        let task = tokio::spawn(async move {
+            let _ = run_enrichment_and_emit(
+                &storage, &secrets, &metadata, &sink, &pid, &raw_clone, &lang, enabled,
+            )
+            .await;
+        });
+
+        Ok((raw, task))
+    }
+
+    /// Persists a user manual canonical metadata binding or disables enrichment for `media`.
+    pub async fn set_metadata_override(
+        &self,
+        media: &MediaRef,
+        canonical_id: Option<&str>,
+        is_disabled: bool,
+    ) -> VesselResult<()> {
+        self.storage
+            .set_metadata_override(media, canonical_id, is_disabled)
+            .await
+    }
+
     /// Resolves playable stream candidates for an episode or movie from `plugin_id`.
     pub async fn streams(
         &self,
@@ -457,12 +522,29 @@ impl VesselEngine {
 
         let start_position_ms = match req.start_position_ms {
             Some(pos) => pos,
-            None => self
-                .storage
-                .get_progress(&req.media, req.season, req.episode)
-                .await?
-                .filter(|p| !p.completed)
-                .map_or(0, |p| p.position_ms),
+            None => {
+                if let Some(direct) = self
+                    .storage
+                    .get_progress(&req.media, req.season, req.episode)
+                    .await?
+                {
+                    if direct.completed {
+                        0
+                    } else {
+                        direct.position_ms
+                    }
+                } else if let (Some(canonical_id), Some(abs_ep)) =
+                    (req.canonical_id.as_deref(), req.absolute_episode)
+                {
+                    self.storage
+                        .get_watch_progress_by_canonical(canonical_id, abs_ep)
+                        .await?
+                        .filter(|p| !p.completed)
+                        .map_or(0, |p| p.position_ms)
+                } else {
+                    0
+                }
+            }
         };
 
         let headers = if proxied {
@@ -531,6 +613,99 @@ impl VesselEngine {
         self.cancel_active_search().await;
         self.pool.shutdown_all().await;
     }
+}
+
+fn apply_canonical_override_hint(external_ids: &mut ExternalIds, canonical_id: &str) {
+    if let Some(rest) = canonical_id.strip_prefix("anilist:") {
+        if let Ok(id) = rest.parse::<u64>() {
+            external_ids.anilist = Some(id);
+        }
+    } else if let Some(rest) = canonical_id.strip_prefix("tmdb:movie:") {
+        if let Ok(id) = rest.parse::<u64>() {
+            external_ids.tmdb = Some(id);
+        }
+    } else if let Some(rest) = canonical_id.strip_prefix("tmdb:tv:") {
+        if let Ok(id) = rest.parse::<u64>() {
+            external_ids.tmdb = Some(id);
+        }
+    } else if let Some(rest) = canonical_id.strip_prefix("imdb:") {
+        external_ids.imdb = Some(rest.to_owned());
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn run_enrichment_and_emit(
+    storage: &SqliteStorage,
+    secrets: &SqliteSecretStore,
+    metadata: &MetadataService,
+    sink: &Arc<dyn EventSink>,
+    plugin_id: &PluginId,
+    raw: &MediaDetail,
+    preferred_lang: &str,
+    metadata_enabled: bool,
+) -> VesselResult<Option<MediaDetail>> {
+    if !metadata_enabled {
+        return Ok(None);
+    }
+
+    let media_ref = MediaRef::new(plugin_id.clone(), raw.native_id.clone())?;
+    let mut query_detail = raw.clone();
+
+    if let Some(override_entry) = storage.get_metadata_override(&media_ref).await? {
+        if override_entry.is_disabled {
+            return Ok(None);
+        }
+        if let Some(ref cid) = override_entry.canonical_id {
+            apply_canonical_override_hint(&mut query_detail.external_ids, cid);
+        }
+    }
+
+    let cache_key = format!(
+        "meta:{}:{}:{}",
+        plugin_id.as_str(),
+        raw.native_id,
+        preferred_lang.to_ascii_lowercase()
+    );
+    if let Some(cached_json) = storage.get_metadata_cache(&cache_key).await?
+        && let Ok(cached_canon) = serde_json::from_str::<CanonicalMetadata>(&cached_json)
+    {
+        let merged = merge_detail(raw, &cached_canon, preferred_lang);
+        sink.emit(EngineEvent::MetadataEnriched {
+            plugin_id: plugin_id.clone(),
+            native_id: raw.native_id.clone(),
+            detail: Box::new(merged.clone()),
+        });
+        return Ok(Some(merged));
+    }
+
+    let tmdb_key = secrets.get(TMDB_API_KEY_SECRET).await?;
+    let outcome = metadata
+        .enrich_detail(
+            &query_detail,
+            preferred_lang,
+            tmdb_key.as_deref(),
+            metadata_enabled,
+        )
+        .await?;
+
+    if let Some(ref canonical) = outcome.canonical
+        && let Ok(json) = serde_json::to_string(canonical)
+    {
+        let _ = storage
+            .upsert_metadata_cache(&cache_key, &json, "2099-01-01T00:00:00Z")
+            .await;
+    }
+
+    if outcome.canonical.is_some() {
+        sink.emit(EngineEvent::MetadataEnriched {
+            plugin_id: plugin_id.clone(),
+            native_id: raw.native_id.clone(),
+            detail: Box::new(outcome.detail.clone()),
+        });
+        return Ok(Some(outcome.detail));
+    }
+
+    Ok(None)
 }
 
 #[cfg(test)]
@@ -842,8 +1017,10 @@ mod tests {
         let playback_url = engine
             .play_candidate(PlayCandidateRequest {
                 media: media.clone(),
+                canonical_id: Some("anilist:918".into()),
                 season: 1,
                 episode: 50,
+                absolute_episode: Some(50),
                 media_type: MediaType::Series,
                 candidate: stream_res.streams[0].clone(),
                 extra_subtitles: Vec::new(),
@@ -904,5 +1081,157 @@ mod tests {
                 .to_string()
                 .contains("[VesselTimeoutError]")
         );
+    }
+
+    #[tokio::test]
+    async fn enriches_details_in_background_and_resumes_across_plugins_by_absolute_episode() {
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind mock meta");
+        let addr = listener.local_addr().expect("addr");
+        let base = format!("http://{addr}");
+
+        let app = Router::new().route(
+            "/anilist",
+            axum::routing::post(|| async {
+                axum::Json(serde_json::json!({
+                    "data": {
+                        "Media": {
+                            "id": 918,
+                            "idMal": 918,
+                            "title": { "romaji": "Gintama", "english": "Gintama", "native": "銀魂" },
+                            "description": "Odd Jobs Gin.",
+                            "seasonYear": 2006,
+                            "averageScore": 89.0,
+                            "genres": ["Action", "Comedy"],
+                            "coverImage": { "extraLarge": "https://cdn.anilist.example/918-hd.jpg" },
+                            "episodes": 201
+                        }
+                    }
+                }))
+            }),
+        );
+        tokio::spawn(async move {
+            let _ = axum::serve(listener, app).await;
+        });
+
+        let (mut engine, player, recorder) = test_engine().await;
+        engine.set_metadata_endpoints(vessel_metadata::MetaEndpoints {
+            anilist_graphql: format!("{base}/anilist"),
+            tmdb_api_base: format!("{base}/tmdb"),
+            tmdb_image_base: "https://image.tmdb.org/t/p".into(),
+            cinemeta_base: format!("{base}/cinemeta"),
+        });
+
+        let plugin_a_ts = r#"
+            export default {
+                async getDetails(nativeId: string) {
+                    return {
+                        pluginId: "anthology",
+                        nativeId,
+                        type: "series",
+                        isAnime: true,
+                        title: "Gintama",
+                        year: 2006,
+                        episodes: [{ streamId: "a-s2e1", season: 2, episode: 1, absoluteEpisode: 50 }]
+                    };
+                }
+            };
+        "#;
+        engine
+            .install_package(
+                build_plugin_package("anthology", plugin_a_ts),
+                None,
+                "local",
+                "/tmp/a",
+            )
+            .await
+            .expect("install anthology");
+
+        let anthology = PluginId::new("anthology").expect("id a");
+        let (raw, enrich_task) = engine
+            .details_with_enrichment(&anthology, "/gintama", "en")
+            .await
+            .expect("details");
+        assert_eq!(raw.poster, None);
+        enrich_task.await.expect("join enrich");
+
+        {
+            let events = recorder.events.lock().expect("lock events");
+            assert!(events.iter().any(|ev| matches!(
+                ev,
+                EngineEvent::MetadataEnriched { detail, .. }
+                    if detail.poster.as_deref() == Some("https://cdn.anilist.example/918-hd.jpg")
+            )));
+        }
+
+        let media_a = MediaRef::new(anthology, "/gintama").expect("media a");
+        engine
+            .record_progress(&PlaybackProgress {
+                media: media_a.clone(),
+                stream_id: "a-s2e1".into(),
+                canonical_id: Some("anilist:918".into()),
+                season: 2,
+                episode: 1,
+                absolute_episode: Some(50),
+                position_ms: 123_456,
+                duration_ms: 1_440_000,
+                completed: false,
+                last_watched_at: "2026-11-23T11:00:00Z".into(),
+            })
+            .await
+            .expect("record progress on plugin a");
+
+        let anizium = PluginId::new("anizium").expect("id b");
+        let media_b = MediaRef::new(anizium, "/anizium/gintama").expect("media b");
+        engine
+            .play_candidate(PlayCandidateRequest {
+                media: media_b,
+                canonical_id: Some("anilist:918".into()),
+                season: 1,
+                episode: 50,
+                absolute_episode: Some(50),
+                media_type: MediaType::Series,
+                candidate: vessel_domain::StreamCandidate {
+                    url: "https://cdn.anizium.example/50.mp4".into(),
+                    kind: StreamKind::Mp4,
+                    quality: Some("1080p".into()),
+                    label: "Anizium Direct".into(),
+                    language: Some("tr".into()),
+                    audio_type: None,
+                    priority: None,
+                    is_default: true,
+                    flags: Vec::new(),
+                    headers: BTreeMap::new(),
+                    needs_extractor: false,
+                    subtitles: Vec::new(),
+                },
+                extra_subtitles: Vec::new(),
+                start_position_ms: None,
+                title: Some("Gintama — 50".into()),
+            })
+            .await
+            .expect("play on plugin b");
+
+        {
+            let loaded = player.loaded.lock().expect("lock loaded");
+            assert_eq!(loaded.len(), 1);
+            assert_eq!(loaded[0].start_position_ms, 123_456);
+            assert_eq!(loaded[0].url, "https://cdn.anizium.example/50.mp4");
+        }
+
+        engine
+            .set_metadata_override(&media_a, None, true)
+            .await
+            .expect("disable metadata override");
+        let prev_count = recorder.events.lock().expect("lock").len();
+        let (_, disabled_task) = engine
+            .details_with_enrichment(&media_a.plugin_id, "/gintama", "en")
+            .await
+            .expect("details after disable");
+        disabled_task.await.expect("join disabled");
+        assert_eq!(recorder.events.lock().expect("lock").len(), prev_count);
+
+        engine.shutdown().await;
     }
 }

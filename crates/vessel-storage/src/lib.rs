@@ -3,6 +3,7 @@
 pub mod actor;
 pub mod backup;
 pub mod library;
+pub mod metadata;
 pub mod plugins;
 pub mod secret;
 pub mod store;
@@ -14,6 +15,7 @@ use vessel_domain::{VesselError, VesselPaths, VesselResult};
 
 pub use actor::StorageActor;
 pub use backup::{BACKUP_SCHEMA_VERSION, BackupImportMode, BackupPluginEntry, VesselBackup};
+pub use metadata::MetadataOverride;
 pub use plugins::StoredPlugin;
 pub use secret::SqliteSecretStore;
 pub use store::{SqliteStorage, UI_PREFERENCES_KEY};

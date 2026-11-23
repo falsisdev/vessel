@@ -277,6 +277,65 @@ impl SqliteStorage {
             .await
     }
 
+    /// Reads the most recent cross-plugin watch progress matching `(canonical_id, absolute_episode)`.
+    ///
+    /// Preserves playback continuity across providers with incompatible season layouts
+    /// (e.g. `Gintama S2E1` vs `Anizium S1E50`).
+    pub async fn get_watch_progress_by_canonical(
+        &self,
+        canonical_id: &str,
+        absolute_episode: u32,
+    ) -> VesselResult<Option<PlaybackProgress>> {
+        let canonical_id = canonical_id.trim().to_owned();
+        if canonical_id.is_empty() || absolute_episode == 0 {
+            return Ok(None);
+        }
+
+        self.actor()
+            .execute(move |db| {
+                let row = db
+                    .conn()
+                    .query_row(
+                        "SELECT plugin_id, native_id, season, episode,
+                                stream_id, canonical_id, absolute_episode, position_ms,
+                                duration_ms, completed, last_watched_at
+                         FROM watch_progress
+                         WHERE canonical_id = ?1 AND absolute_episode = ?2
+                         ORDER BY last_watched_at DESC
+                         LIMIT 1",
+                        (&canonical_id, absolute_episode),
+                        |row| {
+                            let plugin_raw: String = row.get(0)?;
+                            let native_id: String = row.get(1)?;
+                            let season: u32 = row.get(2)?;
+                            let episode: u32 = row.get(3)?;
+                            let raw = RawProgressRow {
+                                stream_id: row.get(4)?,
+                                canonical_id: row.get(5)?,
+                                absolute_episode: row.get(6)?,
+                                position_ms: row.get(7)?,
+                                duration_ms: row.get(8)?,
+                                completed: row.get(9)?,
+                                last_watched_at: row.get(10)?,
+                            };
+                            Ok((plugin_raw, native_id, season, episode, raw))
+                        },
+                    )
+                    .optional()
+                    .map_err(map_sql_err)?;
+
+                match row {
+                    Some((plugin_raw, native_id, season, episode, raw)) => {
+                        let plugin_id = PluginId::new(plugin_raw)?;
+                        let media = MediaRef::new(plugin_id, native_id)?;
+                        Ok(Some(raw.into_domain(media, season, episode)?))
+                    }
+                    None => Ok(None),
+                }
+            })
+            .await
+    }
+
     /// Inserts or updates watch progress for `(plugin_id, native_id, season, episode)`.
     pub async fn upsert_watch_progress(&self, progress: &PlaybackProgress) -> VesselResult<()> {
         let row_id = format!(
