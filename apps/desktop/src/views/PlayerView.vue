@@ -81,13 +81,19 @@ const loadingSubtitle = shallowRef(false)
 const subtitleError = shallowRef('')
 const pendingSeekSeconds = ref<number | null>(null)
 const playableSrc = ref<string>('')
+const gestureLabel = ref<string>('')
 
 let hideTimer: number | null = null
 let progressTimer: number | null = null
 let subSaveTimer: number | null = null
+let gestureTimer: number | null = null
+let touchSeekTimer: number | null = null
+let touchSeekDelta = 0
+let lastPinchAt = 0
 let hlsInstance: Hls | null = null
 let mpegtsPlayer: mpegts.Player | null = null
 let forceHlsJsNextTry = false
+let userExplicitPause = false
 
 function destroyMediaEngines(): void {
   if (hlsInstance) {
@@ -193,9 +199,10 @@ async function persistWatchProgress(forceCompleted = false): Promise<void> {
   }
 }
 
-async function restoreSavedProgress(ep: Episode): Promise<void> {
-  if (isLive.value || (session.value?.startPositionMs && session.value.startPositionMs > 0)) {
-    return
+async function resolveDesiredStartSeconds(ep: Episode | null): Promise<number> {
+  if (isLive.value || !ep) return 0
+  if (session.value?.startPositionMs && session.value.startPositionMs > 2000) {
+    return session.value.startPositionMs / 1000
   }
   try {
     const saved = await vesselApi.getWatchProgress(
@@ -205,15 +212,62 @@ async function restoreSavedProgress(ep: Episode): Promise<void> {
       ep.episode,
     )
     if (saved && !saved.completed && saved.positionMs > 2000) {
-      pendingSeekSeconds.value = saved.positionMs / 1000
-      const el = videoRef.value
-      if (el && el.readyState >= 1) {
-        el.currentTime = pendingSeekSeconds.value
-        pendingSeekSeconds.value = null
-      }
+      return saved.positionMs / 1000
     }
   } catch {
     // Ignore if unavailable
+  }
+  return 0
+}
+
+function showGestureHud(label: string): void {
+  gestureLabel.value = label
+  if (gestureTimer !== null) window.clearTimeout(gestureTimer)
+  gestureTimer = window.setTimeout(() => {
+    gestureLabel.value = ''
+  }, 950)
+}
+
+function handleTouchpadWheel(ev: WheelEvent): void {
+  if (isLocked.value) return
+  if ((ev.target as HTMLElement | null)?.closest('.cs-drawer')) return
+
+  if (ev.ctrlKey) {
+    ev.preventDefault()
+    const now = Date.now()
+    if (now - lastPinchAt > 450 && Math.abs(ev.deltaY) > 2) {
+      lastPinchAt = now
+      fitMode.value = fitMode.value === 'contain' ? 'cover' : 'contain'
+      showGestureHud(fitMode.value === 'cover' ? 'Fill Screen' : 'Fit Screen')
+    }
+    return
+  }
+
+  const absX = Math.abs(ev.deltaX)
+  const absY = Math.abs(ev.deltaY)
+  if (absX > absY && absX > 2 && !isLive.value && duration.value > 0) {
+    ev.preventDefault()
+    touchSeekDelta += ev.deltaX * 0.14
+    const rounded = Math.round(touchSeekDelta)
+    if (rounded !== 0) {
+      showGestureHud(rounded > 0 ? `+${rounded}s »` : `« ${rounded}s`)
+    }
+    if (touchSeekTimer !== null) window.clearTimeout(touchSeekTimer)
+    touchSeekTimer = window.setTimeout(() => {
+      const commit = Math.round(touchSeekDelta)
+      touchSeekDelta = 0
+      if (commit !== 0) {
+        seekBy(commit)
+      }
+    }, 150)
+    return
+  }
+
+  if (absY > absX && absY > 2) {
+    ev.preventDefault()
+    const nextVol = Math.min(1, Math.max(0, volume.value - ev.deltaY * 0.0018))
+    setVolumeLevel(nextVol)
+    showGestureHud(`Volume ${Math.round(nextVol * 100)}%`)
   }
 }
 
@@ -404,10 +458,12 @@ function togglePlay(): void {
   const el = videoRef.value
   if (!el || isLocked.value) return
   if (el.paused) {
+    userExplicitPause = false
     void el.play().catch((err) => {
       playbackError.value = String(err)
     })
   } else {
+    userExplicitPause = true
     el.pause()
   }
   scheduleHideControls()
@@ -558,9 +614,6 @@ async function switchEpisode(ep: Episode): Promise<void> {
     }
     pendingSeekSeconds.value = 0
     updateEpisodeSession(ep, res.streams, res.subtitles, 0)
-    if (!isLive.value) {
-      await restoreSavedProgress(ep)
-    }
     activeDrawer.value = null
   } catch (err) {
     pushToast('error', String(err))
@@ -618,13 +671,47 @@ function onLoadedMetadata(): void {
   el.playbackRate = isLive.value ? 1 : playbackRate.value
   el.volume = volume.value
   el.muted = isMuted.value
-  if (pendingSeekSeconds.value !== null && pendingSeekSeconds.value > 0) {
-    el.currentTime = pendingSeekSeconds.value
+  if (
+    pendingSeekSeconds.value !== null &&
+    pendingSeekSeconds.value > 2 &&
+    !hlsInstance &&
+    (!el.duration || pendingSeekSeconds.value < el.duration - 2)
+  ) {
+    const target = pendingSeekSeconds.value
     pendingSeekSeconds.value = null
-  } else if (session.value?.startPositionMs && session.value.startPositionMs > 0) {
-    el.currentTime = session.value.startPositionMs / 1000
+    el.currentTime = target
+    currentTime.value = target
+    return
+  }
+  if (!userExplicitPause) {
+    void el.play().catch(() => {})
   }
   isBuffering.value = false
+}
+
+function onSeeked(): void {
+  const el = videoRef.value
+  if (!el) return
+  isBuffering.value = false
+  if (!userExplicitPause && el.paused) {
+    void el.play().catch(() => {})
+  }
+}
+
+function onCanPlay(): void {
+  const el = videoRef.value
+  if (!el) return
+  if (pendingSeekSeconds.value !== null && pendingSeekSeconds.value > 2 && !hlsInstance) {
+    const target = pendingSeekSeconds.value
+    pendingSeekSeconds.value = null
+    el.currentTime = target
+    currentTime.value = target
+    return
+  }
+  isBuffering.value = false
+  if (!userExplicitPause && el.paused) {
+    void el.play().catch(() => {})
+  }
 }
 
 function onTimeUpdate(): void {
@@ -776,14 +863,15 @@ async function attachMediaSource(
   src: string,
   stream: StreamCandidate,
   preferHlsJs = false,
+  startSec = 0,
 ): Promise<void> {
   await nextTick()
   const el = videoRef.value
   if (!el || !src) return
 
+  userExplicitPause = false
   destroyMediaEngines()
-  el.removeAttribute('src')
-  el.load()
+  el.pause()
 
   const lowerSrc = src.toLowerCase()
   const looksMpegTs =
@@ -829,8 +917,12 @@ async function attachMediaSource(
     const hls = new Hls({
       enableWorker: true,
       lowLatencyMode: isLive.value,
+      startPosition: startSec > 2 ? startSec : -1,
     })
     hlsInstance = hls
+    hls.on(Hls.Events.MANIFEST_PARSED, () => {
+      void el.play().catch(() => {})
+    })
     hls.on(Hls.Events.ERROR, (_ev, data) => {
       if (data.fatal) {
         if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
@@ -852,18 +944,19 @@ async function attachMediaSource(
     })
     hls.loadSource(src)
     hls.attachMedia(el)
-    void el.play().catch(() => {})
     return
   }
 
+  pendingSeekSeconds.value = startSec > 2 ? startSec : null
   el.src = src
-  el.load()
-  void el.play().catch(() => {})
 }
+
+let attachSeq = 0
 
 watch(
   () => activeStream.value,
   async (stream) => {
+    const seq = ++attachSeq
     destroyMediaEngines()
     forceHlsJsNextTry = false
     playbackError.value = ''
@@ -872,14 +965,13 @@ watch(
     duration.value = 0
     playableSrc.value = ''
     if (!stream) return
-    let resolved = stream.url
-    try {
-      resolved = await vesselApi.preparePlaybackUrl(stream)
-    } catch {
-      resolved = stream.url
-    }
+    const [resolved, startSec] = await Promise.all([
+      vesselApi.preparePlaybackUrl(stream).catch(() => stream.url),
+      resolveDesiredStartSeconds(currentEpisode.value),
+    ])
+    if (seq !== attachSeq) return
     playableSrc.value = resolved
-    await attachMediaSource(resolved, stream, false)
+    await attachMediaSource(resolved, stream, false, startSec)
   },
   { immediate: true },
 )
@@ -888,11 +980,9 @@ onMounted(async () => {
   window.addEventListener('keydown', handleKeydown)
   document.addEventListener('fullscreenchange', onFullscreenChange)
   await ensureSessionLoaded()
-  if (currentEpisode.value) {
-    await restoreSavedProgress(currentEpisode.value)
-  }
   if (playableSrc.value && activeStream.value && !hlsInstance && !mpegtsPlayer) {
-    await attachMediaSource(playableSrc.value, activeStream.value, forceHlsJsNextTry)
+    const startSec = await resolveDesiredStartSeconds(currentEpisode.value)
+    await attachMediaSource(playableSrc.value, activeStream.value, forceHlsJsNextTry, startSec)
   }
   progressTimer = window.setInterval(() => {
     if (isPlaying.value) {
@@ -910,6 +1000,8 @@ onUnmounted(() => {
   if (hideTimer !== null) window.clearTimeout(hideTimer)
   if (progressTimer !== null) window.clearInterval(progressTimer)
   if (subSaveTimer !== null) window.clearTimeout(subSaveTimer)
+  if (gestureTimer !== null) window.clearTimeout(gestureTimer)
+  if (touchSeekTimer !== null) window.clearTimeout(touchSeekTimer)
   if (document.fullscreenElement) {
     void document.exitFullscreen().catch(() => {})
   }
@@ -923,6 +1015,7 @@ onUnmounted(() => {
     :class="{ 'hud-hidden': !controlsVisible && isPlaying && !activeDrawer && !isLocked }"
     @mousemove="handleStagePointerMove"
     @mousedown="scheduleHideControls"
+    @wheel="handleTouchpadWheel"
   >
     <!-- Video Surface -->
     <video
@@ -930,19 +1023,26 @@ onUnmounted(() => {
       ref="videoRef"
       class="cs-video"
       :class="`fit-${fitMode}`"
-      autoplay
       playsinline
       @click="togglePlay"
       @dblclick="toggleFullscreen"
-      @play="isPlaying = true; isBuffering = false; scheduleHideControls()"
+      @play="userExplicitPause = false; isPlaying = true; isBuffering = false; scheduleHideControls()"
       @pause="isPlaying = false; scheduleHideControls(); void persistWatchProgress()"
       @ended="isPlaying = false; void persistWatchProgress(true)"
       @waiting="isBuffering = true"
-      @canplay="isBuffering = false"
+      @canplay="onCanPlay"
+      @seeked="onSeeked"
       @loadedmetadata="onLoadedMetadata"
       @timeupdate="onTimeUpdate"
       @error="onVideoError"
     />
+
+    <!-- Touchpad Gesture Feedback Pill -->
+    <Transition name="fade-fast">
+      <div v-if="gestureLabel" class="cs-gesture-pill" aria-live="polite">
+        {{ gestureLabel }}
+      </div>
+    </Transition>
 
     <!-- In-App Rendered Subtitle Overlay (SRT / VTT / ASS / Inline + Sync Delay) -->
     <div
@@ -1293,10 +1393,10 @@ onUnmounted(() => {
           >
             <div class="cs-drawer-item-row">
               <img
-                v-if="isLive && ep.thumbnail"
-                :src="ep.thumbnail"
+                v-if="ep.thumbnail || (!isLive && (detail?.backdrop || detail?.poster))"
+                :src="ep.thumbnail || detail?.backdrop || detail?.poster"
                 alt=""
-                class="cs-channel-thumb"
+                :class="isLive ? 'cs-channel-thumb' : 'cs-ep-thumb'"
                 loading="lazy"
               />
               <div class="cs-item-main">
@@ -1306,7 +1406,7 @@ onUnmounted(() => {
                 <span class="cs-item-title">{{
                   ep.title ?? (isLive ? `Channel ${ep.episode}` : `Episode ${ep.episode}`)
                 }}</span>
-                <span v-if="ep.overview" class="cs-item-sub">{{ ep.overview }}</span>
+                <span v-if="ep.overview" class="cs-item-sub cs-ep-desc">{{ ep.overview }}</span>
               </div>
             </div>
             <Check
@@ -2271,6 +2371,42 @@ onUnmounted(() => {
   border: 1px solid rgba(255, 255, 255, 0.1);
   padding: 2px;
   flex-shrink: 0;
+}
+
+.cs-ep-thumb {
+  width: 88px;
+  aspect-ratio: 16 / 9;
+  border-radius: 7px;
+  object-fit: cover;
+  background: rgba(10, 11, 18, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  flex-shrink: 0;
+}
+
+.cs-ep-desc {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  white-space: normal;
+  line-height: 1.35;
+}
+
+.cs-gesture-pill {
+  position: absolute;
+  top: 4.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 25;
+  padding: 0.45rem 1.05rem;
+  border-radius: 999px;
+  background: rgba(10, 11, 18, 0.84);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: #ffffff;
+  font-size: 0.88rem;
+  font-weight: 700;
+  pointer-events: none;
+  backdrop-filter: blur(12px);
 }
 
 @keyframes livePulse {

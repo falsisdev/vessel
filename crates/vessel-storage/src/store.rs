@@ -377,4 +377,69 @@ mod tests {
             .expect("delete library item");
         assert!(port.list_library(None).await.expect("list all").is_empty());
     }
+
+    #[tokio::test]
+    async fn continue_watching_reads_meta2_cache_and_invalidates_cleanly() {
+        let actor = StorageActor::open_in_memory().await.expect("open actor");
+        let storage = SqliteStorage::new(actor);
+
+        let anthology = PluginId::new("anthology").expect("valid plugin id");
+        let gintama = MediaRef::new(anthology.clone(), "anime/918").expect("valid media ref");
+
+        storage
+            .upsert_watch_progress(&PlaybackProgress {
+                media: gintama.clone(),
+                stream_id: "/watch/918-3".into(),
+                canonical_id: Some("anilist:918".into()),
+                season: 1,
+                episode: 3,
+                absolute_episode: Some(3),
+                title: None,
+                poster_url: None,
+                backdrop_url: None,
+                episode_title: None,
+                position_ms: 180_000,
+                duration_ms: 1_440_000,
+                completed: false,
+                last_watched_at: "2026-11-23T21:00:00Z".into(),
+            })
+            .await
+            .expect("save watch progress");
+
+        storage
+            .upsert_metadata_cache(
+                "meta2:anthology:anime/918:en",
+                r#"{"title":"Gintama","poster":"https://img.example/poster.jpg","backdrop":"https://img.example/backdrop.jpg"}"#,
+                "2099-01-01T00:00:00Z",
+            )
+            .await
+            .expect("cache metadata");
+
+        let cw = storage
+            .list_continue_watching(12)
+            .await
+            .expect("list continue watching must query metadata_cache cleanly");
+        assert_eq!(cw.len(), 1);
+        assert_eq!(cw[0].title, "Gintama");
+        assert_eq!(
+            cw[0].poster.as_deref(),
+            Some("https://img.example/poster.jpg")
+        );
+        assert_eq!(
+            cw[0].backdrop.as_deref(),
+            Some("https://img.example/backdrop.jpg")
+        );
+
+        storage
+            .invalidate_metadata_cache(&anthology, "anime/918")
+            .await
+            .expect("invalidate meta2 cache");
+        assert!(
+            storage
+                .get_metadata_cache("meta2:anthology:anime/918:en")
+                .await
+                .expect("read invalidated cache")
+                .is_none()
+        );
+    }
 }

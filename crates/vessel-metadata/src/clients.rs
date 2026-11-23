@@ -426,8 +426,37 @@ struct CinemetaVideo {
     name: Option<String>,
     title: Option<String>,
     overview: Option<String>,
+    description: Option<String>,
     thumbnail: Option<String>,
     released: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AniZipResponse {
+    #[serde(default)]
+    episodes: BTreeMap<String, AniZipEpisode>,
+    mappings: Option<AniZipMappings>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AniZipMappings {
+    imdb_id: Option<String>,
+    themoviedb_id: Option<u64>,
+    mal_id: Option<u64>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AniZipEpisode {
+    season_number: Option<u32>,
+    episode_number: Option<u32>,
+    absolute_episode_number: Option<u32>,
+    title: Option<BTreeMap<String, String>>,
+    overview: Option<String>,
+    image: Option<String>,
+    air_date: Option<String>,
 }
 
 fn parse_year_prefix(s: Option<&str>) -> Option<u16> {
@@ -479,6 +508,7 @@ fn cinemeta_to_canonical(meta: CinemetaMeta) -> CanonicalMetadata {
                 .filter(|t| !t.is_empty());
             let overview = video
                 .overview
+                .or(video.description)
                 .map(|o| o.trim().to_owned())
                 .filter(|o| !o.is_empty());
             let thumbnail = video
@@ -557,8 +587,10 @@ impl MetadataClients {
         tmdb_api_key: Option<&str>,
     ) -> VesselResult<Option<CanonicalMetadata>> {
         if let Some(anilist_id) = detail.external_ids.anilist
-            && let Some(meta) = self.fetch_anilist_by_id(anilist_id).await?
+            && let Some(mut meta) = self.fetch_anilist_by_id(anilist_id).await?
         {
+            self.enrich_anime_episodes(anilist_id, preferred_lang, tmdb_api_key, &mut meta)
+                .await;
             return Ok(Some(meta));
         }
 
@@ -580,10 +612,14 @@ impl MetadataClients {
         }
 
         if detail.is_anime
-            && let Some(meta) = self
+            && let Some(mut meta) = self
                 .search_anilist_confident(&detail.title, detail.year)
                 .await?
         {
+            if let Some(anilist_id) = meta.external_ids.anilist {
+                self.enrich_anime_episodes(anilist_id, preferred_lang, tmdb_api_key, &mut meta)
+                    .await;
+            }
             return Ok(Some(meta));
         }
 
@@ -613,6 +649,113 @@ impl MetadataClients {
             })
             .await?;
         Ok(candidates.into_iter().next().map(anilist_to_canonical))
+    }
+
+    async fn enrich_anime_episodes(
+        &self,
+        anilist_id: u64,
+        preferred_lang: &str,
+        tmdb_api_key: Option<&str>,
+        meta: &mut CanonicalMetadata,
+    ) {
+        // Keep test harnesses deterministic & offline when endpoints target localhost mocks.
+        if self.endpoints.anilist_graphql.contains("127.0.0.1")
+            || self.endpoints.anilist_graphql.contains("localhost")
+        {
+            return;
+        }
+
+        let url = format!("https://api.ani.zip/mappings?anilist_id={anilist_id}");
+        if let Ok(resp) = self.http.get(&url).send().await
+            && resp.status().is_success()
+            && let Ok(body) = resp.json::<AniZipResponse>().await
+        {
+            if let Some(maps) = body.mappings {
+                meta.external_ids.imdb = meta.external_ids.imdb.clone().or(maps.imdb_id);
+                meta.external_ids.tmdb = meta.external_ids.tmdb.or(maps.themoviedb_id);
+                meta.external_ids.mal = meta.external_ids.mal.or(maps.mal_id);
+            }
+
+            let mut season_counts: BTreeMap<u32, u32> = BTreeMap::new();
+            let mut eps = Vec::new();
+            for (key, ep) in body.episodes {
+                let ep_num = ep
+                    .episode_number
+                    .or_else(|| key.parse::<u32>().ok())
+                    .unwrap_or(0);
+                let season_num = ep.season_number.unwrap_or(1);
+                if ep_num == 0 || season_num == 0 {
+                    continue;
+                }
+                *season_counts.entry(season_num).or_insert(0) += 1;
+                let title = ep.title.and_then(|map| {
+                    map.get(preferred_lang)
+                        .or_else(|| map.get("en"))
+                        .or_else(|| map.get("x-jat"))
+                        .or_else(|| map.get("ja"))
+                        .or_else(|| map.values().next())
+                        .map(|s| s.trim().to_owned())
+                        .filter(|s| !s.is_empty())
+                });
+                eps.push(CanonicalEpisodeMeta {
+                    season: season_num,
+                    episode: ep_num,
+                    absolute_episode: ep.absolute_episode_number,
+                    title,
+                    overview: ep
+                        .overview
+                        .map(|s| s.trim().to_owned())
+                        .filter(|s| !s.is_empty()),
+                    thumbnail: ep
+                        .image
+                        .map(|s| s.trim().to_owned())
+                        .filter(|s| !s.is_empty()),
+                    air_date: ep
+                        .air_date
+                        .map(|s| s.trim().to_owned())
+                        .filter(|s| !s.is_empty()),
+                });
+            }
+            if !eps.is_empty() {
+                eps.sort_by_key(|e| (e.season, e.episode, e.absolute_episode));
+                meta.episodes = eps;
+                if season_counts.len() > 1 || !season_counts.is_empty() {
+                    meta.season_spans = season_counts
+                        .into_iter()
+                        .map(|(season, episode_count)| SeasonSpan {
+                            season,
+                            episode_count,
+                        })
+                        .collect();
+                }
+                return;
+            }
+        }
+
+        // Secondary fallback if AniZip had no episodes: check TMDB (if key present) or Cinemeta by IMDb ID.
+        if let (Some(tmdb_id), Some(key)) = (
+            meta.external_ids.tmdb,
+            tmdb_api_key.filter(|k| !k.trim().is_empty()),
+        ) && let Ok(Some(tmdb_meta)) = self
+            .fetch_tmdb_by_id(tmdb_id, MediaType::Series, preferred_lang, key)
+            .await
+            && !tmdb_meta.episodes.is_empty()
+        {
+            meta.episodes = tmdb_meta.episodes;
+            if !tmdb_meta.season_spans.is_empty() {
+                meta.season_spans = tmdb_meta.season_spans;
+            }
+            return;
+        }
+        if let Some(ref imdb_id) = meta.external_ids.imdb
+            && let Ok(Some(cm_meta)) = self.fetch_cinemeta_by_id(imdb_id, MediaType::Series).await
+            && !cm_meta.episodes.is_empty()
+        {
+            meta.episodes = cm_meta.episodes;
+            if !cm_meta.season_spans.is_empty() {
+                meta.season_spans = cm_meta.season_spans;
+            }
+        }
     }
 
     async fn search_anilist_confident(

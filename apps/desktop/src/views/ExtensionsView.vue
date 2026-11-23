@@ -7,6 +7,7 @@ import {
   Download,
   Globe,
   Home,
+  Loader2,
   Package,
   RefreshCw,
   Settings2,
@@ -37,6 +38,7 @@ const installingTarget = shallowRef('')
 const batchInstalling = shallowRef(false)
 const batchProgress = shallowRef('')
 const plugins = ref<PluginListEntry[]>([])
+const loadingPlugins = shallowRef(isTauriRuntime())
 const expandedGroups = ref<Record<string, boolean>>({})
 const activeSettingsManifest = ref<PluginManifest | null>(null)
 const confirmUninstallId = shallowRef<string>('')
@@ -223,11 +225,17 @@ async function removeGroup(group: PluginGroup): Promise<void> {
 }
 
 async function refreshPlugins(): Promise<void> {
-  if (!isTauriRuntime()) return
+  if (!isTauriRuntime()) {
+    loadingPlugins.value = false
+    return
+  }
+  loadingPlugins.value = true
   try {
     plugins.value = await vesselApi.listPlugins()
   } catch (err) {
     pushToast('error', String(err))
+  } finally {
+    loadingPlugins.value = false
   }
 }
 
@@ -376,11 +384,17 @@ onMounted(() => {
         placeholder="gh:falsisdev/anthology, stremio://..., https://.../manifest.json, or local folder path"
       />
       <button type="submit" class="v-btn v-btn-primary" :disabled="resolving">
-        {{ resolving ? t('common.loading') : t('extensions.resolve') }}
+        <Loader2 v-if="resolving" :size="15" class="spin" aria-hidden="true" />
+        <span>{{ resolving ? t('common.loading') : t('extensions.resolve') }}</span>
       </button>
     </form>
 
-    <div v-if="resolvedPreview" class="v-card preview-card">
+    <div v-if="resolving" class="v-card preview-loading-card">
+      <Loader2 :size="18" class="spin accent-icon" aria-hidden="true" />
+      <span>{{ t('common.loading') }}</span>
+    </div>
+
+    <div v-else-if="resolvedPreview" class="v-card preview-card">
       <div class="preview-head">
         <div class="preview-title-wrap">
           <img
@@ -508,7 +522,12 @@ onMounted(() => {
       @close="activeSettingsManifest = null"
     />
 
-    <div v-if="!plugins.length" class="v-card v-muted">{{ t('common.empty') }}</div>
+    <div v-if="loadingPlugins && !plugins.length" class="v-card preview-loading-card">
+      <Loader2 :size="18" class="spin accent-icon" />
+      <span>{{ t('common.loading') }}</span>
+    </div>
+
+    <div v-else-if="!plugins.length" class="v-card v-muted">{{ t('common.empty') }}</div>
 
     <template v-else>
       <div class="installed-toolbar">
@@ -942,5 +961,26 @@ onMounted(() => {
   font-size: 0.76rem;
   font-weight: 600;
   color: var(--vessel-text-muted);
+}
+
+.preview-loading-card {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  font-weight: 600;
+}
+
+.accent-icon {
+  color: var(--vessel-accent);
+}
+
+.spin {
+  animation: extSpin 0.85s linear infinite;
+}
+
+@keyframes extSpin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 </style>

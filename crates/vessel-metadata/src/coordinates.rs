@@ -78,6 +78,23 @@ pub fn absolute_to_season_episode(spans: &[SeasonSpan], absolute: u32) -> Option
     None
 }
 
+fn is_generic_episode_title(title: &str) -> bool {
+    let trimmed = title.trim().to_ascii_lowercase();
+    if trimmed.is_empty() {
+        return true;
+    }
+    if let Some(rest) = trimmed.strip_prefix("episode ") {
+        return rest.trim().chars().all(|c| c.is_ascii_digit());
+    }
+    if let Some(rest) = trimmed.strip_prefix("bölüm ") {
+        return rest.trim().chars().all(|c| c.is_ascii_digit());
+    }
+    if let Some(prefix) = trimmed.strip_suffix(". bölüm") {
+        return prefix.trim().chars().all(|c| c.is_ascii_digit());
+    }
+    false
+}
+
 /// Enriches provider `episodes` non-destructively using `canonical_spans` and `canonical_episodes`.
 ///
 /// Guarantees:
@@ -130,13 +147,15 @@ pub fn align_episode_metadata(
             });
 
         if let Some(meta) = matched {
-            if ep.title.as_deref().is_none_or(|t| t.trim().is_empty()) {
+            if ep.title.as_deref().is_none_or(is_generic_episode_title)
+                && meta.title.as_deref().is_some_and(|t| !t.trim().is_empty())
+            {
                 ep.title = meta.title.clone();
             }
             if ep.overview.as_deref().is_none_or(|o| o.trim().is_empty()) {
                 ep.overview = meta.overview.clone();
             }
-            if ep.thumbnail.is_none() {
+            if ep.thumbnail.as_deref().is_none_or(|t| t.trim().is_empty()) {
                 ep.thumbnail = meta.thumbnail.clone();
             }
             if ep.air_date.is_none() {

@@ -215,7 +215,9 @@ async function loadHome(forceRefresh = false): Promise<void> {
     .then((cw) => {
       continueWatching.value = cw
     })
-    .catch(() => {})
+    .catch((err) => {
+      console.warn('Continue Watching failed:', err)
+    })
 
   if (!forceRefresh && hasLoadedOnce.value && cachedFilterKey.value === targetKey) {
     await cwPromise
@@ -676,8 +678,15 @@ onUnmounted(() => {
         </div>
       </section>
 
-      <div v-if="loading && !shelves.length" class="rail-track">
-        <div v-for="n in 7" :key="n" class="v-skeleton rail-skeleton" />
+      <div v-if="loading && !shelves.length" class="shelf-stack">
+        <div v-for="rowIdx in 3" :key="rowIdx" class="nuvio-rail">
+          <div class="rail-head">
+            <div class="v-skeleton rail-title-skeleton" />
+          </div>
+          <div class="rail-track">
+            <div v-for="n in 7" :key="n" class="v-skeleton rail-skeleton" />
+          </div>
+        </div>
       </div>
 
       <div v-else-if="!shelves.length" class="v-card empty-box">
@@ -1126,11 +1135,20 @@ onUnmounted(() => {
   gap: 2rem;
 }
 
-/* Keep rails always painted (no content-visibility culling flicker in WKWebView) */
+/* Keep rails GPU-pinned to prevent WKWebView tile-cull flashes during vertical scroll */
 .nuvio-rail {
   display: flex;
   flex-direction: column;
   gap: 0.85rem;
+  transform: translateZ(0);
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+
+.rail-title-skeleton {
+  width: 210px;
+  height: 22px;
+  border-radius: 8px;
 }
 
 .rail-head {

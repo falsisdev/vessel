@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, shallowRef, watch } from 'vue'
 import { Film, Play, Star } from 'lucide-vue-next'
 import type { CardPreferences, MediaSummary } from '@/types/vessel'
 
@@ -11,6 +11,14 @@ const props = defineProps<{
 const emit = defineEmits<{
   open: [pluginId: string, nativeId: string]
 }>()
+
+const imgLoaded = shallowRef(false)
+watch(
+  () => props.item.poster,
+  () => {
+    imgLoaded.value = false
+  },
+)
 
 const ratioClass = computed(() => {
   if (props.cards.aspectRatio === 'wide_16x9') return 'ratio-wide'
@@ -37,6 +45,7 @@ function handleOpen(): void {
     @click="handleOpen"
   >
     <div class="poster-frame" :class="ratioClass">
+      <div v-if="item.poster && !imgLoaded" class="v-skeleton poster-shimmer" aria-hidden="true" />
       <img
         v-if="item.poster"
         :src="item.poster"
@@ -46,6 +55,9 @@ function handleOpen(): void {
         loading="eager"
         decoding="async"
         class="poster-img"
+        :class="{ 'is-loaded': imgLoaded }"
+        @load="imgLoaded = true"
+        @error="imgLoaded = true"
       />
       <div v-else class="poster-fallback" aria-hidden="true">
         <Film :size="30" />
@@ -141,12 +153,25 @@ function handleOpen(): void {
   aspect-ratio: 1 / 1;
 }
 
+.poster-shimmer {
+  position: absolute;
+  inset: 0;
+  border-radius: 0;
+}
+
 .poster-img {
   width: 100%;
   height: 100%;
   object-fit: cover;
   display: block;
-  transition: transform 0.38s cubic-bezier(0.22, 1, 0.36, 1);
+  opacity: 0;
+  transition:
+    opacity 0.28s ease,
+    transform 0.38s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.poster-img.is-loaded {
+  opacity: 1;
 }
 
 .nuvio-card:hover .poster-img {

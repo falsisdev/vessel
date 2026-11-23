@@ -298,10 +298,13 @@ onMounted(() => {
     </div>
 
     <template v-else-if="detail">
-      <!-- Deep Cinematic Full-Bleed Nuvio Hero Stage -->
-      <header class="detail-hero">
+      <!-- Dissolving Full-Bleed Atmospheric Backdrop extending past Hero -->
+      <div
+        v-if="uiPreferences.details.showBackdrop && (detail.backdrop || detail.poster)"
+        class="hero-backdrop-layer"
+        aria-hidden="true"
+      >
         <img
-          v-if="uiPreferences.details.showBackdrop && (detail.backdrop || detail.poster)"
           :src="detail.backdrop || detail.poster"
           :alt="detail.title"
           width="1440"
@@ -311,11 +314,14 @@ onMounted(() => {
         />
         <div
           class="hero-scrim"
-          aria-hidden="true"
           :style="{
             '--scrim-dim': `${Math.max(58, uiPreferences.details.backdropDimPercent) / 100}`,
           }"
         />
+      </div>
+
+      <!-- Deep Cinematic Nuvio Hero Stage -->
+      <header class="detail-hero">
 
         <div class="hero-nav-row">
           <button type="button" class="v-btn v-btn-sm" @click="router.back()">
@@ -710,9 +716,23 @@ onMounted(() => {
 
 <style scoped>
 .nuvio-details {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
+}
+
+.hero-backdrop-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: min(82vh, 720px);
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+  -webkit-mask-image: linear-gradient(180deg, rgba(0, 0, 0, 1) 0%, rgba(0, 0, 0, 0.78) 54%, transparent 100%);
+  mask-image: linear-gradient(180deg, rgba(0, 0, 0, 1) 0%, rgba(0, 0, 0, 0.78) 54%, transparent 100%);
 }
 
 .hero-skeleton-wrap {
@@ -725,12 +745,12 @@ onMounted(() => {
 
 .detail-hero {
   position: relative;
-  min-height: 480px;
-  padding: 1.75rem 2.75rem 2.75rem;
+  z-index: 1;
+  min-height: 440px;
+  padding: 1.75rem 2.75rem 1.75rem;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  overflow: hidden;
 }
 
 .hero-backdrop {
@@ -740,7 +760,8 @@ onMounted(() => {
   height: 100%;
   object-fit: cover;
   object-position: center 20%;
-  transform: scale(1.05);
+  transform: scale(1.04);
+  filter: saturate(1.1);
   pointer-events: none;
 }
 
@@ -748,17 +769,17 @@ onMounted(() => {
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(circle at 80% 25%, color-mix(in srgb, var(--vessel-accent) 10%, transparent), transparent 45%),
+    radial-gradient(circle at 80% 25%, color-mix(in srgb, var(--vessel-accent) 12%, transparent), transparent 48%),
     linear-gradient(
       90deg,
       var(--vessel-bg-base) 0%,
-      color-mix(in srgb, var(--vessel-bg-base) 88%, transparent) 45%,
-      color-mix(in srgb, var(--vessel-bg-base) 36%, transparent) 100%
+      color-mix(in srgb, var(--vessel-bg-base) 86%, transparent) 46%,
+      color-mix(in srgb, var(--vessel-bg-base) 30%, transparent) 100%
     ),
     linear-gradient(
       180deg,
-      color-mix(in srgb, var(--vessel-bg-base) 30%, transparent) 0%,
-      color-mix(in srgb, var(--vessel-bg-base) 78%, transparent) 64%,
+      color-mix(in srgb, var(--vessel-bg-base) 22%, transparent) 0%,
+      color-mix(in srgb, var(--vessel-bg-base) 74%, transparent) 66%,
       var(--vessel-bg-base) 100%
     );
   pointer-events: none;
@@ -805,8 +826,13 @@ onMounted(() => {
   gap: 0.8rem;
   font-size: 0.86rem;
   font-weight: 600;
-  color: rgba(244, 246, 252, 0.84);
+  color: var(--vessel-text-muted);
   font-variant-numeric: tabular-nums;
+}
+
+.episodes-stage {
+  position: relative;
+  z-index: 1;
 }
 
 .source-tag {

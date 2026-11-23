@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, shallowRef } from 'vue'
 import { useRouter } from 'vue-router'
-import { Search as SearchIcon, X } from 'lucide-vue-next'
+import { Loader2, Search as SearchIcon, X } from 'lucide-vue-next'
 import { vesselApi } from '@/api/vessel'
 import MediaCard from '@/components/media/MediaCard.vue'
 import { useI18n } from '@/composables/useI18n'
@@ -71,7 +71,10 @@ function openDetails(pluginId: string, nativeId: string): void {
   <section class="search-view v-page-container">
     <header class="v-page-header">
       <h1 class="v-page-title">{{ t('search.title') }}</h1>
-      <span v-if="isSearching" class="v-badge v-badge-accent">{{ t('search.searching') }}</span>
+      <span v-if="isSearching" class="v-badge v-badge-accent searching-pill">
+        <Loader2 :size="13" class="spin" aria-hidden="true" />
+        <span>{{ t('search.searching') }}</span>
+      </span>
     </header>
 
     <form class="search-bar" @submit.prevent="runSearch">
@@ -84,13 +87,17 @@ function openDetails(pluginId: string, nativeId: string): void {
         class="v-input"
         :placeholder="t('search.placeholder')"
       />
-      <button type="submit" class="v-btn v-btn-primary">
-        <SearchIcon :size="15" aria-hidden="true" /> {{ t('common.search') }}
+      <button type="submit" class="v-btn v-btn-primary" :disabled="isSearching">
+        <Loader2 v-if="isSearching" :size="15" class="spin" aria-hidden="true" />
+        <SearchIcon v-else :size="15" aria-hidden="true" />
+        <span>{{ isSearching ? t('search.searching') : t('common.search') }}</span>
       </button>
       <button v-if="isSearching" type="button" class="v-btn" @click="stopSearch">
         <X :size="15" aria-hidden="true" /> {{ t('common.cancel') }}
       </button>
     </form>
+
+    <div v-if="isSearching" class="search-progress-bar" aria-hidden="true" />
 
     <div class="type-pills" role="group" aria-label="Filter by media type">
       <button
@@ -165,6 +172,45 @@ function openDetails(pluginId: string, nativeId: string): void {
 .search-skeleton {
   aspect-ratio: 2 / 3;
   min-height: 240px;
+}
+
+.searching-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.search-progress-bar {
+  height: 2.5px;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--vessel-accent) 45%,
+    var(--vessel-accent-secondary) 75%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: searchProgressSlide 1.05s linear infinite;
+}
+
+.spin {
+  animation: searchSpin 0.85s linear infinite;
+}
+
+@keyframes searchSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes searchProgressSlide {
+  0% {
+    background-position: 120% 0;
+  }
+  100% {
+    background-position: -80% 0;
+  }
 }
 
 .bucket-title {

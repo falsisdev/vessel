@@ -147,6 +147,15 @@ pub fn merge_detail_with_override(
         merged.external_ids.mal = merged.external_ids.mal.or(enriched.external_ids.mal);
     }
 
+    // Clear cloned poster thumbnails on episodes so external episode stills replace show-poster placeholders.
+    for ep in &mut merged.episodes {
+        if let (Some(thumb), Some(raw_poster)) = (&ep.thumbnail, &raw.poster)
+            && thumb == raw_poster
+        {
+            ep.thumbnail = None;
+        }
+    }
+
     align_episode_metadata(
         &mut merged.episodes,
         &enriched.season_spans,
