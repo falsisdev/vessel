@@ -1095,14 +1095,23 @@ onUnmounted(() => {
             :class="{ active: ep.streamId === currentEpisode?.streamId }"
             @click="switchEpisode(ep)"
           >
-            <div class="cs-item-main">
-              <span class="cs-item-code">{{
-                isLive ? `CH ${ep.episode}` : `S${ep.season} · E${ep.episode}`
-              }}</span>
-              <span class="cs-item-title">{{
-                ep.title ?? (isLive ? `Channel ${ep.episode}` : `Episode ${ep.episode}`)
-              }}</span>
-              <span v-if="ep.overview" class="cs-item-sub">{{ ep.overview }}</span>
+            <div class="cs-drawer-item-row">
+              <img
+                v-if="isLive && ep.thumbnail"
+                :src="ep.thumbnail"
+                alt=""
+                class="cs-channel-thumb"
+                loading="lazy"
+              />
+              <div class="cs-item-main">
+                <span class="cs-item-code">{{
+                  isLive ? `CH ${ep.episode}` : `S${ep.season} · E${ep.episode}`
+                }}</span>
+                <span class="cs-item-title">{{
+                  ep.title ?? (isLive ? `Channel ${ep.episode}` : `Episode ${ep.episode}`)
+                }}</span>
+                <span v-if="ep.overview" class="cs-item-sub">{{ ep.overview }}</span>
+              </div>
             </div>
             <Check
               v-if="ep.streamId === currentEpisode?.streamId"
@@ -1942,6 +1951,25 @@ onUnmounted(() => {
 
 .cs-sub-error {
   color: #fda4af;
+}
+
+.cs-drawer-item-row {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.cs-channel-thumb {
+  width: 32px;
+  height: 32px;
+  border-radius: 7px;
+  object-fit: contain;
+  background: rgba(10, 11, 18, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 2px;
+  flex-shrink: 0;
 }
 
 @keyframes livePulse {

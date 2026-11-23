@@ -1116,9 +1116,7 @@ impl VesselEngine {
                     .await?
             }
             StoredIptvKind::Xtream => {
-                let username = profile.username.as_deref().ok_or_else(|| {
-                    VesselError::InvalidInput("Xtream profile missing username".into())
-                })?;
+                let username = profile.username.as_deref().unwrap_or("");
                 let password = match profile.secret_ref.as_deref() {
                     Some(key) => self.secrets.get(key).await?.unwrap_or_default(),
                     None => String::new(),

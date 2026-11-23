@@ -8,16 +8,20 @@ use vessel_domain::{VesselError, VesselResult};
 
 use crate::IptvChannel;
 
+const DEFAULT_XTREAM_UA: &str = "IPTVSmartersPro";
+
 #[derive(Debug, Deserialize)]
 struct XtreamCategory {
     category_id: serde_json::Value,
+    #[serde(default)]
     category_name: String,
 }
 
 #[derive(Debug, Deserialize)]
 struct XtreamLiveStream {
     stream_id: serde_json::Value,
-    name: String,
+    #[serde(default)]
+    name: Option<String>,
     #[serde(default)]
     stream_icon: Option<String>,
     #[serde(default)]
@@ -45,17 +49,82 @@ fn non_empty_opt(value: Option<String>) -> Option<String> {
     })
 }
 
-/// Normalizes an Xtream server base URL (validates HTTP/HTTPS and strips trailing slashes).
+fn resolve_icon_url(base: &str, value: Option<String>) -> Option<String> {
+    non_empty_opt(value).map(|raw| {
+        if raw.starts_with("http://") || raw.starts_with("https://") || raw.starts_with("data:") {
+            raw
+        } else if raw.starts_with("//") {
+            format!("https:{raw}")
+        } else if raw.starts_with('/') {
+            format!("{}{raw}", base.trim_end_matches('/'))
+        } else {
+            format!("{}/{raw}", base.trim_end_matches('/'))
+        }
+    })
+}
+
+/// Normalizes an Xtream server base URL (`http(s)://host[:port]`), forgiving pasted `/player_api.php` or `/get.php` URLs.
 pub fn normalize_xtream_base(server_url: &str) -> VesselResult<String> {
-    let trimmed = server_url.trim().trim_end_matches('/');
-    let parsed = Url::parse(trimmed)
+    let raw = server_url.trim();
+    if raw.is_empty() {
+        return Err(VesselError::InvalidInput(
+            "Xtream server URL cannot be empty".into(),
+        ));
+    }
+    let with_scheme = if raw.contains("://") {
+        raw.to_string()
+    } else {
+        format!("http://{raw}")
+    };
+    let parsed = Url::parse(&with_scheme)
         .map_err(|err| VesselError::InvalidInput(format!("invalid Xtream server URL: {err}")))?;
     match parsed.scheme() {
-        "http" | "https" => Ok(trimmed.to_string()),
-        other => Err(VesselError::InvalidInput(format!(
-            "unsupported Xtream server URL scheme '{other}'"
-        ))),
+        "http" | "https" => {}
+        other => {
+            return Err(VesselError::InvalidInput(format!(
+                "unsupported Xtream server URL scheme '{other}'"
+            )));
+        }
     }
+    let Some(host) = parsed.host_str() else {
+        return Err(VesselError::InvalidInput(
+            "Xtream server URL missing host".into(),
+        ));
+    };
+    let mut base = format!("{}://{host}", parsed.scheme());
+    if let Some(port) = parsed.port() {
+        base.push_str(&format!(":{port}"));
+    }
+    let trimmed_path = parsed.path().trim_matches('/');
+    if !trimmed_path.is_empty()
+        && !trimmed_path.ends_with(".php")
+        && !matches!(trimmed_path, "c" | "live" | "movie" | "series")
+    {
+        base.push('/');
+        base.push_str(trimmed_path);
+    }
+    Ok(base)
+}
+
+fn extract_creds_from_url(server_url: &str) -> (Option<String>, Option<String>) {
+    let with_scheme = if server_url.trim().contains("://") {
+        server_url.trim().to_string()
+    } else {
+        format!("http://{}", server_url.trim())
+    };
+    let Ok(parsed) = Url::parse(&with_scheme) else {
+        return (None, None);
+    };
+    let mut u = None;
+    let mut p = None;
+    for (k, v) in parsed.query_pairs() {
+        if k.eq_ignore_ascii_case("username") && !v.trim().is_empty() {
+            u = Some(v.into_owned());
+        } else if k.eq_ignore_ascii_case("password") && !v.trim().is_empty() {
+            p = Some(v.into_owned());
+        }
+    }
+    (u, p)
 }
 
 /// Builds the default XMLTV EPG endpoint exposed by Xtream Codes servers.
@@ -76,7 +145,7 @@ async fn fetch_xtream_json<T: serde::de::DeserializeOwned>(
     password: &str,
     action: &str,
     user_agent: Option<&str>,
-) -> VesselResult<T> {
+) -> VesselResult<Vec<T>> {
     let mut url = Url::parse(&format!("{base}/player_api.php"))
         .map_err(|err| VesselError::InvalidInput(format!("invalid Xtream API URL: {err}")))?;
     url.query_pairs_mut()
@@ -84,14 +153,15 @@ async fn fetch_xtream_json<T: serde::de::DeserializeOwned>(
         .append_pair("password", password)
         .append_pair("action", action);
 
-    let mut req = client.get(url);
-    if let Some(ua) = user_agent
-        && !ua.trim().is_empty()
-    {
-        req = req.header(reqwest::header::USER_AGENT, ua.trim());
-    }
-
-    let resp = req
+    let effective_ua = user_agent
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or(DEFAULT_XTREAM_UA);
+    let resp = client
+        .get(url)
+        .timeout(std::time::Duration::from_secs(60))
+        .header(reqwest::header::USER_AGENT, effective_ua)
+        .header(reqwest::header::ACCEPT, "application/json, text/plain, */*")
         .send()
         .await
         .map_err(|err| VesselError::Network(format!("Xtream '{action}' request failed: {err}")))?;
@@ -102,9 +172,37 @@ async fn fetch_xtream_json<T: serde::de::DeserializeOwned>(
         )));
     }
 
-    resp.json::<T>()
-        .await
-        .map_err(|err| VesselError::Network(format!("Xtream '{action}' JSON decode failed: {err}")))
+    let val: serde_json::Value = resp.json().await.map_err(|err| {
+        VesselError::Network(format!("Xtream '{action}' JSON decode failed: {err}"))
+    })?;
+    match val {
+        serde_json::Value::Array(items) => {
+            let mut out = Vec::with_capacity(items.len());
+            for item in items {
+                if let Ok(parsed) = serde_json::from_value::<T>(item) {
+                    out.push(parsed);
+                }
+            }
+            Ok(out)
+        }
+        serde_json::Value::Object(map) => {
+            if let Some(auth) = map
+                .get("user_info")
+                .and_then(|u| u.get("auth"))
+                .and_then(|a| a.as_i64())
+                && auth == 0
+            {
+                return Err(VesselError::InvalidInput(
+                    "Xtream server rejected username or password (auth=0)".into(),
+                ));
+            }
+            if let Some(msg) = map.get("message").and_then(|m| m.as_str()) {
+                return Err(VesselError::Network(format!("Xtream '{action}': {msg}")));
+            }
+            Ok(Vec::new())
+        }
+        _ => Ok(Vec::new()),
+    }
 }
 
 /// Fetches live categories and live channels from an Xtream Codes compatible endpoint.
@@ -116,21 +214,37 @@ pub async fn fetch_xtream_channels(
     user_agent: Option<&str>,
 ) -> VesselResult<Vec<IptvChannel>> {
     let base = normalize_xtream_base(server_url)?;
+    let (url_user, url_pass) = extract_creds_from_url(server_url);
+    let eff_user = if username.trim().is_empty() {
+        url_user.as_deref().unwrap_or("")
+    } else {
+        username.trim()
+    };
+    let eff_pass = if password.trim().is_empty() {
+        url_pass.as_deref().unwrap_or("")
+    } else {
+        password.trim()
+    };
+    if eff_user.is_empty() {
+        return Err(VesselError::InvalidInput(
+            "Xtream profile is missing a username".into(),
+        ));
+    }
 
     let (categories_res, streams_res) = tokio::join!(
-        fetch_xtream_json::<Vec<XtreamCategory>>(
+        fetch_xtream_json::<XtreamCategory>(
             client,
             &base,
-            username,
-            password,
+            eff_user,
+            eff_pass,
             "get_live_categories",
             user_agent
         ),
-        fetch_xtream_json::<Vec<XtreamLiveStream>>(
+        fetch_xtream_json::<XtreamLiveStream>(
             client,
             &base,
-            username,
-            password,
+            eff_user,
+            eff_pass,
             "get_live_streams",
             user_agent
         ),
@@ -155,14 +269,24 @@ pub async fn fetch_xtream_channels(
         let group_title = categories
             .get(&cat_key)
             .cloned()
+            .filter(|g| !g.trim().is_empty())
             .unwrap_or_else(|| "Live TV".to_string());
-        let stream_url = format!("{base}/live/{username}/{password}/{raw_id}.ts");
+        // Use HLS `.m3u8` output so WKWebView `<video>` plays natively; player UI also offers `.ts`.
+        let stream_url = format!("{base}/live/{eff_user}/{eff_pass}/{raw_id}.m3u8");
+
+        let ch_name = stream
+            .name
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .unwrap_or("Channel")
+            .to_string();
 
         channels.push(IptvChannel {
             stream_id,
-            name: stream.name.trim().to_string(),
+            name: ch_name,
             group_title,
-            logo_url: non_empty_opt(stream.stream_icon),
+            logo_url: resolve_icon_url(&base, stream.stream_icon),
             stream_url,
             tvg_id: non_empty_opt(stream.epg_channel_id),
             user_agent: user_agent.and_then(|ua| {
@@ -265,7 +389,7 @@ mod tests {
         assert_eq!(channels[0].tvg_id.as_deref(), Some("news.4k"));
         assert_eq!(
             channels[0].stream_url,
-            format!("{base}/live/alice/s3cr3t/401.ts")
+            format!("{base}/live/alice/s3cr3t/401.m3u8")
         );
         assert_eq!(
             channels[0].user_agent.as_deref(),
