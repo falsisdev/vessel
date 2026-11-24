@@ -32,3 +32,6 @@ zip.workspace = true
 
 [dev-dependencies]
 axum.workspace = true
+
+[target.'cfg(target_os = "android")'.dependencies]
+rquickjs = { version = "0.14", features = ["bindgen", "futures", "loader", "macro", "parallel"] }
