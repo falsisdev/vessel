@@ -116,7 +116,9 @@ let touchSeekDelta = 0
 let lastPinchAt = 0
 let hlsInstance: Hls | null = null
 let mpegtsPlayer: mpegts.Player | null = null
-let forceHlsJsNextTry = false
+let forceNativeHlsNextTry = false
+let lastTargetStartSec = 0
+let isResettingMedia = false
 let userExplicitPause = false
 let boundAudioTrackList: NativeAudioTrackList | null = null
 
@@ -233,6 +235,21 @@ function destroyMediaEngines(): void {
       // Ignore cleanup errors on torn-down MSE instances
     }
     mpegtsPlayer = null
+  }
+  const el = videoRef.value
+  if (el) {
+    isResettingMedia = true
+    try {
+      el.pause()
+      el.removeAttribute('src')
+      el.load()
+    } catch {
+      // Ignore element cleanup errors
+    } finally {
+      window.setTimeout(() => {
+        isResettingMedia = false
+      }, 0)
+    }
   }
 }
 
@@ -794,6 +811,7 @@ function goBack(): void {
 function onLoadedMetadata(): void {
   const el = videoRef.value
   if (!el) return
+  playbackError.value = ''
   duration.value = Number.isFinite(el.duration) ? el.duration : 0
   el.playbackRate = isLive.value ? 1 : playbackRate.value
   el.volume = volume.value
@@ -807,9 +825,12 @@ function onLoadedMetadata(): void {
   ) {
     const target = pendingSeekSeconds.value
     pendingSeekSeconds.value = null
-    el.currentTime = target
-    currentTime.value = target
-    return
+    try {
+      el.currentTime = target
+      currentTime.value = target
+    } catch {
+      // Ignore transient seek before buffer ready
+    }
   }
   if (!userExplicitPause) {
     void el.play().catch(() => {})
@@ -820,6 +841,7 @@ function onLoadedMetadata(): void {
 function onSeeked(): void {
   const el = videoRef.value
   if (!el) return
+  playbackError.value = ''
   isBuffering.value = false
   if (!userExplicitPause && el.paused) {
     void el.play().catch(() => {})
@@ -829,13 +851,17 @@ function onSeeked(): void {
 function onCanPlay(): void {
   const el = videoRef.value
   if (!el) return
+  playbackError.value = ''
   syncAudioTracks()
   if (pendingSeekSeconds.value !== null && pendingSeekSeconds.value > 2 && !hlsInstance) {
     const target = pendingSeekSeconds.value
     pendingSeekSeconds.value = null
-    el.currentTime = target
-    currentTime.value = target
-    return
+    try {
+      el.currentTime = target
+      currentTime.value = target
+    } catch {
+      // Ignore transient seek error
+    }
   }
   isBuffering.value = false
   if (!userExplicitPause && el.paused) {
@@ -843,9 +869,18 @@ function onCanPlay(): void {
   }
 }
 
+function onPlaying(): void {
+  playbackError.value = ''
+  isBuffering.value = false
+  isPlaying.value = true
+}
+
 function onTimeUpdate(): void {
   const el = videoRef.value
   if (!el) return
+  if (playbackError.value && !el.error && el.readyState >= 2) {
+    playbackError.value = ''
+  }
   currentTime.value = el.currentTime
   if (el.buffered.length > 0) {
     bufferedEnd.value = el.buffered.end(el.buffered.length - 1)
@@ -854,16 +889,26 @@ function onTimeUpdate(): void {
 
 function onVideoError(): void {
   const el = videoRef.value
+  if (isResettingMedia || !playableSrc.value) return
+  const code = el?.error?.code
+  // Ignore MEDIA_ERR_ABORTED (code 1) and cases where media is actually healthy & playing
+  if (!code || code === 1) return
+  if (el && !el.paused && el.readyState >= 2 && el.currentTime > 0) {
+    playbackError.value = ''
+    return
+  }
+
   const src = playableSrc.value
   const stream = activeStream.value
   if (el && src && stream) {
     const isHls =
       stream.kind === 'hls' || src.toLowerCase().includes('.m3u8')
-    if (isHls && !forceHlsJsNextTry && Hls.isSupported() && !hlsInstance) {
-      forceHlsJsNextTry = true
+    const canPlayNativeHls = el.canPlayType('application/vnd.apple.mpegurl') !== ''
+    if (isHls && !forceNativeHlsNextTry && canPlayNativeHls && hlsInstance) {
+      forceNativeHlsNextTry = true
       playbackError.value = ''
       isBuffering.value = true
-      void attachMediaSource(src, stream, true)
+      void attachMediaSource(src, stream, true, lastTargetStartSec)
       return
     }
     // Auto-try next stream candidate (e.g. Xtream HLS <-> MPEG-TS) when primary stream fails
@@ -873,7 +918,6 @@ function onVideoError(): void {
       return
     }
   }
-  const code = el?.error?.code
   playbackError.value =
     code === 4
       ? t('player.error_unsupported')
@@ -889,7 +933,7 @@ function retryStream(): void {
   if (!stream || !src) return
   playbackError.value = ''
   isBuffering.value = true
-  void attachMediaSource(src, stream, forceHlsJsNextTry)
+  void attachMediaSource(src, stream, forceNativeHlsNextTry, lastTargetStartSec)
 }
 
 function handleKeydown(ev: KeyboardEvent): void {
@@ -991,7 +1035,7 @@ async function ensureSessionLoaded(): Promise<void> {
 async function attachMediaSource(
   src: string,
   stream: StreamCandidate,
-  preferHlsJs = false,
+  preferNativeFallback = false,
   startSec = 0,
 ): Promise<void> {
   await nextTick()
@@ -999,8 +1043,9 @@ async function attachMediaSource(
   if (!el || !src) return
 
   userExplicitPause = false
+  lastTargetStartSec = startSec
   destroyMediaEngines()
-  el.pause()
+  isResettingMedia = false
 
   const lowerSrc = src.toLowerCase()
   const looksMpegTs =
@@ -1038,40 +1083,62 @@ async function attachMediaSource(
       return
     } catch {
       destroyMediaEngines()
+      isResettingMedia = false
     }
   }
 
   const canPlayNativeHls = el.canPlayType('application/vnd.apple.mpegurl') !== ''
-  if (looksHls && Hls.isSupported() && (preferHlsJs || !canPlayNativeHls)) {
+  // Prefer hls.js first when supported so startPosition resumes directly on target segments without stalling
+  if (looksHls && Hls.isSupported() && !preferNativeFallback) {
+    let networkRetries = 0
+    let mediaRetries = 0
     const hls = new Hls({
       enableWorker: true,
       lowLatencyMode: isLive.value,
       startPosition: startSec > 2 ? startSec : -1,
+      fragLoadingTimeOut: 20000,
+      manifestLoadingTimeOut: 15000,
+      levelLoadingTimeOut: 15000,
+      fragLoadingMaxRetry: 4,
+      manifestLoadingMaxRetry: 3,
     })
     hlsInstance = hls
     hls.on(Hls.Events.MANIFEST_PARSED, () => {
+      playbackError.value = ''
+      isBuffering.value = false
       syncAudioTracks()
-      void el.play().catch(() => {})
+      if (!userExplicitPause) {
+        void el.play().catch(() => {})
+      }
     })
     hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, syncAudioTracks)
     hls.on(Hls.Events.AUDIO_TRACK_SWITCHED, syncAudioTracks)
     hls.on(Hls.Events.ERROR, (_ev, data) => {
-      if (data.fatal) {
-        if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
-          hls.startLoad()
-        } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
-          hls.recoverMediaError()
-        } else {
-          destroyMediaEngines()
-          const curIdx = session.value?.activeStreamIndex ?? 0
-          if (curIdx + 1 < streams.value.length) {
-            switchSource(curIdx + 1)
-          } else {
-            playbackError.value = t('player.error_failed')
-            isBuffering.value = false
-            isPlaying.value = false
-          }
-        }
+      if (!data.fatal) return
+      if (hlsInstance !== hls) return
+      if (data.type === Hls.ErrorTypes.NETWORK_ERROR && networkRetries < 3) {
+        networkRetries += 1
+        hls.startLoad()
+        return
+      }
+      if (data.type === Hls.ErrorTypes.MEDIA_ERROR && mediaRetries < 2) {
+        mediaRetries += 1
+        hls.recoverMediaError()
+        return
+      }
+      if (canPlayNativeHls && !preferNativeFallback) {
+        forceNativeHlsNextTry = true
+        void attachMediaSource(src, stream, true, startSec)
+        return
+      }
+      destroyMediaEngines()
+      const curIdx = session.value?.activeStreamIndex ?? 0
+      if (curIdx + 1 < streams.value.length) {
+        switchSource(curIdx + 1)
+      } else {
+        playbackError.value = t('player.error_failed')
+        isBuffering.value = false
+        isPlaying.value = false
       }
     })
     hls.loadSource(src)
@@ -1091,7 +1158,8 @@ watch(
   async (stream) => {
     const seq = ++attachSeq
     destroyMediaEngines()
-    forceHlsJsNextTry = false
+    forceNativeHlsNextTry = false
+    lastTargetStartSec = 0
     playbackError.value = ''
     isBuffering.value = true
     currentTime.value = 0
@@ -1117,10 +1185,6 @@ onMounted(async () => {
   window.addEventListener('keydown', handleKeydown)
   document.addEventListener('fullscreenchange', onFullscreenChange)
   await ensureSessionLoaded()
-  if (playableSrc.value && activeStream.value && !hlsInstance && !mpegtsPlayer) {
-    const startSec = await resolveDesiredStartSeconds(currentEpisode.value)
-    await attachMediaSource(playableSrc.value, activeStream.value, forceHlsJsNextTry, startSec)
-  }
   progressTimer = window.setInterval(() => {
     if (isPlaying.value) {
       void persistWatchProgress()
@@ -1160,10 +1224,12 @@ onUnmounted(() => {
       ref="videoRef"
       class="cs-video"
       :class="`fit-${fitMode}`"
+      preload="auto"
       playsinline
       @click="togglePlay"
       @dblclick="toggleFullscreen"
-      @play="userExplicitPause = false; isPlaying = true; isBuffering = false; scheduleHideControls()"
+      @play="userExplicitPause = false; playbackError = ''; isPlaying = true; isBuffering = false; scheduleHideControls()"
+      @playing="onPlaying"
       @pause="isPlaying = false; scheduleHideControls(); void persistWatchProgress()"
       @ended="isPlaying = false; void persistWatchProgress(true)"
       @waiting="isBuffering = true"

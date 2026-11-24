@@ -9,6 +9,7 @@ use std::io::SeekFrom;
 use std::net::SocketAddr;
 use std::path::{Component, Path as FsPath, PathBuf};
 use std::sync::{Arc, RwLock};
+use std::time::Duration;
 
 use axum::body::Body;
 use axum::extract::{Path, Query, State};
@@ -17,7 +18,7 @@ use axum::http::header::{
     ACCESS_CONTROL_ALLOW_ORIGIN, ACCESS_CONTROL_EXPOSE_HEADERS, CONTENT_LENGTH, CONTENT_RANGE,
     CONTENT_TYPE, IF_RANGE, RANGE,
 };
-use axum::http::{HeaderMap, HeaderName, HeaderValue, StatusCode};
+use axum::http::{HeaderMap, HeaderName, HeaderValue, Method, StatusCode};
 use axum::middleware;
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
@@ -171,6 +172,7 @@ async fn health_handler() -> Json<HealthResponse> {
 }
 
 async fn master_stream_handler(
+    method: Method,
     Path(token): Path<String>,
     State(state): State<AppState>,
     req_headers: HeaderMap,
@@ -180,6 +182,7 @@ async fn master_stream_handler(
     };
     stream_upstream_target(
         &state,
+        &method,
         &token,
         &session.upstream_url,
         &session.headers,
@@ -189,6 +192,7 @@ async fn master_stream_handler(
 }
 
 async fn seg_stream_handler(
+    method: Method,
     Path(token): Path<String>,
     Query(query): Query<SegQuery>,
     State(state): State<AppState>,
@@ -205,7 +209,15 @@ async fn seg_stream_handler(
         )
             .into_response();
     };
-    stream_upstream_target(&state, &token, &target_url, &session.headers, &req_headers).await
+    stream_upstream_target(
+        &state,
+        &method,
+        &token,
+        &target_url,
+        &session.headers,
+        &req_headers,
+    )
+    .await
 }
 
 fn local_content_type(path: &FsPath) -> &'static str {
@@ -350,12 +362,18 @@ async fn local_file_handler(
 
 async fn stream_upstream_target(
     state: &AppState,
+    method: &Method,
     token: &str,
     target_url: &str,
     session_headers: &BTreeMap<String, String>,
     req_headers: &HeaderMap,
 ) -> Response {
-    let mut upstream_req = state.client.get(target_url);
+    let is_head = *method == Method::HEAD;
+    let mut upstream_req = if is_head {
+        state.client.head(target_url)
+    } else {
+        state.client.get(target_url)
+    };
     for (name, value) in session_headers {
         if let (Ok(header_name), Ok(header_val)) = (
             HeaderName::from_bytes(name.as_bytes()),
@@ -390,7 +408,7 @@ async fn stream_upstream_target(
         .and_then(|v| v.to_str().ok())
         .map(str::to_owned);
 
-    if status.is_success() && is_hls_playlist(&final_url, content_type.as_deref()) {
+    if !is_head && status.is_success() && is_hls_playlist(&final_url, content_type.as_deref()) {
         let playlist_text = match upstream_resp.text().await {
             Ok(text) => text,
             Err(err) => {
@@ -469,6 +487,9 @@ impl ProxyServer {
         let sessions = Arc::new(ProxySessionStore::default());
         let local_dirs = Arc::new(LocalDirStore::default());
         let client = reqwest::Client::builder()
+            .connect_timeout(Duration::from_secs(10))
+            .pool_idle_timeout(Duration::from_secs(30))
+            .tcp_nodelay(true)
             .build()
             .map_err(|err| VesselError::Network(format!("build proxy http client: {err}")))?;
 

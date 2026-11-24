@@ -61,7 +61,15 @@
     "hero_source_hint": "Escolha extensões específicas para o banner ou deixe em Automático.",
     "shelf_order_title": "Ordem das fileiras (Topo → Base)",
     "shelf_order_hint": "Arraste para reordenar",
-    "up_next": "A seguir"
+    "up_next": "A seguir",
+    "edit_cw": "Editar Continuar assistindo",
+    "cw_episode": "Episódio",
+    "cw_season": "Temporada",
+    "cw_ep_num": "Episódio",
+    "cw_progress": "Progresso",
+    "cw_watched_min": "Assistido (min)",
+    "cw_duration_min": "Duração total (min)",
+    "cw_mark_done": "Marcar concluído / Próximo"
   },
   "search": {
     "title": "Buscar",

@@ -61,7 +61,15 @@
     "hero_source_hint": "ヒーローバナー用のプラグインを指定するか、自動のままにします。",
     "shelf_order_title": "表示順（上 → 下）",
     "shelf_order_hint": "ドラッグして並べ替え",
-    "up_next": "次のエピソード"
+    "up_next": "次のエピソード",
+    "edit_cw": "視聴履歴を編集",
+    "cw_episode": "エピソード",
+    "cw_season": "シーズン",
+    "cw_ep_num": "話数",
+    "cw_progress": "視聴進捗",
+    "cw_watched_min": "視聴済み (分)",
+    "cw_duration_min": "合計時間 (分)",
+    "cw_mark_done": "完了にする / 次へ"
   },
   "search": {
     "title": "検索",

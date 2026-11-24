@@ -61,7 +61,15 @@
     "hero_source_hint": "Pick specific plugin(s) for the Hero banner, or leave Auto to pull from your top Home feeds.",
     "shelf_order_title": "Active Home Shelf Order (Top → Bottom)",
     "shelf_order_hint": "Drag handle to reorder shelves",
-    "up_next": "Up Next"
+    "up_next": "Up Next",
+    "edit_cw": "Edit Continue Watching",
+    "cw_episode": "Episode",
+    "cw_season": "Season",
+    "cw_ep_num": "Episode",
+    "cw_progress": "Watch Progress",
+    "cw_watched_min": "Watched (min)",
+    "cw_duration_min": "Total Duration (min)",
+    "cw_mark_done": "Mark Finished / Next"
   },
   "search": {
     "title": "Search",

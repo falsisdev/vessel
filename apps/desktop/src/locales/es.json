@@ -61,7 +61,15 @@
     "hero_source_hint": "Elige extensiones concretas para el banner principal o déjalo en Automático.",
     "shelf_order_title": "Orden de estantes activos (Arriba → Abajo)",
     "shelf_order_hint": "Arrastra el controlador para reordenar",
-    "up_next": "Siguiente"
+    "up_next": "Siguiente",
+    "edit_cw": "Editar Seguir viendo",
+    "cw_episode": "Episodio",
+    "cw_season": "Temporada",
+    "cw_ep_num": "Episodio",
+    "cw_progress": "Progreso",
+    "cw_watched_min": "Visto (min)",
+    "cw_duration_min": "Duración total (min)",
+    "cw_mark_done": "Marcar terminado / Siguiente"
   },
   "search": {
     "title": "Buscar",

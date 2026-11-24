@@ -61,7 +61,15 @@
     "hero_source_hint": "为顶部焦点图指定插件，或保持自动获取。",
     "shelf_order_title": "首页栏目顺序（从上到下）",
     "shelf_order_hint": "拖拽手柄以调整顺序",
-    "up_next": "下一集"
+    "up_next": "下一集",
+    "edit_cw": "编辑继续观看",
+    "cw_episode": "剧集",
+    "cw_season": "季",
+    "cw_ep_num": "集",
+    "cw_progress": "观看进度",
+    "cw_watched_min": "已观看 (分钟)",
+    "cw_duration_min": "总时长 (分钟)",
+    "cw_mark_done": "标记看完 / 下一集"
   },
   "search": {
     "title": "搜索",

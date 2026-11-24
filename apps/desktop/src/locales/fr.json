@@ -61,7 +61,15 @@
     "hero_source_hint": "Choisissez des extensions précises pour le Hero ou laissez en Automatique.",
     "shelf_order_title": "Ordre des rayons actifs (Haut → Bas)",
     "shelf_order_hint": "Faites glisser pour réorganiser",
-    "up_next": "À suivre"
+    "up_next": "À suivre",
+    "edit_cw": "Modifier Reprendre",
+    "cw_episode": "Épisode",
+    "cw_season": "Saison",
+    "cw_ep_num": "Épisode",
+    "cw_progress": "Progression",
+    "cw_watched_min": "Regardé (min)",
+    "cw_duration_min": "Durée totale (min)",
+    "cw_mark_done": "Marquer terminé / Suivant"
   },
   "search": {
     "title": "Rechercher",

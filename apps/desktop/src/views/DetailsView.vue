@@ -365,7 +365,8 @@ onActivated(() => {
 
 <template>
   <section class="nuvio-details">
-    <div v-if="loading" class="hero-skeleton-wrap">
+    <Transition name="page-fade" mode="out-in">
+      <div v-if="loading" key="details-loading" class="hero-skeleton-wrap">
       <div class="details-sk-hero">
         <div class="v-skeleton details-sk-poster" />
         <div class="details-sk-meta">
@@ -394,7 +395,7 @@ onActivated(() => {
       </div>
     </div>
 
-    <template v-else-if="detail">
+    <div v-else-if="detail" key="details-loaded" class="details-loaded-shell">
       <!-- Dissolving Full-Bleed Atmospheric Backdrop extending past Hero -->
       <div
         v-if="uiPreferences.details.showBackdrop && (detail.backdrop || detail.poster)"
@@ -853,12 +854,14 @@ onActivated(() => {
           </div>
         </Transition>
       </Teleport>
-    </template>
+    </div>
+    </Transition>
   </section>
 </template>
 
 <style scoped>
-.nuvio-details {
+.nuvio-details,
+.details-loaded-shell {
   position: relative;
   display: flex;
   flex-direction: column;

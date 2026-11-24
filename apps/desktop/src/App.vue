@@ -105,7 +105,7 @@ onUnmounted(() => {
       />
       <main id="main-content" class="shell-main" tabindex="-1">
         <RouterView v-slot="{ Component, route: currentRoute }">
-          <Transition name="page-fade" mode="out-in">
+          <Transition name="page-fade" mode="out-in" appear>
             <KeepAlive :include="['HomeView', 'SearchView', 'LibraryView', 'ExtensionsView']">
               <component
                 :is="Component"

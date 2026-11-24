@@ -2,16 +2,19 @@
 import { computed, onActivated, onDeactivated, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import {
+  CheckCircle2,
   ChevronLeft,
   ChevronRight,
   GripVertical,
   Info,
   Layers,
+  Pencil,
   Play,
   RefreshCw,
   SlidersHorizontal,
   Sparkles,
   Star,
+  Trash2,
   X,
 } from 'lucide-vue-next'
 import { isTauriRuntime, vesselApi } from '@/api/vessel'
@@ -22,10 +25,10 @@ import { useLibraryState } from '@/composables/useLibraryState'
 import { usePlayerSession } from '@/composables/usePlayerSession'
 import { useUiPreferences } from '@/composables/useUiPreferences'
 import { pushToast } from '@/composables/useVesselEvents'
-import type { ContinueWatchingEntry, MediaSummary, PluginListEntry } from '@/types/vessel'
+import type { ContinueWatchingEntry, Episode, MediaSummary, PluginListEntry } from '@/types/vessel'
 
 const router = useRouter()
-const { t } = useI18n()
+const { t, currentLang } = useI18n()
 const { refreshLibraryState } = useLibraryState()
 const { setSession } = usePlayerSession()
 const { uiPreferences, preferencesLoaded, loadPreferences, savePreferences } = useUiPreferences()
@@ -43,6 +46,18 @@ const heroIndex = shallowRef(0)
 const showSourcePicker = shallowRef(false)
 const orderListRef = ref<HTMLElement | null>(null)
 const draggingPluginIndex = shallowRef<number | null>(null)
+
+const editingCwEntry = ref<ContinueWatchingEntry | null>(null)
+const cwEditEpisodes = ref<Episode[]>([])
+const cwEditLoadingEps = shallowRef(false)
+const cwEditSaving = shallowRef(false)
+const cwEditSeason = shallowRef(1)
+const cwEditEpisode = shallowRef(1)
+const cwEditStreamId = shallowRef('')
+const cwEditEpTitle = shallowRef('')
+const cwEditWatchedMin = shallowRef(0)
+const cwEditDurationMin = shallowRef(24)
+const cwEditPercent = shallowRef(0)
 
 let heroAutoTimer: number | null = null
 
@@ -366,7 +381,7 @@ async function resumeContinueWatching(entry: ContinueWatchingEntry): Promise<voi
   resumingKey.value = key
   try {
     const [detail, streamRes] = await Promise.all([
-      vesselApi.getDetailsWithEnrichment(entry.media.pluginId, entry.media.nativeId, 'en'),
+      vesselApi.getDetailsWithEnrichment(entry.media.pluginId, entry.media.nativeId, currentLang.value),
       vesselApi.getStreams(entry.media.pluginId, entry.streamId),
     ])
     const ep =
@@ -374,7 +389,11 @@ async function resumeContinueWatching(entry: ContinueWatchingEntry): Promise<voi
       detail.episodes.find((item) => item.season === entry.season && item.episode === entry.episode) ??
       detail.episodes[0]
 
-    if (!ep || !streamRes.streams.length) {
+    const playableIdx = streamRes.streams.findIndex((s) => !s.needsExtractor && s.kind !== 'embed')
+    if (!ep || playableIdx < 0) {
+      if (streamRes.streams.length > 0 && playableIdx < 0) {
+        pushToast('info', t('details.select_stream'))
+      }
       openDetails(entry.media.pluginId, entry.media.nativeId)
       return
     }
@@ -386,8 +405,8 @@ async function resumeContinueWatching(entry: ContinueWatchingEntry): Promise<voi
       episode: ep,
       streams: streamRes.streams,
       subtitles: streamRes.subtitles,
-      activeStreamIndex: 0,
-      startPositionMs: entry.positionMs,
+      activeStreamIndex: playableIdx,
+      startPositionMs: entry.positionMs > 2000 ? entry.positionMs : undefined,
     })
 
     await router.push({
@@ -398,7 +417,7 @@ async function resumeContinueWatching(entry: ContinueWatchingEntry): Promise<voi
       },
       query: {
         streamId: ep.streamId,
-        streamIndex: '0',
+        streamIndex: String(playableIdx),
       },
     })
   } catch (err) {
@@ -407,6 +426,121 @@ async function resumeContinueWatching(entry: ContinueWatchingEntry): Promise<voi
   } finally {
     resumingKey.value = null
   }
+}
+
+async function openCwEditor(entry: ContinueWatchingEntry): Promise<void> {
+  editingCwEntry.value = entry
+  cwEditEpisodes.value = []
+  cwEditSeason.value = entry.season || 1
+  cwEditEpisode.value = entry.episode || 1
+  cwEditStreamId.value = entry.streamId
+  cwEditEpTitle.value = entry.episodeTitle ?? ''
+  const defaultDurMin =
+    entry.durationMs > 60_000
+      ? Math.max(1, Math.round(entry.durationMs / 60_000))
+      : entry.mediaType === 'movie'
+        ? 110
+        : 24
+  cwEditDurationMin.value = defaultDurMin
+  const curMin = Math.max(0, Math.round(entry.positionMs / 60_000))
+  cwEditWatchedMin.value = Math.min(defaultDurMin, curMin)
+  cwEditPercent.value =
+    entry.durationMs > 0
+      ? Math.min(99, Math.max(0, Math.round((entry.positionMs / entry.durationMs) * 100)))
+      : 0
+
+  if (entry.mediaType !== 'movie') {
+    cwEditLoadingEps.value = true
+    try {
+      const detail = await vesselApi.getDetailsWithEnrichment(
+        entry.media.pluginId,
+        entry.media.nativeId,
+        currentLang.value,
+      )
+      if (editingCwEntry.value?.media.nativeId === entry.media.nativeId) {
+        cwEditEpisodes.value = detail.episodes
+      }
+    } catch {
+      // Allow manual season/episode editing if plugin details fail
+    } finally {
+      cwEditLoadingEps.value = false
+    }
+  }
+}
+
+function onCwEpisodeSelect(streamId: string): void {
+  const picked = cwEditEpisodes.value.find((e) => e.streamId === streamId)
+  if (!picked) return
+  cwEditStreamId.value = picked.streamId
+  cwEditSeason.value = picked.season
+  cwEditEpisode.value = picked.episode
+  cwEditEpTitle.value = picked.title ?? ''
+}
+
+function onCwPercentInput(pct: number): void {
+  cwEditPercent.value = pct
+  cwEditWatchedMin.value = Math.round((cwEditDurationMin.value * pct) / 100)
+}
+
+function onCwMinutesInput(): void {
+  const dur = Math.max(1, Number(cwEditDurationMin.value) || 1)
+  const watched = Math.max(0, Math.min(dur, Number(cwEditWatchedMin.value) || 0))
+  cwEditDurationMin.value = dur
+  cwEditWatchedMin.value = watched
+  cwEditPercent.value = Math.min(99, Math.round((watched / dur) * 100))
+}
+
+async function saveCwEdit(markCompleted = false): Promise<void> {
+  const entry = editingCwEntry.value
+  if (!entry || cwEditSaving.value) return
+  cwEditSaving.value = true
+  try {
+    const durMs = Math.max(60_000, Math.round((Number(cwEditDurationMin.value) || 24) * 60_000))
+    const rawPosMs = markCompleted
+      ? durMs
+      : Math.max(10_000, Math.round((Number(cwEditWatchedMin.value) || 0) * 60_000))
+    const matchedEp = cwEditEpisodes.value.find(
+      (e) =>
+        e.streamId === cwEditStreamId.value ||
+        (e.season === Number(cwEditSeason.value) && e.episode === Number(cwEditEpisode.value)),
+    )
+    const season = entry.mediaType === 'movie' ? entry.season : Math.max(0, Number(cwEditSeason.value) || 1)
+    const episode = entry.mediaType === 'movie' ? entry.episode : Math.max(0, Number(cwEditEpisode.value) || 1)
+
+    await vesselApi.recordProgress({
+      media: entry.media,
+      streamId: matchedEp?.streamId ?? cwEditStreamId.value ?? entry.streamId,
+      canonicalId: entry.canonicalId,
+      season,
+      episode,
+      absoluteEpisode: matchedEp?.absoluteEpisode ?? entry.absoluteEpisode,
+      title: entry.title,
+      posterUrl: entry.poster,
+      backdropUrl: entry.backdrop,
+      episodeTitle: matchedEp?.title ?? (cwEditEpTitle.value || entry.episodeTitle),
+      positionMs: rawPosMs,
+      durationMs: durMs,
+      completed: markCompleted,
+      lastWatchedAt: new Date().toISOString(),
+    })
+
+    continueWatching.value = await vesselApi.listContinueWatching(
+      uiPreferences.value.home.continueWatchingLimit || 12,
+    )
+    editingCwEntry.value = null
+    pushToast('info', `${entry.title} · ${t('common.save')}`)
+  } catch (err) {
+    pushToast('error', String(err))
+  } finally {
+    cwEditSaving.value = false
+  }
+}
+
+async function removeCwFromEditor(): Promise<void> {
+  const entry = editingCwEntry.value
+  if (!entry) return
+  await dismissContinueWatching(entry)
+  editingCwEntry.value = null
 }
 
 async function dismissContinueWatching(entry: ContinueWatchingEntry): Promise<void> {
@@ -682,15 +816,26 @@ onUnmounted(() => {
               <span class="cw-play-badge">
                 <Play :size="18" fill="currentColor" aria-hidden="true" />
               </span>
-              <button
-                type="button"
-                class="cw-dismiss"
-                title="Remove from Continue Watching"
-                aria-label="Remove from Continue Watching"
-                @click.stop="dismissContinueWatching(entry)"
-              >
-                <X :size="14" aria-hidden="true" />
-              </button>
+              <div class="cw-top-actions" @click.stop>
+                <button
+                  type="button"
+                  class="cw-action-btn cw-edit"
+                  :title="t('home.edit_cw')"
+                  :aria-label="t('home.edit_cw')"
+                  @click.stop="openCwEditor(entry)"
+                >
+                  <Pencil :size="13" aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
+                  class="cw-action-btn cw-dismiss"
+                  title="Remove from Continue Watching"
+                  aria-label="Remove from Continue Watching"
+                  @click.stop="dismissContinueWatching(entry)"
+                >
+                  <X :size="14" aria-hidden="true" />
+                </button>
+              </div>
               <span class="cw-remaining">{{ formatRemaining(entry) }}</span>
               <div v-if="entry.positionMs > 0" class="cw-progress-track">
                 <div class="cw-progress-fill" :style="{ width: `${progressPercent(entry)}%` }" />
@@ -943,6 +1088,139 @@ onUnmounted(() => {
               <button type="button" class="v-btn v-btn-primary" @click="applyHomeSources">
                 Apply & Refresh Home
               </button>
+            </div>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
+
+    <!-- Manual Continue Watching Editor Modal -->
+    <Teleport to="body">
+      <Transition name="modal-pop">
+        <div
+          v-if="editingCwEntry"
+          class="home-modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          :aria-label="t('home.edit_cw')"
+          @click.self="editingCwEntry = null"
+        >
+          <div class="v-card cw-editor-modal">
+            <div class="picker-head">
+              <div>
+                <h3 class="picker-title">{{ t('home.edit_cw') }}</h3>
+                <p class="v-muted picker-sub">{{ editingCwEntry.title }}</p>
+              </div>
+              <button
+                type="button"
+                class="v-btn v-btn-icon"
+                :aria-label="t('common.close')"
+                @click="editingCwEntry = null"
+              >
+                <X :size="16" />
+              </button>
+            </div>
+
+            <div class="cw-edit-body">
+              <template v-if="editingCwEntry.mediaType !== 'movie'">
+                <div v-if="cwEditEpisodes.length" class="cw-field">
+                  <label class="cw-label">{{ t('home.cw_episode') }}</label>
+                  <select
+                    :value="cwEditStreamId"
+                    class="v-select"
+                    @change="onCwEpisodeSelect(($event.target as HTMLSelectElement).value)"
+                  >
+                    <option
+                      v-for="ep in cwEditEpisodes"
+                      :key="ep.streamId"
+                      :value="ep.streamId"
+                    >
+                      S{{ ep.season }} · E{{ ep.episode }}
+                      <template v-if="ep.title"> — {{ ep.title }}</template>
+                    </option>
+                  </select>
+                </div>
+
+                <div class="cw-row-2">
+                  <label class="cw-field">
+                    <span class="cw-label">{{ t('home.cw_season') }}</span>
+                    <input v-model.number="cwEditSeason" type="number" min="0" class="v-input" />
+                  </label>
+                  <label class="cw-field">
+                    <span class="cw-label">{{ t('home.cw_ep_num') }}</span>
+                    <input v-model.number="cwEditEpisode" type="number" min="0" class="v-input" />
+                  </label>
+                </div>
+              </template>
+
+              <div class="cw-field">
+                <div class="cw-label-row">
+                  <span class="cw-label">{{ t('home.cw_progress') }}</span>
+                  <strong>{{ cwEditPercent }}%</strong>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="95"
+                  step="1"
+                  :value="cwEditPercent"
+                  class="cw-slider"
+                  @input="onCwPercentInput(Number(($event.target as HTMLInputElement).value))"
+                />
+              </div>
+
+              <div class="cw-row-2">
+                <label class="cw-field">
+                  <span class="cw-label">{{ t('home.cw_watched_min') }}</span>
+                  <input
+                    v-model.number="cwEditWatchedMin"
+                    type="number"
+                    min="0"
+                    :max="cwEditDurationMin"
+                    class="v-input"
+                    @input="onCwMinutesInput"
+                  />
+                </label>
+                <label class="cw-field">
+                  <span class="cw-label">{{ t('home.cw_duration_min') }}</span>
+                  <input
+                    v-model.number="cwEditDurationMin"
+                    type="number"
+                    min="1"
+                    class="v-input"
+                    @input="onCwMinutesInput"
+                  />
+                </label>
+              </div>
+            </div>
+
+            <div class="cw-edit-foot">
+              <button
+                type="button"
+                class="v-btn v-btn-danger v-btn-sm"
+                :disabled="cwEditSaving"
+                @click="removeCwFromEditor"
+              >
+                <Trash2 :size="14" aria-hidden="true" /> {{ t('common.remove') }}
+              </button>
+              <div class="cw-foot-right">
+                <button
+                  type="button"
+                  class="v-btn v-btn-sm"
+                  :disabled="cwEditSaving"
+                  @click="saveCwEdit(true)"
+                >
+                  <CheckCircle2 :size="14" aria-hidden="true" /> {{ t('home.cw_mark_done') }}
+                </button>
+                <button
+                  type="button"
+                  class="v-btn v-btn-primary v-btn-sm"
+                  :disabled="cwEditSaving"
+                  @click="saveCwEdit(false)"
+                >
+                  {{ cwEditSaving ? t('common.loading') : t('common.save') }}
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -1346,6 +1624,7 @@ onUnmounted(() => {
   position: absolute;
   top: 50%;
   left: 50%;
+  z-index: 4;
   transform: translate(-50%, -50%) scale(0.92);
   display: inline-flex;
   align-items: center;
@@ -1366,26 +1645,43 @@ onUnmounted(() => {
   border-color: transparent;
 }
 
-.cw-dismiss {
+.cw-top-actions {
   position: absolute;
-  top: 0.5rem;
-  right: 0.5rem;
+  top: 0.45rem;
+  right: 0.45rem;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.cw-action-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 26px;
   height: 26px;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.26);
   background: rgba(10, 10, 18, 0.84);
   color: #fff;
-  opacity: 0;
+  opacity: 0.78;
   cursor: pointer;
-  transition: opacity 0.16s ease, background-color 0.16s ease;
+  transition: opacity 0.16s ease, background-color 0.16s ease, transform 0.16s ease;
 }
 
-.cw-card:hover .cw-dismiss {
+.cw-card:hover .cw-action-btn,
+.cw-action-btn:focus-visible {
   opacity: 1;
+}
+
+.cw-action-btn:hover {
+  transform: scale(1.08);
+}
+
+.cw-edit:hover {
+  background: var(--vessel-accent);
+  color: #0b0b12;
 }
 
 .cw-dismiss:hover {
@@ -1395,17 +1691,22 @@ onUnmounted(() => {
 .cw-remaining {
   position: absolute;
   left: 0.65rem;
-  bottom: 0.55rem;
-  font-size: 0.74rem;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.92);
+  bottom: 0.6rem;
+  z-index: 4;
+  padding: 0.14rem 0.48rem;
+  border-radius: 6px;
+  background: rgba(10, 11, 16, 0.72);
+  font-size: 0.73rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.96);
 }
 
 .cw-progress-track {
   position: absolute;
   inset: auto 0 0 0;
-  height: 4px;
-  background: rgba(255, 255, 255, 0.22);
+  z-index: 4;
+  height: 5px;
+  background: rgba(255, 255, 255, 0.28);
 }
 
 .cw-progress-fill {
@@ -1676,6 +1977,66 @@ onUnmounted(() => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.cw-editor-modal {
+  width: min(500px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  background: var(--vessel-bg-surface);
+}
+
+.cw-edit-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.cw-row-2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.cw-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.cw-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.cw-label {
+  font-size: 0.8rem;
+  font-weight: 650;
+  color: var(--vessel-text-muted);
+}
+
+.cw-slider {
+  width: 100%;
+  accent-color: var(--vessel-accent);
+  cursor: pointer;
+}
+
+.cw-edit-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--vessel-border);
+}
+
+.cw-foot-right {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .spin {

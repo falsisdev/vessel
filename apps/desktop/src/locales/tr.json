@@ -61,7 +61,15 @@
     "hero_source_hint": "Vitrin bannerı için özel eklenti seçin veya üst akışlardan otomatik alınmasını sağlayın.",
     "shelf_order_title": "Aktif Raf Sırası (Üst → Alt)",
     "shelf_order_hint": "Sıralamak için tutamacı sürükleyin",
-    "up_next": "Sıradaki"
+    "up_next": "Sıradaki",
+    "edit_cw": "İzlemeye Devam Et Düzenle",
+    "cw_episode": "Bölüm",
+    "cw_season": "Sezon",
+    "cw_ep_num": "Bölüm No",
+    "cw_progress": "İzleme İlerlemesi",
+    "cw_watched_min": "İzlenen (dk)",
+    "cw_duration_min": "Toplam Süre (dk)",
+    "cw_mark_done": "Bitti İşaretle / Sonraki"
   },
   "search": {
     "title": "Ara",

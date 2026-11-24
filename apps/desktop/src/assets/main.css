@@ -473,9 +473,13 @@ textarea {
   }
 }
 
-.page-fade-enter-active,
 .page-fade-leave-active {
-  transition: opacity 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+  transition: opacity 0.24s ease-in-out;
+  will-change: opacity;
+}
+
+.page-fade-enter-active {
+  transition: opacity 0.36s ease-in-out;
   will-change: opacity;
 }
 

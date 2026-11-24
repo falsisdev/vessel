@@ -61,7 +61,15 @@
     "hero_source_hint": "Wähle gezielte Plugins für das Hero-Banner oder belasse es auf Automatisch.",
     "shelf_order_title": "Reihenfolge der Regale (Oben → Unten)",
     "shelf_order_hint": "Zum Sortieren Griff ziehen",
-    "up_next": "Als Nächstes"
+    "up_next": "Als Nächstes",
+    "edit_cw": "Weiterschauen bearbeiten",
+    "cw_episode": "Folge",
+    "cw_season": "Staffel",
+    "cw_ep_num": "Folge",
+    "cw_progress": "Fortschritt",
+    "cw_watched_min": "Gesehen (Min.)",
+    "cw_duration_min": "Gesamtdauer (Min.)",
+    "cw_mark_done": "Als gesehen markieren / Nächste"
   },
   "search": {
     "title": "Suche",
