@@ -82,11 +82,11 @@ impl Default for IptvClient {
 impl IptvClient {
     /// Creates an [`IptvClient`] with conservative connection/request timeouts.
     pub fn new() -> Self {
-        let http = reqwest::Client::builder()
+        let http = vessel_domain::http_client_builder()
             .connect_timeout(Duration::from_secs(10))
             .timeout(Duration::from_secs(30))
             .build()
-            .unwrap_or_else(|_| reqwest::Client::new());
+            .expect("build iptv reqwest client");
         Self { http }
     }
 

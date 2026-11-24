@@ -228,7 +228,7 @@ impl HostServices {
         event_sink: Option<Arc<dyn EventSink>>,
         ts_cache: Arc<TsCompileCache>,
     ) -> VesselResult<Self> {
-        let http_client = reqwest::Client::builder()
+        let http_client = vessel_domain::http_client_builder()
             .redirect(reqwest::redirect::Policy::none())
             .build()
             .map_err(|err| VesselError::Network(format!("build plugin http client: {err}")))?;

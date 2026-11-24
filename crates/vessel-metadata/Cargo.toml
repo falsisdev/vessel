@@ -11,7 +11,7 @@ reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
-vessel-domain = { path = "../vessel-domain" }
+vessel-domain = { path = "../vessel-domain", features = ["http-client"] }
 
 [dev-dependencies]
 axum.workspace = true

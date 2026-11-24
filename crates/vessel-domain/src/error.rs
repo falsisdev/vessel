@@ -47,6 +47,18 @@ pub enum VesselError {
     InvalidInput(String),
 }
 
+/// Formats an error along with its entire `source()` chain so transport/TLS causes are never hidden.
+pub fn format_error_chain(err: &(dyn std::error::Error + 'static)) -> String {
+    let mut out = err.to_string();
+    let mut current = err.source();
+    while let Some(cause) = current {
+        out.push_str(": ");
+        out.push_str(&cause.to_string());
+        current = cause.source();
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::{VesselError, VesselResult};

@@ -2,6 +2,7 @@ package dev.falsis.vessel
 
 import android.app.Application
 import android.content.Context
+import android.util.Log
 import dev.falsis.vessel.data.VesselRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -18,6 +19,9 @@ class VesselApp : Application() {
         runCatching {
             System.loadLibrary("vessel_ffi")
             nativeInitTls(this)
+            Log.i("VesselApp", "nativeInitTls initialized")
+        }.onFailure { err ->
+            Log.e("VesselApp", "nativeInitTls failed", err)
         }
         val repo = VesselRepository.get(this)
         appScope.launch {

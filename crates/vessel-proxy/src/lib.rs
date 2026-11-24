@@ -486,7 +486,7 @@ impl ProxyServer {
         let signer = Arc::new(HmacSigner::generate()?);
         let sessions = Arc::new(ProxySessionStore::default());
         let local_dirs = Arc::new(LocalDirStore::default());
-        let client = reqwest::Client::builder()
+        let client = vessel_domain::http_client_builder()
             .connect_timeout(Duration::from_secs(10))
             .pool_idle_timeout(Duration::from_secs(30))
             .tcp_nodelay(true)

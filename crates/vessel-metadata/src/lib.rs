@@ -37,10 +37,10 @@ impl Default for MetadataService {
     fn default() -> Self {
         Self {
             clients: MetadataClients::default(),
-            skip_http: reqwest::Client::builder()
+            skip_http: vessel_domain::http_client_builder()
                 .connect_timeout(std::time::Duration::from_secs(4))
                 .build()
-                .unwrap_or_else(|_| reqwest::Client::new()),
+                .expect("build skip reqwest client"),
             skip_endpoints: SkipEndpoints::default(),
         }
     }

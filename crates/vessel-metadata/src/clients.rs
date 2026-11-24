@@ -572,7 +572,7 @@ impl Default for MetadataClients {
 impl MetadataClients {
     /// Creates a metadata client pointing at `endpoints`.
     pub fn new(endpoints: MetaEndpoints) -> Self {
-        let http = reqwest::Client::builder()
+        let http = vessel_domain::http_client_builder()
             .timeout(METADATA_TIMEOUT)
             .build()
             .expect("build metadata reqwest client");

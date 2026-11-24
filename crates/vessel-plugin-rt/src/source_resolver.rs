@@ -349,7 +349,7 @@ impl Default for SourceResolver {
 impl SourceResolver {
     /// Creates a production `SourceResolver` backed by `raw.githubusercontent.com` and `gitlab.com`.
     pub fn new() -> Self {
-        let client = reqwest::Client::builder()
+        let client = vessel_domain::http_client_builder()
             .redirect(Policy::none())
             .timeout(RESOLVER_TIMEOUT)
             .build()
@@ -450,7 +450,12 @@ impl SourceResolver {
                 .get(current.clone())
                 .send()
                 .await
-                .map_err(|err| VesselError::Network(format!("fetch {current}: {err}")))?;
+                .map_err(|err| {
+                    VesselError::Network(format!(
+                        "fetch {current}: {}",
+                        vessel_domain::format_error_chain(&err)
+                    ))
+                })?;
 
             if resp.status().is_redirection() {
                 if hop == MAX_REDIRECTS {

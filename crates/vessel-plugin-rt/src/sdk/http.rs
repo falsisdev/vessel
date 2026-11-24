@@ -188,10 +188,12 @@ async fn execute_http_request(
             req = req.body(payload.clone());
         }
 
-        let resp = req
-            .send()
-            .await
-            .map_err(|err| VesselError::Network(format!("http request to {current_url}: {err}")))?;
+        let resp = req.send().await.map_err(|err| {
+            VesselError::Network(format!(
+                "http request to {current_url}: {}",
+                vessel_domain::format_error_chain(&err)
+            ))
+        })?;
 
         if follow_redirects && resp.status().is_redirection() {
             if hop == MAX_REDIRECTS {

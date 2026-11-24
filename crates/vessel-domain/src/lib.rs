@@ -4,13 +4,15 @@ pub mod error;
 pub mod event;
 pub mod ids;
 pub mod media;
+#[cfg(feature = "http-client")]
+pub mod net;
 pub mod paths;
 pub mod plugin;
 pub mod ports;
 pub mod stream;
 pub mod ui;
 
-pub use error::{VesselError, VesselResult};
+pub use error::{VesselError, VesselResult, format_error_chain};
 pub use event::{
     DownloadProgressSnapshot, DownloadStatus, EngineEvent, LogLevel, PlayerStateSnapshot,
 };
@@ -19,6 +21,8 @@ pub use media::{
     ContentRating, Episode, EpisodeTag, MediaDetail, MediaRelation, MediaSummary, MediaType,
     PlaybackProgress, RelationKind, SeasonSummary,
 };
+#[cfg(feature = "http-client")]
+pub use net::http_client_builder;
 pub use paths::VesselPaths;
 pub use plugin::{
     ContentCategory, PluginCapability, PluginManifest, PluginSettingField, RegistryIndex,

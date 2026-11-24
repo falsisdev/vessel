@@ -187,10 +187,10 @@ impl DownloadManager {
         event_sink: Arc<dyn EventSink>,
         downloads_root: impl Into<PathBuf>,
     ) -> Self {
-        let http = reqwest::Client::builder()
+        let http = vessel_domain::http_client_builder()
             .connect_timeout(Duration::from_secs(10))
             .build()
-            .unwrap_or_else(|_| reqwest::Client::new());
+            .expect("build downloader reqwest client");
         Self {
             storage,
             http,

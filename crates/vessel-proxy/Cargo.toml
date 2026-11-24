@@ -17,4 +17,4 @@ sha2.workspace = true
 tokio = { workspace = true, features = ["fs"] }
 tokio-util = { workspace = true, features = ["io"] }
 url.workspace = true
-vessel-domain = { path = "../vessel-domain" }
+vessel-domain = { path = "../vessel-domain", features = ["http-client"] }

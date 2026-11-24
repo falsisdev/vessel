@@ -27,7 +27,7 @@ sha1.workspace = true
 sha2.workspace = true
 tokio.workspace = true
 url.workspace = true
-vessel-domain = { path = "../vessel-domain" }
+vessel-domain = { path = "../vessel-domain", features = ["http-client"] }
 zip.workspace = true
 
 [dev-dependencies]
