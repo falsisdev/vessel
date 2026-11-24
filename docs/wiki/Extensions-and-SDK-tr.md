@@ -9,7 +9,7 @@
 **Eklentiler → Kaynak İncele** kutusuna aşağıdaki biçimlerden herhangi birini yapıştırabilirsiniz:
 - Doğrudan HTTPS bağlantısı (`https://.../repo.json` veya `.plugin.vessel`)
 - GitHub / GitLab kısa yolu (`gh:kullanici/repo`, `gl:grup/proje@dal/altklasor`)
-- Kayıt defteri kısa kodu (`registry.json` veya `301/302` kısa URL)
+- Kayıt defteri kısa kodu (`registry.json` veya `301/302` kısa URL — örn. `anthology` veya `tr` → `gh:falsisdev/anthology`)
 - Deep link (`vessel://install?src=...`)
 - Yerel **Dev Mode** klasör yolu (`/Users/.../benim-eklentim`)
 - Açık kaynak **Nuvio** kazıyıcı manifestleri

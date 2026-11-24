@@ -15,7 +15,7 @@ In **Extensions → Inspect Source**, paste any of the following formats:
 | **Direct HTTPS URL** | `https://example.org/repo.json` or `...plugin.vessel` | Resolves `repo.json` repository indexes, single `manifest.json`, or signed `.plugin.vessel` zip packages |
 | **GitHub Shorthand (`gh:`)** | `gh:owner/repo` / `gh:owner/repo@v2/plugins/foo` | Checks `main`/`master` or specified branch/tag for `repo.json`, `manifest.json`, or relative TS/JS files |
 | **GitLab Shorthand (`gl:`)** | `gl:group/project[@ref][/subpath]` | Resolves GitLab repositories cleanly across branches/subpaths |
-| **Shortcodes (`registry.json`)** | `anthology` | Looks up short names via `registry.json` or HTTP `301/302` redirect shorteners (up to 3 hops) |
+| **Shortcodes (`registry.json`)** | `anthology`, `tr` | Looks up short names via Vessel's default [`registry.json`](https://github.com/falsisdev/vessel/blob/main/registry.json) (e.g. `anthology` & `tr` → `gh:falsisdev/anthology`, with offline fallback) or HTTP `301/302` redirect shorteners (up to 3 hops) |
 | **Deep Links (`vessel://install`)** | `vessel://install?src=gh:owner/repo` | Parses deep-link install URI directly into source resolver |
 | **Local Dev Mode Folder** | `/Users/you/dev/my-vessel-plugin` | Loads `manifest.json` + local `.ts`/`.js` ES6 imports straight from disk for instant hot testing |
 | **Nuvio Scraper Manifests** | `https://.../providers.json` or `nuvio:...` | Wraps compatible open-source JS/TS Nuvio scraper packages automatically |

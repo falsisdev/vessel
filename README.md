@@ -151,7 +151,7 @@ pnpm --filter @vessel/desktop build
 
 ## Plugin Development (Quick Overview)
 
-Vessel loads **Dev Mode** plugins directly from a local folder (`manifest.json` + `index.ts`) via **Extensions → Inspect Source**, `.plugin.vessel` zip packages, `gh:owner/repo` / `gl:owner/repo`, HTTP shortcodes (`registry.json`), `vessel://install?src=…`, and Nuvio scraper manifests.
+Vessel loads **Dev Mode** plugins directly from a local folder (`manifest.json` + `index.ts`) via **Extensions → Inspect Source**, `.plugin.vessel` zip packages, `gh:owner/repo` / `gl:owner/repo`, HTTP/registry shortcodes (`registry.json` — e.g. `anthology` or `tr` → `gh:falsisdev/anthology`), `vessel://install?src=…`, and Nuvio scraper manifests.
 
 A plugin exports an object (default export or `vessel.definePlugin(...)`):
 - `getHomeFeed(cursor?)` — returns categorized `poster` or `landscape` shelves

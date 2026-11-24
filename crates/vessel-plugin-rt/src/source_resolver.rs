@@ -32,6 +32,18 @@ const DEFAULT_BRANCH_CANDIDATES: &[&str] = &["main", "master"];
 const TRY_MODULE_EXTENSIONS: &[&str] =
     &["", ".ts", ".mts", ".js", ".mjs", "/index.ts", "/index.js"];
 
+/// Official Vessel shortcode registry hosted in the main repository.
+pub const DEFAULT_REGISTRY_URL: &str =
+    "https://raw.githubusercontent.com/falsisdev/vessel/main/registry.json";
+
+/// Built-in official shortcodes kept as a zero-network fallback for `registry.json`.
+pub fn builtin_shortcode(code: &str) -> Option<&'static str> {
+    match code.trim().to_ascii_lowercase().as_str() {
+        "anthology" | "tr" => Some("gh:falsisdev/anthology"),
+        _ => None,
+    }
+}
+
 /// Core-controlled trust badge (never read from `manifest.json`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SourceTrustBadge {
@@ -358,6 +370,14 @@ impl SourceResolver {
         self
     }
 
+    /// Enables Vessel's official default `registry.json` endpoint for shortcode resolution.
+    pub fn with_default_registries(mut self) -> Self {
+        if !self.registry_urls.iter().any(|u| u == DEFAULT_REGISTRY_URL) {
+            self.registry_urls.push(DEFAULT_REGISTRY_URL.to_owned());
+        }
+        self
+    }
+
     /// Configures an optional HTTP shortener base (`<base>/<shortcode>` redirecting via `301/302`).
     pub fn with_shortener_base(mut self, base_url: impl Into<String>) -> Self {
         self.shortener_base_url = Some(base_url.into().trim_end_matches('/').to_owned());
@@ -599,15 +619,23 @@ impl SourceResolver {
     }
 
     async fn lookup_shortcode(&self, code: &str) -> VesselResult<String> {
+        let mut last_err: Option<VesselError> = None;
         for reg_url in &self.registry_urls {
-            if let Some((_, bytes)) = self.try_fetch_bytes(reg_url).await? {
-                let registry: RegistryIndex = serde_json::from_slice(&bytes).map_err(|err| {
-                    VesselError::InvalidInput(format!(
-                        "invalid registry.json at '{reg_url}': {err}"
-                    ))
-                })?;
-                if let Some(target) = registry.codes.get(code) {
-                    return Ok(target.clone());
+            match self.try_fetch_bytes(reg_url).await {
+                Ok(Some((_, bytes))) => {
+                    let registry: RegistryIndex =
+                        serde_json::from_slice(&bytes).map_err(|err| {
+                            VesselError::InvalidInput(format!(
+                                "invalid registry.json at '{reg_url}': {err}"
+                            ))
+                        })?;
+                    if let Some(target) = registry.codes.get(code) {
+                        return Ok(target.clone());
+                    }
+                }
+                Ok(None) => {}
+                Err(err) => {
+                    last_err = Some(err);
                 }
             }
         }
@@ -623,6 +651,14 @@ impl SourceResolver {
             {
                 return Ok(location.to_owned());
             }
+        }
+
+        if let Some(target) = builtin_shortcode(code) {
+            return Ok(target.to_owned());
+        }
+
+        if let Some(err) = last_err {
+            return Err(err);
         }
 
         Err(VesselError::NotFound(format!(
@@ -1312,5 +1348,34 @@ mod tests {
         let feed = provider.home_feed(None).await.expect("home_feed");
         assert_eq!(feed.sections[0].title, "Trending");
         provider.shutdown().await;
+    }
+
+    #[tokio::test]
+    async fn resolves_builtin_official_shortcodes_anthology_and_tr() {
+        let resolver = SourceResolver::new();
+        assert_eq!(
+            resolver
+                .lookup_shortcode("anthology")
+                .await
+                .expect("anthology shortcode"),
+            "gh:falsisdev/anthology"
+        );
+        assert_eq!(
+            resolver.lookup_shortcode("tr").await.expect("tr shortcode"),
+            "gh:falsisdev/anthology"
+        );
+        assert!(resolver.lookup_shortcode("unknown-code").await.is_err());
+
+        let repo_registry_raw = include_str!("../../../registry.json");
+        let parsed: vessel_domain::RegistryIndex =
+            serde_json::from_str(repo_registry_raw).expect("parse root registry.json");
+        assert_eq!(
+            parsed.codes.get("anthology").map(String::as_str),
+            Some("gh:falsisdev/anthology")
+        );
+        assert_eq!(
+            parsed.codes.get("tr").map(String::as_str),
+            Some("gh:falsisdev/anthology")
+        );
     }
 }

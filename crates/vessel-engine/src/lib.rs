@@ -190,7 +190,7 @@ impl VesselEngine {
             proxy,
             player,
             event_sink,
-            SourceResolver::new(),
+            SourceResolver::new().with_default_registries(),
             paths.downloads_dir(),
             always_proxy,
         )
@@ -1855,7 +1855,7 @@ mod tests {
             proxy,
             player.clone(),
             recorder.clone(),
-            SourceResolver::new(),
+            SourceResolver::new().with_default_registries(),
             false,
         )
         .await
@@ -2338,7 +2338,7 @@ mod tests {
             proxy,
             player.clone(),
             recorder,
-            SourceResolver::new(),
+            SourceResolver::new().with_default_registries(),
             dl_root.clone(),
             false,
         )

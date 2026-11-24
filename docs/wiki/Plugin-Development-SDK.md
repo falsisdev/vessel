@@ -124,9 +124,10 @@ my-plugin/
 ```json
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-11-24T00:00:00Z",
+  "updatedAt": "2026-11-24T13:30:00Z",
   "codes": {
-    "anthology": "gh:falsisdev/anthology"
+    "anthology": "gh:falsisdev/anthology",
+    "tr": "gh:falsisdev/anthology"
   }
 }
 ```
