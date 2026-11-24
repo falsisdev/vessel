@@ -15,6 +15,21 @@ Official installers are built automatically via GitHub Actions on every tagged r
 | **macOS** | Apple Silicon (`aarch64-apple-darwin`) | `.dmg` | Drag `Vessel.app` to Applications |
 | **macOS** | Intel (`x86_64-apple-darwin`) | `.dmg` | Drag `Vessel.app` to Applications |
 | **Windows** | x64 (`x86_64-pc-windows-msvc`) | `-setup.exe` (NSIS) | Built-in WebView2 runtime check |
+| **Linux** | x64 (`x86_64-unknown-linux-gnu`) | `.AppImage`, `.deb`, `.rpm`, `.flatpak` | Sandbox-aware Flatpak (`dev.falsis.vessel`) + native packages |
+
+---
+
+### Linux Installation (`.AppImage`, `.deb`, `.rpm`, `.flatpak`)
+
+- **AppImage:** `chmod +x Vessel_*.AppImage && ./Vessel_*.AppImage` (bundles GStreamer media framework libraries).
+- **Debian / Ubuntu (`.deb`):** `sudo apt install ./Vessel_*.deb`
+- **Fedora / RHEL (`.rpm`):** `sudo dnf install ./Vessel-*.rpm`
+- **Flatpak (`.flatpak` bundle):**
+  ```bash
+  flatpak install --user Vessel_*_amd64.flatpak
+  flatpak run dev.falsis.vessel
+  ```
+  > Under Flatpak, `<VesselRoot>` defaults to Tauri's XDG data directory (`~/.var/app/dev.falsis.vessel/data/dev.falsis.vessel`), while custom download locations can still be selected via portal/XDG permissions.
 
 ---
 

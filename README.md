@@ -102,7 +102,12 @@ vessel/
 
 ## Installation (Prebuilt Desktop Releases)
 
-Prebuilt desktop installers for **macOS** (`.dmg` for Apple Silicon & Intel) and **Windows** (`-setup.exe`) are published on the [GitHub Releases](https://github.com/falsisdev/vessel/releases) page.
+Prebuilt desktop installers for **macOS** (`.dmg` for Apple Silicon & Intel), **Windows** (`-setup.exe`), and **Linux** (`.AppImage`, `.deb`, `.rpm`, and `.flatpak` bundle — starting from upcoming Linux CI releases) are published on the [GitHub Releases](https://github.com/falsisdev/vessel/releases) page.
+
+### Linux Note (`.AppImage` & `.flatpak`)
+- **AppImage:** Make executable with `chmod +x Vessel_*.AppImage` and launch directly.
+- **Flatpak:** Install the downloaded bundle locally via `flatpak install --user Vessel_*.flatpak` and run `flatpak run dev.falsis.vessel`.
+- **Debian / Ubuntu / Fedora:** Install `.deb` via `sudo apt install ./Vessel_*.deb` or `.rpm` via `sudo dnf install ./Vessel-*.rpm`.
 
 ### macOS Note ("Vessel is damaged and can't be opened")
 Because Vessel is an open-source app distributed without a paid Apple Developer ID notarization certificate, macOS Gatekeeper flags downloaded `.dmg` apps with a quarantine attribute. After dragging **Vessel.app** into **Applications**, run this once in Terminal:

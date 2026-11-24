@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>dev.falsis.vessel</id>
+  <name>Vessel</name>
+  <summary>Local-first, cross-platform streaming and media center</summary>
+  <metadata_license>FSFAP</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <developer id="dev.falsis">
+    <name>Falsis</name>
+  </developer>
+  <launchable type="desktop-id">dev.falsis.vessel.desktop</launchable>
+  <url type="homepage">https://github.com/falsisdev/vessel</url>
+  <url type="bugtracker">https://github.com/falsisdev/vessel/issues</url>
+  <url type="help">https://github.com/falsisdev/vessel/wiki</url>
+  <description>
+    <p>
+      Vessel is a local-first, privacy-respecting streaming and media center built in Rust,
+      Tauri v2, and Vue 3. Extensions execute locally in isolated QuickJS sandboxes,
+      accompanied by an HMAC-authenticated local HTTP/HLS proxy, SQLite FTS5 library
+      persistence, IPTV with XMLTV EPG, skip segments, and concurrent offline downloads.
+    </p>
+  </description>
+  <categories>
+    <category>AudioVideo</category>
+    <category>Video</category>
+  </categories>
+  <content_rating type="oars-1.1" />
+  <releases>
+    <release version="0.1.1-alpha.4" date="2026-11-24">
+      <description>
+        <p>Smart Continue Watching, multi-provider Skip Segments, 4-level offline download hierarchy, and Linux packaging.</p>
+      </description>
+    </release>
+  </releases>
+</component>

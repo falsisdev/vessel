@@ -188,13 +188,34 @@ fn select_best_asset<'a>(
                 }
             }
             "linux" => {
-                if lower.ends_with(".appimage") {
+                let mentions_x64 =
+                    lower.contains("amd64") || lower.contains("x86_64") || lower.contains("x64");
+                let mentions_arm = lower.contains("arm64") || lower.contains("aarch64");
+                if target_arch == "x86_64" && mentions_arm && !mentions_x64 {
+                    return -1;
+                }
+                if target_arch == "aarch64" && mentions_x64 && !mentions_arm {
+                    return -1;
+                }
+                let base = if lower.ends_with(".appimage") {
                     100
                 } else if lower.ends_with(".deb") {
                     80
+                } else if lower.ends_with(".rpm") {
+                    60
+                } else if lower.ends_with(".flatpak") {
+                    40
                 } else {
-                    -1
-                }
+                    return -1;
+                };
+                let arch_bonus = if (target_arch == "x86_64" && mentions_x64)
+                    || (target_arch == "aarch64" && mentions_arm)
+                {
+                    10
+                } else {
+                    0
+                };
+                base + arch_bonus
             }
             _ => -1,
         }
@@ -402,7 +423,12 @@ pub async fn check_app_update(state: State<'_, AppState>) -> Result<AppUpdateInf
 
     let latest_version = normalize_version(&rel.tag_name).to_owned();
     let update_available = is_newer_version(&current_version, &latest_version);
-    let best_asset = select_best_asset(&rel.assets, std::env::consts::OS, std::env::consts::ARCH);
+    let in_flatpak = std::env::var_os("FLATPAK_ID").is_some();
+    let best_asset = if in_flatpak {
+        None
+    } else {
+        select_best_asset(&rel.assets, std::env::consts::OS, std::env::consts::ARCH)
+    };
 
     Ok(AppUpdateInfoDto {
         current_version,
@@ -573,6 +599,21 @@ mod tests {
                 size: 100,
                 browser_download_url: "https://github.com/a/b/setup.exe".into(),
             },
+            GithubAsset {
+                name: "Vessel_0.2.0_amd64.AppImage".into(),
+                size: 100,
+                browser_download_url: "https://github.com/a/b/amd64.AppImage".into(),
+            },
+            GithubAsset {
+                name: "Vessel_0.2.0_amd64.deb".into(),
+                size: 100,
+                browser_download_url: "https://github.com/a/b/amd64.deb".into(),
+            },
+            GithubAsset {
+                name: "Vessel_0.2.0_amd64.flatpak".into(),
+                size: 100,
+                browser_download_url: "https://github.com/a/b/amd64.flatpak".into(),
+            },
         ];
 
         assert_eq!(
@@ -586,6 +627,10 @@ mod tests {
         assert_eq!(
             select_best_asset(&assets, "windows", "x86_64").map(|a| a.name.as_str()),
             Some("Vessel_0.2.0_x64-setup.exe")
+        );
+        assert_eq!(
+            select_best_asset(&assets, "linux", "x86_64").map(|a| a.name.as_str()),
+            Some("Vessel_0.2.0_amd64.AppImage")
         );
     }
 

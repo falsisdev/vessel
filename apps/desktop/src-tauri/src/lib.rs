@@ -19,11 +19,17 @@ use events::TauriEventSink;
 pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
-            let paths = VesselPaths::from_home_env().or_else(|_| {
+            let paths = if std::env::var_os("FLATPAK_ID").is_some() {
                 let data_dir = app.path().app_data_dir()?;
                 VesselPaths::new(data_dir)
-                    .map_err(|err| Box::new(err) as Box<dyn std::error::Error>)
-            })?;
+                    .map_err(|err| Box::new(err) as Box<dyn std::error::Error>)?
+            } else {
+                VesselPaths::from_home_env().or_else(|_| {
+                    let data_dir = app.path().app_data_dir()?;
+                    VesselPaths::new(data_dir)
+                        .map_err(|err| Box::new(err) as Box<dyn std::error::Error>)
+                })?
+            };
 
             let event_sink: Arc<dyn EventSink> =
                 Arc::new(TauriEventSink::new(app.handle().clone()));

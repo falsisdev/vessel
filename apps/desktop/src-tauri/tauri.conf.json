@@ -27,6 +27,14 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "category": "Video",
+    "shortDescription": "Local-first, cross-platform streaming and media center",
+    "longDescription": "Vessel is a local-first streaming and media center powered by Rust, Tauri v2, QuickJS plugins, local HTTP/HLS proxy, IPTV EPG, and offline downloads.",
+    "linux": {
+      "appimage": {
+        "bundleMediaFramework": true
+      }
+    },
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

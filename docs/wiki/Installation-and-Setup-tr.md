@@ -15,6 +15,21 @@ Etiketlenen her sürüm (`v*`) GitHub Actions üzerinden otomatik derlenerek **[
 | **macOS** | Apple Silicon (`aarch64-apple-darwin`) | `.dmg` | `Vessel.app` dosyasını Applications klasörüne sürükleyin |
 | **macOS** | Intel (`x86_64-apple-darwin`) | `.dmg` | `Vessel.app` dosyasını Applications klasörüne sürükleyin |
 | **Windows** | x64 (`x86_64-pc-windows-msvc`) | `-setup.exe` (NSIS) | Kurulum sihirbazı |
+| **Linux** | x64 (`x86_64-unknown-linux-gnu`) | `.AppImage`, `.deb`, `.rpm`, `.flatpak` | Flatpak sandbox (`dev.falsis.vessel`) + yerel paketler |
+
+---
+
+### Linux Kurulum Notları (`.AppImage`, `.deb`, `.rpm`, `.flatpak`)
+
+- **AppImage:** `chmod +x Vessel_*.AppImage && ./Vessel_*.AppImage`
+- **Debian / Ubuntu (`.deb`):** `sudo apt install ./Vessel_*.deb`
+- **Fedora / RHEL (`.rpm`):** `sudo dnf install ./Vessel-*.rpm`
+- **Flatpak (`.flatpak`):**
+  ```bash
+  flatpak install --user Vessel_*_amd64.flatpak
+  flatpak run dev.falsis.vessel
+  ```
+  > Flatpak içinde `<VesselRoot>` otomatik olarak XDG uygulama veri dizinine (`~/.var/app/dev.falsis.vessel/data/dev.falsis.vessel`) yerleşir.
 
 ---
 

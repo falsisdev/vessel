@@ -30,25 +30,41 @@ jobs:
             rust_target: aarch64-apple-darwin
             bundles: dmg
             bundle_glob: target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
-            artifact_name: vessel-macos-aarch64
+            artifact_name: installer-macos-aarch64
+            is_linux: false
           - label: macOS Intel (.dmg)
             os: macos-latest
             rust_target: x86_64-apple-darwin
             bundles: dmg
             bundle_glob: target/x86_64-apple-darwin/release/bundle/dmg/*.dmg
-            artifact_name: vessel-macos-x64
+            artifact_name: installer-macos-x64
+            is_linux: false
           - label: Windows x64 (.exe)
             os: windows-latest
             rust_target: x86_64-pc-windows-msvc
             bundles: nsis
             bundle_glob: target/x86_64-pc-windows-msvc/release/bundle/nsis/*-setup.exe
-            artifact_name: vessel-windows-x64
+            artifact_name: installer-windows-x64
+            is_linux: false
+          - label: Linux x64 (.AppImage / .deb / .rpm)
+            os: ubuntu-22.04
+            rust_target: x86_64-unknown-linux-gnu
+            bundles: deb,appimage,rpm
+            bundle_glob: target/x86_64-unknown-linux-gnu/release/bundle/deb/*.deb target/x86_64-unknown-linux-gnu/release/bundle/appimage/*.AppImage target/x86_64-unknown-linux-gnu/release/bundle/rpm/*.rpm
+            artifact_name: installer-linux-x64
+            is_linux: true
 
     runs-on: ${{ matrix.os }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Install Linux Tauri system dependencies
+        if: matrix.is_linux
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf libgtk-3-dev libssl-dev
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -96,9 +112,67 @@ jobs:
           path: release-assets/*
           if-no-files-found: error
 
+      - name: Upload Linux binary for Flatpak bundling
+        if: matrix.is_linux
+        uses: actions/upload-artifact@v4
+        with:
+          name: flatpak-bin-x64
+          path: target/x86_64-unknown-linux-gnu/release/vessel-desktop
+          if-no-files-found: error
+
+  build-flatpak:
+    name: Build (Linux Flatpak bundle)
+    needs: build
+    runs-on: ubuntu-24.04
+    continue-on-error: true
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download compiled Linux binary
+        uses: actions/download-artifact@v4
+        with:
+          name: flatpak-bin-x64
+          path: flatpak-staging
+
+      - name: Install Flatpak & GNOME 47 runtime
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y flatpak flatpak-builder
+          flatpak remote-add --if-not-exists --user flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+          flatpak install --user -y flathub org.gnome.Platform//47 org.gnome.Sdk//47
+
+      - name: Build single-file .flatpak bundle
+        run: |
+          chmod +x flatpak-staging/vessel-desktop
+          cp packaging/flatpak/dev.falsis.vessel.yml flatpak-staging/
+          cp packaging/flatpak/dev.falsis.vessel.desktop flatpak-staging/
+          cp packaging/flatpak/dev.falsis.vessel.metainfo.xml flatpak-staging/
+          cp apps/desktop/src-tauri/icons/32x32.png flatpak-staging/
+          cp apps/desktop/src-tauri/icons/128x128.png flatpak-staging/
+          cp apps/desktop/src-tauri/icons/icon.png flatpak-staging/
+
+          flatpak-builder --user --force-clean --repo=flatpak-repo flatpak-build flatpak-staging/dev.falsis.vessel.yml
+          VERSION="${GITHUB_REF_NAME#v}"
+          if [ -z "$VERSION" ] || [ "$VERSION" = "main" ]; then
+            VERSION="dev"
+          fi
+          mkdir -p flatpak-release
+          flatpak build-bundle flatpak-repo "flatpak-release/Vessel_${VERSION}_amd64.flatpak" dev.falsis.vessel
+          ls -lh flatpak-release/
+
+      - name: Upload Flatpak artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer-linux-flatpak
+          path: flatpak-release/*.flatpak
+          if-no-files-found: error
+
   publish-release:
     name: Publish GitHub Release
-    needs: build
+    needs: [build, build-flatpak]
+    if: always() && needs.build.result == 'success'
     runs-on: ubuntu-latest
 
     steps:
@@ -109,6 +183,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: artifacts
+          pattern: installer-*
           merge-multiple: true
 
       - name: List release assets

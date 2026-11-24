@@ -1,0 +1,11 @@
+[Desktop Entry]
+Name=Vessel
+Comment=Local-first, cross-platform streaming and media center
+Exec=vessel-desktop %u
+Icon=dev.falsis.vessel
+Terminal=false
+Type=Application
+Categories=AudioVideo;Video;Player;
+StartupWMClass=vessel-desktop
+MimeType=x-scheme-handler/vessel;
+Keywords=video;streaming;iptv;media;player;
