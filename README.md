@@ -18,7 +18,7 @@
 
 **Vessel** is a local-first, cross-platform streaming and media center built from the ground up in **Rust**, **Tauri v2**, **Vue 3 / TypeScript**, and **Kotlin Jetpack Compose (`UniFFI`)**.
 
-> **Project Status (`v0.1.3`):** Core Engine (`crates/vessel-*`), the **Desktop App (`apps/desktop`)** for macOS, Windows & Linux, and the **Android App (`apps/android` via `vessel-ffi` UniFFI)** are active and downloadable on [GitHub Releases](https://github.com/falsisdev/vessel/releases). Next major milestones include cloud device sync, tracker scrobbling (Simkl/Trakt/AniList/MAL/Kitsu), Android TV remote navigation, and iOS/iPadOS.
+> **Project Status (`v0.1.4`):** Core Engine (`crates/vessel-*`), the **Desktop App (`apps/desktop`)** for macOS, Windows & Linux, and the **Android App (`apps/android` via `vessel-ffi` UniFFI)** are active and downloadable on [GitHub Releases](https://github.com/falsisdev/vessel/releases). Next major milestones include unified OAuth + OS Keyring security, Google Drive & tracker sync, independent subtitle providers, Android TV + `mpvkit` options, and iOS/iPadOS.
 > The earlier Go + SwiftUI prototype is preserved on `archive/v1-go` (`v1-go-archive` tag) and `archive/v1-go-ui-polish` (`v1-go-ui-polish-archive` tag).
 
 ---
@@ -174,11 +174,10 @@ See the full [Plugin Development SDK](https://github.com/falsisdev/vessel/wiki/P
 
 ## Roadmap
 
-- **Cloud Sync:** Google Drive account linking for cross-device library, watch progress, linked sources, and preferences sync.
-- **Tracker Integration:** Bidirectional scrobbling, matching, library status edits, and auto-sync with **Simkl**, **Trakt**, **AniList**, **MyAnimeList**, and **Kitsu**.
-- **Android TV:** Full D-pad focus & remote navigation experience built on shared `vessel-ffi` + Compose for TV.
-- **Performance & Media Optimizations:** Expanded player/runtime optimizations and stream extractor polish.
-- **iOS & iPadOS:** Native SwiftUI + `MPVKit` shell powered by `vessel-ffi` `.xcframework`.
+1. **Unified OAuth & Secure Token Storage:** Shared OAuth flows (Desktop loopback, Android deep link, TV Device Code / QR) backed by `OsKeyringSecretStore` (OS Keychain / Android Keystore) and token refresh handling.
+2. **Cloud & Tracker Sync + Independent Subtitles:** Incremental SQLite sync with deletion tombstones via **Google Drive**, bidirectional scrobbling & library sync with **Simkl**, **Trakt**, **AniList**, **MyAnimeList**, and **Kitsu**, plus external subtitle providers (**OpenSubtitles**, **SubDL**, community Turkish subtitle sources).
+3. **Performance, Player Upgrades & Android TV:** Dynamic `PluginPool` memory tuning, cache/TTL caps, ABI split + Android background download `ForegroundService`, **Android TV** (`Compose for TV` D-pad UX), optional Android `mpvkit` (`libass`) / `ExoPlayer` auto-switching, and optional Desktop embedded `libmpv` HUD.
+4. **iOS / iPadOS & Long-Term Media:** Native SwiftUI + `MPVKit` shell powered by `vessel-ffi` `.xcframework`, plus Torrent / Debrid / Magnet integration and optional Desktop `ffmpeg -c copy` single-`.mp4` export.
 
 ---
 

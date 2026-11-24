@@ -36,7 +36,7 @@ Unlike cloud-reliant streaming hubs or closed-source scrapers, Vessel executes *
 
 ---
 
-## Feature Matrix (`v0.1.3`)
+## Feature Matrix (`v0.1.4`)
 
 | Area | Implemented Capabilities |
 | :--- | :--- |
@@ -55,5 +55,9 @@ Unlike cloud-reliant streaming hubs or closed-source scrapers, Vessel executes *
 
 - **Milestone 6.1 — Production Ecosystem & Desktop v1.0:** Real-world community plugins, Windows `OsKeyringSecretStore`, optional embedded `MpvEmbeddedBackend`, stable signed `.dmg` / `.msi` / `.exe` releases.
 - **Milestone 6.2 — Android & Android TV (`UniFFI`):** Shared Rust `vessel-engine` via `crates/vessel-ffi` powering Kotlin Jetpack Compose + Compose for TV (`mpvkit` / `Media3 ExoPlayer`).
-- **Milestone 6.1–6.2 (Current `v0.1.3`):** Cross-platform **Desktop (Tauri v2 + Vue 3)** & **Android (`apps/android` Kotlin Jetpack Compose + Media3 ExoPlayer via `vessel-ffi`)**, 6-provider Fix Match title search, cross-source stream linking, Live TV customization & favorites, and toggleable Android Floating Bottom Navbar.
-- **Milestone 6.3+ — Upcoming:** Google Drive cross-device sync, Simkl / Trakt / AniList / MAL / Kitsu scrobbling & library sync, Android TV + D-pad navigation, performance optimizations, and iOS/iPadOS (`vessel-ffi` + `MPVKit`), Torrent/Debrid, and OpenSubtitles/SubDL.
+- **Milestone 6.1–6.2 (Current `v0.1.4`):** Cross-platform **Desktop (Tauri v2 + Vue 3)** & **Android (`apps/android` Kotlin Jetpack Compose + Media3 ExoPlayer via `vessel-ffi`)**, universal third-party Nuvio/Stremio/ESM/TS runtime compatibility, 6-provider Fix Match title search, cross-source stream linking, Live TV customization & favorites, and true edge-to-edge Android Floating Bottom Navbar.
+- **Milestone 6.3+ — Roadmap:**
+  1. Unified OAuth (Loopback / Deep Link / TV Device Code) + `OsKeyringSecretStore` token security.
+  2. SQLite deletion tombstones + Google Drive sync ↔ **Simkl / Trakt / AniList / MAL / Kitsu** library/scrobble sync + external subtitle providers (**OpenSubtitles / SubDL**).
+  3. Memory/cache optimizations, **Android TV (`Compose for TV`)**, and optional Android `mpvkit` (`libass`) / Desktop embedded `libmpv` HUD.
+  4. **iOS & iPadOS** (`SwiftUI` + `vessel-ffi` + `MPVKit`), Torrent/Debrid/Magnet, and optional Desktop `ffmpeg -c copy` `.mp4` export.

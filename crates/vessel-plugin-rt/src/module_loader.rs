@@ -12,6 +12,37 @@ use crate::ts_strip::TsCompileCache;
 /// Built-in specifier exported to plugin ES modules (`import { http, html } from "vessel"`).
 pub const VESSEL_SDK_MODULE_ID: &str = "vessel";
 
+const VIRTUAL_COMPAT_PREFIX: &str = "__vessel_virtual__:";
+
+fn virtual_compat_module_name(specifier: &str) -> Option<&'static str> {
+    let clean = specifier.strip_prefix("node:").unwrap_or(specifier);
+    match clean {
+        "cheerio" | "cheerio-without-node-native" | "react-native-cheerio" => Some("cheerio"),
+        "axios" => Some("axios"),
+        "crypto-js" | "crypto" => Some("crypto-js"),
+        "path" => Some("path"),
+        "fs" => Some("fs"),
+        "url" => Some("url"),
+        "querystring" => Some("querystring"),
+        "buffer" => Some("buffer"),
+        "he" | "entities" => Some("he"),
+        _ => None,
+    }
+}
+
+fn build_virtual_compat_esm(module_name: &str) -> String {
+    match module_name {
+        "cheerio" => r#"const m = globalThis.require("cheerio"); export const load = m.load; export default m;"#.into(),
+        "axios" => r#"const m = globalThis.require("axios"); export const get = m.get; export const post = m.post; export const put = m.put; export const head = m.head; export const request = m.request; export const create = m.create; export default m;"#.into(),
+        "crypto-js" => r#"const m = globalThis.require("crypto-js"); export const enc = m.enc; export const MD5 = m.MD5; export const SHA1 = m.SHA1; export const SHA256 = m.SHA256; export const HmacSHA256 = m.HmacSHA256; export const AES = m.AES; export default m;"#.into(),
+        "url" => r#"const m = globalThis.require("url"); export const URL = m.URL; export const URLSearchParams = m.URLSearchParams; export const parse = m.parse; export const resolve = m.resolve; export default m;"#.into(),
+        "querystring" => r#"const m = globalThis.require("querystring"); export const parse = m.parse; export const stringify = m.stringify; export const encode = m.encode; export const decode = m.decode; export default m;"#.into(),
+        "buffer" => r#"const m = globalThis.require("buffer"); export const Buffer = m.Buffer; export default m;"#.into(),
+        "he" => r#"const m = globalThis.require("he"); export const decode = m.decode; export const decodeHTML = m.decodeHTML; export default m;"#.into(),
+        other => format!(r#"const m = globalThis.require({other:?}); export default m;"#),
+    }
+}
+
 const VESSEL_MODULE_SHIM: &str = r#"
 const v = globalThis.vessel;
 if (!v) {
@@ -118,6 +149,9 @@ impl PluginBundle {
         if specifier == VESSEL_SDK_MODULE_ID {
             return Ok(VESSEL_SDK_MODULE_ID.to_owned());
         }
+        if let Some(compat_name) = virtual_compat_module_name(specifier) {
+            return Ok(format!("{VIRTUAL_COMPAT_PREFIX}{compat_name}"));
+        }
 
         if !specifier.starts_with("./") && !specifier.starts_with("../") {
             return Err(VesselError::InvalidInput(format!(
@@ -213,6 +247,13 @@ impl Loader for PluginLoader {
         if name == VESSEL_SDK_MODULE_ID {
             return Module::declare(ctx.clone(), VESSEL_SDK_MODULE_ID, VESSEL_MODULE_SHIM);
         }
+        if let Some(compat_name) = name.strip_prefix(VIRTUAL_COMPAT_PREFIX) {
+            return Module::declare(
+                ctx.clone(),
+                name.to_owned(),
+                build_virtual_compat_esm(compat_name),
+            );
+        }
 
         let Some(source) = self.bundle.get(name) else {
             return Err(QjsError::new_loading(name));
@@ -277,8 +318,15 @@ mod tests {
             .expect_err("reject bundle escape");
         assert!(matches!(escape_err, VesselError::InvalidInput(_)));
 
+        assert_eq!(
+            bundle
+                .resolve_import("src/index.ts", "axios")
+                .expect("built-in compat module axios"),
+            "__vessel_virtual__:axios"
+        );
+
         let bare_err = bundle
-            .resolve_import("src/index.ts", "axios")
+            .resolve_import("src/index.ts", "lodash")
             .expect_err("reject unbundled npm package");
         assert!(matches!(bare_err, VesselError::InvalidInput(_)));
     }

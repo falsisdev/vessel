@@ -350,6 +350,7 @@ impl SourceResolver {
     /// Creates a production `SourceResolver` backed by `raw.githubusercontent.com` and `gitlab.com`.
     pub fn new() -> Self {
         let client = vessel_domain::http_client_builder()
+            .user_agent("Vessel/0.1.4 (https://github.com/falsisdev/vessel)")
             .redirect(Policy::none())
             .timeout(RESOLVER_TIMEOUT)
             .build()
@@ -583,13 +584,19 @@ impl SourceResolver {
             .get("scrapers")
             .and_then(|v| v.as_array())
             .and_then(|arr| {
-                arr.iter()
-                    .find(|s| s.get("id").and_then(|v| v.as_str()) == Some(scraper_id))
+                arr.iter().find(|s| {
+                    s.get("id")
+                        .or_else(|| s.get("slug"))
+                        .or_else(|| s.get("name"))
+                        .and_then(|v| v.as_str())
+                        .map(str::trim)
+                        == Some(scraper_id)
+                })
             })
-            .and_then(|s| s.get("filename").and_then(|v| v.as_str()))
+            .and_then(crate::compat::nuvio_scraper_source_url)
             .ok_or_else(|| {
                 VesselError::NotFound(format!(
-                    "scraper '{scraper_id}' missing filename in '{final_manifest_url}'"
+                    "scraper '{scraper_id}' missing source path/url in '{final_manifest_url}'"
                 ))
             })?;
 
@@ -923,9 +930,15 @@ impl SourceResolver {
                 } else {
                     continue;
                 };
-                if let Some((_, list_bytes)) = self.try_fetch_bytes(&target_url).await? {
-                    check_cloudstream_closed_plugins(&list_bytes, &target_url)?;
-                    if let Ok(sub_repo) = serde_json::from_slice::<RepoIndex>(&list_bytes) {
+                if let Some((final_list_url, list_bytes)) =
+                    self.try_fetch_bytes(&target_url).await?
+                {
+                    check_cloudstream_closed_plugins(&list_bytes, &final_list_url)?;
+                    if let Ok(Some(ExternalManifestKind::NuvioRepo(nuvio_repo))) =
+                        parse_external_manifest(&list_bytes, &final_list_url)
+                    {
+                        repo.plugins.extend(nuvio_repo.plugins);
+                    } else if let Ok(sub_repo) = serde_json::from_slice::<RepoIndex>(&list_bytes) {
                         repo.plugins.extend(sub_repo.plugins);
                     }
                 }

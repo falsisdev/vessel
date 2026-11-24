@@ -76,6 +76,7 @@ import androidx.compose.material3.Text
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
 import dev.falsis.vessel.data.PlaybackProgress
+import dev.falsis.vessel.ui.theme.LocalVesselFloatingNavInset
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -372,7 +373,7 @@ fun HomeScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(palette.bgBase),
-        contentPadding = PaddingValues(bottom = 24.dp),
+        contentPadding = PaddingValues(bottom = 24.dp + LocalVesselFloatingNavInset.current),
         verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
         // Native FFI warning banner if .so isn't built yet

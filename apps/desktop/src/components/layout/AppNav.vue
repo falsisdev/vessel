@@ -67,7 +67,7 @@ const showLabels = computed(() => isTop.value || isExpanded.value)
   >
     <div v-if="!isFloatingBottom" class="brand" translate="no">
       <div class="brand-mark" aria-hidden="true">
-        <VesselLogo :size="20" />
+        <VesselLogo :size="24" />
       </div>
       <span v-if="showLabels" class="brand-name">{{ t('app.name') }}</span>
     </div>
@@ -171,16 +171,13 @@ const showLabels = computed(() => isTop.value || isExpanded.value)
 }
 
 .brand-mark {
-  width: 38px;
-  height: 38px;
-  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(145deg, color-mix(in srgb, var(--vessel-accent) 26%, transparent), color-mix(in srgb, var(--vessel-accent-secondary) 14%, transparent));
+  background: transparent;
+  border: none;
+  box-shadow: none;
   color: var(--vessel-text-primary);
-  border: 1px solid var(--vessel-border-strong);
-  box-shadow: 0 0 22px color-mix(in srgb, var(--vessel-accent) 22%, transparent);
   flex-shrink: 0;
 }
 

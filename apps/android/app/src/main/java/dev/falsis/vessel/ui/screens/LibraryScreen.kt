@@ -53,6 +53,7 @@ import dev.falsis.vessel.ui.components.VesselSearchField
 import dev.falsis.vessel.ui.components.isLandscapeCardRatio
 import dev.falsis.vessel.ui.components.vesselTopSafeInset
 import dev.falsis.vessel.ui.i18n.VesselI18n
+import dev.falsis.vessel.ui.theme.LocalVesselFloatingNavInset
 import dev.falsis.vessel.ui.theme.LocalVesselPalette
 import kotlinx.coroutines.launch
 
@@ -150,7 +151,7 @@ fun LibraryScreen(
             } else {
                 LazyVerticalGrid(
                     columns = GridCells.Adaptive(minSize = if (isWideCard) 168.dp else 110.dp),
-                    contentPadding = PaddingValues(top = 2.dp, bottom = 24.dp),
+                    contentPadding = PaddingValues(top = 2.dp, bottom = 24.dp + LocalVesselFloatingNavInset.current),
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp),
                     modifier = Modifier.fillMaxSize(),

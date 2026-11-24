@@ -5,7 +5,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use reqwest::Method;
-use reqwest::header::{HeaderMap, HeaderName, HeaderValue, LOCATION};
+use reqwest::header::{HeaderMap, HeaderName, HeaderValue, LOCATION, USER_AGENT};
 use rquickjs::function::{IntoJsFunc, ParamRequirement, Params};
 use rquickjs::prelude::Async;
 use rquickjs::{
@@ -166,6 +166,14 @@ async fn execute_http_request(
             VesselError::InvalidInput(format!("invalid value for header '{name}': {err}"))
         })?;
         header_map.insert(header_name, header_value);
+    }
+    if !header_map.contains_key(USER_AGENT) {
+        header_map.insert(
+            USER_AGENT,
+            HeaderValue::from_static(
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+            ),
+        );
     }
 
     let timeout = Duration::from_millis(timeout_ms.clamp(1, MAX_HTTP_TIMEOUT_MS).max(

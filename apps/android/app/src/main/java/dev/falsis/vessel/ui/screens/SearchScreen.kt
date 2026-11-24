@@ -63,6 +63,7 @@ import dev.falsis.vessel.ui.components.VesselFilterChip
 import dev.falsis.vessel.ui.components.VesselOutlinedButton
 import dev.falsis.vessel.ui.components.VesselSearchField
 import dev.falsis.vessel.ui.components.VesselTextButton
+import dev.falsis.vessel.ui.theme.LocalVesselFloatingNavInset
 import dev.falsis.vessel.ui.components.isLandscapeCardRatio
 import dev.falsis.vessel.ui.components.vesselTopSafeInset
 import dev.falsis.vessel.ui.i18n.VesselI18n
@@ -285,7 +286,7 @@ fun SearchScreen(
             } else {
                 LazyVerticalGrid(
                     columns = GridCells.Adaptive(minSize = if (isWideCard) 168.dp else 110.dp),
-                    contentPadding = PaddingValues(top = 2.dp, bottom = 24.dp),
+                    contentPadding = PaddingValues(top = 2.dp, bottom = 24.dp + LocalVesselFloatingNavInset.current),
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp),
                     modifier = Modifier.fillMaxSize(),

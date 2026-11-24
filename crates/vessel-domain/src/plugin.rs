@@ -148,15 +148,25 @@ pub struct SharedExtractorsRef {
     pub sha256: Option<String>,
 }
 
+fn default_schema_version() -> u32 {
+    1
+}
+
+fn default_repo_capabilities() -> Vec<PluginCapability> {
+    vec![PluginCapability::Vod, PluginCapability::Search]
+}
+
 /// Single plugin listing inside a `repo.json` index.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RepoPluginEntry {
     pub id: PluginId,
     pub name: String,
+    #[serde(default = "default_entry_version")]
     pub version: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
+    #[serde(default = "default_repo_capabilities")]
     pub capabilities: Vec<PluginCapability>,
     #[serde(default)]
     pub content_types: Vec<ContentCategory>,
@@ -176,10 +186,15 @@ pub struct RepoPluginEntry {
     pub min_core_version: Option<String>,
 }
 
+fn default_entry_version() -> String {
+    "1.0.0".into()
+}
+
 /// Multi-plugin repository index (`repo.json`).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RepoIndex {
+    #[serde(default = "default_schema_version")]
     pub schema_version: u32,
     pub id: String,
     pub name: String,

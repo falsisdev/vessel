@@ -14,7 +14,7 @@
 
 ---
 
-## Hauptfunktionen (`v0.1.3`)
+## Hauptfunktionen (`v0.1.4`)
 
 - **Vollbild-Player (`/watch`):** HLS (`hls.js`), MPEG-TS (`mpegts.js`), MP4/WebM und nahtlose Übergabe an externes **`mpv`** per JSON-IPC; Auswahl von **Audiospuren**, **Untertiteln** (`.srt/.vtt/.ass/.ssa`) inkl. Sync (`-500ms / +500ms`), Live-Vorschau im Einstellungsmenü, direkter **Zurück zu Details**-Button und automatisches **Intro / Rückblick / Abspann / Vorschau überspringen** (`Plugin > TheIntroDB > IntroDB > AniSkip`).
 - **Intelligentes „Weiterschauen“:** Springt bei Serien automatisch zur nächsten Episode, blendet abgeschlossene Filme/Serienfinale aus, bietet Kontextmenü (Rechtsklick / langes Drücken) und einen manuellen Editor mit schreibgeschützter Episodendauer.

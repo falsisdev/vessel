@@ -1152,14 +1152,30 @@ impl VesselEngine {
                         fetched
                     }
                 };
-                let matched_ep = match_linked_episode(
+                let synthetic_stream_id;
+                let target_stream_id = if let Some(ep) = match_linked_episode(
                     &detail.episodes,
                     season,
                     episode,
                     absolute_episode,
                     is_movie,
-                )?;
-                let mut sr = provider.streams(&matched_ep.stream_id).await.ok()?;
+                ) {
+                    ep.stream_id.as_str()
+                } else if let Some(only_ep) = detail
+                    .episodes
+                    .first()
+                    .filter(|_| detail.episodes.len() == 1)
+                    && let Some(raw_rest) = only_ep.stream_id.strip_prefix("vns::")
+                    && let Some((mtype, rest_after_type)) = raw_rest.split_once("::")
+                    && let Some((_, rest_after_s)) = rest_after_type.split_once("::")
+                    && let Some((_, raw_id)) = rest_after_s.split_once("::")
+                {
+                    synthetic_stream_id = format!("vns::{mtype}::{season}::{episode}::{raw_id}");
+                    synthetic_stream_id.as_str()
+                } else {
+                    return None;
+                };
+                let mut sr = provider.streams(target_stream_id).await.ok()?;
                 for cand in &mut sr.streams {
                     cand.plugin_id = Some(link_pid.as_str().to_owned());
                     cand.plugin_name = Some(link_name.clone());

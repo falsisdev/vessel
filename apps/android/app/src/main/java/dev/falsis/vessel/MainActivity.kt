@@ -34,6 +34,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -69,6 +70,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -99,6 +101,7 @@ import dev.falsis.vessel.ui.screens.LiveTvScreen
 import dev.falsis.vessel.ui.screens.PlayerScreen
 import dev.falsis.vessel.ui.screens.SearchScreen
 import dev.falsis.vessel.ui.screens.SettingsScreen
+import dev.falsis.vessel.ui.theme.LocalVesselFloatingNavInset
 import dev.falsis.vessel.ui.theme.LocalVesselPalette
 import dev.falsis.vessel.ui.theme.VesselTheme
 import kotlinx.coroutines.delay
@@ -464,75 +467,71 @@ fun VesselAndroidApp(
                                     }
 
                                     if (prefs.shell.mobileNavLayout == "floating_bottom") {
-                                        Scaffold(
-                                            containerColor = palette.bgBase,
-                                            contentWindowInsets = WindowInsets(0, 0, 0, 0),
-                                            bottomBar = {
-                                                Box(
+                                        CompositionLocalProvider(LocalVesselFloatingNavInset provides 86.dp) {
+                                            Box(modifier = Modifier.fillMaxSize()) {
+                                                tabBody(Modifier.fillMaxSize())
+                                                Surface(
+                                                    shape = RoundedCornerShape(999.dp),
+                                                    color = palette.bgSurface.copy(alpha = 0.86f),
+                                                    border = BorderStroke(1.dp, palette.border.copy(alpha = 0.72f)),
+                                                    shadowElevation = 20.dp,
+                                                    tonalElevation = 8.dp,
                                                     modifier = Modifier
-                                                        .fillMaxWidth()
+                                                        .align(Alignment.BottomCenter)
                                                         .navigationBarsPadding()
-                                                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                                                        .padding(horizontal = 18.dp, vertical = 12.dp)
+                                                        .widthIn(max = 440.dp)
+                                                        .fillMaxWidth(),
                                                 ) {
-                                                    Surface(
-                                                        shape = RoundedCornerShape(999.dp),
-                                                        color = palette.bgSurface.copy(alpha = 0.94f),
-                                                        border = BorderStroke(1.dp, palette.border.copy(alpha = 0.65f)),
-                                                        shadowElevation = 14.dp,
-                                                        modifier = Modifier.fillMaxWidth(),
+                                                    Row(
+                                                        modifier = Modifier
+                                                            .fillMaxWidth()
+                                                            .padding(horizontal = 6.dp, vertical = 5.dp),
+                                                        horizontalArrangement = Arrangement.SpaceEvenly,
                                                     ) {
-                                                        Row(
-                                                            modifier = Modifier
-                                                                .fillMaxWidth()
-                                                                .padding(horizontal = 6.dp, vertical = 5.dp),
-                                                            horizontalArrangement = Arrangement.SpaceEvenly,
-                                                        ) {
-                                                            TopTab.entries.forEachIndexed { idx, tab ->
-                                                                val isSelected = selectedTab == idx
-                                                                val pillColor by animateColorAsState(
-                                                                    targetValue = if (isSelected) palette.accent.copy(alpha = 0.20f) else palette.bgSurface.copy(alpha = 0f),
-                                                                    animationSpec = tween(200),
-                                                                    label = "float_nav_bg",
+                                                        TopTab.entries.forEachIndexed { idx, tab ->
+                                                            val isSelected = selectedTab == idx
+                                                            val pillColor by animateColorAsState(
+                                                                targetValue = if (isSelected) palette.accent.copy(alpha = 0.22f) else palette.bgSurface.copy(alpha = 0f),
+                                                                animationSpec = tween(200),
+                                                                label = "float_nav_bg",
+                                                            )
+                                                            val contentTint by animateColorAsState(
+                                                                targetValue = if (isSelected) palette.accent else palette.textMuted,
+                                                                animationSpec = tween(200),
+                                                                label = "float_nav_tint",
+                                                            )
+                                                            Column(
+                                                                horizontalAlignment = Alignment.CenterHorizontally,
+                                                                verticalArrangement = Arrangement.Center,
+                                                                modifier = Modifier
+                                                                    .weight(1f)
+                                                                    .clip(RoundedCornerShape(999.dp))
+                                                                    .background(pillColor)
+                                                                    .clickable { selectedTab = idx }
+                                                                    .padding(horizontal = 4.dp, vertical = 6.dp),
+                                                            ) {
+                                                                Icon(
+                                                                    imageVector = tab.icon,
+                                                                    contentDescription = VesselI18n.tr(tab.key),
+                                                                    tint = contentTint,
+                                                                    modifier = Modifier.size(19.dp),
                                                                 )
-                                                                val contentTint by animateColorAsState(
-                                                                    targetValue = if (isSelected) palette.accent else palette.textMuted,
-                                                                    animationSpec = tween(200),
-                                                                    label = "float_nav_tint",
+                                                                Text(
+                                                                    text = VesselI18n.tr(tab.key),
+                                                                    color = contentTint,
+                                                                    maxLines = 1,
+                                                                    softWrap = false,
+                                                                    overflow = TextOverflow.Ellipsis,
+                                                                    textAlign = TextAlign.Center,
+                                                                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                                                                    style = MaterialTheme.typography.labelSmall,
                                                                 )
-                                                                Column(
-                                                                    horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally,
-                                                                    verticalArrangement = Arrangement.Center,
-                                                                    modifier = Modifier
-                                                                        .weight(1f)
-                                                                        .clip(RoundedCornerShape(999.dp))
-                                                                        .background(pillColor)
-                                                                        .clickable { selectedTab = idx }
-                                                                        .padding(horizontal = 4.dp, vertical = 6.dp),
-                                                                ) {
-                                                                    Icon(
-                                                                        imageVector = tab.icon,
-                                                                        contentDescription = VesselI18n.tr(tab.key),
-                                                                        tint = contentTint,
-                                                                        modifier = Modifier.size(19.dp),
-                                                                    )
-                                                                    Text(
-                                                                        text = VesselI18n.tr(tab.key),
-                                                                        color = contentTint,
-                                                                        maxLines = 1,
-                                                                        softWrap = false,
-                                                                        overflow = TextOverflow.Ellipsis,
-                                                                        textAlign = TextAlign.Center,
-                                                                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
-                                                                        style = MaterialTheme.typography.labelSmall,
-                                                                    )
-                                                                }
                                                             }
                                                         }
                                                     }
                                                 }
-                                            },
-                                        ) { navInnerPadding ->
-                                            tabBody(Modifier.padding(bottom = navInnerPadding.calculateBottomPadding()))
+                                            }
                                         }
                                     } else {
                                         NavigationSuiteScaffold(

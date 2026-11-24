@@ -235,6 +235,31 @@ pub fn check_cloudstream_closed_plugins(bytes: &[u8], origin: &str) -> VesselRes
     Ok(())
 }
 
+/// Extracts the script filename/URL from a Nuvio scraper manifest entry (`filename`, `url`, `scriptUrl`, `main`, `file`).
+pub fn nuvio_scraper_source_url(sc: &Value) -> Option<&str> {
+    ["filename", "url", "scriptUrl", "main", "file"]
+        .into_iter()
+        .find_map(|key| {
+            sc.get(key)
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+        })
+}
+
+fn looks_like_esm_source(code: &str) -> bool {
+    code.lines().any(|line| {
+        let t = line.trim_start();
+        t.starts_with("import ")
+            || t.starts_with("export default")
+            || t.starts_with("export async ")
+            || t.starts_with("export function ")
+            || t.starts_with("export const ")
+            || t.starts_with("export let ")
+            || t.starts_with("export {")
+    })
+}
+
 /// Parses either a Nuvio repository (`scrapers: [...]`) or a Stremio addon manifest into Vessel models.
 pub fn parse_external_manifest(
     bytes: &[u8],
@@ -264,12 +289,19 @@ pub fn parse_external_manifest(
 
         let mut plugins = Vec::with_capacity(scrapers.len());
         for sc in scrapers {
-            let Some(raw_id) = sc.get("id").and_then(Value::as_str) else {
+            let Some(raw_id) = sc
+                .get("id")
+                .or_else(|| sc.get("slug"))
+                .or_else(|| sc.get("name"))
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+            else {
                 continue;
             };
-            let Some(_filename) = sc.get("filename").and_then(Value::as_str) else {
+            if nuvio_scraper_source_url(sc).is_none() {
                 continue;
-            };
+            }
             let plugin_id = sanitize_plugin_id(raw_id)?;
             let name = sc
                 .get("name")
@@ -395,7 +427,14 @@ pub fn build_nuvio_scraper_package(
         .ok_or_else(|| VesselError::InvalidInput("manifest missing scrapers array".into()))?;
     let sc = scrapers
         .iter()
-        .find(|item| item.get("id").and_then(Value::as_str) == Some(scraper_id))
+        .find(|item| {
+            item.get("id")
+                .or_else(|| item.get("slug"))
+                .or_else(|| item.get("name"))
+                .and_then(Value::as_str)
+                .map(str::trim)
+                == Some(scraper_id)
+        })
         .ok_or_else(|| {
             VesselError::NotFound(format!(
                 "scraper '{scraper_id}' not found in Nuvio manifest '{manifest_url}'"
@@ -424,6 +463,13 @@ pub fn build_nuvio_scraper_package(
         .unwrap_or_else(|| vec!["en".into()]);
 
     let domains = extract_literal_https_domains(raw_js, &[manifest_url, resolved_js_url]);
+    let is_ts = resolved_js_url.ends_with(".ts") || resolved_js_url.ends_with(".mts");
+    let use_esm_directly = is_ts || looks_like_esm_source(raw_js);
+    let shim_filename = if is_ts {
+        "provider_shim.ts"
+    } else {
+        "provider_shim.js"
+    };
 
     let manifest = PluginManifest {
         schema_version: 1,
@@ -442,44 +488,58 @@ pub fn build_nuvio_scraper_package(
         entry: "index.js".into(),
         icon: sc.get("logo").and_then(Value::as_str).map(str::to_owned),
         min_core_version: None,
-        capabilities,
+        capabilities: capabilities.clone(),
         content_types,
         languages,
         domains,
         allow_any_https: false,
         is_adult: sc.get("isAdult").and_then(Value::as_bool).unwrap_or(false),
-        files: vec!["provider_shim.js".into()],
+        files: vec![shim_filename.into()],
         settings_schema: Vec::new(),
     };
     manifest.validate()?;
 
     let meta_json = serde_json::json!({
         "id": scraper_id,
+        "capabilities": capabilities,
         "catalogs": sc.get("catalogs").cloned().unwrap_or_else(|| Value::Array(Vec::new())),
         "supportedTypes": sc.get("supportedTypes").cloned().unwrap_or_else(|| Value::Array(Vec::new())),
     });
 
-    let shim_src = format!(
-        r#"// Wrapped open-source Nuvio provider: {scraper_id}
+    let shim_src = if use_esm_directly {
+        if raw_js.contains("export default") {
+            raw_js.to_owned()
+        } else {
+            format!(
+                "{raw_js}\nexport default {{\n    getCatalog: typeof getCatalog === \"function\" ? getCatalog : undefined,\n    getMeta: typeof getMeta === \"function\" ? getMeta : undefined,\n    getStreams: typeof getStreams === \"function\" ? getStreams : undefined,\n    getSubtitles: typeof getSubtitles === \"function\" ? getSubtitles : undefined,\n    search: typeof search === \"function\" ? search : undefined,\n}};\n"
+            )
+        }
+    } else {
+        format!(
+            r#"// Wrapped open-source Nuvio provider: {scraper_id}
 const __module = {{ exports: {{}} }};
 (function(module, exports, global, window, require, __dirname, __filename) {{
 {raw_js}
 }})(__module, __module.exports, globalThis, globalThis, globalThis.require, "/", "/{scraper_id}.js");
 
-const __exported = (__module.exports && typeof __module.exports === "object") ? __module.exports : {{}};
+const __rawExport = __module.exports && typeof __module.exports === "object"
+    ? (__module.exports.default && typeof __module.exports.default === "object" ? __module.exports.default : __module.exports)
+    : {{}};
 export default {{
-    getCatalog: __exported.getCatalog || globalThis.getCatalog,
-    getMeta: __exported.getMeta || globalThis.getMeta,
-    getStreams: __exported.getStreams || globalThis.getStreams,
-    getSubtitles: __exported.getSubtitles || globalThis.getSubtitles,
+    getCatalog: __rawExport.getCatalog || globalThis.getCatalog,
+    getMeta: __rawExport.getMeta || globalThis.getMeta,
+    getStreams: __rawExport.getStreams || globalThis.getStreams,
+    getSubtitles: __rawExport.getSubtitles || globalThis.getSubtitles,
+    search: __rawExport.search || globalThis.search,
 }};
 "#
-    );
+        )
+    };
 
-    let index_src = build_nuvio_adapter_js(&meta_json.to_string());
+    let index_src = build_nuvio_adapter_js(&meta_json.to_string(), shim_filename);
 
     let mut files: BTreeMap<String, String> = BTreeMap::new();
-    files.insert("provider_shim.js".into(), shim_src);
+    files.insert(shim_filename.into(), shim_src);
     files.insert("index.js".into(), index_src);
 
     let mut hash_buf = serde_json::to_vec(&manifest).unwrap_or_default();
@@ -528,7 +588,8 @@ pub fn build_stremio_addon_package(
         manifest_val.get("resources").and_then(Value::as_array),
         &content_types,
     );
-    let domains = extract_literal_https_domains("", &[manifest_url]);
+    let domains =
+        extract_literal_https_domains("", &[manifest_url, "https://v3-cinemeta.strem.io"]);
 
     let manifest = PluginManifest {
         schema_version: 1,
@@ -583,12 +644,27 @@ pub fn build_stremio_addon_package(
     })
 }
 
-fn build_nuvio_adapter_js(meta_json: &str) -> String {
+fn build_nuvio_adapter_js(meta_json: &str, shim_filename: &str) -> String {
     format!(
         r##"import {{ definePlugin }} from "vessel";
-import provider from "./provider_shim.js";
-
+import provider from "./{shim_filename}";
 const META = {meta_json};
+
+function sanitizeHeaders(rawHeaders) {{
+    const clean = {{}};
+    if (!rawHeaders || typeof rawHeaders !== "object") return clean;
+    for (const [k, v] of Object.entries(rawHeaders)) {{
+        if (v === undefined || v === null || typeof v === "object") continue;
+        const val = String(v).trim();
+        if (k && val) clean[String(k)] = val;
+    }}
+    return clean;
+}}
+
+function isDomainError(err) {{
+    const msg = String(err || "");
+    return msg.includes("DomainBlocked") || msg.includes("AccessDenied");
+}}
 
 function mapMediaType(rawType, rawId) {{
     const id = String(rawId || "").toLowerCase();
@@ -649,7 +725,7 @@ function mapSummary(it, fallbackType) {{
 }}
 
 function encodeStreamRef(mediaType, season, episode, rawId) {{
-    return `vns::${{mediaType || "series"}}::${{season || 1}}::${{episode || 1}}::${{rawId}}`;
+    return `vns::${{mediaType || "series"}}::${{season}}::${{episode}}::${{rawId}}`;
 }}
 
 function decodeStreamRef(streamId) {{
@@ -657,10 +733,12 @@ function decodeStreamRef(streamId) {{
     if (s.startsWith("vns::")) {{
         const parts = s.split("::");
         if (parts.length >= 5) {{
+            const parsedSeason = parseInt(parts[2], 10);
+            const parsedEpisode = parseInt(parts[3], 10);
             return {{
                 mediaType: parts[1] || "series",
-                season: parseInt(parts[2], 10) || 1,
-                episode: parseInt(parts[3], 10) || 1,
+                season: Number.isFinite(parsedSeason) ? parsedSeason : 1,
+                episode: Number.isFinite(parsedEpisode) ? parsedEpisode : 1,
                 rawId: parts.slice(4).join("::"),
             }};
         }}
@@ -668,12 +746,15 @@ function decodeStreamRef(streamId) {{
     return {{ mediaType: "series", season: 1, episode: 1, rawId: s }};
 }}
 
-function inferStreamKind(s) {{
-    const url = String(s.url || "").toLowerCase();
+function inferStreamKind(s, rawUrl) {{
+    const url = String(rawUrl || "").toLowerCase();
     const fmt = String(s.format || s.type || "").toLowerCase();
+    if (!s.url && !s.file && !s.link && !s.src && !s.streamUrl && s.externalUrl) return "embed";
     if (s.isHls === true || fmt === "hls" || fmt === "m3u8" || url.includes(".m3u8")) return "hls";
+    if (fmt === "mpeg_ts" || fmt === "ts" || url.endsWith(".ts") || url.includes(".ts?")) return "mpeg_ts";
     if (fmt === "mkv" || url.includes(".mkv")) return "mkv";
-    return "mp4";
+    if (fmt === "mp4" || url.includes(".mp4")) return "mp4";
+    return "auto";
 }}
 
 function inferSubtitleFormat(url) {{
@@ -693,6 +774,13 @@ function normalizeCatalogTargets() {{
     return [{{ id: META.id, name: META.id, type: types[0] || "series" }}];
 }}
 
+function supportsSearchCatalog(c) {{
+    if (!c) return false;
+    if (Array.isArray(c.extra) && c.extra.some((e) => e && e.name === "search")) return true;
+    if (Array.isArray(c.extraSupported) && c.extraSupported.includes("search")) return true;
+    return String(c.id || "").toLowerCase().includes("search");
+}}
+
 export default definePlugin({{
     async getHomeFeed() {{
         if (typeof provider.getCatalog !== "function") {{
@@ -703,20 +791,26 @@ export default definePlugin({{
             (Array.isArray(META.capabilities) && META.capabilities.includes("live_tv")) ||
             allCatalogs.some((c) => {{
                 const t = String(c.type || "").toLowerCase();
-                return t === "tv" || t === "live";
+                return t === "tv" || t === "live" || t === "livetv";
             }});
-        const catalogs = isLiveProvider ? allCatalogs : allCatalogs.slice(0, 4);
+        const catalogs = isLiveProvider ? allCatalogs : allCatalogs.slice(0, 6);
         const sections = [];
         for (const cat of catalogs) {{
             try {{
-                const res = await provider.getCatalog({{
-                    type: cat.type || "series",
-                    id: cat.id || META.id,
-                    extra: {{}},
-                }});
+                let res;
+                try {{
+                    res = await provider.getCatalog({{
+                        type: cat.type || "series",
+                        id: cat.id || META.id,
+                        extra: {{}},
+                    }});
+                }} catch (sigErr) {{
+                    if (isDomainError(sigErr)) throw sigErr;
+                    res = await provider.getCatalog(cat.type || "series", cat.id || META.id, {{}});
+                }}
                 const list = Array.isArray(res) ? res : (res && Array.isArray(res.metas) ? res.metas : []);
                 const catType = String(cat.type || "").toLowerCase();
-                const isLiveCat = isLiveProvider || catType === "tv" || catType === "live";
+                const isLiveCat = isLiveProvider || catType === "tv" || catType === "live" || catType === "livetv";
                 const sliced = isLiveCat ? list : list.slice(0, 30);
                 const items = sliced
                     .map((it) => mapSummary(it, cat.type || "series"))
@@ -730,24 +824,29 @@ export default definePlugin({{
                     }});
                 }}
             }} catch (err) {{
-                const msg = String(err || "");
-                if (msg.includes("DomainBlocked") || msg.includes("AccessDenied")) {{
-                    throw err;
-                }}
-                console.warn(`catalog '${{cat.id || META.id}}' failed: ${{msg}}`);
+                if (isDomainError(err)) throw err;
+                console.warn(`catalog '${{cat.id || META.id}}' failed: ${{String(err || "")}}`);
             }}
         }}
         return {{ sections }};
     }},
 
-    async search(query, filters, _page) {{
-        if (typeof provider.getCatalog !== "function") {{
-            return {{ items: [], hasMore: false }};
-        }}
+    async search(query, filters, page) {{
         const q = String(query || "").trim();
         const requestedType = filters && filters.mediaType
             ? String(filters.mediaType).trim().toLowerCase()
             : "";
+        if (typeof provider.search === "function") {{
+            const direct = await provider.search(q, filters || {{}}, page || 1);
+            if (direct && Array.isArray(direct.items)) return direct;
+            if (Array.isArray(direct)) {{
+                const items = direct.map((raw) => mapSummary(raw, requestedType || "series")).filter(Boolean);
+                return {{ items, hasMore: false }};
+            }}
+        }}
+        if (typeof provider.getCatalog !== "function") {{
+            return {{ items: [], hasMore: false }};
+        }}
         let catalogs = normalizeCatalogTargets();
         if (requestedType === "movie") {{
             const movieCats = catalogs.filter((c) => String(c.type || "").toLowerCase() === "movie");
@@ -756,17 +855,23 @@ export default definePlugin({{
             const seriesCats = catalogs.filter((c) => String(c.type || "").toLowerCase() !== "movie");
             if (seriesCats.length > 0) catalogs = seriesCats;
         }}
-        catalogs = catalogs.slice(0, 3);
+        catalogs = [...catalogs].sort((a, b) => Number(supportsSearchCatalog(b)) - Number(supportsSearchCatalog(a))).slice(0, 6);
         const seen = new Set();
         const items = [];
         for (const cat of catalogs) {{
             try {{
-                const res = await provider.getCatalog({{
-                    type: cat.type || "series",
-                    id: cat.id || META.id,
-                    search: q,
-                    extra: {{ search: q }},
-                }});
+                let res;
+                try {{
+                    res = await provider.getCatalog({{
+                        type: cat.type || "series",
+                        id: cat.id || META.id,
+                        search: q,
+                        extra: {{ search: q }},
+                    }});
+                }} catch (sigErr) {{
+                    if (isDomainError(sigErr)) throw sigErr;
+                    res = await provider.getCatalog(cat.type || "series", cat.id || META.id, {{ search: q }});
+                }}
                 const list = Array.isArray(res) ? res : (res && Array.isArray(res.metas) ? res.metas : []);
                 const mappedList = list.map((raw) => mapSummary(raw, cat.type || "series")).filter(Boolean);
                 const hits = q ? mappedList.filter((m) => matchesQueryTokens(m.title, q)).length : mappedList.length;
@@ -779,8 +884,8 @@ export default definePlugin({{
                     items.push(mapped);
                     if (items.length >= 40) break;
                 }}
-            }} catch {{
-                // Ignore catalog error during search fan-out
+            }} catch (err) {{
+                if (isDomainError(err)) throw err;
             }}
             if (items.length >= 40) break;
         }}
@@ -796,23 +901,38 @@ export default definePlugin({{
 
         let meta = null;
         if (typeof provider.getMeta === "function") {{
+            const extractMeta = (res) => (res && res.meta !== undefined ? res.meta : res);
             try {{
-                const res = await provider.getMeta(nativeId);
-                meta = res && res.meta !== undefined ? res.meta : res;
-                if (!meta) {{
-                    const resObj = await provider.getMeta({{ id: nativeId, type: fallbackType }});
-                    meta = resObj && resObj.meta !== undefined ? resObj.meta : resObj;
-                }}
-            }} catch {{
+                meta = extractMeta(await provider.getMeta(nativeId));
+            }} catch (err) {{
+                if (isDomainError(err)) throw err;
                 meta = null;
+            }}
+            if (!meta) {{
+                try {{
+                    meta = extractMeta(await provider.getMeta({{ id: nativeId, type: fallbackType }}));
+                }} catch (err) {{
+                    if (isDomainError(err)) throw err;
+                    meta = null;
+                }}
+            }}
+            if (!meta) {{
+                try {{
+                    meta = extractMeta(await provider.getMeta(fallbackType, nativeId));
+                }} catch (err) {{
+                    if (isDomainError(err)) throw err;
+                    meta = null;
+                }}
             }}
         }}
 
         const mediaType = mapMediaType((meta && meta.type) || fallbackType, (meta && meta.id) || nativeId);
         const rawVideos = meta && Array.isArray(meta.videos) ? meta.videos : [];
         const episodes = rawVideos.map((v, idx) => {{
-            const s = parseInt(v.season, 10) || 1;
-            const e = parseInt(v.episode, 10) || (idx + 1);
+            const parsedSeason = parseInt(v.season, 10);
+            const parsedEpisode = parseInt(v.episode, 10);
+            const s = Number.isFinite(parsedSeason) ? parsedSeason : 1;
+            const e = Number.isFinite(parsedEpisode) ? parsedEpisode : (idx + 1);
             const rawEpId = String(v.id || nativeId);
             return {{
                 streamId: encodeStreamRef(mediaType === "live" ? "tv" : mediaType, s, e, rawEpId),
@@ -858,15 +978,46 @@ export default definePlugin({{
         }}
         const ref = decodeStreamRef(streamId);
         const mediaArg = ref.mediaType === "series" ? "tv" : ref.mediaType;
-        const raw = await provider.getStreams(ref.rawId, mediaArg, ref.season, ref.episode);
+        let raw;
+        try {{
+            raw = await provider.getStreams(ref.rawId, mediaArg, ref.season, ref.episode);
+            if ((!raw || (Array.isArray(raw) && raw.length === 0)) && provider.getStreams.length <= 1) {{
+                const objRaw = await provider.getStreams({{
+                    id: ref.rawId,
+                    tmdbId: ref.rawId,
+                    type: mediaArg,
+                    mediaType: mediaArg,
+                    season: ref.season,
+                    episode: ref.episode,
+                }});
+                if (objRaw && (!Array.isArray(objRaw) || objRaw.length > 0)) {{
+                    raw = objRaw;
+                }}
+            }}
+        }} catch (err) {{
+            if (isDomainError(err)) throw err;
+            raw = await provider.getStreams({{
+                id: ref.rawId,
+                tmdbId: ref.rawId,
+                type: mediaArg,
+                mediaType: mediaArg,
+                season: ref.season,
+                episode: ref.episode,
+            }});
+        }}
         const list = Array.isArray(raw) ? raw : (raw && Array.isArray(raw.streams) ? raw.streams : []);
 
         const streams = [];
         for (const s of list) {{
-            if (!s || !s.url) continue;
-            const kind = inferStreamKind(s);
+            if (!s) continue;
+            const streamUrl = s.url || s.file || s.link || s.src || s.streamUrl || s.externalUrl;
+            if (!streamUrl) continue;
+            const kind = inferStreamKind(s, streamUrl);
             const labelParts = [s.name || s.server, s.title].filter(Boolean).map(String);
-            const label = Array.from(new Set(labelParts)).join(" — ") || String(s.url);
+            const label = Array.from(new Set(labelParts)).join(" — ") || String(streamUrl);
+            const rawHeaders = (s.headers && typeof s.headers === "object")
+                ? s.headers
+                : (s.behaviorHints && s.behaviorHints.proxyHeaders && s.behaviorHints.proxyHeaders.request);
             const subs = Array.isArray(s.subtitles)
                 ? s.subtitles.filter((sub) => sub && sub.url).map((sub) => ({{
                     source: {{ kind: "url", url: String(sub.url), headers: {{}} }},
@@ -876,12 +1027,12 @@ export default definePlugin({{
                 }}))
                 : [];
             streams.push({{
-                url: String(s.url),
+                url: String(streamUrl),
                 kind,
                 quality: s.quality ? String(s.quality) : undefined,
                 label,
                 flags: [],
-                headers: (s.headers && typeof s.headers === "object") ? s.headers : {{}},
+                headers: sanitizeHeaders(rawHeaders),
                 subtitles: subs,
             }});
         }}
@@ -898,6 +1049,17 @@ fn build_stremio_adapter_js(cfg_json: &str) -> String {
 
 const CFG = {cfg_json};
 
+function sanitizeHeaders(rawHeaders) {{
+    const clean = {{}};
+    if (!rawHeaders || typeof rawHeaders !== "object") return clean;
+    for (const [k, v] of Object.entries(rawHeaders)) {{
+        if (v === undefined || v === null || typeof v === "object") continue;
+        const val = String(v).trim();
+        if (k && val) clean[String(k)] = val;
+    }}
+    return clean;
+}}
+
 async function fetchJsonOrNull(url) {{
     const resp = await http.get(url);
     if (resp.status < 200 || resp.status >= 300) return null;
@@ -909,6 +1071,31 @@ function mapType(rawType) {{
     if (t === "movie") return "movie";
     if (t === "channel" || t === "tv") return "live";
     return "series";
+}}
+
+function inferStremioKind(s, rawUrl) {{
+    const u = String(rawUrl || "").toLowerCase();
+    if (!s.url && s.externalUrl) return "embed";
+    if (u.includes(".m3u8")) return "hls";
+    if (u.endsWith(".ts") || u.includes(".ts?")) return "mpeg_ts";
+    if (u.includes(".mkv")) return "mkv";
+    if (u.includes(".mp4")) return "mp4";
+    return "auto";
+}}
+
+function inferSubtitleFormat(url) {{
+    const u = String(url || "").toLowerCase();
+    if (u.includes(".ass")) return "ass";
+    if (u.includes(".ssa")) return "ssa";
+    if (u.includes(".srt")) return "srt";
+    return "vtt";
+}}
+
+function supportsSearchCatalog(c) {{
+    if (!c) return false;
+    if (Array.isArray(c.extra) && c.extra.some((e) => e && e.name === "search")) return true;
+    if (Array.isArray(c.extraSupported) && c.extraSupported.includes("search")) return true;
+    return String(c.id || "").toLowerCase().includes("search");
 }}
 
 function mapSummary(it, fallbackType) {{
@@ -958,7 +1145,7 @@ export default definePlugin({{
                 const lt = String(c.type || "").toLowerCase();
                 return lt === "tv" || lt === "live";
             }});
-        const catalogs = isLiveAddon ? allCatalogs : allCatalogs.slice(0, 5);
+        const catalogs = isLiveAddon ? allCatalogs : allCatalogs.slice(0, 6);
         const sections = [];
         for (const cat of catalogs) {{
             const url = `${{CFG.baseUrl}}/catalog/${{encodeURIComponent(cat.type)}}/${{encodeURIComponent(cat.id)}}.json`;
@@ -994,7 +1181,9 @@ export default definePlugin({{
             const seriesCats = catalogs.filter((c) => String(c.type || "").toLowerCase() !== "movie");
             if (seriesCats.length > 0) catalogs = seriesCats;
         }}
-        catalogs = catalogs.slice(0, 4);
+        catalogs = [...catalogs]
+            .sort((a, b) => Number(supportsSearchCatalog(b)) - Number(supportsSearchCatalog(a)))
+            .slice(0, 8);
         const seen = new Set();
         const items = [];
         for (const cat of catalogs) {{
@@ -1033,17 +1222,25 @@ export default definePlugin({{
         if (!data) {{
             data = await fetchJsonOrNull(`${{CFG.baseUrl}}/meta/${{stype}}/${{rawId}}.json`);
         }}
+        if ((!data || !data.meta) && /^tt\d+$/i.test(rawId)) {{
+            const metaType = stype === "anime" ? "series" : stype;
+            data = await fetchJsonOrNull(`https://v3-cinemeta.strem.io/meta/${{encodeURIComponent(metaType)}}/${{encodeURIComponent(rawId)}}.json`);
+        }}
         const meta = (data && data.meta) || {{ id: rawId, name: rawId, type: stype }};
         const rawVideos = Array.isArray(meta.videos) ? meta.videos : [];
-        const episodes = rawVideos.map((v, idx) => ({{
-            streamId: `${{stype}}::${{v.id || rawId}}`,
-            season: parseInt(v.season, 10) || 1,
-            episode: parseInt(v.episode, 10) || (idx + 1),
-            title: String(v.title || v.name || `Episode ${{idx + 1}}`),
-            overview: v.overview ? String(v.overview) : undefined,
-            thumbnail: v.thumbnail ? String(v.thumbnail) : undefined,
-            tags: [],
-        }}));
+        const episodes = rawVideos.map((v, idx) => {{
+            const parsedSeason = parseInt(v.season, 10);
+            const parsedEpisode = parseInt(v.episode, 10);
+            return {{
+                streamId: `${{stype}}::${{v.id || rawId}}`,
+                season: Number.isFinite(parsedSeason) ? parsedSeason : 1,
+                episode: Number.isFinite(parsedEpisode) ? parsedEpisode : (idx + 1),
+                title: String(v.title || v.name || `Episode ${{idx + 1}}`),
+                overview: v.overview ? String(v.overview) : undefined,
+                thumbnail: v.thumbnail ? String(v.thumbnail) : undefined,
+                tags: [],
+            }};
+        }});
         if (episodes.length === 0) {{
             episodes.push({{
                 streamId: `${{stype}}::${{rawId}}`,
@@ -1075,15 +1272,28 @@ export default definePlugin({{
         }}
         const list = data && Array.isArray(data.streams) ? data.streams : [];
         const streams = list
-            .filter((s) => s && s.url)
-            .map((s) => ({{
-                url: String(s.url),
-                kind: String(s.url).toLowerCase().includes(".m3u8") ? "hls" : "mp4",
-                label: String(s.name || s.title || s.url),
-                flags: [],
-                headers: (s.behaviorHints && s.behaviorHints.proxyHeaders && s.behaviorHints.proxyHeaders.request) || {{}},
-                subtitles: [],
-            }}));
+            .filter((s) => s && (s.url || s.externalUrl))
+            .map((s) => {{
+                const streamUrl = s.url || s.externalUrl;
+                const subs = Array.isArray(s.subtitles)
+                    ? s.subtitles.filter((sub) => sub && sub.url).map((sub) => ({{
+                        source: {{ kind: "url", url: String(sub.url), headers: {{}} }},
+                        lang: String(sub.lang || "und"),
+                        label: String(sub.label || sub.name || sub.lang || "Subtitle"),
+                        format: inferSubtitleFormat(sub.url),
+                    }}))
+                    : [];
+                return {{
+                    url: String(streamUrl),
+                    kind: inferStremioKind(s, streamUrl),
+                    label: String(s.name || s.title || streamUrl),
+                    flags: [],
+                    headers: sanitizeHeaders(
+                        (s.behaviorHints && s.behaviorHints.proxyHeaders && s.behaviorHints.proxyHeaders.request) || s.headers,
+                    ),
+                    subtitles: subs,
+                }};
+            }});
         return {{ streams, subtitles: [] }};
     }},
 }});
@@ -1312,6 +1522,130 @@ mod tests {
             .expect("streams");
         assert_eq!(streams.streams.len(), 1);
         assert_eq!(streams.streams[0].url, "https://cdn.example/video.mp4");
+    }
+
+    #[tokio::test]
+    async fn supports_non_anthology_esm_nuvio_axios_create_and_sanitized_headers() {
+        let app = Router::new().route(
+            "/api/catalog",
+            get(|axum::extract::Query(params): axum::extract::Query<std::collections::BTreeMap<String, String>>| async move {
+                let q = params.get("q").cloned().unwrap_or_default();
+                axum::Json(serde_json::json!({
+                    "items": [{ "id": "ext-1", "title": if q.is_empty() { "Community Show" } else { "Matched Community Show" } }]
+                }))
+            }),
+        );
+        let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
+        let addr = listener.local_addr().expect("addr");
+        tokio::spawn(async move {
+            let _ = axum::serve(listener, app).await;
+        });
+
+        let manifest_json = serde_json::json!({
+            "name": "ThirdPartyCommunity",
+            "scrapers": [{
+                "slug": "third_party_esm",
+                "name": "Third Party ESM",
+                "url": "providers/third_party_esm.ts",
+                "supportedTypes": ["series"]
+            }]
+        });
+        let ext = parse_external_manifest(
+            manifest_json.to_string().as_bytes(),
+            "https://example.org/community/manifest.json",
+        )
+        .expect("parse community nuvio")
+        .expect("nuvio repo");
+        match ext {
+            ExternalManifestKind::NuvioRepo(repo) => {
+                assert_eq!(repo.plugins[0].id.as_str(), "third_party_esm");
+            }
+            _ => panic!("expected NuvioRepo"),
+        }
+
+        let ts_esm_scraper = format!(
+            r#"
+            import axios from "axios";
+            import * as cheerio from "cheerio";
+
+            const client = axios.create({{ baseURL: "http://{addr}" }});
+
+            export async function getCatalog(args: {{ extra?: {{ search?: string }} }}) {{
+                const res = await client.get("/api/catalog", {{ params: {{ q: args.extra?.search || "" }} }});
+                const $ = cheerio.load("<div><span>ok</span></div>");
+                const tag = $("span").slice(0, 1).text();
+                return res.data.items.map((x: any) => ({{ id: x.id, type: "series", name: `${{x.title}} (${{tag}})` }}));
+            }}
+
+            export async function getMeta(arg: {{ id: string; type: string }}) {{
+                if (typeof arg === "string") throw new Error("expected object arg");
+                return {{ id: arg.id, type: arg.type, name: "Matched Community Show", videos: [{{ id: arg.id + ":0:1", season: 0, episode: 1, title: "OVA" }}] }};
+            }}
+
+            export async function getStreams(arg: {{ id: string; season: number }}) {{
+                if (!arg || typeof arg !== "object" || !arg.id) throw new Error("expected object arg");
+                return [{{
+                    url: "https://cdn.example/playback/token123",
+                    name: "Edge",
+                    headers: {{ Referer: "https://cdn.example/", Cookie: null, Retry: 1 }}
+                }}];
+            }}
+            "#
+        );
+
+        let pkg = build_nuvio_scraper_package(
+            &manifest_json,
+            "https://example.org/community/manifest.json",
+            "third_party_esm",
+            &ts_esm_scraper,
+            "https://example.org/community/providers/third_party_esm.ts",
+        )
+        .expect("build esm ts pkg");
+
+        let policy = DomainPolicy::new(pkg.manifest.id.clone(), vec!["127.0.0.1".into()], false)
+            .with_loopback_for_tests();
+        let host = Arc::new(
+            HostServices::new(
+                pkg.manifest.id.clone(),
+                Arc::new(policy),
+                Arc::new(NoopStorage),
+                None,
+                Arc::new(TsCompileCache::default()),
+            )
+            .expect("host"),
+        );
+
+        let provider = QuickJsContentProvider::load(
+            pkg.manifest,
+            Arc::new(pkg.bundle),
+            host,
+            SandboxLimits::default(),
+        )
+        .await
+        .expect("load esm ts provider");
+
+        let search = provider
+            .search("matched", &Default::default(), 1)
+            .await
+            .expect("search");
+        assert_eq!(search.items[0].title, "Matched Community Show (ok)");
+
+        let detail = provider.details("ext-1").await.expect("details fallback");
+        assert_eq!(detail.episodes[0].season, 0);
+
+        let streams = provider
+            .streams(&detail.episodes[0].stream_id)
+            .await
+            .expect("streams");
+        assert_eq!(streams.streams.len(), 1);
+        assert_eq!(
+            streams.streams[0]
+                .headers
+                .get("Referer")
+                .map(String::as_str),
+            Some("https://cdn.example/")
+        );
+        assert!(!streams.streams[0].headers.contains_key("Cookie"));
     }
 
     #[tokio::test]

@@ -63,6 +63,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import dev.falsis.vessel.ui.theme.LocalVesselFloatingNavInset
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -777,7 +778,7 @@ fun LiveTvScreen(
                 } else {
                     LazyColumn(
                         verticalArrangement = Arrangement.spacedBy(8.dp),
-                        contentPadding = PaddingValues(bottom = 24.dp),
+                        contentPadding = PaddingValues(bottom = 24.dp + LocalVesselFloatingNavInset.current),
                     ) {
                         items(channels, key = { it.id }) { ch ->
                             Surface(
@@ -987,7 +988,7 @@ fun LiveTvScreen(
                         }
                         LazyVerticalGrid(
                             columns = gridCols,
-                            contentPadding = PaddingValues(bottom = 24.dp),
+                            contentPadding = PaddingValues(bottom = 24.dp + LocalVesselFloatingNavInset.current),
                             horizontalArrangement = Arrangement.spacedBy(cardSpacing),
                             verticalArrangement = Arrangement.spacedBy(cardSpacing),
                             modifier = Modifier.fillMaxSize(),

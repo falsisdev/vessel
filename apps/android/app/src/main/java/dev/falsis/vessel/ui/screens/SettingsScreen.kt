@@ -63,6 +63,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
+import dev.falsis.vessel.ui.theme.LocalVesselFloatingNavInset
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
@@ -133,7 +134,7 @@ fun SettingsScreen(
             .fillMaxSize()
             .background(palette.bgBase)
             .vesselTopSafeInset(),
-        contentPadding = PaddingValues(start = 16.dp, top = 14.dp, end = 16.dp, bottom = 36.dp),
+        contentPadding = PaddingValues(start = 16.dp, top = 14.dp, end = 16.dp, bottom = 36.dp + LocalVesselFloatingNavInset.current),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         item {

@@ -22,6 +22,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
@@ -49,6 +50,7 @@ data class VesselPalette(
 private val DefaultPalette = ThemeSpec().toPalette()
 
 val LocalVesselPalette = staticCompositionLocalOf { DefaultPalette }
+val LocalVesselFloatingNavInset = staticCompositionLocalOf<Dp> { 0.dp }
 
 fun parseHexColor(raw: String, fallback: Color): Color {
     val hex = raw.trim().removePrefix("#")

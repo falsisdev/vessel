@@ -175,6 +175,33 @@ pub(crate) const POLYFILLS_JS: &str = r##"
             }
         };
     }
+    for (const alias of ["window", "global", "self"]) {
+        if (typeof globalThis[alias] === "undefined") {
+            Object.defineProperty(globalThis, alias, {
+                get: () => globalThis,
+                set: (val) => {
+                    Object.defineProperty(globalThis, alias, {
+                        value: val,
+                        writable: true,
+                        configurable: true,
+                        enumerable: true,
+                    });
+                },
+                configurable: true,
+            });
+        }
+    }
+    if (typeof globalThis.queueMicrotask !== "function") {
+        globalThis.queueMicrotask = (fn) => Promise.resolve().then(() => fn());
+    }
+    if (typeof globalThis.process !== "object" || !globalThis.process) {
+        globalThis.process = {
+            env: {},
+            version: "v20.0.0",
+            platform: "linux",
+            nextTick: (fn, ...args) => Promise.resolve().then(() => fn(...args)),
+        };
+    }
 })();
 "##;
 
