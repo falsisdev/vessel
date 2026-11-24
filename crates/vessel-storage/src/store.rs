@@ -442,4 +442,132 @@ mod tests {
                 .is_none()
         );
     }
+
+    #[tokio::test]
+    async fn continue_watching_advances_series_to_next_episode_and_hides_finished_movies_and_finales()
+     {
+        let actor = StorageActor::open_in_memory().await.expect("open actor");
+        let storage = SqliteStorage::new(actor);
+
+        let anthology = PluginId::new("anthology").expect("valid plugin id");
+        let movie = MediaRef::new(anthology.clone(), "movie/42").expect("movie ref");
+        let series = MediaRef::new(anthology.clone(), "series/99").expect("series ref");
+
+        // 1) Finished movie stays in watch_progress but is omitted from Continue Watching.
+        storage
+            .upsert_metadata_cache(
+                "episodes:anthology:movie/42",
+                r#"{"type":"movie","title":"Spirited Away","episodes":[]}"#,
+                "2099-01-01T00:00:00Z",
+            )
+            .await
+            .expect("cache movie meta");
+        storage
+            .upsert_watch_progress(&PlaybackProgress {
+                media: movie.clone(),
+                stream_id: "mv-42".into(),
+                canonical_id: None,
+                season: 0,
+                episode: 0,
+                absolute_episode: None,
+                title: Some("Spirited Away".into()),
+                poster_url: None,
+                backdrop_url: None,
+                episode_title: None,
+                position_ms: 7_400_000,
+                duration_ms: 7_500_000,
+                completed: true,
+                last_watched_at: "2026-11-24T10:00:00Z".into(),
+            })
+            .await
+            .expect("save movie progress");
+
+        // 2) Finished S1E1 of 2-episode series advances to S1E2 ("Up Next", pos=0).
+        storage
+            .upsert_metadata_cache(
+                "episodes:anthology:series/99",
+                r#"{"type":"series","title":"Short Run","episodes":[{"streamId":"sr-1","season":1,"episode":1,"title":"Opening"},{"streamId":"sr-2","season":1,"episode":2,"title":"Finale"}]}"#,
+                "2099-01-01T00:00:00Z",
+            )
+            .await
+            .expect("cache series episodes");
+        storage
+            .upsert_watch_progress(&PlaybackProgress {
+                media: series.clone(),
+                stream_id: "sr-1".into(),
+                canonical_id: None,
+                season: 1,
+                episode: 1,
+                absolute_episode: Some(1),
+                title: Some("Short Run".into()),
+                poster_url: None,
+                backdrop_url: None,
+                episode_title: Some("Opening".into()),
+                position_ms: 1_400_000,
+                duration_ms: 1_440_000,
+                completed: true,
+                last_watched_at: "2026-11-24T10:05:00Z".into(),
+            })
+            .await
+            .expect("save ep1 progress");
+
+        let cw = storage
+            .list_continue_watching(12)
+            .await
+            .expect("list cw after ep1");
+        assert_eq!(cw.len(), 1, "completed movie should be omitted");
+        assert_eq!(cw[0].media.native_id, "series/99");
+        assert_eq!(cw[0].season, 1);
+        assert_eq!(cw[0].episode, 2);
+        assert_eq!(cw[0].stream_id, "sr-2");
+        assert_eq!(cw[0].episode_title.as_deref(), Some("Finale"));
+        assert_eq!(cw[0].position_ms, 0);
+        assert!(!cw[0].completed);
+
+        // Movie progress row still exists in DB.
+        assert!(
+            storage
+                .get_watch_progress(&movie, 0, 0)
+                .await
+                .expect("read movie progress")
+                .is_some()
+        );
+
+        // 3) Finishing final episode removes series from Continue Watching, keeping both DB rows.
+        storage
+            .upsert_watch_progress(&PlaybackProgress {
+                media: series.clone(),
+                stream_id: "sr-2".into(),
+                canonical_id: None,
+                season: 1,
+                episode: 2,
+                absolute_episode: Some(2),
+                title: Some("Short Run".into()),
+                poster_url: None,
+                backdrop_url: None,
+                episode_title: Some("Finale".into()),
+                position_ms: 1_400_000,
+                duration_ms: 1_440_000,
+                completed: true,
+                last_watched_at: "2026-11-24T10:30:00Z".into(),
+            })
+            .await
+            .expect("save finale progress");
+
+        let cw_after_finale = storage
+            .list_continue_watching(12)
+            .await
+            .expect("list cw after finale");
+        assert!(
+            cw_after_finale.is_empty(),
+            "final episode completed should clear Continue Watching"
+        );
+
+        let all_ep_rows = storage
+            .list_media_watch_progress(&series)
+            .await
+            .expect("list series progress");
+        assert_eq!(all_ep_rows.len(), 2);
+        assert!(all_ep_rows.iter().all(|row| row.completed));
+    }
 }

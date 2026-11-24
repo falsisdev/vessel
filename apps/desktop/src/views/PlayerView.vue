@@ -1098,8 +1098,12 @@ watch(
     duration.value = 0
     playableSrc.value = ''
     if (!stream) return
+    const isLocalOffline =
+      stream.url.startsWith('http://127.0.0.1:') && stream.url.includes('/local/')
     const [resolved, startSec] = await Promise.all([
-      vesselApi.preparePlaybackUrl(stream).catch(() => stream.url),
+      isLocalOffline
+        ? Promise.resolve(stream.url)
+        : vesselApi.preparePlaybackUrl(stream).catch(() => stream.url),
       resolveDesiredStartSeconds(currentEpisode.value),
     ])
     if (seq !== attachSeq) return
@@ -1267,6 +1271,11 @@ onUnmounted(() => {
                   <span v-if="currentEpisode?.overview">{{ currentEpisode.overview }}</span>
                   <span v-else-if="detail?.genres.length">{{ detail.genres.join(' · ') }}</span>
                 </template>
+                <span v-else-if="currentEpisode && detail?.type === 'movie'">
+                  <template v-if="currentEpisode.title && currentEpisode.title !== detail?.title">
+                    {{ currentEpisode.title }}
+                  </template>
+                </span>
                 <span v-else-if="currentEpisode">
                   S{{ currentEpisode.season }} · E{{ currentEpisode.episode }}
                   <template v-if="currentEpisode.title"> — {{ currentEpisode.title }}</template>

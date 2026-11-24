@@ -13,8 +13,8 @@ use vessel_domain::{
     ThemeColors, ThemeSpec, UiPreferences, VesselPaths, VesselResult,
 };
 use vessel_engine::{
-    DownloadRequest, EpgNowNext, IptvKind, IptvProfile, PlayCandidateRequest, TMDB_API_KEY_SECRET,
-    VesselEngine,
+    DownloadRequest, EpgNowNext, IptvKind, IptvProfile, LocalPlaybackBundle, PlayCandidateRequest,
+    TMDB_API_KEY_SECRET, VesselEngine,
 };
 use vessel_plugin_rt::{ResolvedSource, SourceTrustBadge};
 use vessel_storage::{
@@ -118,6 +118,7 @@ pub struct EnqueueDownloadPayload {
     pub title: String,
     pub season: Option<u32>,
     pub episode: Option<u32>,
+    pub stream_label: Option<String>,
     pub kind: DownloadKind,
     pub source_url: String,
     #[serde(default)]
@@ -940,6 +941,32 @@ pub async fn list_continue_watching(
 }
 
 #[tauri::command]
+pub async fn list_media_watch_progress(
+    state: State<'_, AppState>,
+    plugin_id: String,
+    native_id: String,
+) -> Result<Vec<PlaybackProgress>, String> {
+    let media = MediaRef {
+        plugin_id: map_err(PluginId::new(plugin_id))?,
+        native_id,
+    };
+    map_err(state.engine.list_media_watch_progress(&media).await)
+}
+
+#[tauri::command]
+pub async fn list_all_watch_progress(
+    state: State<'_, AppState>,
+    limit: Option<usize>,
+) -> Result<Vec<PlaybackProgress>, String> {
+    map_err(
+        state
+            .engine
+            .list_all_watch_progress(limit.unwrap_or(200))
+            .await,
+    )
+}
+
+#[tauri::command]
 pub async fn delete_watch_progress(
     state: State<'_, AppState>,
     plugin_id: String,
@@ -1128,11 +1155,33 @@ pub async fn enqueue_download(
                 title: payload.title,
                 season: payload.season,
                 episode: payload.episode,
+                stream_label: payload.stream_label,
                 kind: payload.kind,
                 source_url: payload.source_url,
                 headers: payload.headers,
                 subtitles: payload.subtitles,
             })
+            .await,
+    )
+}
+
+#[tauri::command]
+pub async fn reorder_downloads(
+    state: State<'_, AppState>,
+    ordered_ids: Vec<String>,
+) -> Result<(), String> {
+    map_err(state.engine.reorder_downloads(&ordered_ids).await)
+}
+
+#[tauri::command]
+pub async fn prepare_local_download_playback(
+    state: State<'_, AppState>,
+    download_id: String,
+) -> Result<LocalPlaybackBundle, String> {
+    map_err(
+        state
+            .engine
+            .prepare_local_download_playback(&download_id)
             .await,
     )
 }

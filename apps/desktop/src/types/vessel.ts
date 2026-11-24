@@ -317,6 +317,8 @@ export interface StoredDownload {
   title: string
   season?: number
   episode?: number
+  streamLabel?: string
+  queueOrder: number
   kind: DownloadKind
   sourceUrl: string
   localDir: string
@@ -329,6 +331,13 @@ export interface StoredDownload {
   errorMsg?: string
   createdAt: string
   updatedAt: string
+}
+
+export interface LocalPlaybackBundle {
+  downloadId: string
+  url: string
+  kind: StreamKind
+  subtitles: SubtitleTrack[]
 }
 
 export interface ThemeColors {

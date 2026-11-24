@@ -18,6 +18,7 @@ import { isTauriRuntime, vesselApi } from '@/api/vessel'
 import MediaCard from '@/components/media/MediaCard.vue'
 import { useHomeCache } from '@/composables/useHomeCache'
 import { useI18n } from '@/composables/useI18n'
+import { useLibraryState } from '@/composables/useLibraryState'
 import { usePlayerSession } from '@/composables/usePlayerSession'
 import { useUiPreferences } from '@/composables/useUiPreferences'
 import { pushToast } from '@/composables/useVesselEvents'
@@ -25,6 +26,7 @@ import type { ContinueWatchingEntry, MediaSummary, PluginListEntry } from '@/typ
 
 const router = useRouter()
 const { t } = useI18n()
+const { refreshLibraryState } = useLibraryState()
 const { setSession } = usePlayerSession()
 const { uiPreferences, preferencesLoaded, loadPreferences, savePreferences } = useUiPreferences()
 const {
@@ -209,7 +211,8 @@ async function loadHome(forceRefresh = false): Promise<void> {
   const targetIds = Array.from(new Set([...activeHomePluginIds.value, ...activeHeroPluginIds.value]))
   const targetKey = `${activeHomePluginIds.value.slice().sort().join(',')}|${activeHeroPluginIds.value.slice().sort().join(',')}`
 
-  // Always silently refresh Continue Watching so Home return feels instant and accurate
+  // Always silently refresh Continue Watching & library status so Home return feels instant and accurate
+  void refreshLibraryState()
   const cwPromise = vesselApi
     .listContinueWatching(uiPreferences.value.home.continueWatchingLimit || 12)
     .then((cw) => {
@@ -339,12 +342,14 @@ async function toggleGroupOnHome(items: PluginListEntry[], enable: boolean): Pro
 }
 
 function progressPercent(entry: ContinueWatchingEntry): number {
+  if (!entry.positionMs || entry.positionMs <= 0) return 0
   if (!entry.durationMs || entry.durationMs <= 0) return 15
   return Math.min(100, Math.max(4, Math.round((entry.positionMs / entry.durationMs) * 100)))
 }
 
 function formatRemaining(entry: ContinueWatchingEntry): string {
-  if (!entry.durationMs || entry.durationMs <= entry.positionMs) return 'Resume'
+  if (!entry.positionMs || entry.positionMs <= 0) return t('home.up_next')
+  if (!entry.durationMs || entry.durationMs <= entry.positionMs) return t('details.resume')
   const remSec = Math.max(0, Math.floor((entry.durationMs - entry.positionMs) / 1000))
   const mins = Math.floor(remSec / 60)
   if (mins >= 60) {
@@ -687,15 +692,18 @@ onUnmounted(() => {
                 <X :size="14" aria-hidden="true" />
               </button>
               <span class="cw-remaining">{{ formatRemaining(entry) }}</span>
-              <div class="cw-progress-track">
+              <div v-if="entry.positionMs > 0" class="cw-progress-track">
                 <div class="cw-progress-fill" :style="{ width: `${progressPercent(entry)}%` }" />
               </div>
             </div>
             <div class="cw-meta">
               <div class="cw-title">{{ entry.title }}</div>
-              <div class="cw-sub">
+              <div v-if="entry.mediaType !== 'movie'" class="cw-sub">
                 <span>S{{ entry.season }} · E{{ entry.episode }}</span>
                 <template v-if="entry.episodeTitle"> · {{ entry.episodeTitle }}</template>
+              </div>
+              <div v-else-if="entry.episodeTitle" class="cw-sub">
+                {{ entry.episodeTitle }}
               </div>
             </div>
           </article>

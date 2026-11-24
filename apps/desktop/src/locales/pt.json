@@ -60,7 +60,8 @@
     "hero_source_auto": "Automático (Todas as fontes ativas)",
     "hero_source_hint": "Escolha extensões específicas para o banner ou deixe em Automático.",
     "shelf_order_title": "Ordem das fileiras (Topo → Base)",
-    "shelf_order_hint": "Arraste para reordenar"
+    "shelf_order_hint": "Arraste para reordenar",
+    "up_next": "A seguir"
   },
   "search": {
     "title": "Buscar",
@@ -90,7 +91,8 @@
     "select_stream": "Selecionar fonte de reprodução",
     "no_episodes": "Nenhum episódio listado para este título.",
     "searching_streams": "Buscando links reproduzíveis…",
-    "no_streams": "Nenhuma fonte disponível"
+    "no_streams": "Nenhuma fonte disponível",
+    "watched_badge": "Assistido"
   },
   "library": {
     "title": "Biblioteca",
@@ -120,7 +122,14 @@
   "downloads": {
     "title": "Downloads",
     "empty": "Sua fila offline está vazia.",
-    "segments": "Segmentos"
+    "segments": "Segmentos",
+    "continue_watching": "Continuar assistindo (Downloads)",
+    "streams_count": "streams",
+    "watched": "Assistido",
+    "queue_pos": "Fila de downloads",
+    "drag_hint": "Arraste para reordenar a fila",
+    "play_offline": "Reproduzir offline",
+    "stream_default": "Stream offline"
   },
   "extensions": {
     "title": "Extensões & Repositórios",
@@ -251,5 +260,8 @@
     "zh": "Chinês",
     "ar": "Árabe",
     "fa": "Persa"
+  },
+  "media": {
+    "quick_status": "Status rápido"
   }
 }

@@ -60,7 +60,8 @@
     "hero_source_auto": "Auto (All Active Feeds)",
     "hero_source_hint": "Pick specific plugin(s) for the Hero banner, or leave Auto to pull from your top Home feeds.",
     "shelf_order_title": "Active Home Shelf Order (Top → Bottom)",
-    "shelf_order_hint": "Drag handle to reorder shelves"
+    "shelf_order_hint": "Drag handle to reorder shelves",
+    "up_next": "Up Next"
   },
   "search": {
     "title": "Search",
@@ -90,7 +91,8 @@
     "select_stream": "Select Stream Source",
     "no_episodes": "No episodes listed for this title.",
     "searching_streams": "Searching playable links…",
-    "no_streams": "No Streams Available"
+    "no_streams": "No Streams Available",
+    "watched_badge": "Watched"
   },
   "library": {
     "title": "Library",
@@ -120,7 +122,14 @@
   "downloads": {
     "title": "Downloads",
     "empty": "Your offline queue is empty.",
-    "segments": "Segments"
+    "segments": "Segments",
+    "continue_watching": "Continue Watching (Downloads)",
+    "streams_count": "streams",
+    "watched": "Watched",
+    "queue_pos": "Download Queue",
+    "drag_hint": "Drag handle to reorder queue priority",
+    "play_offline": "Play Offline",
+    "stream_default": "Offline Stream"
   },
   "extensions": {
     "title": "Extensions & Repos",
@@ -251,5 +260,8 @@
     "zh": "Chinese",
     "ar": "Arabic",
     "fa": "Persian"
+  },
+  "media": {
+    "quick_status": "Quick Watch Status"
   }
 }

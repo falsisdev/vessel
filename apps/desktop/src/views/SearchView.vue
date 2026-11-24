@@ -5,6 +5,7 @@ import { Loader2, Search as SearchIcon, X } from 'lucide-vue-next'
 import { isTauriRuntime, vesselApi } from '@/api/vessel'
 import MediaCard from '@/components/media/MediaCard.vue'
 import { useI18n } from '@/composables/useI18n'
+import { useLibraryState } from '@/composables/useLibraryState'
 import { useUiPreferences } from '@/composables/useUiPreferences'
 import { pushToast, useVesselEvents } from '@/composables/useVesselEvents'
 import type { PluginListEntry } from '@/types/vessel'
@@ -14,6 +15,7 @@ defineOptions({ name: 'SearchView' })
 const router = useRouter()
 const { t } = useI18n()
 const { uiPreferences } = useUiPreferences()
+const { refreshLibraryState } = useLibraryState()
 const { isSearching, searchBuckets, startSearch } = useVesselEvents()
 
 const query = shallowRef('')
@@ -92,10 +94,12 @@ async function runSearch(): Promise<void> {
 
 onMounted(() => {
   void refreshPlugins()
+  void refreshLibraryState()
 })
 
 onActivated(() => {
   void refreshPlugins()
+  void refreshLibraryState()
 })
 
 async function stopSearch(): Promise<void> {

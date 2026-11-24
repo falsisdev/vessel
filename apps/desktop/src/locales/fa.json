@@ -60,7 +60,8 @@
     "hero_source_auto": "خودکار (همه منابع فعال)",
     "hero_source_hint": "افزونه‌های خاصی را برای بنر اصلی انتخاب کنید یا روی خودکار بگذارید.",
     "shelf_order_title": "ترتیب ردیف‌های فعال (بالا ← پایین)",
-    "shelf_order_hint": "برای تغییر ترتیب بکشید"
+    "shelf_order_hint": "برای تغییر ترتیب بکشید",
+    "up_next": "بعدی"
   },
   "search": {
     "title": "جستجو",
@@ -90,7 +91,8 @@
     "select_stream": "انتخاب منبع پخش",
     "no_episodes": "قسمتی برای این عنوان ثبت نشده است.",
     "searching_streams": "در حال جستجوی لینک‌های قابل پخش…",
-    "no_streams": "منبعی یافت نشد"
+    "no_streams": "منبعی یافت نشد",
+    "watched_badge": "دیده شده"
   },
   "library": {
     "title": "کتابخانه",
@@ -120,7 +122,14 @@
   "downloads": {
     "title": "دانلودها",
     "empty": "صف دانلود آفلاین شما خالی است.",
-    "segments": "بخش‌ها"
+    "segments": "بخش‌ها",
+    "continue_watching": "ادامه تماشا (دانلودها)",
+    "streams_count": "منبع",
+    "watched": "دیده شده",
+    "queue_pos": "صف دانلود",
+    "drag_hint": "برای تغییر ترتیب بکشید",
+    "play_offline": "پخش آفلاین",
+    "stream_default": "جریان آفلاین"
   },
   "extensions": {
     "title": "افزونه‌ها و مخازن",
@@ -251,5 +260,8 @@
     "zh": "چینی",
     "ar": "عربی",
     "fa": "فارسی"
+  },
+  "media": {
+    "quick_status": "تغییر سریع وضعیت"
   }
 }

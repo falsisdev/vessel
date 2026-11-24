@@ -6,6 +6,7 @@ import {
   AlignJustify,
   ArrowLeft,
   BookmarkPlus,
+  CheckCircle2,
   Download,
   LayoutGrid,
   List,
@@ -20,6 +21,7 @@ import {
 } from 'lucide-vue-next'
 import { vesselApi } from '@/api/vessel'
 import { useI18n } from '@/composables/useI18n'
+import { useLibraryState } from '@/composables/useLibraryState'
 import { usePlayerSession } from '@/composables/usePlayerSession'
 import { useUiPreferences } from '@/composables/useUiPreferences'
 import { pushToast, useVesselEvents } from '@/composables/useVesselEvents'
@@ -29,6 +31,7 @@ import type {
   EpisodeListLayout,
   LibraryStatus,
   MediaDetail,
+  PlaybackProgress,
   StreamCandidate,
   SubtitleTrack,
 } from '@/types/vessel'
@@ -40,14 +43,34 @@ const props = defineProps<{
 
 const router = useRouter()
 const { t, currentLang } = useI18n()
+const { getMediaStatus, setMediaStatus, refreshLibraryState } = useLibraryState()
 const { setSession } = usePlayerSession()
 const { uiPreferences, savePreferences } = useUiPreferences()
 const { lastEnrichedDetail } = useVesselEvents()
 
 const detail = ref<MediaDetail | null>(null)
 const resumeEntry = ref<ContinueWatchingEntry | null>(null)
+const mediaProgressList = ref<PlaybackProgress[]>([])
 const selectedSeason = shallowRef<number>(1)
 const loading = shallowRef(false)
+
+const currentLibraryStatus = computed(() => getMediaStatus(props.pluginId, props.nativeId))
+
+function findEpisodeProgress(ep: Episode): PlaybackProgress | null {
+  return (
+    mediaProgressList.value.find((p) => p.streamId === ep.streamId) ??
+    mediaProgressList.value.find((p) => p.season === ep.season && p.episode === ep.episode) ??
+    null
+  )
+}
+
+function episodeProgressPercent(ep: Episode): number {
+  const prog = findEpisodeProgress(ep)
+  if (!prog) return 0
+  if (prog.completed) return 100
+  if (!prog.durationMs || prog.durationMs <= 0) return prog.positionMs > 0 ? 12 : 0
+  return Math.min(99, Math.max(4, Math.round((prog.positionMs / prog.durationMs) * 100)))
+}
 
 // Fix Match Modal state
 const showFixMatchModal = shallowRef(false)
@@ -124,12 +147,15 @@ async function setEpisodeLayout(layout: EpisodeListLayout): Promise<void> {
 
 async function refreshResumeState(): Promise<void> {
   try {
-    const cw = await vesselApi.listContinueWatching(50)
+    const [cw, epProgress] = await Promise.all([
+      vesselApi.listContinueWatching(50),
+      vesselApi.listMediaWatchProgress(props.pluginId, props.nativeId),
+    ])
+    mediaProgressList.value = epProgress
     const match = cw.find(
       (entry) =>
         entry.media.pluginId === props.pluginId &&
-        entry.media.nativeId === props.nativeId &&
-        entry.positionMs > 0,
+        entry.media.nativeId === props.nativeId,
     )
     resumeEntry.value = match ?? null
     if (match && detail.value?.episodes.some((ep) => ep.season === match.season)) {
@@ -146,6 +172,7 @@ async function loadDetails(): Promise<void> {
     const [res] = await Promise.all([
       vesselApi.getDetailsWithEnrichment(props.pluginId, props.nativeId, currentLang.value),
       refreshResumeState(),
+      refreshLibraryState(),
     ])
     detail.value = res
     if (res.episodes.length) {
@@ -163,21 +190,19 @@ async function loadDetails(): Promise<void> {
 }
 
 async function saveLibrary(status: LibraryStatus): Promise<void> {
-  if (!detail.value) return
-  const now = new Date().toISOString()
+  if (!detail.value || !status) return
   try {
-    await vesselApi.upsertLibrary({
-      media: { pluginId: props.pluginId, nativeId: props.nativeId },
+    await setMediaStatus({
+      pluginId: props.pluginId,
+      nativeId: props.nativeId,
       mediaType: detail.value.type,
       isAnime: detail.value.isAnime,
       title: detail.value.title,
       posterUrl: detail.value.poster,
       year: detail.value.year,
       status,
-      addedAt: now,
-      updatedAt: now,
     })
-    pushToast('info', `Saved to ${status}`)
+    pushToast('info', `${detail.value.title} · ${t(`library.${status}`)}`)
   } catch (err) {
     pushToast('error', String(err))
   }
@@ -302,19 +327,26 @@ async function startStream(ep: Episode, candidate: StreamCandidate): Promise<voi
 
 async function downloadCandidate(ep: Episode, candidate: StreamCandidate): Promise<void> {
   if (!detail.value) return
+  const isMovie = detail.value.type === 'movie'
   try {
     await vesselApi.enqueueDownload({
       pluginId: props.pluginId,
       nativeId: props.nativeId,
-      title: `${detail.value.title} — S${ep.season}E${ep.episode}`,
-      season: ep.season,
-      episode: ep.episode,
+      title: isMovie ? detail.value.title : `${detail.value.title} — S${ep.season}E${ep.episode}`,
+      season: isMovie ? undefined : ep.season,
+      episode: isMovie ? undefined : ep.episode,
+      streamLabel: candidate.label,
       kind: candidate.kind === 'hls' ? 'hls' : 'direct',
       sourceUrl: candidate.url,
       headers: candidate.headers,
       subtitles: [...candidate.subtitles, ...episodeSubtitles.value],
     })
-    pushToast('info', `Queued download: S${ep.season}E${ep.episode}`)
+    pushToast(
+      'info',
+      isMovie
+        ? `Queued download: ${detail.value.title}`
+        : `Queued download: S${ep.season}E${ep.episode}`,
+    )
   } catch (err) {
     pushToast('error', String(err))
   }
@@ -446,7 +478,10 @@ onActivated(() => {
                 @click="openSourceResolver(ctaEpisode)"
               >
                 <Play :size="16" fill="currentColor" aria-hidden="true" />
-                {{ resumeEntry ? t('details.resume') : t('details.watch') }} S{{ ctaEpisode.season }}:E{{ ctaEpisode.episode }}
+                {{ resumeEntry && resumeEntry.positionMs > 0 ? t('details.resume') : t('details.watch') }}
+                <template v-if="detail.type !== 'movie'">
+                  S{{ ctaEpisode.season }}:E{{ ctaEpisode.episode }}
+                </template>
               </button>
 
               <div class="library-picker">
@@ -454,9 +489,10 @@ onActivated(() => {
                 <select
                   aria-label="Library status"
                   class="v-select status-select"
+                  :value="currentLibraryStatus ?? ''"
                   @change="saveLibrary(($event.target as HTMLSelectElement).value as LibraryStatus)"
                 >
-                  <option value="" disabled selected>{{ t('details.library_status') }}</option>
+                  <option value="" disabled>{{ t('details.library_status') }}</option>
                   <option value="watching">{{ t('library.watching') }}</option>
                   <option value="plan_to_watch">{{ t('library.plan_to_watch') }}</option>
                   <option value="completed">{{ t('library.completed') }}</option>
@@ -566,16 +602,39 @@ onActivated(() => {
                   <Play :size="16" fill="currentColor" />
                 </span>
               </div>
-              <span class="ep-corner-tag">S{{ ep.season }}·E{{ ep.episode }}</span>
+              <span v-if="detail.type !== 'movie'" class="ep-corner-tag">
+                S{{ ep.season }}·E{{ ep.episode }}
+              </span>
+              <span
+                v-if="findEpisodeProgress(ep)?.completed"
+                class="ep-watched-corner"
+                :title="t('details.watched_badge')"
+              >
+                <CheckCircle2 :size="15" aria-hidden="true" />
+              </span>
+              <div v-if="episodeProgressPercent(ep) > 0" class="ep-thumb-progress">
+                <div
+                  class="ep-thumb-progress-fill"
+                  :class="{ 'is-done': findEpisodeProgress(ep)?.completed }"
+                  :style="{ width: `${episodeProgressPercent(ep)}%` }"
+                />
+              </div>
             </button>
 
             <button type="button" class="ep-content-btn" @click="openSourceResolver(ep)">
               <span class="ep-title">
-                <span v-if="episodeLayout === 'compact_rows'" class="compact-num">
+                <span v-if="episodeLayout === 'compact_rows' && detail.type !== 'movie'" class="compact-num">
                   E{{ String(ep.episode).padStart(2, '0') }}
                 </span>
-                <template v-else>{{ ep.episode }}. </template>
-                {{ ep.title?.trim() || `Episode ${ep.episode}` }}
+                <template v-else-if="detail.type !== 'movie'">{{ ep.episode }}. </template>
+                {{ ep.title?.trim() || (detail.type === 'movie' ? detail.title : `Episode ${ep.episode}`) }}
+                <CheckCircle2
+                  v-if="findEpisodeProgress(ep)?.completed"
+                  :size="15"
+                  class="ep-watched-inline"
+                  :title="t('details.watched_badge')"
+                  aria-hidden="true"
+                />
               </span>
               <span
                 v-if="ep.overview && episodeLayout !== 'compact_rows' && !uiPreferences.details.hideEpisodeOverviews"
@@ -583,6 +642,25 @@ onActivated(() => {
               >
                 {{ ep.overview }}
               </span>
+              <div v-if="episodeProgressPercent(ep) > 0" class="ep-progress-row">
+                <div class="ep-progress-track">
+                  <div
+                    class="ep-progress-fill"
+                    :class="{ 'is-done': findEpisodeProgress(ep)?.completed }"
+                    :style="{ width: `${episodeProgressPercent(ep)}%` }"
+                  />
+                </div>
+                <span
+                  class="ep-progress-label"
+                  :class="{ 'is-done': findEpisodeProgress(ep)?.completed }"
+                >
+                  {{
+                    findEpisodeProgress(ep)?.completed
+                      ? t('details.watched_badge')
+                      : `${episodeProgressPercent(ep)}%`
+                  }}
+                </span>
+              </div>
             </button>
 
             <div class="ep-controls">
@@ -1285,11 +1363,80 @@ onActivated(() => {
 }
 
 .ep-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
   font-size: 1.02rem;
   font-weight: 650;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.ep-watched-corner {
+  position: absolute;
+  top: 0.4rem;
+  right: 0.4rem;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(16, 185, 129, 0.92);
+  color: #ffffff;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.4);
+}
+
+.ep-watched-inline {
+  color: var(--vessel-success);
+  flex-shrink: 0;
+}
+
+.ep-thumb-progress {
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 3.5px;
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.ep-thumb-progress-fill,
+.ep-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--vessel-accent-secondary), var(--vessel-accent));
+  border-radius: 999px;
+}
+
+.ep-thumb-progress-fill.is-done,
+.ep-progress-fill.is-done {
+  background: var(--vessel-success);
+}
+
+.ep-progress-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.15rem;
+}
+
+.ep-progress-track {
+  flex: 1;
+  max-width: 180px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--vessel-border);
+  overflow: hidden;
+}
+
+.ep-progress-label {
+  font-size: 0.72rem;
+  font-weight: 650;
+  color: var(--vessel-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.ep-progress-label.is-done {
+  color: var(--vessel-success);
 }
 
 .ep-overview {

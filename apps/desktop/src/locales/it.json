@@ -60,7 +60,8 @@
     "hero_source_auto": "Automatico (Tutti i feed attivi)",
     "hero_source_hint": "Seleziona plugin specifici per il banner Hero o lascia su Automatico.",
     "shelf_order_title": "Ordine righe attive (Alto → Basso)",
-    "shelf_order_hint": "Trascina la maniglia per riordinare"
+    "shelf_order_hint": "Trascina la maniglia per riordinare",
+    "up_next": "Prossimo"
   },
   "search": {
     "title": "Cerca",
@@ -90,7 +91,8 @@
     "select_stream": "Seleziona sorgente stream",
     "no_episodes": "Nessun episodio disponibile per questo titolo.",
     "searching_streams": "Ricerca link riproducibili…",
-    "no_streams": "Nessun flusso disponibile"
+    "no_streams": "Nessun flusso disponibile",
+    "watched_badge": "Visto"
   },
   "library": {
     "title": "Libreria",
@@ -120,7 +122,14 @@
   "downloads": {
     "title": "Download",
     "empty": "La tua coda offline è vuota.",
-    "segments": "Segmenti"
+    "segments": "Segmenti",
+    "continue_watching": "Continua a guardare (Download)",
+    "streams_count": "flussi",
+    "watched": "Visto",
+    "queue_pos": "Coda di download",
+    "drag_hint": "Trascina per riordinare la coda",
+    "play_offline": "Riproduci offline",
+    "stream_default": "Flusso offline"
   },
   "extensions": {
     "title": "Estensioni & Repository",
@@ -251,5 +260,8 @@
     "zh": "Cinese",
     "ar": "Arabo",
     "fa": "Persiano"
+  },
+  "media": {
+    "quick_status": "Stato rapido"
   }
 }

@@ -45,6 +45,7 @@ pub struct DownloadRequest {
     pub source_url: String,
     pub headers: BTreeMap<String, String>,
     pub subtitles: Vec<SubtitleTrack>,
+    pub stream_label: Option<String>,
 }
 
 type ActiveDownloadMap = HashMap<String, (CancellationToken, JoinHandle<()>)>;
@@ -56,7 +57,7 @@ pub struct DownloadManager {
     http: reqwest::Client,
     event_sink: Arc<dyn EventSink>,
     downloads_root: Arc<RwLock<PathBuf>>,
-    queue_semaphore: Arc<Semaphore>,
+    dispatch_lock: Arc<Mutex<()>>,
     active: Arc<Mutex<ActiveDownloadMap>>,
 }
 
@@ -195,7 +196,7 @@ impl DownloadManager {
             http,
             event_sink,
             downloads_root: Arc::new(RwLock::new(downloads_root.into())),
-            queue_semaphore: Arc::new(Semaphore::new(MAX_CONCURRENT_DOWNLOADS)),
+            dispatch_lock: Arc::new(Mutex::new(())),
             active: Arc::new(Mutex::new(HashMap::new())),
         }
     }
@@ -226,7 +227,7 @@ impl DownloadManager {
         Ok(())
     }
 
-    /// Persists a download job as `Queued` and schedules it against the 4-slot queue semaphore.
+    /// Persists a download job as `Queued` and schedules it against the 4-slot priority queue.
     pub async fn enqueue(&self, req: DownloadRequest) -> VesselResult<StoredDownload> {
         let id = req.id.unwrap_or_else(next_download_id);
         let local_dir = self.downloads_root().join(&id);
@@ -237,6 +238,8 @@ impl DownloadManager {
             title: req.title,
             season: req.season,
             episode: req.episode,
+            stream_label: req.stream_label,
+            queue_order: 0,
             kind: req.kind,
             source_url: req.source_url,
             headers: req.headers,
@@ -254,6 +257,7 @@ impl DownloadManager {
         };
 
         self.storage.upsert_download(&record).await?;
+        let persisted = self.storage.get_download(&id).await?.unwrap_or(record);
         self.event_sink
             .emit(EngineEvent::DownloadProgress(DownloadProgressSnapshot {
                 download_id: id,
@@ -264,8 +268,14 @@ impl DownloadManager {
                 segments_total: 0,
             }));
 
-        self.spawn_worker(record.clone()).await;
-        Ok(record)
+        self.dispatch_queued().await?;
+        Ok(persisted)
+    }
+
+    /// Reorders queued/all downloads according to `ordered_ids` priority and triggers dispatch.
+    pub async fn reorder(&self, ordered_ids: &[String]) -> VesselResult<()> {
+        self.storage.reorder_downloads(ordered_ids).await?;
+        self.dispatch_queued().await
     }
 
     /// Cancels an active worker and transitions its status to `Paused` while preserving partial files.
@@ -335,7 +345,16 @@ impl DownloadManager {
             .get_download(download_id)
             .await?
             .unwrap_or(existing);
-        self.spawn_worker(refreshed.clone()).await;
+        self.event_sink
+            .emit(EngineEvent::DownloadProgress(DownloadProgressSnapshot {
+                download_id: refreshed.id.clone(),
+                status: DownloadStatus::Queued,
+                bytes_downloaded: refreshed.bytes_downloaded,
+                total_bytes: refreshed.total_bytes,
+                segments_done: refreshed.segments_done,
+                segments_total: refreshed.segments_total,
+            }));
+        self.dispatch_queued().await?;
         Ok(refreshed)
     }
 
@@ -368,119 +387,181 @@ impl DownloadManager {
         self.storage.get_download(download_id).await
     }
 
+    /// Dispatches the highest-priority `Queued` downloads up to `MAX_CONCURRENT_DOWNLOADS`.
+    pub async fn dispatch_queued(&self) -> VesselResult<()> {
+        self.clone().dispatch_queued_boxed().await
+    }
+
+    fn dispatch_queued_boxed(
+        self,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = VesselResult<()>> + Send>> {
+        Box::pin(async move {
+            let _dispatch_guard = self.dispatch_lock.lock().await;
+
+            loop {
+                let active_count = self.active.lock().await.len();
+                if active_count >= MAX_CONCURRENT_DOWNLOADS {
+                    break;
+                }
+
+                let Some(next_record) = self.storage.next_queued_download().await? else {
+                    break;
+                };
+
+                if self.active.lock().await.contains_key(&next_record.id) {
+                    break;
+                }
+
+                self.storage
+                    .update_download_progress(
+                        &next_record.id,
+                        DownloadStatus::Downloading,
+                        next_record.bytes_downloaded,
+                        next_record.total_bytes,
+                        next_record.segments_done,
+                        next_record.segments_total,
+                        next_record.local_media_path.as_deref(),
+                        None,
+                    )
+                    .await?;
+
+                self.spawn_worker(next_record).await;
+            }
+            Ok(())
+        })
+    }
+
     async fn spawn_worker(&self, record: StoredDownload) {
         let token = CancellationToken::new();
         let manager = self.clone();
         let worker_token = token.clone();
         let dl_id = record.id.clone();
 
+        let mut guard = self.active.lock().await;
         let handle = tokio::spawn(async move {
-            let permit = tokio::select! {
-                _ = worker_token.cancelled() => {
-                    let _ = manager.storage.update_download_progress(
-                        &record.id,
-                        DownloadStatus::Paused,
-                        record.bytes_downloaded,
-                        record.total_bytes,
-                        record.segments_done,
-                        record.segments_total,
-                        None,
-                        None,
-                    ).await;
-                    manager.active.lock().await.remove(&record.id);
-                    return;
-                }
-                res = Arc::clone(&manager.queue_semaphore).acquire_owned() => match res {
-                    Ok(p) => p,
-                    Err(_) => {
-                        manager.active.lock().await.remove(&record.id);
-                        return;
+            let result = if worker_token.is_cancelled() {
+                Err(VesselError::Cancelled)
+            } else {
+                match record.kind {
+                    DownloadKind::Direct => {
+                        direct::run_direct_download(
+                            &manager.http,
+                            &manager.storage,
+                            &manager.event_sink,
+                            &record,
+                            &worker_token,
+                        )
+                        .await
+                    }
+                    DownloadKind::Hls => {
+                        hls::run_hls_download(
+                            &manager.http,
+                            &manager.storage,
+                            &manager.event_sink,
+                            &record,
+                            &worker_token,
+                        )
+                        .await
                     }
                 }
             };
 
-            let result = match record.kind {
-                DownloadKind::Direct => {
-                    direct::run_direct_download(
-                        &manager.http,
-                        &manager.storage,
-                        &manager.event_sink,
-                        &record,
-                        &worker_token,
-                    )
-                    .await
-                }
-                DownloadKind::Hls => {
-                    hls::run_hls_download(
-                        &manager.http,
-                        &manager.storage,
-                        &manager.event_sink,
-                        &record,
-                        &worker_token,
-                    )
-                    .await
-                }
-            };
-            drop(permit);
-
-            if let Err(err) = result
-                && err != VesselError::Cancelled
-            {
-                let latest = manager
-                    .storage
-                    .get_download(&record.id)
-                    .await
-                    .ok()
-                    .flatten();
-                let (bytes, total, done, total_seg) = latest
-                    .map(|d| {
-                        (
-                            d.bytes_downloaded,
-                            d.total_bytes,
-                            d.segments_done,
-                            d.segments_total,
+            if let Err(err) = result {
+                if err == VesselError::Cancelled {
+                    let latest = manager
+                        .storage
+                        .get_download(&record.id)
+                        .await
+                        .ok()
+                        .flatten();
+                    let (bytes, total, done, total_seg, media_path) = latest
+                        .map(|d| {
+                            (
+                                d.bytes_downloaded,
+                                d.total_bytes,
+                                d.segments_done,
+                                d.segments_total,
+                                d.local_media_path,
+                            )
+                        })
+                        .unwrap_or((
+                            record.bytes_downloaded,
+                            record.total_bytes,
+                            record.segments_done,
+                            record.segments_total,
+                            record.local_media_path.clone(),
+                        ));
+                    let _ = manager
+                        .storage
+                        .update_download_progress(
+                            &record.id,
+                            DownloadStatus::Paused,
+                            bytes,
+                            total,
+                            done,
+                            total_seg,
+                            media_path.as_deref(),
+                            None,
                         )
-                    })
-                    .unwrap_or((
-                        record.bytes_downloaded,
-                        record.total_bytes,
-                        record.segments_done,
-                        record.segments_total,
+                        .await;
+                } else {
+                    let latest = manager
+                        .storage
+                        .get_download(&record.id)
+                        .await
+                        .ok()
+                        .flatten();
+                    let (bytes, total, done, total_seg) = latest
+                        .map(|d| {
+                            (
+                                d.bytes_downloaded,
+                                d.total_bytes,
+                                d.segments_done,
+                                d.segments_total,
+                            )
+                        })
+                        .unwrap_or((
+                            record.bytes_downloaded,
+                            record.total_bytes,
+                            record.segments_done,
+                            record.segments_total,
+                        ));
+                    let msg = err.to_string();
+                    let _ = manager
+                        .storage
+                        .update_download_progress(
+                            &record.id,
+                            DownloadStatus::Failed,
+                            bytes,
+                            total,
+                            done,
+                            total_seg,
+                            None,
+                            Some(&msg),
+                        )
+                        .await;
+                    manager.event_sink.emit(EngineEvent::DownloadProgress(
+                        DownloadProgressSnapshot {
+                            download_id: record.id.clone(),
+                            status: DownloadStatus::Failed,
+                            bytes_downloaded: bytes,
+                            total_bytes: total,
+                            segments_done: done,
+                            segments_total: total_seg,
+                        },
                     ));
-                let msg = err.to_string();
-                let _ = manager
-                    .storage
-                    .update_download_progress(
-                        &record.id,
-                        DownloadStatus::Failed,
-                        bytes,
-                        total,
-                        done,
-                        total_seg,
-                        None,
-                        Some(&msg),
-                    )
-                    .await;
-                manager
-                    .event_sink
-                    .emit(EngineEvent::DownloadProgress(DownloadProgressSnapshot {
-                        download_id: record.id.clone(),
-                        status: DownloadStatus::Failed,
-                        bytes_downloaded: bytes,
-                        total_bytes: total,
-                        segments_done: done,
-                        segments_total: total_seg,
-                    }));
+                }
             }
 
             manager.active.lock().await.remove(&record.id);
+            let _ = manager.dispatch_queued_boxed().await;
         });
 
-        let mut guard = self.active.lock().await;
         if let Some((old_token, old_handle)) = guard.insert(dl_id, (token, handle)) {
             old_token.cancel();
             old_handle.abort();
         }
+        drop(guard);
     }
 }
 
@@ -621,6 +702,7 @@ mod tests {
                 kind: DownloadKind::Direct,
                 source_url: format!("http://{addr}/video.mp4"),
                 headers: BTreeMap::new(),
+                stream_label: Some("1080p Direct MP4".into()),
                 subtitles: vec![SubtitleTrack {
                     id: Some("sub-en".into()),
                     source: SubtitleSource::InlineContent {
@@ -732,6 +814,7 @@ mod tests {
                 kind: DownloadKind::Hls,
                 source_url: format!("http://{addr}/master.m3u8"),
                 headers: BTreeMap::new(),
+                stream_label: Some("HLS 1080p".into()),
                 subtitles: Vec::new(),
             })
             .await
@@ -834,6 +917,7 @@ mod tests {
                 kind: DownloadKind::Hls,
                 source_url: format!("http://{addr}/master.m3u8"),
                 headers: BTreeMap::new(),
+                stream_label: Some("HLS 1080p".into()),
                 subtitles: Vec::new(),
             })
             .await
@@ -858,6 +942,62 @@ mod tests {
             b"AUD_TR_BYTES"
         );
         assert!(bundle_dir.join("sub_hls_1/seg_00000.ts").exists());
+
+        let _ = tokio::fs::remove_dir_all(&root).await;
+    }
+
+    #[tokio::test]
+    async fn download_queue_preserves_stream_label_and_reorders_priority() {
+        let root = temp_dir("reorder");
+        let actor = StorageActor::open_in_memory().await.expect("db");
+        let storage = Arc::new(SqliteStorage::new(actor));
+        let sink = Arc::new(CollectorSink::default());
+        let manager = DownloadManager::new(Arc::clone(&storage), sink, root.clone());
+
+        for (id, label) in [
+            ("dl-a", "Stream A"),
+            ("dl-b", "Stream B"),
+            ("dl-c", "Stream C"),
+        ] {
+            storage
+                .upsert_download(&vessel_storage::StoredDownload {
+                    id: id.into(),
+                    plugin_id: "anthology".into(),
+                    native_id: "s1".into(),
+                    title: "Series".into(),
+                    season: Some(1),
+                    episode: Some(1),
+                    stream_label: Some(label.into()),
+                    queue_order: 0,
+                    kind: DownloadKind::Direct,
+                    source_url: "http://127.0.0.1:9/v.mp4".into(),
+                    headers: BTreeMap::new(),
+                    local_dir: root.join(id).to_string_lossy().into_owned(),
+                    local_media_path: None,
+                    status: DownloadStatus::Paused,
+                    bytes_downloaded: 0,
+                    total_bytes: None,
+                    segments_done: 0,
+                    segments_total: 0,
+                    subtitles: Vec::new(),
+                    error_msg: None,
+                    created_at: String::new(),
+                    updated_at: String::new(),
+                })
+                .await
+                .expect("seed download");
+        }
+
+        manager
+            .reorder(&["dl-c".into(), "dl-a".into(), "dl-b".into()])
+            .await
+            .expect("reorder");
+
+        let listed = manager.list().await.expect("list");
+        let ids: Vec<&str> = listed.iter().map(|d| d.id.as_str()).collect();
+        assert_eq!(ids, vec!["dl-c", "dl-a", "dl-b"]);
+        assert_eq!(listed[0].stream_label.as_deref(), Some("Stream C"));
+        assert_eq!(listed[0].queue_order, 1);
 
         let _ = tokio::fs::remove_dir_all(&root).await;
     }

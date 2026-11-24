@@ -68,6 +68,8 @@ pub struct StoredDownload {
     pub title: String,
     pub season: Option<u32>,
     pub episode: Option<u32>,
+    pub stream_label: Option<String>,
+    pub queue_order: i64,
     pub kind: DownloadKind,
     pub source_url: String,
     pub headers: BTreeMap<String, String>,
@@ -116,6 +118,8 @@ fn decode_download_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<(StoredDownl
         error_msg: row.get(17)?,
         created_at: row.get(18)?,
         updated_at: row.get(19)?,
+        stream_label: row.get(20)?,
+        queue_order: row.get(21)?,
     },))
 }
 
@@ -140,6 +144,8 @@ struct StoredDownloadRaw {
     error_msg: Option<String>,
     created_at: String,
     updated_at: String,
+    stream_label: Option<String>,
+    queue_order: i64,
 }
 
 impl StoredDownloadRaw {
@@ -155,6 +161,8 @@ impl StoredDownloadRaw {
             title: self.title,
             season: self.season,
             episode: self.episode,
+            stream_label: self.stream_label,
+            queue_order: self.queue_order,
             kind: DownloadKind::parse(&self.kind)?,
             source_url: self.source_url,
             headers,
@@ -186,18 +194,30 @@ impl SqliteStorage {
 
         self.actor()
             .execute(move |db| {
+                let assigned_order = if dl.queue_order > 0 {
+                    dl.queue_order
+                } else {
+                    db.conn()
+                        .query_row(
+                            "SELECT COALESCE(MAX(queue_order), 0) + 1 FROM downloads",
+                            [],
+                            |r| r.get::<_, i64>(0),
+                        )
+                        .map_err(map_sql_err)?
+                };
                 db.conn()
                     .execute(
                         "INSERT INTO downloads (
                              id, plugin_id, native_id, title, season, episode, kind, source_url,
                              headers_json, local_dir, local_media_path, status, bytes_downloaded,
                              total_bytes, segments_done, segments_total, subtitles_json, error_msg,
-                             created_at, updated_at
+                             created_at, updated_at, stream_label, queue_order
                          ) VALUES (
                              ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8,
                              ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18,
                              COALESCE(NULLIF(?19, ''), strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
-                             COALESCE(NULLIF(?20, ''), strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+                             COALESCE(NULLIF(?20, ''), strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+                             ?21, ?22
                          )
                          ON CONFLICT(id) DO UPDATE SET
                              local_media_path = excluded.local_media_path,
@@ -208,7 +228,8 @@ impl SqliteStorage {
                              segments_total = excluded.segments_total,
                              subtitles_json = excluded.subtitles_json,
                              error_msg = excluded.error_msg,
-                             updated_at = excluded.updated_at",
+                             updated_at = excluded.updated_at,
+                             stream_label = COALESCE(NULLIF(excluded.stream_label, ''), downloads.stream_label)",
                         rusqlite::params![
                             dl.id,
                             dl.plugin_id,
@@ -230,6 +251,8 @@ impl SqliteStorage {
                             dl.error_msg,
                             dl.created_at,
                             dl.updated_at,
+                            dl.stream_label,
+                            assigned_order,
                         ],
                     )
                     .map_err(map_sql_err)?;
@@ -249,7 +272,7 @@ impl SqliteStorage {
                         "SELECT id, plugin_id, native_id, title, season, episode, kind, source_url,
                                 headers_json, local_dir, local_media_path, status, bytes_downloaded,
                                 total_bytes, segments_done, segments_total, subtitles_json, error_msg,
-                                created_at, updated_at
+                                created_at, updated_at, stream_label, queue_order
                          FROM downloads WHERE id = ?1",
                         [&id],
                         decode_download_row,
@@ -261,7 +284,7 @@ impl SqliteStorage {
             .await
     }
 
-    /// Lists all recorded download tasks ordered by newest update first.
+    /// Lists all recorded download tasks ordered by queue priority first, then creation time.
     pub async fn list_downloads(&self) -> VesselResult<Vec<StoredDownload>> {
         self.actor()
             .execute(|db| {
@@ -271,8 +294,9 @@ impl SqliteStorage {
                         "SELECT id, plugin_id, native_id, title, season, episode, kind, source_url,
                                 headers_json, local_dir, local_media_path, status, bytes_downloaded,
                                 total_bytes, segments_done, segments_total, subtitles_json, error_msg,
-                                created_at, updated_at
-                         FROM downloads ORDER BY updated_at DESC",
+                                created_at, updated_at, stream_label, queue_order
+                         FROM downloads
+                         ORDER BY CASE WHEN queue_order > 0 THEN 0 ELSE 1 END ASC, queue_order ASC, created_at ASC",
                     )
                     .map_err(map_sql_err)?;
                 let rows = stmt
@@ -283,6 +307,62 @@ impl SqliteStorage {
                     out.push(r.map_err(map_sql_err)?.0.into_domain()?);
                 }
                 Ok(out)
+            })
+            .await
+    }
+
+    /// Returns the highest-priority `Queued` download according to `queue_order`.
+    pub async fn next_queued_download(&self) -> VesselResult<Option<StoredDownload>> {
+        self.actor()
+            .execute(|db| {
+                let row = db
+                    .conn()
+                    .query_row(
+                        "SELECT id, plugin_id, native_id, title, season, episode, kind, source_url,
+                                headers_json, local_dir, local_media_path, status, bytes_downloaded,
+                                total_bytes, segments_done, segments_total, subtitles_json, error_msg,
+                                created_at, updated_at, stream_label, queue_order
+                         FROM downloads
+                         WHERE status = 'queued'
+                         ORDER BY CASE WHEN queue_order > 0 THEN 0 ELSE 1 END ASC, queue_order ASC, created_at ASC
+                         LIMIT 1",
+                        [],
+                        decode_download_row,
+                    )
+                    .optional()
+                    .map_err(map_sql_err)?;
+                row.map(|(raw,)| raw.into_domain()).transpose()
+            })
+            .await
+    }
+
+    /// Persists user-dragged queue ordering (`1..=N`) across download IDs.
+    pub async fn reorder_downloads(&self, ordered_ids: &[String]) -> VesselResult<()> {
+        let ids = ordered_ids.to_vec();
+        self.actor()
+            .execute(move |db| {
+                let conn = db.conn();
+                conn.execute_batch("BEGIN IMMEDIATE").map_err(map_sql_err)?;
+                let res = (|| -> VesselResult<()> {
+                    let mut stmt = conn
+                        .prepare("UPDATE downloads SET queue_order = ?1 WHERE id = ?2")
+                        .map_err(map_sql_err)?;
+                    for (idx, id) in ids.iter().enumerate() {
+                        let order = i64::try_from(idx + 1).unwrap_or(i64::MAX);
+                        stmt.execute((order, id)).map_err(map_sql_err)?;
+                    }
+                    Ok(())
+                })();
+                match res {
+                    Ok(()) => {
+                        conn.execute_batch("COMMIT").map_err(map_sql_err)?;
+                        Ok(())
+                    }
+                    Err(err) => {
+                        let _ = conn.execute_batch("ROLLBACK");
+                        Err(err)
+                    }
+                }
             })
             .await
     }

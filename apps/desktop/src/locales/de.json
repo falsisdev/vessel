@@ -60,7 +60,8 @@
     "hero_source_auto": "Automatisch (Alle aktiven Feeds)",
     "hero_source_hint": "Wähle gezielte Plugins für das Hero-Banner oder belasse es auf Automatisch.",
     "shelf_order_title": "Reihenfolge der Regale (Oben → Unten)",
-    "shelf_order_hint": "Zum Sortieren Griff ziehen"
+    "shelf_order_hint": "Zum Sortieren Griff ziehen",
+    "up_next": "Als Nächstes"
   },
   "search": {
     "title": "Suche",
@@ -90,7 +91,8 @@
     "select_stream": "Stream-Quelle wählen",
     "no_episodes": "Keine Episoden für diesen Titel gelistet.",
     "searching_streams": "Suche abspielbare Links…",
-    "no_streams": "Keine Streams verfügbar"
+    "no_streams": "Keine Streams verfügbar",
+    "watched_badge": "Gesehen"
   },
   "library": {
     "title": "Mediathek",
@@ -120,7 +122,14 @@
   "downloads": {
     "title": "Downloads",
     "empty": "Deine Offline-Warteschlange ist leer.",
-    "segments": "Segmente"
+    "segments": "Segmente",
+    "continue_watching": "Weiterschauen (Downloads)",
+    "streams_count": "Streams",
+    "watched": "Gesehen",
+    "queue_pos": "Download-Warteschlange",
+    "drag_hint": "Zum Sortieren am Griff ziehen",
+    "play_offline": "Offline abspielen",
+    "stream_default": "Offline-Stream"
   },
   "extensions": {
     "title": "Erweiterungen & Repos",
@@ -251,5 +260,8 @@
     "zh": "Chinesisch",
     "ar": "Arabisch",
     "fa": "Persisch"
+  },
+  "media": {
+    "quick_status": "Schnellstatus"
   }
 }

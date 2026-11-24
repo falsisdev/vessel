@@ -13,10 +13,11 @@ use tokio::sync::Mutex;
 use tokio::task::{JoinHandle, JoinSet};
 use tokio_util::sync::CancellationToken;
 use vessel_domain::{
-    ContentProvider, DomainGrantSource, EngineEvent, EventSink, ExternalIds, HomeFeed, LibraryItem,
-    LibraryStatus, LogLevel, MediaDetail, MediaRef, MediaType, PlaybackProgress, PlaybackRequest,
-    PlayerBackend, PluginId, SecretStore, StoragePort, StreamCandidate, StreamResult,
-    SubtitleSource, SubtitleTrack, UiPreferences, VesselError, VesselPaths, VesselResult,
+    ContentProvider, DomainGrantSource, DownloadStatus, EngineEvent, EventSink, ExternalIds,
+    HomeFeed, LibraryItem, LibraryStatus, LogLevel, MediaDetail, MediaRef, MediaType,
+    PlaybackProgress, PlaybackRequest, PlayerBackend, PluginId, SecretStore, StoragePort,
+    StreamCandidate, StreamKind, StreamResult, SubtitleFormat, SubtitleSource, SubtitleTrack,
+    UiPreferences, VesselError, VesselPaths, VesselResult,
 };
 use vessel_iptv::{IptvClient, channel_to_stream_candidate, xtream::xtream_xmltv_url};
 use vessel_metadata::{
@@ -28,14 +29,69 @@ use vessel_plugin_rt::{
 };
 use vessel_proxy::ProxyServer;
 use vessel_storage::{
-    BackupImportMode, ContinueWatchingEntry, NewIptvChannel, SqliteSecretStore, SqliteStorage,
-    StorageActor, StoredDownload, StoredEpgNowNext, StoredEpgProgram, StoredIptvChannel,
-    StoredIptvKind, StoredIptvProfile, StoredPlugin,
+    BackupImportMode, ContinueWatchingEntry, DownloadKind, NewIptvChannel, SqliteSecretStore,
+    SqliteStorage, StorageActor, StoredDownload, StoredEpgNowNext, StoredEpgProgram,
+    StoredIptvChannel, StoredIptvKind, StoredIptvProfile, StoredPlugin,
 };
 
 pub use pool::{DEFAULT_IDLE_TTL, DEFAULT_MAX_WARM_PLUGINS, PluginPool};
 pub use vessel_downloader::{DownloadManager, DownloadRequest};
 pub use vessel_iptv::{EpgNowNext, EpgProgram, IptvChannel, IptvKind, IptvProfile};
+
+/// Local playback bundle resolved through the loopback file server (`http://127.0.0.1:<port>/local/<token>/...`).
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LocalPlaybackBundle {
+    pub download_id: String,
+    pub url: String,
+    pub kind: StreamKind,
+    pub subtitles: Vec<SubtitleTrack>,
+}
+
+fn subtitle_ext(format: SubtitleFormat) -> &'static str {
+    match format {
+        SubtitleFormat::Srt => "srt",
+        SubtitleFormat::Ass => "ass",
+        SubtitleFormat::Ssa => "ssa",
+        SubtitleFormat::Vtt => "vtt",
+    }
+}
+
+async fn persist_episode_snapshot(
+    storage: &SqliteStorage,
+    plugin_id: &PluginId,
+    detail: &MediaDetail,
+) {
+    let media_type = match detail.media_type {
+        MediaType::Movie => "movie",
+        MediaType::Series => "series",
+        MediaType::Live => "live",
+    };
+    let episodes: Vec<serde_json::Value> = detail
+        .episodes
+        .iter()
+        .map(|ep| {
+            serde_json::json!({
+                "streamId": ep.stream_id,
+                "season": ep.season,
+                "episode": ep.episode,
+                "absoluteEpisode": ep.absolute_episode,
+                "title": ep.title,
+            })
+        })
+        .collect();
+    let payload = serde_json::json!({
+        "title": detail.title,
+        "poster": detail.poster,
+        "backdrop": detail.backdrop,
+        "type": media_type,
+        "episodes": episodes,
+    });
+    let cache_key = format!("episodes:{}:{}", plugin_id.as_str(), detail.native_id);
+    let _ = storage
+        .upsert_metadata_cache(&cache_key, &payload.to_string(), "2099-01-01T00:00:00Z")
+        .await;
+}
 
 static SEQ_ID: AtomicU64 = AtomicU64::new(1);
 
@@ -876,6 +932,7 @@ impl VesselEngine {
         preferred_lang: &str,
     ) -> VesselResult<(MediaDetail, JoinHandle<()>)> {
         let raw = self.details(plugin_id, native_id).await?;
+        persist_episode_snapshot(&self.storage, plugin_id, &raw).await;
         let storage = Arc::clone(&self.storage);
         let secrets = Arc::clone(&self.secrets);
         let metadata = self.metadata.clone();
@@ -1054,6 +1111,22 @@ impl VesselEngine {
         limit: usize,
     ) -> VesselResult<Vec<ContinueWatchingEntry>> {
         self.storage.list_continue_watching(limit).await
+    }
+
+    /// Lists all watch progress rows for `(plugin_id, native_id)` ordered by `(season, episode)`.
+    pub async fn list_media_watch_progress(
+        &self,
+        media: &MediaRef,
+    ) -> VesselResult<Vec<PlaybackProgress>> {
+        self.storage.list_media_watch_progress(media).await
+    }
+
+    /// Lists recent watch progress rows across all media (completed and active).
+    pub async fn list_all_watch_progress(
+        &self,
+        limit: usize,
+    ) -> VesselResult<Vec<PlaybackProgress>> {
+        self.storage.list_all_watch_progress(limit).await
     }
 
     /// Removes a title's watch progress from Continue Watching.
@@ -1362,6 +1435,94 @@ impl VesselEngine {
         self.downloader.get(download_id).await
     }
 
+    /// Persists drag-and-drop download queue priority ordering and dispatches queued jobs.
+    pub async fn reorder_downloads(&self, ordered_ids: &[String]) -> VesselResult<()> {
+        self.downloader.reorder(ordered_ids).await
+    }
+
+    /// Registers a completed offline download folder on the loopback HTTP proxy for playback.
+    pub async fn prepare_local_download_playback(
+        &self,
+        download_id: &str,
+    ) -> VesselResult<LocalPlaybackBundle> {
+        let record = self.downloader.get(download_id).await?.ok_or_else(|| {
+            VesselError::NotFound(format!("download '{download_id}' does not exist"))
+        })?;
+        if record.status != DownloadStatus::Completed {
+            return Err(VesselError::InvalidInput(format!(
+                "download '{download_id}' is not completed yet"
+            )));
+        }
+        let media_path = record.local_media_path.as_deref().ok_or_else(|| {
+            VesselError::NotFound(format!("download '{download_id}' has no local media path"))
+        })?;
+        let root_dir = PathBuf::from(&record.local_dir);
+        let media_buf = PathBuf::from(media_path);
+        if !tokio::fs::try_exists(&media_buf).await.unwrap_or(false) {
+            return Err(VesselError::NotFound(format!(
+                "local downloaded file is missing at '{}'",
+                media_buf.display()
+            )));
+        }
+
+        let rel_media = media_buf
+            .strip_prefix(&root_dir)
+            .ok()
+            .or_else(|| media_buf.file_name().map(Path::new))
+            .ok_or_else(|| VesselError::Storage("invalid local media path".into()))?;
+        let rel_str = rel_media.to_string_lossy().replace('\\', "/");
+
+        let base_url = self.proxy.register_local_dir(&root_dir)?;
+        let url = format!("{base_url}/{rel_str}");
+
+        let kind = match record.kind {
+            DownloadKind::Hls => StreamKind::Hls,
+            DownloadKind::Direct => match media_buf
+                .extension()
+                .and_then(|s| s.to_str())
+                .map(|s| s.to_ascii_lowercase())
+                .as_deref()
+            {
+                Some("mkv") => StreamKind::Mkv,
+                Some("webm") => StreamKind::Webm,
+                Some("ts") => StreamKind::MpegTs,
+                Some("m3u8") => StreamKind::Hls,
+                _ => StreamKind::Mp4,
+            },
+        };
+
+        let mut subtitles = Vec::new();
+        for (idx, track) in record.subtitles.into_iter().enumerate() {
+            let ext = subtitle_ext(track.format);
+            let filename = format!("sub_{idx}.{ext}");
+            if tokio::fs::try_exists(root_dir.join(&filename))
+                .await
+                .unwrap_or(false)
+            {
+                subtitles.push(SubtitleTrack {
+                    id: track.id,
+                    source: SubtitleSource::Url {
+                        url: format!("{base_url}/{filename}"),
+                        headers: BTreeMap::new(),
+                    },
+                    lang: track.lang,
+                    label: track.label,
+                    format: track.format,
+                    is_default: track.is_default,
+                });
+            } else if matches!(track.source, SubtitleSource::InlineContent { .. }) {
+                subtitles.push(track);
+            }
+        }
+
+        Ok(LocalPlaybackBundle {
+            download_id: record.id,
+            url,
+            kind,
+            subtitles,
+        })
+    }
+
     /// Evicts warm QuickJS runtimes idle beyond TTL (`3 min`).
     pub async fn evict_idle_plugins(&self) -> usize {
         self.pool.evict_idle().await
@@ -1434,6 +1595,7 @@ async fn run_enrichment_and_emit(
         && let Ok(cached_canon) = serde_json::from_str::<CanonicalMetadata>(&cached_json)
     {
         let merged = merge_detail_with_override(raw, &cached_canon, preferred_lang, has_override);
+        persist_episode_snapshot(storage, plugin_id, &merged).await;
         sink.emit(EngineEvent::MetadataEnriched {
             plugin_id: plugin_id.clone(),
             native_id: raw.native_id.clone(),
@@ -1459,6 +1621,7 @@ async fn run_enrichment_and_emit(
                 .await;
         }
         let merged = merge_detail_with_override(raw, canonical, preferred_lang, has_override);
+        persist_episode_snapshot(storage, plugin_id, &merged).await;
         sink.emit(EngineEvent::MetadataEnriched {
             plugin_id: plugin_id.clone(),
             native_id: raw.native_id.clone(),
@@ -2214,6 +2377,7 @@ mod tests {
                 kind: DownloadKind::Direct,
                 source_url: format!("{base_url}/offline.mp4"),
                 headers: BTreeMap::new(),
+                stream_label: Some("Offline MP4".into()),
                 subtitles: Vec::new(),
             })
             .await

@@ -60,7 +60,8 @@
     "hero_source_auto": "Automatique (Tous les flux actifs)",
     "hero_source_hint": "Choisissez des extensions précises pour le Hero ou laissez en Automatique.",
     "shelf_order_title": "Ordre des rayons actifs (Haut → Bas)",
-    "shelf_order_hint": "Faites glisser pour réorganiser"
+    "shelf_order_hint": "Faites glisser pour réorganiser",
+    "up_next": "À suivre"
   },
   "search": {
     "title": "Rechercher",
@@ -90,7 +91,8 @@
     "select_stream": "Choisir une source de lecture",
     "no_episodes": "Aucun épisode listé pour ce titre.",
     "searching_streams": "Recherche de liens lisibles…",
-    "no_streams": "Aucune source disponible"
+    "no_streams": "Aucune source disponible",
+    "watched_badge": "Vu"
   },
   "library": {
     "title": "Bibliothèque",
@@ -120,7 +122,14 @@
   "downloads": {
     "title": "Téléchargements",
     "empty": "Votre file hors ligne est vide.",
-    "segments": "Segments"
+    "segments": "Segments",
+    "continue_watching": "Reprendre (Téléchargements)",
+    "streams_count": "flux",
+    "watched": "Vu",
+    "queue_pos": "File de téléchargement",
+    "drag_hint": "Glisser la poignée pour réorganiser",
+    "play_offline": "Lire hors ligne",
+    "stream_default": "Flux hors ligne"
   },
   "extensions": {
     "title": "Extensions & Dépôts",
@@ -251,5 +260,8 @@
     "zh": "Chinois",
     "ar": "Arabe",
     "fa": "Persan"
+  },
+  "media": {
+    "quick_status": "Statut rapide"
   }
 }

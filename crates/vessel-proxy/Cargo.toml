@@ -14,6 +14,7 @@ hmac.workspace = true
 reqwest.workspace = true
 serde.workspace = true
 sha2.workspace = true
-tokio.workspace = true
+tokio = { workspace = true, features = ["fs"] }
+tokio-util = { workspace = true, features = ["io"] }
 url.workspace = true
 vessel-domain = { path = "../vessel-domain" }

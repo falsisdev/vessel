@@ -60,7 +60,8 @@
     "hero_source_auto": "Otomatik (Tüm Aktif Akışlar)",
     "hero_source_hint": "Vitrin bannerı için özel eklenti seçin veya üst akışlardan otomatik alınmasını sağlayın.",
     "shelf_order_title": "Aktif Raf Sırası (Üst → Alt)",
-    "shelf_order_hint": "Sıralamak için tutamacı sürükleyin"
+    "shelf_order_hint": "Sıralamak için tutamacı sürükleyin",
+    "up_next": "Sıradaki"
   },
   "search": {
     "title": "Ara",
@@ -90,7 +91,8 @@
     "select_stream": "Yayın Kaynağı Seç",
     "no_episodes": "Bu içerik için bölüm listelenmedi.",
     "searching_streams": "Oynatılabilir bağlantılar aranıyor…",
-    "no_streams": "Kaynak Bulunamadı"
+    "no_streams": "Kaynak Bulunamadı",
+    "watched_badge": "İzlendi"
   },
   "library": {
     "title": "Kütüphane",
@@ -120,7 +122,14 @@
   "downloads": {
     "title": "İndirilenler",
     "empty": "Çevrimdışı indirme kuyruğunuz boş.",
-    "segments": "Parçalar"
+    "segments": "Parçalar",
+    "continue_watching": "İzlemeye Devam Et (İndirilenler)",
+    "streams_count": "kaynak",
+    "watched": "İzlendi",
+    "queue_pos": "İndirme Sırası",
+    "drag_hint": "Sırayı değiştirmek için tutamacı sürükleyin",
+    "play_offline": "İndirileni Oynat",
+    "stream_default": "Çevrimdışı Kaynak"
   },
   "extensions": {
     "title": "Eklentiler ve Depolar",
@@ -251,5 +260,8 @@
     "zh": "Çince",
     "ar": "Arapça",
     "fa": "Farsça"
+  },
+  "media": {
+    "quick_status": "Hızlı İzleme Durumu"
   }
 }

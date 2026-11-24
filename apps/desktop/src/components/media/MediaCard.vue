@@ -1,7 +1,21 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, shallowRef, watch } from 'vue'
-import { Film, Play, Star } from 'lucide-vue-next'
-import type { CardPreferences, MediaSummary } from '@/types/vessel'
+import { computed, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
+import {
+  Bookmark,
+  BookmarkCheck,
+  CheckCircle2,
+  Clock,
+  Film,
+  PauseCircle,
+  Play,
+  Star,
+  Trash2,
+  XCircle,
+} from 'lucide-vue-next'
+import { useI18n } from '@/composables/useI18n'
+import { useLibraryState } from '@/composables/useLibraryState'
+import { pushToast } from '@/composables/useVesselEvents'
+import type { CardPreferences, LibraryStatus, MediaSummary } from '@/types/vessel'
 
 const props = defineProps<{
   item: MediaSummary
@@ -12,8 +26,14 @@ const emit = defineEmits<{
   open: [pluginId: string, nativeId: string]
 }>()
 
+const { t } = useI18n()
+const { getMediaStatus, setMediaStatus, removeMediaStatus } = useLibraryState()
+
 const imgRef = ref<HTMLImageElement | null>(null)
+const cardRootRef = ref<HTMLElement | null>(null)
 const imgLoaded = shallowRef(false)
+const menuOpen = shallowRef(false)
+
 watch(
   () => props.item.poster,
   () => {
@@ -21,10 +41,23 @@ watch(
   },
 )
 
+function handleDocPointerDown(ev: PointerEvent): void {
+  if (!menuOpen.value) return
+  const target = ev.target as Node | null
+  if (cardRootRef.value && target && !cardRootRef.value.contains(target)) {
+    menuOpen.value = false
+  }
+}
+
 onMounted(() => {
   if (imgRef.value?.complete && imgRef.value.naturalWidth > 0) {
     imgLoaded.value = true
   }
+  window.addEventListener('pointerdown', handleDocPointerDown)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('pointerdown', handleDocPointerDown)
 })
 
 const ratioClass = computed(() => {
@@ -37,51 +70,150 @@ const ratingText = computed(() =>
   props.item.rating !== undefined ? props.item.rating.toFixed(1) : null,
 )
 
+const currentStatus = computed<LibraryStatus | null>(() =>
+  getMediaStatus(props.item.pluginId, props.item.nativeId),
+)
+
+const STATUS_OPTIONS: Array<{ value: LibraryStatus; key: string }> = [
+  { value: 'watching', key: 'library.watching' },
+  { value: 'plan_to_watch', key: 'library.plan_to_watch' },
+  { value: 'completed', key: 'library.completed' },
+  { value: 'on_hold', key: 'library.on_hold' },
+  { value: 'dropped', key: 'library.dropped' },
+]
+
 function handleOpen(): void {
+  menuOpen.value = false
   if (props.item.pluginId) {
     emit('open', props.item.pluginId, props.item.nativeId)
+  }
+}
+
+function toggleStatusMenu(): void {
+  if (!props.item.pluginId) return
+  menuOpen.value = !menuOpen.value
+}
+
+async function pickStatus(status: LibraryStatus): Promise<void> {
+  if (!props.item.pluginId) return
+  menuOpen.value = false
+  try {
+    await setMediaStatus({
+      pluginId: props.item.pluginId,
+      nativeId: props.item.nativeId,
+      mediaType: props.item.type,
+      isAnime: props.item.isAnime,
+      title: props.item.title,
+      posterUrl: props.item.poster,
+      year: props.item.year,
+      status,
+    })
+    pushToast('info', `${props.item.title} · ${t(`library.${status}`)}`)
+  } catch (err) {
+    pushToast('error', String(err))
+  }
+}
+
+async function clearStatus(): Promise<void> {
+  if (!props.item.pluginId) return
+  menuOpen.value = false
+  try {
+    await removeMediaStatus(props.item.pluginId, props.item.nativeId)
+  } catch (err) {
+    pushToast('error', String(err))
   }
 }
 </script>
 
 <template>
-  <button
-    type="button"
+  <div
+    ref="cardRootRef"
+    role="button"
+    tabindex="0"
     class="nuvio-card"
+    :class="{ 'has-open-menu': menuOpen }"
     :aria-label="`Open ${item.title}`"
     @click="handleOpen"
+    @keydown.enter.self="handleOpen"
+    @keydown.space.prevent.self="handleOpen"
   >
-    <div class="poster-frame" :class="ratioClass">
-      <div v-if="item.poster && !imgLoaded" class="v-skeleton poster-shimmer" aria-hidden="true" />
-      <img
-        v-if="item.poster"
-        ref="imgRef"
-        :src="item.poster"
-        :alt="item.title"
-        width="300"
-        height="450"
-        loading="eager"
-        decoding="async"
-        class="poster-img"
-        :class="{ 'is-loaded': imgLoaded }"
-        @load="imgLoaded = true"
-        @error="imgLoaded = true"
-      />
-      <div v-else class="poster-fallback" aria-hidden="true">
-        <Film :size="30" />
-      </div>
+    <div class="card-stage">
+      <div class="poster-frame" :class="ratioClass">
+        <div v-if="item.poster && !imgLoaded" class="v-skeleton poster-shimmer" aria-hidden="true" />
+        <img
+          v-if="item.poster"
+          ref="imgRef"
+          :src="item.poster"
+          :alt="item.title"
+          width="300"
+          height="450"
+          loading="eager"
+          decoding="async"
+          class="poster-img"
+          :class="{ 'is-loaded': imgLoaded }"
+          @load="imgLoaded = true"
+          @error="imgLoaded = true"
+        />
+        <div v-else class="poster-fallback" aria-hidden="true">
+          <Film :size="30" />
+        </div>
 
-      <span class="poster-sheen" aria-hidden="true" />
+        <span class="poster-sheen" aria-hidden="true" />
 
-      <div class="poster-overlay" aria-hidden="true">
-        <span class="nuvio-play-pill">
-          <Play :size="16" fill="currentColor" />
+        <div class="poster-overlay" aria-hidden="true">
+          <span class="nuvio-play-pill">
+            <Play :size="16" fill="currentColor" />
+          </span>
+        </div>
+
+        <span v-if="cards.showRating && ratingText" class="rating-chip">
+          <Star :size="11" fill="currentColor" aria-hidden="true" /> {{ ratingText }}
         </span>
       </div>
 
-      <span v-if="cards.showRating && ratingText" class="rating-chip">
-        <Star :size="11" fill="currentColor" aria-hidden="true" /> {{ ratingText }}
-      </span>
+      <div v-if="item.pluginId" class="quick-status-wrap" @click.stop>
+        <button
+          type="button"
+          class="quick-status-btn"
+          :class="{ 'has-status': Boolean(currentStatus), [`status-${currentStatus}`]: Boolean(currentStatus) }"
+          :title="currentStatus ? t(`library.${currentStatus}`) : t('media.quick_status')"
+          :aria-label="currentStatus ? t(`library.${currentStatus}`) : t('media.quick_status')"
+          @click.stop="toggleStatusMenu"
+        >
+          <CheckCircle2 v-if="currentStatus === 'completed'" :size="14" aria-hidden="true" />
+          <BookmarkCheck v-else-if="currentStatus === 'watching'" :size="14" aria-hidden="true" />
+          <Clock v-else-if="currentStatus === 'plan_to_watch'" :size="14" aria-hidden="true" />
+          <PauseCircle v-else-if="currentStatus === 'on_hold'" :size="14" aria-hidden="true" />
+          <XCircle v-else-if="currentStatus === 'dropped'" :size="14" aria-hidden="true" />
+          <Bookmark v-else :size="14" aria-hidden="true" />
+        </button>
+
+        <Transition name="modal-pop">
+          <div v-if="menuOpen" class="quick-status-menu" role="menu">
+            <button
+              v-for="opt in STATUS_OPTIONS"
+              :key="opt.value"
+              type="button"
+              role="menuitem"
+              class="qs-item"
+              :class="{ 'is-active': currentStatus === opt.value }"
+              @click.stop="pickStatus(opt.value)"
+            >
+              <span>{{ t(opt.key) }}</span>
+            </button>
+            <button
+              v-if="currentStatus"
+              type="button"
+              role="menuitem"
+              class="qs-item qs-danger"
+              @click.stop="clearStatus"
+            >
+              <Trash2 :size="12" aria-hidden="true" />
+              <span>{{ t('common.remove') }}</span>
+            </button>
+          </div>
+        </Transition>
+      </div>
     </div>
 
     <div class="card-caption">
@@ -96,12 +228,13 @@ function handleOpen(): void {
         </template>
       </div>
     </div>
-  </button>
+  </div>
 </template>
 
 <style scoped>
 /* Nuvio clean frameless poster cards with crisp focus/hover halo */
 .nuvio-card {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 0.55rem;
@@ -111,6 +244,116 @@ function handleOpen(): void {
   background: transparent;
   text-align: left;
   cursor: pointer;
+}
+
+.nuvio-card.has-open-menu {
+  z-index: 40;
+}
+
+.card-stage {
+  position: relative;
+  width: 100%;
+}
+
+.quick-status-wrap {
+  position: absolute;
+  top: 0.45rem;
+  right: 0.45rem;
+  z-index: 6;
+}
+
+.quick-status-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  background: rgba(10, 11, 16, 0.78);
+  backdrop-filter: blur(8px);
+  color: #f8fafc;
+  cursor: pointer;
+  opacity: 0.84;
+  transition:
+    opacity 0.18s ease,
+    transform 0.18s ease,
+    background 0.18s ease,
+    border-color 0.18s ease;
+}
+
+.nuvio-card:hover .quick-status-btn,
+.quick-status-btn.has-status,
+.quick-status-btn:focus-visible {
+  opacity: 1;
+}
+
+.quick-status-btn:hover {
+  transform: scale(1.08);
+  border-color: var(--vessel-accent);
+}
+
+.quick-status-btn.has-status {
+  background: color-mix(in srgb, var(--vessel-accent) 88%, #090b10);
+  border-color: rgba(255, 255, 255, 0.35);
+}
+
+.quick-status-btn.status-completed {
+  background: color-mix(in srgb, var(--vessel-success) 88%, #090b10);
+}
+
+.quick-status-btn.status-dropped {
+  background: color-mix(in srgb, var(--vessel-danger) 86%, #090b10);
+}
+
+.quick-status-menu {
+  position: absolute;
+  top: calc(100% + 0.35rem);
+  right: 0;
+  min-width: 148px;
+  padding: 0.32rem;
+  border-radius: 12px;
+  background: var(--vessel-surface-elevated);
+  border: 1px solid var(--vessel-border);
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  z-index: 60;
+}
+
+.qs-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.38rem 0.55rem;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--vessel-text-primary);
+  font-size: 0.78rem;
+  font-weight: 550;
+  text-align: left;
+  cursor: pointer;
+}
+
+.qs-item:hover {
+  background: color-mix(in srgb, var(--vessel-accent) 16%, transparent);
+}
+
+.qs-item.is-active {
+  background: color-mix(in srgb, var(--vessel-accent) 26%, transparent);
+  color: var(--vessel-accent);
+  font-weight: 700;
+}
+
+.qs-item.qs-danger {
+  color: var(--vessel-danger);
+  border-top: 1px solid var(--vessel-border);
+  margin-top: 0.1rem;
+  padding-top: 0.42rem;
+  border-radius: 0 0 8px 8px;
 }
 
 .poster-frame {
@@ -233,8 +476,8 @@ function handleOpen(): void {
 
 .rating-chip {
   position: absolute;
-  top: 0.5rem;
-  right: 0.5rem;
+  top: 0.45rem;
+  left: 0.45rem;
   display: inline-flex;
   align-items: center;
   gap: 0.25rem;

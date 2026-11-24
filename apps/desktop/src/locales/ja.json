@@ -60,7 +60,8 @@
     "hero_source_auto": "自動（すべての有効フィード）",
     "hero_source_hint": "ヒーローバナー用のプラグインを指定するか、自動のままにします。",
     "shelf_order_title": "表示順（上 → 下）",
-    "shelf_order_hint": "ドラッグして並べ替え"
+    "shelf_order_hint": "ドラッグして並べ替え",
+    "up_next": "次のエピソード"
   },
   "search": {
     "title": "検索",
@@ -90,7 +91,8 @@
     "select_stream": "ストリームソースを選択",
     "no_episodes": "エピソード一覧がありません。",
     "searching_streams": "再生可能なリンクを検索中…",
-    "no_streams": "利用可能なソースがありません"
+    "no_streams": "利用可能なソースがありません",
+    "watched_badge": "視聴済み"
   },
   "library": {
     "title": "ライブラリ",
@@ -120,7 +122,14 @@
   "downloads": {
     "title": "ダウンロード",
     "empty": "オフラインキューは空です。",
-    "segments": "セグメント"
+    "segments": "セグメント",
+    "continue_watching": "視聴を続ける（ダウンロード）",
+    "streams_count": "ストリーム",
+    "watched": "視聴済み",
+    "queue_pos": "ダウンロードキュー",
+    "drag_hint": "ドラッグして優先順位を並び替え",
+    "play_offline": "オフライン再生",
+    "stream_default": "オフラインストリーム"
   },
   "extensions": {
     "title": "拡張機能とリポジトリ",
@@ -251,5 +260,8 @@
     "zh": "中国語",
     "ar": "アラビア語",
     "fa": "ペルシア語"
+  },
+  "media": {
+    "quick_status": "クイック視聴ステータス"
   }
 }

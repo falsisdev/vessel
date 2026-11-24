@@ -60,7 +60,8 @@
     "hero_source_auto": "自动（所有已启用片源）",
     "hero_source_hint": "为顶部焦点图指定插件，或保持自动获取。",
     "shelf_order_title": "首页栏目顺序（从上到下）",
-    "shelf_order_hint": "拖拽手柄以调整顺序"
+    "shelf_order_hint": "拖拽手柄以调整顺序",
+    "up_next": "下一集"
   },
   "search": {
     "title": "搜索",
@@ -90,7 +91,8 @@
     "select_stream": "选择播放源",
     "no_episodes": "此条目暂无分集列表。",
     "searching_streams": "正在查找可播放链接…",
-    "no_streams": "暂无可用播放源"
+    "no_streams": "暂无可用播放源",
+    "watched_badge": "已观看"
   },
   "library": {
     "title": "媒体库",
@@ -120,7 +122,14 @@
   "downloads": {
     "title": "下载",
     "empty": "离线下载队列为空。",
-    "segments": "分片"
+    "segments": "分片",
+    "continue_watching": "继续观看（已下载）",
+    "streams_count": "个片源",
+    "watched": "已观看",
+    "queue_pos": "下载队列",
+    "drag_hint": "拖动句柄调整下载顺序",
+    "play_offline": "离线播放",
+    "stream_default": "离线片源"
   },
   "extensions": {
     "title": "扩展与仓库",
@@ -251,5 +260,8 @@
     "zh": "中文",
     "ar": "阿拉伯语",
     "fa": "波斯语"
+  },
+  "media": {
+    "quick_status": "快速设置状态"
   }
 }

@@ -3,10 +3,12 @@
 pub mod hls;
 pub mod session;
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fmt::Write as _;
+use std::io::SeekFrom;
 use std::net::SocketAddr;
-use std::sync::Arc;
+use std::path::{Component, Path as FsPath, PathBuf};
+use std::sync::{Arc, RwLock};
 
 use axum::body::Body;
 use axum::extract::{Path, Query, State};
@@ -23,8 +25,10 @@ use axum::{Json, Router};
 use hmac::{Hmac, KeyInit, Mac};
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
+use tokio::io::{AsyncReadExt, AsyncSeekExt};
 use tokio::net::TcpListener;
 use tokio::sync::oneshot;
+use tokio_util::io::ReaderStream;
 use vessel_domain::{StreamCandidate, StreamFlag, StreamKind, VesselError, VesselResult};
 
 use hls::{decode_signed_seg_url, is_hls_playlist, rewrite_m3u8_playlist};
@@ -120,10 +124,42 @@ struct SegQuery {
     sig: String,
 }
 
+#[derive(Debug, Default)]
+struct LocalDirStore {
+    dirs: RwLock<HashMap<String, PathBuf>>,
+}
+
+impl LocalDirStore {
+    fn register(&self, root: PathBuf) -> VesselResult<String> {
+        let canon = std::fs::canonicalize(&root).map_err(|err| {
+            VesselError::NotFound(format!("local playback dir '{}': {err}", root.display()))
+        })?;
+        let mut raw = [0u8; 16];
+        getrandom::fill(&mut raw)
+            .map_err(|err| VesselError::Network(format!("generate local proxy token: {err}")))?;
+        let token = bytes_to_hex(&raw);
+        let mut guard = self
+            .dirs
+            .write()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        guard.insert(token.clone(), canon);
+        Ok(token)
+    }
+
+    fn get(&self, token: &str) -> Option<PathBuf> {
+        self.dirs
+            .read()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .get(token)
+            .cloned()
+    }
+}
+
 #[derive(Clone)]
 struct AppState {
     base_url: String,
     sessions: Arc<ProxySessionStore>,
+    local_dirs: Arc<LocalDirStore>,
     signer: Arc<HmacSigner>,
     client: reqwest::Client,
 }
@@ -170,6 +206,146 @@ async fn seg_stream_handler(
             .into_response();
     };
     stream_upstream_target(&state, &token, &target_url, &session.headers, &req_headers).await
+}
+
+fn local_content_type(path: &FsPath) -> &'static str {
+    match path
+        .extension()
+        .and_then(|s| s.to_str())
+        .map(|s| s.to_ascii_lowercase())
+        .as_deref()
+    {
+        Some("m3u8") => "application/vnd.apple.mpegurl; charset=utf-8",
+        Some("mp4") | Some("m4v") => "video/mp4",
+        Some("m4s") => "video/iso.segment",
+        Some("ts") => "video/mp2t",
+        Some("mkv") => "video/x-matroska",
+        Some("webm") => "video/webm",
+        Some("aac") => "audio/aac",
+        Some("vtt") => "text/vtt; charset=utf-8",
+        Some("srt") => "application/x-subrip; charset=utf-8",
+        Some("ass") | Some("ssa") => "text/plain; charset=utf-8",
+        Some("key") => "application/octet-stream",
+        _ => "application/octet-stream",
+    }
+}
+
+fn parse_byte_range(header_val: &str, file_len: u64) -> Option<Result<(u64, u64), ()>> {
+    let spec = header_val.trim().strip_prefix("bytes=")?;
+    if spec.contains(',') {
+        return None;
+    }
+    let (start_str, end_str) = spec.split_once('-')?;
+    if file_len == 0 {
+        return Some(Err(()));
+    }
+    if start_str.is_empty() {
+        let suffix: u64 = end_str.trim().parse().ok()?;
+        if suffix == 0 {
+            return Some(Err(()));
+        }
+        let start = file_len.saturating_sub(suffix);
+        return Some(Ok((start, file_len - 1)));
+    }
+    let start: u64 = start_str.trim().parse().ok()?;
+    if start >= file_len {
+        return Some(Err(()));
+    }
+    let end = if end_str.trim().is_empty() {
+        file_len - 1
+    } else {
+        end_str.trim().parse::<u64>().ok()?.min(file_len - 1)
+    };
+    if end < start {
+        return Some(Err(()));
+    }
+    Some(Ok((start, end)))
+}
+
+async fn local_file_handler(
+    Path((token, rel_path)): Path<(String, String)>,
+    State(state): State<AppState>,
+    req_headers: HeaderMap,
+) -> Response {
+    let Some(root_dir) = state.local_dirs.get(&token) else {
+        return (StatusCode::NOT_FOUND, "unknown or expired local token").into_response();
+    };
+    let clean_rel = rel_path.trim_start_matches('/');
+    if clean_rel.is_empty() {
+        return (StatusCode::BAD_REQUEST, "empty local path").into_response();
+    }
+    let candidate = FsPath::new(clean_rel);
+    if candidate.components().any(|c| {
+        matches!(
+            c,
+            Component::ParentDir | Component::RootDir | Component::Prefix(_)
+        )
+    }) {
+        return (StatusCode::FORBIDDEN, "path traversal forbidden").into_response();
+    }
+
+    let joined = root_dir.join(candidate);
+    let canon_target = match tokio::fs::canonicalize(&joined).await {
+        Ok(p) => p,
+        Err(_) => return (StatusCode::NOT_FOUND, "local media file not found").into_response(),
+    };
+    if !canon_target.starts_with(&root_dir) {
+        return (StatusCode::FORBIDDEN, "path escapes bundle directory").into_response();
+    }
+
+    let mut file = match tokio::fs::File::open(&canon_target).await {
+        Ok(f) => f,
+        Err(_) => return (StatusCode::NOT_FOUND, "local media file not readable").into_response(),
+    };
+    let Ok(meta) = file.metadata().await else {
+        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+    };
+    if !meta.is_file() {
+        return (StatusCode::NOT_FOUND, "not a regular file").into_response();
+    }
+    let file_len = meta.len();
+    let content_type = local_content_type(&canon_target);
+
+    if let Some(range_val) = req_headers.get(RANGE).and_then(|v| v.to_str().ok())
+        && let Some(parsed) = parse_byte_range(range_val, file_len)
+    {
+        match parsed {
+            Ok((start, end)) => {
+                let length = end - start + 1;
+                if file.seek(SeekFrom::Start(start)).await.is_err() {
+                    return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+                }
+                let stream = ReaderStream::new(file.take(length));
+                return match Response::builder()
+                    .status(StatusCode::PARTIAL_CONTENT)
+                    .header(CONTENT_TYPE, content_type)
+                    .header(CONTENT_LENGTH, length.to_string())
+                    .header(CONTENT_RANGE, format!("bytes {start}-{end}/{file_len}"))
+                    .header(ACCEPT_RANGES, "bytes")
+                    .body(Body::from_stream(stream))
+                {
+                    Ok(resp) => resp,
+                    Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+                };
+            }
+            Err(()) => {
+                return Response::builder()
+                    .status(StatusCode::RANGE_NOT_SATISFIABLE)
+                    .header(CONTENT_RANGE, format!("bytes */{file_len}"))
+                    .body(Body::empty())
+                    .unwrap_or_else(|_| StatusCode::RANGE_NOT_SATISFIABLE.into_response());
+            }
+        }
+    }
+
+    let stream = ReaderStream::new(file);
+    Response::builder()
+        .status(StatusCode::OK)
+        .header(CONTENT_TYPE, content_type)
+        .header(CONTENT_LENGTH, file_len.to_string())
+        .header(ACCEPT_RANGES, "bytes")
+        .body(Body::from_stream(stream))
+        .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response())
 }
 
 async fn stream_upstream_target(
@@ -280,6 +456,7 @@ async fn add_cors_headers(mut resp: Response) -> Response {
 pub struct ProxyServer {
     local_addr: SocketAddr,
     sessions: Arc<ProxySessionStore>,
+    local_dirs: Arc<LocalDirStore>,
     signer: Arc<HmacSigner>,
     client: reqwest::Client,
     shutdown_tx: Option<oneshot::Sender<()>>,
@@ -290,6 +467,7 @@ impl ProxyServer {
     pub async fn start() -> VesselResult<Self> {
         let signer = Arc::new(HmacSigner::generate()?);
         let sessions = Arc::new(ProxySessionStore::default());
+        let local_dirs = Arc::new(LocalDirStore::default());
         let client = reqwest::Client::builder()
             .build()
             .map_err(|err| VesselError::Network(format!("build proxy http client: {err}")))?;
@@ -304,6 +482,7 @@ impl ProxyServer {
         let state = AppState {
             base_url: format!("http://{local_addr}"),
             sessions: Arc::clone(&sessions),
+            local_dirs: Arc::clone(&local_dirs),
             signer: Arc::clone(&signer),
             client: client.clone(),
         };
@@ -312,6 +491,7 @@ impl ProxyServer {
             .route("/health", get(health_handler))
             .route("/s/{token}/master", get(master_stream_handler))
             .route("/s/{token}/seg", get(seg_stream_handler))
+            .route("/local/{token}/{*path}", get(local_file_handler))
             .with_state(state)
             .layer(middleware::map_response(add_cors_headers));
         let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
@@ -327,10 +507,17 @@ impl ProxyServer {
         Ok(Self {
             local_addr,
             sessions,
+            local_dirs,
             signer,
             client,
             shutdown_tx: Some(shutdown_tx),
         })
+    }
+
+    /// Registers a local bundle directory and returns its base URL prefix (`http://127.0.0.1:<port>/local/<token>`).
+    pub fn register_local_dir(&self, root_dir: impl Into<PathBuf>) -> VesselResult<String> {
+        let token = self.local_dirs.register(root_dir.into())?;
+        Ok(format!("{}/local/{token}", self.base_url()))
     }
 
     /// Registers a stream target and returns its full local master proxy URL.
@@ -776,5 +963,56 @@ mod tests {
             server.resolve_playback_url(&needs_extract, false),
             Err(VesselError::InvalidInput(_))
         ));
+    }
+
+    #[tokio::test]
+    async fn serves_local_offline_files_with_range_and_traversal_guard() {
+        let server = ProxyServer::start().await.expect("start proxy");
+        let dir = std::env::temp_dir().join(format!("vessel-proxy-local-{}", std::process::id()));
+        let sub_dir = dir.join("audio_0");
+        tokio::fs::create_dir_all(&sub_dir).await.expect("mkdir");
+        let video_path = dir.join("video.mp4");
+        let seg_path = sub_dir.join("seg.ts");
+        tokio::fs::write(&video_path, b"0123456789ABCDEF")
+            .await
+            .expect("write video");
+        tokio::fs::write(&seg_path, b"AUDIO_SEG")
+            .await
+            .expect("write audio seg");
+
+        let base = server.register_local_dir(&dir).expect("register dir");
+        let client = reqwest::Client::new();
+
+        // Range request returns 206 Partial Content with exact slice.
+        let resp = client
+            .get(format!("{base}/video.mp4"))
+            .header(RANGE, "bytes=4-9")
+            .send()
+            .await
+            .expect("range fetch");
+        assert_eq!(resp.status(), StatusCode::PARTIAL_CONTENT);
+        assert_eq!(resp.bytes().await.expect("bytes").as_ref(), b"456789");
+
+        // Nested relative subpath resolves cleanly.
+        let nested = client
+            .get(format!("{base}/audio_0/seg.ts"))
+            .send()
+            .await
+            .expect("nested fetch");
+        assert_eq!(nested.status(), StatusCode::OK);
+        assert_eq!(nested.bytes().await.expect("bytes").as_ref(), b"AUDIO_SEG");
+
+        // Parent directory traversal is blocked.
+        let escaped = client
+            .get(format!("{base}/../etc/passwd"))
+            .send()
+            .await
+            .expect("traversal request");
+        assert!(matches!(
+            escaped.status(),
+            StatusCode::FORBIDDEN | StatusCode::NOT_FOUND
+        ));
+
+        let _ = tokio::fs::remove_dir_all(&dir).await;
     }
 }

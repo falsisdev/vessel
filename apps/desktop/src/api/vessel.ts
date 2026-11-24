@@ -12,6 +12,7 @@ import type {
   IptvKind,
   LibraryItem,
   LibraryStatus,
+  LocalPlaybackBundle,
   MediaDetail,
   MediaType,
   PlaybackProgress,
@@ -136,6 +137,10 @@ export const vesselApi = {
   recordProgress: (progress: PlaybackProgress) => call<void>('record_progress', { progress }),
   getWatchProgress: (pluginId: string, nativeId: string, season: number, episode: number) =>
     call<PlaybackProgress | null>('get_watch_progress', { pluginId, nativeId, season, episode }),
+  listMediaWatchProgress: (pluginId: string, nativeId: string) =>
+    call<PlaybackProgress[]>('list_media_watch_progress', { pluginId, nativeId }),
+  listAllWatchProgress: (limit = 200) =>
+    call<PlaybackProgress[]>('list_all_watch_progress', { limit }),
   listContinueWatching: (limit = 16) =>
     call<ContinueWatchingEntry[]>('list_continue_watching', { limit }),
   deleteWatchProgress: (pluginId: string, nativeId: string) =>
@@ -177,11 +182,16 @@ export const vesselApi = {
     title: string
     season?: number
     episode?: number
+    streamLabel?: string
     kind: DownloadKind
     sourceUrl: string
     headers?: Record<string, string>
     subtitles?: SubtitleTrack[]
   }) => call<StoredDownload>('enqueue_download', { payload }),
+  reorderDownloads: (orderedIds: string[]) =>
+    call<void>('reorder_downloads', { orderedIds }),
+  prepareLocalDownloadPlayback: (downloadId: string) =>
+    call<LocalPlaybackBundle>('prepare_local_download_playback', { downloadId }),
   pauseDownload: (downloadId: string) => call<void>('pause_download', { downloadId }),
   resumeDownload: (downloadId: string) => call<StoredDownload>('resume_download', { downloadId }),
   deleteDownload: (downloadId: string) => call<void>('delete_download', { downloadId }),

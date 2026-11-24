@@ -5,6 +5,7 @@ import { X } from 'lucide-vue-next'
 import { isTauriRuntime, vesselApi } from '@/api/vessel'
 import MediaCard from '@/components/media/MediaCard.vue'
 import { useI18n } from '@/composables/useI18n'
+import { useLibraryState } from '@/composables/useLibraryState'
 import { useUiPreferences } from '@/composables/useUiPreferences'
 import { pushToast } from '@/composables/useVesselEvents'
 import type { LibraryItem, LibraryStatus } from '@/types/vessel'
@@ -12,6 +13,7 @@ import type { LibraryItem, LibraryStatus } from '@/types/vessel'
 const router = useRouter()
 const { t } = useI18n()
 const { uiPreferences } = useUiPreferences()
+const { refreshLibraryState } = useLibraryState()
 
 const activeFilter = shallowRef<LibraryStatus | 'all'>('all')
 const items = shallowRef<LibraryItem[]>([])
@@ -37,6 +39,9 @@ async function loadLibrary(filter = activeFilter.value): Promise<void> {
   loading.value = true
   try {
     items.value = await vesselApi.listLibrary(filter === 'all' ? undefined : filter)
+    if (filter === 'all') {
+      void refreshLibraryState()
+    }
   } catch (err) {
     pushToast('error', String(err))
   } finally {
@@ -51,6 +56,7 @@ function openDetails(pluginId: string, nativeId: string): void {
 async function removeEntry(entry: LibraryItem): Promise<void> {
   try {
     await vesselApi.deleteLibraryItem(entry.media.pluginId, entry.media.nativeId)
+    void refreshLibraryState()
     items.value = items.value.filter(
       (i) => !(i.media.pluginId === entry.media.pluginId && i.media.nativeId === entry.media.nativeId),
     )

@@ -413,7 +413,94 @@ impl SqliteStorage {
             .await
     }
 
-    /// Lists recently watched incomplete items (deduplicated per show/movie, newest first).
+    /// Lists all watch progress rows for a given `(plugin_id, native_id)` ordered by `(season, episode)`.
+    pub async fn list_media_watch_progress(
+        &self,
+        media: &MediaRef,
+    ) -> VesselResult<Vec<PlaybackProgress>> {
+        let plugin_raw = media.plugin_id.as_str().to_owned();
+        let native_id = media.native_id.clone();
+
+        self.actor()
+            .execute(move |db| {
+                let mut stmt = db
+                    .conn()
+                    .prepare(
+                        "SELECT stream_id, canonical_id, absolute_episode,
+                                position_ms, duration_ms, completed, last_watched_at,
+                                title, poster_url, backdrop_url, episode_title,
+                                season, episode
+                         FROM watch_progress
+                         WHERE plugin_id = ?1 AND native_id = ?2
+                         ORDER BY season ASC, episode ASC",
+                    )
+                    .map_err(map_sql_err)?;
+
+                let rows = stmt
+                    .query_map((&plugin_raw, &native_id), |row| {
+                        let raw = RawProgressRow::from_sql(row)?;
+                        let season: u32 = row.get(11)?;
+                        let episode: u32 = row.get(12)?;
+                        Ok((raw, season, episode))
+                    })
+                    .map_err(map_sql_err)?;
+
+                let mut items = Vec::new();
+                for row in rows {
+                    let (raw, season, episode) = row.map_err(map_sql_err)?;
+                    let media_ref =
+                        MediaRef::new(PluginId::new(plugin_raw.clone())?, native_id.clone())?;
+                    items.push(raw.into_domain(media_ref, season, episode)?);
+                }
+                Ok(items)
+            })
+            .await
+    }
+
+    /// Lists recent watch progress rows across all media ordered newest-first.
+    pub async fn list_all_watch_progress(
+        &self,
+        limit: usize,
+    ) -> VesselResult<Vec<PlaybackProgress>> {
+        let cap = limit.clamp(1, 500) as i64;
+        self.actor()
+            .execute(move |db| {
+                let mut stmt = db
+                    .conn()
+                    .prepare(
+                        "SELECT stream_id, canonical_id, absolute_episode,
+                                position_ms, duration_ms, completed, last_watched_at,
+                                title, poster_url, backdrop_url, episode_title,
+                                plugin_id, native_id, season, episode
+                         FROM watch_progress
+                         ORDER BY last_watched_at DESC
+                         LIMIT ?1",
+                    )
+                    .map_err(map_sql_err)?;
+
+                let rows = stmt
+                    .query_map([cap], |row| {
+                        let raw = RawProgressRow::from_sql(row)?;
+                        let plugin_raw: String = row.get(11)?;
+                        let native_id: String = row.get(12)?;
+                        let season: u32 = row.get(13)?;
+                        let episode: u32 = row.get(14)?;
+                        Ok((raw, plugin_raw, native_id, season, episode))
+                    })
+                    .map_err(map_sql_err)?;
+
+                let mut items = Vec::new();
+                for row in rows {
+                    let (raw, plugin_raw, native_id, season, episode) = row.map_err(map_sql_err)?;
+                    let media_ref = MediaRef::new(PluginId::new(plugin_raw)?, native_id)?;
+                    items.push(raw.into_domain(media_ref, season, episode)?);
+                }
+                Ok(items)
+            })
+            .await
+    }
+
+    /// Lists recently watched incomplete or up-next items (deduplicated per show/movie, newest first).
     pub async fn list_continue_watching(
         &self,
         limit: usize,
@@ -433,8 +520,7 @@ impl SqliteStorage {
                          FROM watch_progress wp
                          LEFT JOIN library_items li
                            ON li.plugin_id = wp.plugin_id AND li.native_id = wp.native_id
-                         WHERE wp.completed = 0
-                           AND wp.position_ms > 0
+                         WHERE (wp.completed = 1 OR wp.position_ms > 0)
                            AND COALESCE(li.media_type, '') != 'live'
                            AND wp.stream_id NOT LIKE 'tv:%'
                            AND wp.stream_id NOT LIKE 'tv\_%' ESCAPE '\'
@@ -445,7 +531,7 @@ impl SqliteStorage {
                     )
                     .map_err(map_sql_err)?;
 
-                let raw_limit = (cap * 4) as i64;
+                let raw_limit = (cap * 6) as i64;
                 let mut rows = stmt.query([raw_limit]).map_err(map_sql_err)?;
                 let mut seen: HashSet<(String, String)> = HashSet::new();
                 let mut out = Vec::new();
@@ -457,14 +543,14 @@ impl SqliteStorage {
                         continue;
                     }
 
-                    let stream_id: String = row.get(2).map_err(map_sql_err)?;
+                    let mut stream_id: String = row.get(2).map_err(map_sql_err)?;
                     let canonical_id: Option<String> = row.get(3).map_err(map_sql_err)?;
-                    let season: u32 = row.get(4).map_err(map_sql_err)?;
-                    let episode: u32 = row.get(5).map_err(map_sql_err)?;
-                    let absolute_episode: Option<u32> = row.get(6).map_err(map_sql_err)?;
-                    let position_ms = row.get::<_, i64>(7).map_err(map_sql_err)?.max(0) as u64;
-                    let duration_ms = row.get::<_, i64>(8).map_err(map_sql_err)?.max(0) as u64;
-                    let completed = row.get::<_, i32>(9).map_err(map_sql_err)? != 0;
+                    let mut season: u32 = row.get(4).map_err(map_sql_err)?;
+                    let mut episode: u32 = row.get(5).map_err(map_sql_err)?;
+                    let mut absolute_episode: Option<u32> = row.get(6).map_err(map_sql_err)?;
+                    let mut position_ms = row.get::<_, i64>(7).map_err(map_sql_err)?.max(0) as u64;
+                    let mut duration_ms = row.get::<_, i64>(8).map_err(map_sql_err)?.max(0) as u64;
+                    let mut completed = row.get::<_, i32>(9).map_err(map_sql_err)? != 0;
                     let last_watched_at: String = row.get(10).map_err(map_sql_err)?;
 
                     let wp_title: Option<String> = row.get(11).map_err(map_sql_err)?;
@@ -477,7 +563,11 @@ impl SqliteStorage {
                         .get::<_, Option<String>>(17)
                         .map_err(map_sql_err)?
                         .and_then(|s| parse_media_type(&s).ok())
-                        .unwrap_or(MediaType::Series);
+                        .unwrap_or(if season == 0 && episode == 0 {
+                            MediaType::Movie
+                        } else {
+                            MediaType::Series
+                        });
 
                     let mut title = wp_title
                         .filter(|s| !s.trim().is_empty())
@@ -486,72 +576,180 @@ impl SqliteStorage {
                         .filter(|s| !s.trim().is_empty())
                         .or_else(|| li_poster.filter(|s| !s.trim().is_empty()));
 
+                    let episodes_key = format!("episodes:{plugin_raw}:{native_id}");
                     let meta3_pattern = format!("meta3:{plugin_raw}:{native_id}:%");
                     let meta2_pattern = format!("meta2:{plugin_raw}:{native_id}:%");
                     let meta_pattern = format!("meta:{plugin_raw}:{native_id}:%");
                     let detail_pattern = format!("detail:{plugin_raw}:{native_id}:%");
-                    let cached_json: Option<String> = db
+
+                    let mut cached_episodes: Option<Vec<serde_json::Value>> = None;
+                    let mut cache_stmt = db
                         .conn()
-                        .query_row(
-                            "SELECT payload_json FROM metadata_cache
-                             WHERE cache_key LIKE ?1 OR cache_key LIKE ?2 OR cache_key LIKE ?3 OR cache_key LIKE ?4
-                             ORDER BY expires_at DESC
-                             LIMIT 1",
-                            (&meta3_pattern, &meta2_pattern, &meta_pattern, &detail_pattern),
-                            |r| r.get(0),
+                        .prepare(
+                            "SELECT cache_key, payload_json FROM metadata_cache
+                             WHERE cache_key = ?1
+                                OR cache_key LIKE ?2
+                                OR cache_key LIKE ?3
+                                OR cache_key LIKE ?4
+                                OR cache_key LIKE ?5
+                             ORDER BY CASE WHEN cache_key = ?1 THEN 0 ELSE 1 END ASC, expires_at DESC
+                             LIMIT 6",
                         )
-                        .optional()
+                        .map_err(map_sql_err)?;
+                    let cache_rows = cache_stmt
+                        .query_map(
+                            (
+                                &episodes_key,
+                                &meta3_pattern,
+                                &meta2_pattern,
+                                &meta_pattern,
+                                &detail_pattern,
+                            ),
+                            |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)),
+                        )
                         .map_err(map_sql_err)?;
 
-                    if let Some(json_str) = cached_json
-                        && let Ok(val) = serde_json::from_str::<serde_json::Value>(&json_str)
-                    {
-                        if title.is_none() {
-                            title = val
-                                .get("title")
-                                .and_then(|v| v.as_str())
-                                .filter(|s| !s.trim().is_empty())
-                                .map(str::to_owned);
-                        }
-                        if poster.is_none() {
-                            poster = val
-                                .get("poster")
-                                .and_then(|v| v.as_str())
-                                .filter(|s| !s.trim().is_empty())
-                                .map(str::to_owned);
-                        }
-                        if backdrop.as_ref().is_none_or(|b| b.trim().is_empty()) {
-                            backdrop = val
-                                .get("backdrop")
-                                .and_then(|v| v.as_str())
-                                .filter(|s| !s.trim().is_empty())
-                                .map(str::to_owned);
-                        }
-                        if let Some(t) = val.get("type").and_then(|v| v.as_str())
-                            && let Ok(parsed) = parse_media_type(t)
-                        {
-                            media_type = parsed;
-                        }
-                        if episode_title.as_ref().is_none_or(|t| t.trim().is_empty())
-                            && let Some(eps) = val.get("episodes").and_then(|v| v.as_array())
-                        {
-                            episode_title = eps
-                                .iter()
-                                .find(|e| {
-                                    e.get("streamId").and_then(|v| v.as_str())
-                                        == Some(stream_id.as_str())
-                                        || (e.get("season").and_then(|v| v.as_u64())
-                                            == Some(u64::from(season))
-                                            && e.get("episode").and_then(|v| v.as_u64())
-                                                == Some(u64::from(episode)))
-                                })
-                                .and_then(|e| e.get("title").and_then(|v| v.as_str()))
-                                .map(str::to_owned);
+                    for cache_row in cache_rows {
+                        let (_, json_str) = cache_row.map_err(map_sql_err)?;
+                        if let Ok(val) = serde_json::from_str::<serde_json::Value>(&json_str) {
+                            if title.is_none() {
+                                title = val
+                                    .get("title")
+                                    .and_then(|v| v.as_str())
+                                    .filter(|s| !s.trim().is_empty())
+                                    .map(str::to_owned);
+                            }
+                            if poster.is_none() {
+                                poster = val
+                                    .get("poster")
+                                    .and_then(|v| v.as_str())
+                                    .filter(|s| !s.trim().is_empty())
+                                    .map(str::to_owned);
+                            }
+                            if backdrop.as_ref().is_none_or(|b| b.trim().is_empty()) {
+                                backdrop = val
+                                    .get("backdrop")
+                                    .and_then(|v| v.as_str())
+                                    .filter(|s| !s.trim().is_empty())
+                                    .map(str::to_owned);
+                            }
+                            if let Some(t) = val.get("type").and_then(|v| v.as_str())
+                                && let Ok(parsed) = parse_media_type(t)
+                            {
+                                media_type = parsed;
+                            }
+                            if cached_episodes.is_none()
+                                && let Some(eps) = val.get("episodes").and_then(|v| v.as_array())
+                                && !eps.is_empty()
+                            {
+                                cached_episodes = Some(eps.clone());
+                            }
                         }
                     }
 
                     if media_type == MediaType::Live {
                         continue;
+                    }
+
+                    if completed {
+                        if media_type == MediaType::Movie {
+                            continue;
+                        }
+                        let Some(mut eps) = cached_episodes.clone() else {
+                            continue;
+                        };
+                        eps.sort_by_key(|e| {
+                            (
+                                e.get("season").and_then(|v| v.as_u64()).unwrap_or(1) as u32,
+                                e.get("episode").and_then(|v| v.as_u64()).unwrap_or(0) as u32,
+                            )
+                        });
+                        let current_idx = eps.iter().position(|e| {
+                            e.get("streamId").and_then(|v| v.as_str()) == Some(stream_id.as_str())
+                                || (e.get("season").and_then(|v| v.as_u64()).unwrap_or(1) as u32
+                                    == season
+                                    && e.get("episode").and_then(|v| v.as_u64()).unwrap_or(0)
+                                        as u32
+                                        == episode)
+                        });
+                        let next_ep = match current_idx {
+                            Some(idx) => eps.get(idx + 1),
+                            None => eps.iter().find(|e| {
+                                let es =
+                                    e.get("season").and_then(|v| v.as_u64()).unwrap_or(1) as u32;
+                                let ee =
+                                    e.get("episode").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+                                (es, ee) > (season, episode)
+                            }),
+                        };
+                        let Some(next_val) = next_ep else {
+                            // Final episode completed -> remove from Continue Watching while preserving DB progress.
+                            continue;
+                        };
+                        let next_season = next_val
+                            .get("season")
+                            .and_then(|v| v.as_u64())
+                            .unwrap_or(1) as u32;
+                        let next_episode = next_val
+                            .get("episode")
+                            .and_then(|v| v.as_u64())
+                            .unwrap_or(0) as u32;
+                        let next_stream_id = next_val
+                            .get("streamId")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_owned();
+                        if next_stream_id.is_empty() {
+                            continue;
+                        }
+                        let next_existing: Option<(i64, i64, i32)> = db
+                            .conn()
+                            .query_row(
+                                "SELECT position_ms, duration_ms, completed
+                                 FROM watch_progress
+                                 WHERE plugin_id = ?1 AND native_id = ?2 AND season = ?3 AND episode = ?4",
+                                (&plugin_raw, &native_id, next_season, next_episode),
+                                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+                            )
+                            .optional()
+                            .map_err(map_sql_err)?;
+                        if let Some((pos, dur, next_done)) = next_existing {
+                            if next_done != 0 {
+                                continue;
+                            }
+                            position_ms = pos.max(0) as u64;
+                            duration_ms = dur.max(0) as u64;
+                        } else {
+                            position_ms = 0;
+                            duration_ms = 0;
+                        }
+                        season = next_season;
+                        episode = next_episode;
+                        stream_id = next_stream_id;
+                        absolute_episode = next_val
+                            .get("absoluteEpisode")
+                            .and_then(|v| v.as_u64())
+                            .map(|n| n as u32);
+                        episode_title = next_val
+                            .get("title")
+                            .and_then(|v| v.as_str())
+                            .map(str::to_owned);
+                        completed = false;
+                    } else if episode_title.as_ref().is_none_or(|t| t.trim().is_empty())
+                        && let Some(ref eps) = cached_episodes
+                    {
+                        episode_title = eps
+                            .iter()
+                            .find(|e| {
+                                e.get("streamId").and_then(|v| v.as_str())
+                                    == Some(stream_id.as_str())
+                                    || (e.get("season").and_then(|v| v.as_u64())
+                                        == Some(u64::from(season))
+                                        && e.get("episode").and_then(|v| v.as_u64())
+                                            == Some(u64::from(episode)))
+                            })
+                            .and_then(|e| e.get("title").and_then(|v| v.as_str()))
+                            .map(str::to_owned);
                     }
 
                     let plugin_id = PluginId::new(plugin_raw)?;
