@@ -25,7 +25,7 @@ import { useLibraryState } from '@/composables/useLibraryState'
 import { usePlayerSession } from '@/composables/usePlayerSession'
 import { useUiPreferences } from '@/composables/useUiPreferences'
 import { pushToast } from '@/composables/useVesselEvents'
-import type { ContinueWatchingEntry, Episode, MediaSummary, PluginListEntry } from '@/types/vessel'
+import type { ContinueWatchingEntry, Episode, MediaSummary, PlaybackProgress, PluginListEntry } from '@/types/vessel'
 
 const router = useRouter()
 const { t, currentLang } = useI18n()
@@ -49,6 +49,7 @@ const draggingPluginIndex = shallowRef<number | null>(null)
 
 const editingCwEntry = ref<ContinueWatchingEntry | null>(null)
 const cwEditEpisodes = ref<Episode[]>([])
+const cwEditProgressRows = ref<PlaybackProgress[]>([])
 const cwEditLoadingEps = shallowRef(false)
 const cwEditSaving = shallowRef(false)
 const cwEditSeason = shallowRef(1)
@@ -56,7 +57,8 @@ const cwEditEpisode = shallowRef(1)
 const cwEditStreamId = shallowRef('')
 const cwEditEpTitle = shallowRef('')
 const cwEditWatchedMin = shallowRef(0)
-const cwEditDurationMin = shallowRef(24)
+const cwEditDurationMs = shallowRef(24 * 60_000)
+const cwEditDurationMin = computed(() => Math.max(1, Math.round(cwEditDurationMs.value / 60_000)))
 const cwEditPercent = shallowRef(0)
 
 let heroAutoTimer: number | null = null
@@ -428,43 +430,55 @@ async function resumeContinueWatching(entry: ContinueWatchingEntry): Promise<voi
   }
 }
 
+function applyEpisodeTimingFromProgress(season: number, episode: number, streamId: string): void {
+  const entry = editingCwEntry.value
+  if (!entry) return
+  const matched =
+    cwEditProgressRows.value.find((p) => streamId && p.streamId === streamId) ??
+    cwEditProgressRows.value.find((p) => p.season === season && p.episode === episode)
+
+  const fallbackDurMs =
+    cwEditProgressRows.value.find((p) => p.durationMs > 60_000)?.durationMs ??
+    (entry.durationMs > 60_000 ? entry.durationMs : entry.mediaType === 'movie' ? 110 * 60_000 : 24 * 60_000)
+
+  const durMs = matched && matched.durationMs > 60_000 ? matched.durationMs : fallbackDurMs
+  const posMs = matched ? matched.positionMs : streamId === entry.streamId ? entry.positionMs : 0
+  cwEditDurationMs.value = durMs
+  const maxMin = Math.max(1, Math.round(durMs / 60_000))
+  cwEditWatchedMin.value = Math.min(maxMin, Math.max(0, Math.round(posMs / 60_000)))
+  cwEditPercent.value =
+    durMs > 0 ? Math.min(99, Math.max(0, Math.round((posMs / durMs) * 100))) : 0
+}
+
 async function openCwEditor(entry: ContinueWatchingEntry): Promise<void> {
   editingCwEntry.value = entry
   cwEditEpisodes.value = []
+  cwEditProgressRows.value = []
   cwEditSeason.value = entry.season || 1
   cwEditEpisode.value = entry.episode || 1
   cwEditStreamId.value = entry.streamId
   cwEditEpTitle.value = entry.episodeTitle ?? ''
-  const defaultDurMin =
-    entry.durationMs > 60_000
-      ? Math.max(1, Math.round(entry.durationMs / 60_000))
-      : entry.mediaType === 'movie'
-        ? 110
-        : 24
-  cwEditDurationMin.value = defaultDurMin
-  const curMin = Math.max(0, Math.round(entry.positionMs / 60_000))
-  cwEditWatchedMin.value = Math.min(defaultDurMin, curMin)
-  cwEditPercent.value =
-    entry.durationMs > 0
-      ? Math.min(99, Math.max(0, Math.round((entry.positionMs / entry.durationMs) * 100)))
-      : 0
+  applyEpisodeTimingFromProgress(entry.season, entry.episode, entry.streamId)
 
-  if (entry.mediaType !== 'movie') {
-    cwEditLoadingEps.value = true
-    try {
-      const detail = await vesselApi.getDetailsWithEnrichment(
-        entry.media.pluginId,
-        entry.media.nativeId,
-        currentLang.value,
-      )
-      if (editingCwEntry.value?.media.nativeId === entry.media.nativeId) {
+  cwEditLoadingEps.value = true
+  try {
+    const [detail, progRows] = await Promise.all([
+      entry.mediaType !== 'movie'
+        ? vesselApi.getDetailsWithEnrichment(entry.media.pluginId, entry.media.nativeId, currentLang.value)
+        : Promise.resolve(null),
+      vesselApi.listMediaWatchProgress(entry.media.pluginId, entry.media.nativeId).catch(() => []),
+    ])
+    if (editingCwEntry.value?.media.nativeId === entry.media.nativeId) {
+      cwEditProgressRows.value = progRows
+      if (detail) {
         cwEditEpisodes.value = detail.episodes
       }
-    } catch {
-      // Allow manual season/episode editing if plugin details fail
-    } finally {
-      cwEditLoadingEps.value = false
+      applyEpisodeTimingFromProgress(cwEditSeason.value, cwEditEpisode.value, cwEditStreamId.value)
     }
+  } catch {
+    // Allow manual editing if plugin details fail
+  } finally {
+    cwEditLoadingEps.value = false
   }
 }
 
@@ -475,6 +489,22 @@ function onCwEpisodeSelect(streamId: string): void {
   cwEditSeason.value = picked.season
   cwEditEpisode.value = picked.episode
   cwEditEpTitle.value = picked.title ?? ''
+  applyEpisodeTimingFromProgress(picked.season, picked.episode, picked.streamId)
+}
+
+function onCwManualCoordChange(): void {
+  const matchedEp = cwEditEpisodes.value.find(
+    (e) => e.season === Number(cwEditSeason.value) && e.episode === Number(cwEditEpisode.value),
+  )
+  if (matchedEp) {
+    cwEditStreamId.value = matchedEp.streamId
+    cwEditEpTitle.value = matchedEp.title ?? ''
+  }
+  applyEpisodeTimingFromProgress(
+    Number(cwEditSeason.value) || 1,
+    Number(cwEditEpisode.value) || 1,
+    cwEditStreamId.value,
+  )
 }
 
 function onCwPercentInput(pct: number): void {
@@ -483,9 +513,8 @@ function onCwPercentInput(pct: number): void {
 }
 
 function onCwMinutesInput(): void {
-  const dur = Math.max(1, Number(cwEditDurationMin.value) || 1)
+  const dur = cwEditDurationMin.value
   const watched = Math.max(0, Math.min(dur, Number(cwEditWatchedMin.value) || 0))
-  cwEditDurationMin.value = dur
   cwEditWatchedMin.value = watched
   cwEditPercent.value = Math.min(99, Math.round((watched / dur) * 100))
 }
@@ -495,10 +524,10 @@ async function saveCwEdit(markCompleted = false): Promise<void> {
   if (!entry || cwEditSaving.value) return
   cwEditSaving.value = true
   try {
-    const durMs = Math.max(60_000, Math.round((Number(cwEditDurationMin.value) || 24) * 60_000))
+    const durMs = Math.max(60_000, cwEditDurationMs.value)
     const rawPosMs = markCompleted
       ? durMs
-      : Math.max(10_000, Math.round((Number(cwEditWatchedMin.value) || 0) * 60_000))
+      : Math.min(durMs, Math.max(10_000, Math.round((cwEditDurationMs.value * cwEditPercent.value) / 100)))
     const matchedEp = cwEditEpisodes.value.find(
       (e) =>
         e.streamId === cwEditStreamId.value ||
@@ -847,7 +876,7 @@ onUnmounted(() => {
                 <span>S{{ entry.season }} · E{{ entry.episode }}</span>
                 <template v-if="entry.episodeTitle"> · {{ entry.episodeTitle }}</template>
               </div>
-              <div v-else-if="entry.episodeTitle" class="cw-sub">
+              <div v-else-if="entry.episodeTitle && entry.episodeTitle !== entry.title" class="cw-sub">
                 {{ entry.episodeTitle }}
               </div>
             </div>
@@ -1144,11 +1173,23 @@ onUnmounted(() => {
                 <div class="cw-row-2">
                   <label class="cw-field">
                     <span class="cw-label">{{ t('home.cw_season') }}</span>
-                    <input v-model.number="cwEditSeason" type="number" min="0" class="v-input" />
+                    <input
+                      v-model.number="cwEditSeason"
+                      type="number"
+                      min="0"
+                      class="v-input"
+                      @change="onCwManualCoordChange"
+                    />
                   </label>
                   <label class="cw-field">
                     <span class="cw-label">{{ t('home.cw_ep_num') }}</span>
-                    <input v-model.number="cwEditEpisode" type="number" min="0" class="v-input" />
+                    <input
+                      v-model.number="cwEditEpisode"
+                      type="number"
+                      min="0"
+                      class="v-input"
+                      @change="onCwManualCoordChange"
+                    />
                   </label>
                 </div>
               </template>
@@ -1169,7 +1210,7 @@ onUnmounted(() => {
                 />
               </div>
 
-              <div class="cw-row-2">
+              <div class="cw-row-2 cw-time-row">
                 <label class="cw-field">
                   <span class="cw-label">{{ t('home.cw_watched_min') }}</span>
                   <input
@@ -1181,16 +1222,10 @@ onUnmounted(() => {
                     @input="onCwMinutesInput"
                   />
                 </label>
-                <label class="cw-field">
+                <div class="cw-field">
                   <span class="cw-label">{{ t('home.cw_duration_min') }}</span>
-                  <input
-                    v-model.number="cwEditDurationMin"
-                    type="number"
-                    min="1"
-                    class="v-input"
-                    @input="onCwMinutesInput"
-                  />
-                </label>
+                  <div class="v-input cw-readonly-dur">{{ cwEditDurationMin }} min</div>
+                </div>
               </div>
             </div>
 
@@ -1585,7 +1620,9 @@ onUnmounted(() => {
 
 .cw-thumb {
   position: relative;
-  aspect-ratio: 16 / 9;
+  width: 280px;
+  height: 158px;
+  flex-shrink: 0;
   border-radius: var(--vessel-radius);
   overflow: hidden;
   background: linear-gradient(135deg, color-mix(in srgb, var(--vessel-accent) 18%, transparent), var(--vessel-bg-surface));
@@ -1597,7 +1634,8 @@ onUnmounted(() => {
 }
 
 .cw-img {
-  position: relative;
+  position: absolute;
+  inset: 0;
   z-index: 1;
   width: 100%;
   height: 100%;
@@ -2021,6 +2059,14 @@ onUnmounted(() => {
   width: 100%;
   accent-color: var(--vessel-accent);
   cursor: pointer;
+}
+
+.cw-readonly-dur {
+  display: flex;
+  align-items: center;
+  color: var(--vessel-text-muted);
+  cursor: default;
+  opacity: 0.85;
 }
 
 .cw-edit-foot {

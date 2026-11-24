@@ -175,7 +175,7 @@ onActivated(() => {
 .lib-remove-btn {
   position: absolute;
   top: 0.45rem;
-  right: 2.65rem;
+  left: 0.45rem;
   z-index: 6;
   display: inline-flex;
   align-items: center;
