@@ -138,7 +138,10 @@
     "queue_pos": "Cola de descargas",
     "drag_hint": "Arrastra el controlador para reordenar",
     "play_offline": "Reproducir sin conexión",
-    "stream_default": "Fuente sin conexión"
+    "stream_default": "Fuente sin conexión",
+    "seasons_count": "temporadas",
+    "episodes_count": "episodios",
+    "episode_label": "Episodio"
   },
   "extensions": {
     "title": "Extensiones y repositorios",

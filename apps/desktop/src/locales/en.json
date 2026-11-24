@@ -138,7 +138,10 @@
     "queue_pos": "Download Queue",
     "drag_hint": "Drag handle to reorder queue priority",
     "play_offline": "Play Offline",
-    "stream_default": "Offline Stream"
+    "stream_default": "Offline Stream",
+    "seasons_count": "seasons",
+    "episodes_count": "episodes",
+    "episode_label": "Episode"
   },
   "extensions": {
     "title": "Extensions & Repos",

@@ -138,7 +138,10 @@
     "queue_pos": "ダウンロードキュー",
     "drag_hint": "ドラッグして優先順位を並び替え",
     "play_offline": "オフライン再生",
-    "stream_default": "オフラインストリーム"
+    "stream_default": "オフラインストリーム",
+    "seasons_count": "シーズン",
+    "episodes_count": "話",
+    "episode_label": "第"
   },
   "extensions": {
     "title": "拡張機能とリポジトリ",

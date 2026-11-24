@@ -138,7 +138,10 @@
     "queue_pos": "Coda di download",
     "drag_hint": "Trascina per riordinare la coda",
     "play_offline": "Riproduci offline",
-    "stream_default": "Flusso offline"
+    "stream_default": "Flusso offline",
+    "seasons_count": "stagioni",
+    "episodes_count": "episodi",
+    "episode_label": "Episodio"
   },
   "extensions": {
     "title": "Estensioni & Repository",

@@ -138,7 +138,10 @@
     "queue_pos": "قائمة انتظار التنزيل",
     "drag_hint": "اسحب لإعادة ترتيب الأولوية",
     "play_offline": "تشغيل دون إنترنت",
-    "stream_default": "بث محلي"
+    "stream_default": "بث محلي",
+    "seasons_count": "مواسم",
+    "episodes_count": "حلقات",
+    "episode_label": "الحلقة"
   },
   "extensions": {
     "title": "الإضافات والمستودعات",

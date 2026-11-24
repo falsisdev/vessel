@@ -138,7 +138,10 @@
     "queue_pos": "İndirme Sırası",
     "drag_hint": "Sırayı değiştirmek için tutamacı sürükleyin",
     "play_offline": "İndirileni Oynat",
-    "stream_default": "Çevrimdışı Kaynak"
+    "stream_default": "Çevrimdışı Kaynak",
+    "seasons_count": "sezon",
+    "episodes_count": "bölüm",
+    "episode_label": "Bölüm"
   },
   "extensions": {
     "title": "Eklentiler ve Depolar",

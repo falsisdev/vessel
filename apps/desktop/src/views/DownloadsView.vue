@@ -8,6 +8,7 @@ import {
   ChevronDown,
   ChevronRight,
   Film,
+  FolderOpen,
   GripVertical,
   HardDriveDownload,
   Pause,
@@ -23,35 +24,65 @@ import type { MediaDetail, PlaybackProgress, StoredDownload } from '@/types/vess
 
 defineOptions({ name: 'DownloadsView' })
 
-interface DownloadGroup {
+interface EpisodeGroup {
+  key: string
+  season: number
+  episode: number
+  items: StoredDownload[]
+  downloadedBytes: number
+  totalBytes: number
+  activeCount: number
+  progress: PlaybackProgress | null
+}
+
+interface SeasonGroup {
+  key: string
+  season: number
+  episodes: EpisodeGroup[]
+  totalStreams: number
+  downloadedBytes: number
+  totalBytes: number
+  activeCount: number
+  allWatched: boolean
+}
+
+interface ContentGroup {
   key: string
   pluginId: string
   nativeId: string
   displayTitle: string
-  season?: number
-  episode?: number
   isMovie: boolean
-  items: StoredDownload[]
-  completedCount: number
-  activeCount: number
-  totalBytes: number
+  seasons: SeasonGroup[]
+  movieStreams: StoredDownload[]
+  episodeCount: number
+  totalStreams: number
   downloadedBytes: number
-  progress: PlaybackProgress | null
+  totalBytes: number
+  activeCount: number
+  allWatched: boolean
+  movieProgress: PlaybackProgress | null
 }
 
 const router = useRouter()
 const { t } = useI18n()
 const { setSession } = usePlayerSession()
-const { downloadProgress } = useVesselEvents()
+const {
+  downloadProgress,
+  setDownloadSnapshot,
+  clearDownloadProgress,
+  pruneStaleDownloadProgress,
+} = useVesselEvents()
 
 const downloads = ref<StoredDownload[]>([])
 const progressList = ref<PlaybackProgress[]>([])
 const downloadDir = shallowRef('')
-const confirmDeleteId = shallowRef('')
-const expandedGroups = ref<Set<string>>(new Set())
+const expandedContents = ref<Set<string>>(new Set())
+const expandedSeasons = ref<Set<string>>(new Set())
+const expandedEpisodes = ref<Set<string>>(new Set())
 const queueListRef = ref<HTMLElement | null>(null)
 const draggingQueueId = shallowRef<string | null>(null)
 const launchingDownloadId = shallowRef<string | null>(null)
+const busyIds = ref<Set<string>>(new Set())
 
 const mergedDownloads = computed(() =>
   downloads.value
@@ -77,61 +108,212 @@ const mergedDownloads = computed(() =>
 
 const queueDownloads = computed(() =>
   mergedDownloads.value.filter(
-    (dl) => dl.status === 'queued' || dl.status === 'downloading' || dl.status === 'paused' || dl.status === 'failed',
+    (dl) =>
+      dl.status === 'queued' ||
+      dl.status === 'downloading' ||
+      dl.status === 'paused' ||
+      dl.status === 'failed',
   ),
 )
 
-function progressKeyFor(pluginId: string, nativeId: string, season?: number, episode?: number): string {
+function progressKeyFor(
+  pluginId: string,
+  nativeId: string,
+  season?: number,
+  episode?: number,
+): string {
   return `${pluginId}:${nativeId}:${season ?? 0}:${episode ?? 0}`
 }
 
 const progressByCoord = computed(() => {
   const map = new Map<string, PlaybackProgress>()
   for (const row of progressList.value) {
-    map.set(progressKeyFor(row.media.pluginId, row.media.nativeId, row.season, row.episode), row)
+    map.set(
+      progressKeyFor(row.media.pluginId, row.media.nativeId, row.season, row.episode),
+      row,
+    )
   }
   return map
 })
 
 function findProgressForDownload(dl: StoredDownload): PlaybackProgress | null {
-  return progressByCoord.value.get(progressKeyFor(dl.pluginId, dl.nativeId, dl.season, dl.episode)) ?? null
+  return (
+    progressByCoord.value.get(
+      progressKeyFor(dl.pluginId, dl.nativeId, dl.season, dl.episode),
+    ) ?? null
+  )
 }
 
 function cleanDisplayTitle(raw: string): string {
   return raw.replace(/\s+—\s+S\d+E\d+$/i, '').trim() || raw
 }
 
-const groupedDownloads = computed<DownloadGroup[]>(() => {
-  const groups = new Map<string, DownloadGroup>()
+/** 4-level hierarchy: Content -> Season -> Episode -> Stream candidates (movies go directly Content -> Stream). */
+const contentHierarchy = computed<ContentGroup[]>(() => {
+  const contentMap = new Map<
+    string,
+    {
+      key: string
+      pluginId: string
+      nativeId: string
+      displayTitle: string
+      hasEpisodes: boolean
+      seasonMap: Map<number, Map<number, StoredDownload[]>>
+      movieStreams: StoredDownload[]
+    }
+  >()
+
   for (const dl of mergedDownloads.value) {
-    const key = progressKeyFor(dl.pluginId, dl.nativeId, dl.season, dl.episode)
-    let grp = groups.get(key)
-    if (!grp) {
-      const isMovie = dl.season === undefined && dl.episode === undefined
-      grp = {
-        key,
+    const cKey = `${dl.pluginId}:${dl.nativeId}`
+    let cBucket = contentMap.get(cKey)
+    if (!cBucket) {
+      cBucket = {
+        key: cKey,
         pluginId: dl.pluginId,
         nativeId: dl.nativeId,
         displayTitle: cleanDisplayTitle(dl.title),
-        season: dl.season,
-        episode: dl.episode,
-        isMovie,
-        items: [],
-        completedCount: 0,
-        activeCount: 0,
-        totalBytes: 0,
-        downloadedBytes: 0,
-        progress: findProgressForDownload(dl),
+        hasEpisodes: dl.season !== undefined || dl.episode !== undefined,
+        seasonMap: new Map(),
+        movieStreams: [],
       }
-      groups.set(key, grp)
+      contentMap.set(cKey, cBucket)
     }
-    grp.items.push(dl)
-    if (dl.status === 'completed') grp.completedCount += 1
-    if (dl.status === 'downloading' || dl.status === 'queued') grp.activeCount += 1
-    grp.totalBytes += dl.totalBytes ?? 0
-    grp.downloadedBytes += dl.bytesDownloaded
+
+    if (dl.season === undefined && dl.episode === undefined) {
+      cBucket.movieStreams.push(dl)
+    } else {
+      cBucket.hasEpisodes = true
+      const sNum = dl.season ?? 1
+      const eNum = dl.episode ?? 1
+      let epMap = cBucket.seasonMap.get(sNum)
+      if (!epMap) {
+        epMap = new Map()
+        cBucket.seasonMap.set(sNum, epMap)
+      }
+      let list = epMap.get(eNum)
+      if (!list) {
+        list = []
+        epMap.set(eNum, list)
+      }
+      list.push(dl)
+    }
   }
-  return Array.from(groups.values())
+
+  const out: ContentGroup[] = []
+  for (const c of contentMap.values()) {
+    const isMovie = !c.hasEpisodes && c.seasonMap.size === 0
+    if (isMovie) {
+      const totalBytes = c.movieStreams.reduce((s, d) => s + (d.totalBytes ?? 0), 0)
+      const downloadedBytes = c.movieStreams.reduce((s, d) => s + d.bytesDownloaded, 0)
+      const activeCount = c.movieStreams.filter(
+        (d) => d.status === 'downloading' || d.status === 'queued',
+      ).length
+      const movieProgress =
+        progressByCoord.value.get(progressKeyFor(c.pluginId, c.nativeId, 0, 0)) ?? null
+      out.push({
+        key: c.key,
+        pluginId: c.pluginId,
+        nativeId: c.nativeId,
+        displayTitle: c.displayTitle,
+        isMovie: true,
+        seasons: [],
+        movieStreams: c.movieStreams,
+        episodeCount: 0,
+        totalStreams: c.movieStreams.length,
+        downloadedBytes,
+        totalBytes,
+        activeCount,
+        allWatched: Boolean(movieProgress?.completed),
+        movieProgress,
+      })
+      continue
+    }
+
+    const seasons: SeasonGroup[] = []
+    const sortedSeasonNums = Array.from(c.seasonMap.keys()).sort((a, b) => a - b)
+    let totalEpCount = 0
+    let totalStreamCount = 0
+    let contentDownloadedBytes = 0
+    let contentTotalBytes = 0
+    let contentActiveCount = 0
+
+    for (const sNum of sortedSeasonNums) {
+      const epMap = c.seasonMap.get(sNum)!
+      const sortedEpNums = Array.from(epMap.keys()).sort((a, b) => a - b)
+      const episodes: EpisodeGroup[] = []
+      const seasonKey = `${c.key}:s:${sNum}`
+      let sStreamCount = 0
+      let sDownloadedBytes = 0
+      let sTotalBytes = 0
+      let sActiveCount = 0
+
+      for (const eNum of sortedEpNums) {
+        const items = epMap.get(eNum)!
+        const epKey = `${seasonKey}:e:${eNum}`
+        const epDownloaded = items.reduce((s, d) => s + d.bytesDownloaded, 0)
+        const epTotal = items.reduce((s, d) => s + (d.totalBytes ?? 0), 0)
+        const epActive = items.filter(
+          (d) => d.status === 'downloading' || d.status === 'queued',
+        ).length
+        const prog =
+          progressByCoord.value.get(progressKeyFor(c.pluginId, c.nativeId, sNum, eNum)) ?? null
+
+        episodes.push({
+          key: epKey,
+          season: sNum,
+          episode: eNum,
+          items,
+          downloadedBytes: epDownloaded,
+          totalBytes: epTotal,
+          activeCount: epActive,
+          progress: prog,
+        })
+
+        sStreamCount += items.length
+        sDownloadedBytes += epDownloaded
+        sTotalBytes += epTotal
+        sActiveCount += epActive
+      }
+
+      const seasonWatched = episodes.length > 0 && episodes.every((e) => Boolean(e.progress?.completed))
+      seasons.push({
+        key: seasonKey,
+        season: sNum,
+        episodes,
+        totalStreams: sStreamCount,
+        downloadedBytes: sDownloadedBytes,
+        totalBytes: sTotalBytes,
+        activeCount: sActiveCount,
+        allWatched: seasonWatched,
+      })
+
+      totalEpCount += episodes.length
+      totalStreamCount += sStreamCount
+      contentDownloadedBytes += sDownloadedBytes
+      contentTotalBytes += sTotalBytes
+      contentActiveCount += sActiveCount
+    }
+
+    const allWatched = seasons.length > 0 && seasons.every((s) => s.allWatched)
+    out.push({
+      key: c.key,
+      pluginId: c.pluginId,
+      nativeId: c.nativeId,
+      displayTitle: c.displayTitle,
+      isMovie: false,
+      seasons,
+      movieStreams: [],
+      episodeCount: totalEpCount,
+      totalStreams: totalStreamCount,
+      downloadedBytes: contentDownloadedBytes,
+      totalBytes: contentTotalBytes,
+      activeCount: contentActiveCount,
+      allWatched,
+      movieProgress: null,
+    })
+  }
+
+  return out
 })
 
 const continueWatchingDownloads = computed(() => {
@@ -183,11 +365,28 @@ function formatRemaining(prog: PlaybackProgress): string {
   return `${remSec}s`
 }
 
-function toggleGroup(key: string): void {
-  const next = new Set(expandedGroups.value)
+function toggleInSet(targetRef: typeof expandedContents, key: string): void {
+  const next = new Set(targetRef.value)
   if (next.has(key)) next.delete(key)
   else next.add(key)
-  expandedGroups.value = next
+  targetRef.value = next
+}
+
+const toggleContent = (key: string): void => toggleInSet(expandedContents, key)
+const toggleSeason = (key: string): void => toggleInSet(expandedSeasons, key)
+const toggleEpisode = (key: string): void => toggleInSet(expandedEpisodes, key)
+
+function firstCompletedInContent(c: ContentGroup): StoredDownload | undefined {
+  if (c.isMovie) {
+    return c.movieStreams.find((d) => d.status === 'completed')
+  }
+  for (const s of c.seasons) {
+    for (const e of s.episodes) {
+      const done = e.items.find((d) => d.status === 'completed')
+      if (done) return done
+    }
+  }
+  return undefined
 }
 
 async function refresh(): Promise<void> {
@@ -201,6 +400,19 @@ async function refresh(): Promise<void> {
     downloads.value = list
     progressList.value = allProg
     if (info) downloadDir.value = info.downloadsDir
+
+    const validIds = new Set(list.map((d) => d.id))
+    pruneStaleDownloadProgress(validIds)
+    for (const dl of list) {
+      setDownloadSnapshot({
+        downloadId: dl.id,
+        status: dl.status,
+        bytesDownloaded: dl.bytesDownloaded,
+        totalBytes: dl.totalBytes,
+        segmentsDone: dl.segmentsDone,
+        segmentsTotal: dl.segmentsTotal,
+      })
+    }
   } catch (err) {
     pushToast('error', String(err))
   }
@@ -211,7 +423,6 @@ async function commitQueueOrder(reorderedQueueIds: string[]): Promise<void> {
     .filter((d) => !reorderedQueueIds.includes(d.id))
     .map((d) => d.id)
   const fullOrder = [...reorderedQueueIds, ...completedIds]
-  // Optimistically update queueOrder locally for instant UI feedback.
   const orderIndex = new Map<string, number>()
   fullOrder.forEach((id, idx) => orderIndex.set(id, idx + 1))
   downloads.value = downloads.value.map((d) => ({
@@ -289,7 +500,10 @@ function startQueueDrag(id: string, ev: PointerEvent): void {
   window.addEventListener('pointerup', onUp)
 }
 
-async function playLocalDownload(dl: StoredDownload, resumeProgress?: PlaybackProgress | null): Promise<void> {
+async function playLocalDownload(
+  dl: StoredDownload,
+  resumeProgress?: PlaybackProgress | null,
+): Promise<void> {
   if (dl.status !== 'completed' || launchingDownloadId.value) return
   launchingDownloadId.value = dl.id
   try {
@@ -352,37 +566,80 @@ async function playLocalDownload(dl: StoredDownload, resumeProgress?: PlaybackPr
 }
 
 async function pauseItem(id: string): Promise<void> {
+  if (busyIds.value.has(id)) return
+  const nextBusy = new Set(busyIds.value)
+  nextBusy.add(id)
+  busyIds.value = nextBusy
+
+  const cur = mergedDownloads.value.find((d) => d.id === id)
+  if (cur) {
+    setDownloadSnapshot({
+      downloadId: id,
+      status: 'paused',
+      bytesDownloaded: cur.bytesDownloaded,
+      totalBytes: cur.totalBytes,
+      segmentsDone: cur.segmentsDone,
+      segmentsTotal: cur.segmentsTotal,
+    })
+  }
   try {
     await vesselApi.pauseDownload(id)
     await refresh()
   } catch (err) {
     pushToast('error', String(err))
+    await refresh()
+  } finally {
+    const done = new Set(busyIds.value)
+    done.delete(id)
+    busyIds.value = done
   }
 }
 
 async function resumeItem(id: string): Promise<void> {
+  if (busyIds.value.has(id)) return
+  const nextBusy = new Set(busyIds.value)
+  nextBusy.add(id)
+  busyIds.value = nextBusy
+
   try {
-    await vesselApi.resumeDownload(id)
+    const updated = await vesselApi.resumeDownload(id)
+    setDownloadSnapshot({
+      downloadId: id,
+      status: updated.status,
+      bytesDownloaded: updated.bytesDownloaded,
+      totalBytes: updated.totalBytes,
+      segmentsDone: updated.segmentsDone,
+      segmentsTotal: updated.segmentsTotal,
+    })
     await refresh()
   } catch (err) {
     pushToast('error', String(err))
+    await refresh()
+  } finally {
+    const done = new Set(busyIds.value)
+    done.delete(id)
+    busyIds.value = done
   }
 }
 
 async function deleteItem(id: string): Promise<void> {
-  if (confirmDeleteId.value !== id) {
-    confirmDeleteId.value = id
-    setTimeout(() => {
-      if (confirmDeleteId.value === id) confirmDeleteId.value = ''
-    }, 3000)
-    return
-  }
-  confirmDeleteId.value = ''
+  if (busyIds.value.has(id)) return
+  const nextBusy = new Set(busyIds.value)
+  nextBusy.add(id)
+  busyIds.value = nextBusy
+
   try {
     await vesselApi.deleteDownload(id)
+    clearDownloadProgress(id)
+    downloads.value = downloads.value.filter((d) => d.id !== id)
     await refresh()
   } catch (err) {
     pushToast('error', String(err))
+    await refresh()
+  } finally {
+    const done = new Set(busyIds.value)
+    done.delete(id)
+    busyIds.value = done
   }
 }
 
@@ -502,6 +759,7 @@ onMounted(() => {
               v-if="dl.status === 'downloading' || dl.status === 'queued'"
               type="button"
               class="v-btn v-btn-sm"
+              :disabled="busyIds.has(dl.id)"
               @click="pauseItem(dl.id)"
             >
               <Pause :size="14" aria-hidden="true" /> {{ t('common.pause') }}
@@ -510,13 +768,18 @@ onMounted(() => {
               v-if="dl.status === 'paused' || dl.status === 'failed'"
               type="button"
               class="v-btn v-btn-primary v-btn-sm"
+              :disabled="busyIds.has(dl.id)"
               @click="resumeItem(dl.id)"
             >
               <Play :size="14" aria-hidden="true" /> {{ t('common.resume') }}
             </button>
-            <button type="button" class="v-btn v-btn-danger v-btn-sm" @click="deleteItem(dl.id)">
-              <Trash2 :size="14" aria-hidden="true" />
-              {{ confirmDeleteId === dl.id ? t('common.confirm') : t('common.delete') }}
+            <button
+              type="button"
+              class="v-btn v-btn-danger v-btn-sm"
+              :disabled="busyIds.has(dl.id)"
+              @click="deleteItem(dl.id)"
+            >
+              <Trash2 :size="14" aria-hidden="true" /> {{ t('common.delete') }}
             </button>
           </div>
         </div>
@@ -525,135 +788,344 @@ onMounted(() => {
 
     <div v-if="!mergedDownloads.length" class="v-card v-muted">{{ t('downloads.empty') }}</div>
 
-    <!-- Expandable Grouped Offline Library -->
+    <!-- 4-Level Expandable Hierarchy: Content -> Season -> Episode -> Stream -->
     <div v-else class="dl-stack">
       <div
-        v-for="grp in groupedDownloads"
-        :key="grp.key"
-        class="v-card dl-group-card"
+        v-for="content in contentHierarchy"
+        :key="content.key"
+        class="v-card dl-content-card"
       >
+        <!-- Level 1: Content -->
         <div
           role="button"
           tabindex="0"
           class="dl-group-header"
-          :aria-expanded="expandedGroups.has(grp.key)"
-          @click="toggleGroup(grp.key)"
-          @keydown.enter.self="toggleGroup(grp.key)"
-          @keydown.space.prevent.self="toggleGroup(grp.key)"
+          :aria-expanded="expandedContents.has(content.key)"
+          @click="toggleContent(content.key)"
+          @keydown.enter.self="toggleContent(content.key)"
+          @keydown.space.prevent.self="toggleContent(content.key)"
         >
           <div class="dl-group-left">
-            <ChevronDown v-if="expandedGroups.has(grp.key)" :size="18" aria-hidden="true" />
+            <ChevronDown v-if="expandedContents.has(content.key)" :size="18" aria-hidden="true" />
             <ChevronRight v-else :size="18" aria-hidden="true" />
-            <Film v-if="grp.isMovie" :size="17" class="dl-type-icon" aria-hidden="true" />
-            <HardDriveDownload v-else :size="17" class="dl-type-icon" aria-hidden="true" />
+            <Film v-if="content.isMovie" :size="18" class="dl-type-icon" aria-hidden="true" />
+            <HardDriveDownload v-else :size="18" class="dl-type-icon" aria-hidden="true" />
 
             <div class="dl-group-meta">
               <div class="dl-head">
-                <strong>{{ grp.displayTitle }}</strong>
-                <span v-if="!grp.isMovie" class="v-badge">
-                  S{{ grp.season ?? 1 }} · E{{ grp.episode ?? 1 }}
+                <strong>{{ content.displayTitle }}</strong>
+                <span v-if="!content.isMovie" class="v-badge">
+                  {{ content.seasons.length }} {{ t('downloads.seasons_count') }} ·
+                  {{ content.episodeCount }} {{ t('downloads.episodes_count') }}
                 </span>
                 <span class="v-badge">
-                  {{ grp.items.length }} {{ t('downloads.streams_count') }}
+                  {{ content.totalStreams }} {{ t('downloads.streams_count') }}
                 </span>
-                <span
-                  v-if="grp.progress?.completed"
-                  class="v-badge v-badge-success dl-watched-pill"
-                >
+                <span v-if="content.allWatched" class="v-badge v-badge-success dl-watched-pill">
                   <CheckCircle2 :size="12" aria-hidden="true" /> {{ t('downloads.watched') }}
                 </span>
                 <span
-                  v-else-if="grp.progress && grp.progress.positionMs > 0"
+                  v-else-if="content.movieProgress && content.movieProgress.positionMs > 0"
                   class="v-badge v-badge-accent"
                 >
-                  {{ watchPercent(grp.progress) }}%
+                  {{ watchPercent(content.movieProgress) }}%
                 </span>
               </div>
               <div class="v-muted dl-stats">
-                <span>{{ grp.pluginId }}</span>
-                <span>· {{ formatBytes(grp.downloadedBytes) }}</span>
-                <span v-if="grp.totalBytes">/ {{ formatBytes(grp.totalBytes) }}</span>
-                <span v-if="grp.activeCount > 0">· {{ grp.activeCount }} active</span>
+                <span>{{ content.pluginId }}</span>
+                <span>· {{ formatBytes(content.downloadedBytes) }}</span>
+                <span v-if="content.totalBytes">/ {{ formatBytes(content.totalBytes) }}</span>
+                <span v-if="content.activeCount > 0">· {{ content.activeCount }} active</span>
               </div>
             </div>
           </div>
 
           <div class="dl-actions" @click.stop>
             <button
-              v-if="grp.items.some((i) => i.status === 'completed')"
+              v-if="firstCompletedInContent(content)"
               type="button"
               class="v-btn v-btn-primary v-btn-sm"
-              @click="playLocalDownload(grp.items.find((i) => i.status === 'completed')!, grp.progress)"
+              @click="
+                playLocalDownload(
+                  firstCompletedInContent(content)!,
+                  content.isMovie ? content.movieProgress : undefined,
+                )
+              "
             >
-              <Play :size="14" fill="currentColor" aria-hidden="true" /> {{ t('downloads.play_offline') }}
+              <Play :size="14" fill="currentColor" aria-hidden="true" />
+              {{ t('downloads.play_offline') }}
             </button>
           </div>
         </div>
 
+        <!-- Level 2: Seasons (Series) or Direct Streams (Movie) -->
         <Transition name="page-fade">
-          <div v-if="expandedGroups.has(grp.key)" class="dl-streams-panel">
-            <div
-              v-for="dl in grp.items"
-              :key="dl.id"
-              class="dl-stream-row"
-            >
-              <button
-                type="button"
-                class="dl-stream-link"
-                :disabled="dl.status !== 'completed' || launchingDownloadId === dl.id"
-                @click="playLocalDownload(dl, grp.progress)"
+          <div v-if="expandedContents.has(content.key)" class="dl-children-level">
+            <!-- Movies: Level 4 Streams directly -->
+            <template v-if="content.isMovie">
+              <div
+                v-for="dl in content.movieStreams"
+                :key="dl.id"
+                class="dl-stream-row"
               >
-                <Play
-                  v-if="dl.status === 'completed'"
-                  :size="14"
-                  fill="currentColor"
-                  class="dl-stream-play-icon"
-                  aria-hidden="true"
-                />
-                <span class="dl-stream-name">
-                  {{ dl.streamLabel || `${t('downloads.stream_default')} (${dl.kind.toUpperCase()})` }}
-                </span>
-                <CheckCircle2
-                  v-if="dl.status === 'completed' && grp.progress?.completed"
-                  :size="14"
-                  class="dl-stream-watched"
-                  :title="t('downloads.watched')"
-                  aria-hidden="true"
-                />
-              </button>
-
-              <div class="dl-stream-meta">
-                <span class="v-badge v-badge-accent">{{ dl.status }}</span>
-                <span class="v-badge">{{ dl.kind.toUpperCase() }}</span>
-                <span class="v-muted dl-stats">
-                  {{ formatBytes(dl.bytesDownloaded) }}
-                  <template v-if="dl.totalBytes">/ {{ formatBytes(dl.totalBytes) }}</template>
-                </span>
-              </div>
-
-              <div class="dl-actions">
                 <button
-                  v-if="dl.status === 'downloading' || dl.status === 'queued'"
                   type="button"
-                  class="v-btn v-btn-sm"
-                  @click="pauseItem(dl.id)"
+                  class="dl-stream-link"
+                  :disabled="dl.status !== 'completed' || launchingDownloadId === dl.id"
+                  @click="playLocalDownload(dl, content.movieProgress)"
                 >
-                  <Pause :size="13" aria-hidden="true" /> {{ t('common.pause') }}
+                  <Play
+                    v-if="dl.status === 'completed'"
+                    :size="14"
+                    fill="currentColor"
+                    class="dl-stream-play-icon"
+                    aria-hidden="true"
+                  />
+                  <span class="dl-stream-name">
+                    {{ dl.streamLabel || `${t('downloads.stream_default')} (${dl.kind.toUpperCase()})` }}
+                  </span>
+                  <CheckCircle2
+                    v-if="dl.status === 'completed' && content.movieProgress?.completed"
+                    :size="14"
+                    class="dl-stream-watched"
+                    :title="t('downloads.watched')"
+                    aria-hidden="true"
+                  />
                 </button>
-                <button
-                  v-if="dl.status === 'paused' || dl.status === 'failed'"
-                  type="button"
-                  class="v-btn v-btn-primary v-btn-sm"
-                  @click="resumeItem(dl.id)"
-                >
-                  <Play :size="13" aria-hidden="true" /> {{ t('common.resume') }}
-                </button>
-                <button type="button" class="v-btn v-btn-danger v-btn-sm" @click="deleteItem(dl.id)">
-                  <Trash2 :size="13" aria-hidden="true" />
-                  {{ confirmDeleteId === dl.id ? t('common.confirm') : t('common.delete') }}
-                </button>
+
+                <div class="dl-stream-meta">
+                  <span class="v-badge v-badge-accent">{{ dl.status }}</span>
+                  <span class="v-badge">{{ dl.kind.toUpperCase() }}</span>
+                  <span class="v-muted dl-stats">
+                    {{ formatBytes(dl.bytesDownloaded) }}
+                    <template v-if="dl.totalBytes">/ {{ formatBytes(dl.totalBytes) }}</template>
+                  </span>
+                </div>
+
+                <div class="dl-actions">
+                  <button
+                    v-if="dl.status === 'downloading' || dl.status === 'queued'"
+                    type="button"
+                    class="v-btn v-btn-sm"
+                    :disabled="busyIds.has(dl.id)"
+                    @click="pauseItem(dl.id)"
+                  >
+                    <Pause :size="13" aria-hidden="true" /> {{ t('common.pause') }}
+                  </button>
+                  <button
+                    v-if="dl.status === 'paused' || dl.status === 'failed'"
+                    type="button"
+                    class="v-btn v-btn-primary v-btn-sm"
+                    :disabled="busyIds.has(dl.id)"
+                    @click="resumeItem(dl.id)"
+                  >
+                    <Play :size="13" aria-hidden="true" /> {{ t('common.resume') }}
+                  </button>
+                  <button
+                    type="button"
+                    class="v-btn v-btn-danger v-btn-sm"
+                    :disabled="busyIds.has(dl.id)"
+                    @click="deleteItem(dl.id)"
+                  >
+                    <Trash2 :size="13" aria-hidden="true" /> {{ t('common.delete') }}
+                  </button>
+                </div>
               </div>
-            </div>
+            </template>
+
+            <!-- Series: Season List -->
+            <template v-else>
+              <div
+                v-for="seasonGrp in content.seasons"
+                :key="seasonGrp.key"
+                class="dl-season-box"
+              >
+                <div
+                  role="button"
+                  tabindex="0"
+                  class="dl-sub-header"
+                  :aria-expanded="expandedSeasons.has(seasonGrp.key)"
+                  @click="toggleSeason(seasonGrp.key)"
+                  @keydown.enter.self="toggleSeason(seasonGrp.key)"
+                  @keydown.space.prevent.self="toggleSeason(seasonGrp.key)"
+                >
+                  <div class="dl-group-left">
+                    <ChevronDown
+                      v-if="expandedSeasons.has(seasonGrp.key)"
+                      :size="16"
+                      aria-hidden="true"
+                    />
+                    <ChevronRight v-else :size="16" aria-hidden="true" />
+                    <FolderOpen :size="15" class="dl-type-icon" aria-hidden="true" />
+                    <strong>{{ t('details.season') }} {{ seasonGrp.season }}</strong>
+                    <span class="v-badge">
+                      {{ seasonGrp.episodes.length }} {{ t('downloads.episodes_count') }}
+                    </span>
+                    <span class="v-badge">
+                      {{ seasonGrp.totalStreams }} {{ t('downloads.streams_count') }}
+                    </span>
+                    <span
+                      v-if="seasonGrp.allWatched"
+                      class="v-badge v-badge-success dl-watched-pill"
+                    >
+                      <CheckCircle2 :size="12" aria-hidden="true" /> {{ t('downloads.watched') }}
+                    </span>
+                  </div>
+                  <span class="v-muted dl-stats">{{ formatBytes(seasonGrp.downloadedBytes) }}</span>
+                </div>
+
+                <!-- Level 3: Episodes inside Season -->
+                <Transition name="page-fade">
+                  <div v-if="expandedSeasons.has(seasonGrp.key)" class="dl-episodes-level">
+                    <div
+                      v-for="epGrp in seasonGrp.episodes"
+                      :key="epGrp.key"
+                      class="dl-episode-box"
+                    >
+                      <div
+                        role="button"
+                        tabindex="0"
+                        class="dl-sub-header dl-ep-header"
+                        :aria-expanded="expandedEpisodes.has(epGrp.key)"
+                        @click="toggleEpisode(epGrp.key)"
+                        @keydown.enter.self="toggleEpisode(epGrp.key)"
+                        @keydown.space.prevent.self="toggleEpisode(epGrp.key)"
+                      >
+                        <div class="dl-group-left">
+                          <ChevronDown
+                            v-if="expandedEpisodes.has(epGrp.key)"
+                            :size="15"
+                            aria-hidden="true"
+                          />
+                          <ChevronRight v-else :size="15" aria-hidden="true" />
+                          <strong>
+                            {{ t('downloads.episode_label') }} {{ epGrp.episode }}
+                          </strong>
+                          <span class="v-badge">
+                            S{{ epGrp.season }}·E{{ epGrp.episode }}
+                          </span>
+                          <span class="v-badge">
+                            {{ epGrp.items.length }} {{ t('downloads.streams_count') }}
+                          </span>
+                          <span
+                            v-if="epGrp.progress?.completed"
+                            class="v-badge v-badge-success dl-watched-pill"
+                          >
+                            <CheckCircle2 :size="12" aria-hidden="true" />
+                            {{ t('downloads.watched') }}
+                          </span>
+                          <span
+                            v-else-if="epGrp.progress && epGrp.progress.positionMs > 0"
+                            class="v-badge v-badge-accent"
+                          >
+                            {{ watchPercent(epGrp.progress) }}%
+                          </span>
+                        </div>
+
+                        <div class="dl-actions" @click.stop>
+                          <span class="v-muted dl-stats">
+                            {{ formatBytes(epGrp.downloadedBytes) }}
+                          </span>
+                          <button
+                            v-if="epGrp.items.some((i) => i.status === 'completed')"
+                            type="button"
+                            class="v-btn v-btn-primary v-btn-sm"
+                            @click="
+                              playLocalDownload(
+                                epGrp.items.find((i) => i.status === 'completed')!,
+                                epGrp.progress,
+                              )
+                            "
+                          >
+                            <Play :size="13" fill="currentColor" aria-hidden="true" />
+                            {{ t('common.play') }}
+                          </button>
+                        </div>
+                      </div>
+
+                      <!-- Level 4: Stream Candidates inside Episode -->
+                      <Transition name="page-fade">
+                        <div v-if="expandedEpisodes.has(epGrp.key)" class="dl-streams-level">
+                          <div
+                            v-for="dl in epGrp.items"
+                            :key="dl.id"
+                            class="dl-stream-row"
+                          >
+                            <button
+                              type="button"
+                              class="dl-stream-link"
+                              :disabled="dl.status !== 'completed' || launchingDownloadId === dl.id"
+                              @click="playLocalDownload(dl, epGrp.progress)"
+                            >
+                              <Play
+                                v-if="dl.status === 'completed'"
+                                :size="14"
+                                fill="currentColor"
+                                class="dl-stream-play-icon"
+                                aria-hidden="true"
+                              />
+                              <span class="dl-stream-name">
+                                {{
+                                  dl.streamLabel ||
+                                  `${t('downloads.stream_default')} (${dl.kind.toUpperCase()})`
+                                }}
+                              </span>
+                              <CheckCircle2
+                                v-if="dl.status === 'completed' && epGrp.progress?.completed"
+                                :size="14"
+                                class="dl-stream-watched"
+                                :title="t('downloads.watched')"
+                                aria-hidden="true"
+                              />
+                            </button>
+
+                            <div class="dl-stream-meta">
+                              <span class="v-badge v-badge-accent">{{ dl.status }}</span>
+                              <span class="v-badge">{{ dl.kind.toUpperCase() }}</span>
+                              <span class="v-muted dl-stats">
+                                {{ formatBytes(dl.bytesDownloaded) }}
+                                <template v-if="dl.totalBytes">
+                                  / {{ formatBytes(dl.totalBytes) }}
+                                </template>
+                              </span>
+                            </div>
+
+                            <div class="dl-actions">
+                              <button
+                                v-if="dl.status === 'downloading' || dl.status === 'queued'"
+                                type="button"
+                                class="v-btn v-btn-sm"
+                                :disabled="busyIds.has(dl.id)"
+                                @click="pauseItem(dl.id)"
+                              >
+                                <Pause :size="13" aria-hidden="true" /> {{ t('common.pause') }}
+                              </button>
+                              <button
+                                v-if="dl.status === 'paused' || dl.status === 'failed'"
+                                type="button"
+                                class="v-btn v-btn-primary v-btn-sm"
+                                :disabled="busyIds.has(dl.id)"
+                                @click="resumeItem(dl.id)"
+                              >
+                                <Play :size="13" aria-hidden="true" /> {{ t('common.resume') }}
+                              </button>
+                              <button
+                                type="button"
+                                class="v-btn v-btn-danger v-btn-sm"
+                                :disabled="busyIds.has(dl.id)"
+                                @click="deleteItem(dl.id)"
+                              >
+                                <Trash2 :size="13" aria-hidden="true" /> {{ t('common.delete') }}
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </Transition>
+                    </div>
+                  </div>
+                </Transition>
+              </div>
+            </template>
           </div>
         </Transition>
       </div>
@@ -734,7 +1206,8 @@ onMounted(() => {
   color: var(--vessel-text-muted);
 }
 
-.dl-cw-title {
+.dl-cw-title,
+.dl-cw-sub {
   width: 100%;
   white-space: nowrap;
   overflow: hidden;
@@ -742,11 +1215,7 @@ onMounted(() => {
 }
 
 .dl-cw-sub {
-  width: 100%;
   font-size: 0.78rem;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .dl-cw-bar {
@@ -800,13 +1269,14 @@ onMounted(() => {
   font-variant-numeric: tabular-nums;
 }
 
-.dl-group-card {
+.dl-content-card {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
 }
 
-.dl-group-header {
+.dl-group-header,
+.dl-sub-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -818,9 +1288,10 @@ onMounted(() => {
 .dl-group-left {
   display: flex;
   align-items: center;
-  gap: 0.65rem;
+  gap: 0.55rem;
   min-width: 0;
   flex: 1;
+  flex-wrap: wrap;
 }
 
 .dl-group-meta {
@@ -841,11 +1312,48 @@ onMounted(() => {
   gap: 0.28rem;
 }
 
-.dl-streams-panel {
+.dl-children-level {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  padding-top: 0.7rem;
+  border-top: 1px solid var(--vessel-border);
+}
+
+.dl-season-box {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  padding: 0.7rem 0.85rem;
+  border-radius: var(--vessel-radius-sm);
+  border: 1px solid var(--vessel-border);
+  background: var(--vessel-bg-surface);
+}
+
+.dl-episodes-level {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-  padding-top: 0.65rem;
+  padding-left: 1.15rem;
+  border-left: 2px solid color-mix(in srgb, var(--vessel-accent) 35%, transparent);
+}
+
+.dl-episode-box {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  padding: 0.55rem 0.7rem;
+  border-radius: var(--vessel-radius-sm);
+  background: var(--vessel-surface-elevated);
+  border: 1px solid var(--vessel-border);
+}
+
+.dl-streams-level {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding-top: 0.45rem;
+  padding-left: 1rem;
   border-top: 1px solid var(--vessel-border);
 }
 
@@ -855,9 +1363,10 @@ onMounted(() => {
   justify-content: space-between;
   gap: 0.75rem;
   flex-wrap: wrap;
-  padding: 0.55rem 0.7rem;
+  padding: 0.5rem 0.7rem;
   border-radius: var(--vessel-radius-sm);
-  background: var(--vessel-surface-elevated);
+  background: var(--vessel-surface-input);
+  border: 1px solid var(--vessel-border);
 }
 
 .dl-stream-link {

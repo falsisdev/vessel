@@ -138,7 +138,10 @@
     "queue_pos": "Fila de downloads",
     "drag_hint": "Arraste para reordenar a fila",
     "play_offline": "Reproduzir offline",
-    "stream_default": "Stream offline"
+    "stream_default": "Stream offline",
+    "seasons_count": "temporadas",
+    "episodes_count": "episódios",
+    "episode_label": "Episódio"
   },
   "extensions": {
     "title": "Extensões & Repositórios",

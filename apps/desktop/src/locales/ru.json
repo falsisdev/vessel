@@ -138,7 +138,10 @@
     "queue_pos": "Очередь загрузок",
     "drag_hint": "Перетащите для изменения порядка",
     "play_offline": "Смотреть офлайн",
-    "stream_default": "Офлайн-поток"
+    "stream_default": "Офлайн-поток",
+    "seasons_count": "сез.",
+    "episodes_count": "сер.",
+    "episode_label": "Серия"
   },
   "extensions": {
     "title": "Расширения и репозитории",

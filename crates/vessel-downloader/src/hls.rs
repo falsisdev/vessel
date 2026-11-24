@@ -613,8 +613,22 @@ pub(crate) async fn run_hls_download(
     }
 
     let mut first_error: Option<VesselError> = None;
-    while let Some(res) = join_set.join_next().await {
-        match res {
+    loop {
+        let next_res = tokio::select! {
+            biased;
+            _ = cancel.cancelled() => {
+                join_set.abort_all();
+                if first_error.is_none() {
+                    first_error = Some(VesselError::Cancelled);
+                }
+                break;
+            }
+            maybe = join_set.join_next() => match maybe {
+                Some(res) => res,
+                None => break,
+            }
+        };
+        match next_res {
             Ok(Ok(())) => {}
             Ok(Err(err)) => {
                 if first_error.is_none() {
@@ -623,7 +637,11 @@ pub(crate) async fn run_hls_download(
                 }
             }
             Err(join_err) => {
-                if first_error.is_none() {
+                if join_err.is_cancelled() {
+                    if first_error.is_none() {
+                        first_error = Some(VesselError::Cancelled);
+                    }
+                } else if first_error.is_none() {
                     first_error = Some(VesselError::Storage(format!(
                         "HLS segment worker panicked: {join_err}"
                     )));

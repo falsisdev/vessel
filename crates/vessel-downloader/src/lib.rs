@@ -369,12 +369,18 @@ impl DownloadManager {
             .map(|r| PathBuf::from(r.local_dir))
             .unwrap_or_else(|| self.downloads_root().join(download_id));
 
-        if fs::metadata(&dir_to_remove).await.is_ok() {
-            fs::remove_dir_all(&dir_to_remove)
-                .await
-                .map_err(|err| VesselError::Storage(format!("remove download directory: {err}")))?;
+        if fs::metadata(&dir_to_remove).await.is_ok()
+            && let Err(first_err) = fs::remove_dir_all(&dir_to_remove).await
+        {
+            tokio::time::sleep(Duration::from_millis(80)).await;
+            if fs::metadata(&dir_to_remove).await.is_ok() {
+                fs::remove_dir_all(&dir_to_remove).await.map_err(|err| {
+                    VesselError::Storage(format!("remove download directory ({first_err}): {err}"))
+                })?;
+            }
         }
-        self.storage.delete_download(download_id).await
+        self.storage.delete_download(download_id).await?;
+        self.clone().dispatch_queued_boxed().await
     }
 
     /// Lists all recorded downloads ordered newest-first.
@@ -504,6 +510,16 @@ impl DownloadManager {
                             None,
                         )
                         .await;
+                    manager.event_sink.emit(EngineEvent::DownloadProgress(
+                        DownloadProgressSnapshot {
+                            download_id: record.id.clone(),
+                            status: DownloadStatus::Paused,
+                            bytes_downloaded: bytes,
+                            total_bytes: total,
+                            segments_done: done,
+                            segments_total: total_seg,
+                        },
+                    ));
                 } else {
                     let latest = manager
                         .storage

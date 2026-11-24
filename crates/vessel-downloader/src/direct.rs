@@ -517,8 +517,22 @@ async fn try_multipart_direct_download(
     }
 
     let mut first_err: Option<VesselError> = None;
-    while let Some(res) = join_set.join_next().await {
-        match res {
+    loop {
+        let next_res = tokio::select! {
+            biased;
+            _ = cancel.cancelled() => {
+                join_set.abort_all();
+                if first_err.is_none() {
+                    first_err = Some(VesselError::Cancelled);
+                }
+                break;
+            }
+            maybe = join_set.join_next() => match maybe {
+                Some(res) => res,
+                None => break,
+            }
+        };
+        match next_res {
             Ok(Ok(())) => {}
             Ok(Err(err)) => {
                 if first_err.is_none() {
@@ -527,7 +541,11 @@ async fn try_multipart_direct_download(
                 }
             }
             Err(err) => {
-                if first_err.is_none() {
+                if err.is_cancelled() {
+                    if first_err.is_none() {
+                        first_err = Some(VesselError::Cancelled);
+                    }
+                } else if first_err.is_none() {
                     first_err = Some(VesselError::Storage(format!(
                         "multipart download worker panicked: {err}"
                     )));

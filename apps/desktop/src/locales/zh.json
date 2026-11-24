@@ -138,7 +138,10 @@
     "queue_pos": "下载队列",
     "drag_hint": "拖动句柄调整下载顺序",
     "play_offline": "离线播放",
-    "stream_default": "离线片源"
+    "stream_default": "离线片源",
+    "seasons_count": "季",
+    "episodes_count": "集",
+    "episode_label": "第"
   },
   "extensions": {
     "title": "扩展与仓库",

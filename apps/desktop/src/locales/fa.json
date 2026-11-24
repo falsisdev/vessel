@@ -138,7 +138,10 @@
     "queue_pos": "صف دانلود",
     "drag_hint": "برای تغییر ترتیب بکشید",
     "play_offline": "پخش آفلاین",
-    "stream_default": "جریان آفلاین"
+    "stream_default": "جریان آفلاین",
+    "seasons_count": "فصل",
+    "episodes_count": "قسمت",
+    "episode_label": "قسمت"
   },
   "extensions": {
     "title": "افزونه‌ها و مخازن",

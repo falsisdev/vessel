@@ -138,7 +138,10 @@
     "queue_pos": "File de téléchargement",
     "drag_hint": "Glisser la poignée pour réorganiser",
     "play_offline": "Lire hors ligne",
-    "stream_default": "Flux hors ligne"
+    "stream_default": "Flux hors ligne",
+    "seasons_count": "saisons",
+    "episodes_count": "épisodes",
+    "episode_label": "Épisode"
   },
   "extensions": {
     "title": "Extensions & Dépôts",

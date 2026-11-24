@@ -138,6 +138,30 @@ export function useVesselEvents() {
     pushToast('info', `Granted ${prompt.domain} to ${prompt.pluginId}`)
   }
 
+  function setDownloadSnapshot(snapshot: DownloadProgressSnapshot): void {
+    downloadProgress.value = {
+      ...downloadProgress.value,
+      [snapshot.downloadId]: snapshot,
+    }
+  }
+
+  function clearDownloadProgress(downloadId: string): void {
+    if (!(downloadId in downloadProgress.value)) return
+    const copy = { ...downloadProgress.value }
+    delete copy[downloadId]
+    downloadProgress.value = copy
+  }
+
+  function pruneStaleDownloadProgress(validIds: Set<string>): void {
+    const next: Record<string, DownloadProgressSnapshot> = {}
+    for (const [id, snap] of Object.entries(downloadProgress.value)) {
+      if (validIds.has(id)) {
+        next[id] = snap
+      }
+    }
+    downloadProgress.value = next
+  }
+
   return {
     activeSearchId,
     isSearching,
@@ -151,6 +175,9 @@ export function useVesselEvents() {
     stopListening,
     startSearch,
     resolveDomainPrompt,
+    setDownloadSnapshot,
+    clearDownloadProgress,
+    pruneStaleDownloadProgress,
     pushToast,
   }
 }

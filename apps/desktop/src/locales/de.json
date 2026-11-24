@@ -138,7 +138,10 @@
     "queue_pos": "Download-Warteschlange",
     "drag_hint": "Zum Sortieren am Griff ziehen",
     "play_offline": "Offline abspielen",
-    "stream_default": "Offline-Stream"
+    "stream_default": "Offline-Stream",
+    "seasons_count": "Staffeln",
+    "episodes_count": "Folgen",
+    "episode_label": "Folge"
   },
   "extensions": {
     "title": "Erweiterungen & Repos",
