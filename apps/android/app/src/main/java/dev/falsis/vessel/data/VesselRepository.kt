@@ -69,6 +69,9 @@ class VesselRepository private constructor(private val appContext: Context) {
     private val _searchEvents = MutableSharedFlow<SearchResultEvent>(extraBufferCapacity = 64)
     val searchEvents: SharedFlow<SearchResultEvent> = _searchEvents.asSharedFlow()
 
+    private val _metadataEnriched = MutableSharedFlow<MetadataEnrichedEvent>(extraBufferCapacity = 32)
+    val metadataEnriched: SharedFlow<MetadataEnrichedEvent> = _metadataEnriched.asSharedFlow()
+
     private val _downloadProgress = MutableStateFlow<Map<String, DownloadProgressSnapshot>>(emptyMap())
     val downloadProgress: StateFlow<Map<String, DownloadProgressSnapshot>> = _downloadProgress.asStateFlow()
 
@@ -152,6 +155,10 @@ class VesselRepository private constructor(private val appContext: Context) {
                             _domainPrompts.value = cur + prompt
                         }
                     }
+            }
+            "metadata_enriched" -> {
+                runCatching { json.decodeFromJsonElement<MetadataEnrichedEvent>(obj) }
+                    .onSuccess { _metadataEnriched.tryEmit(it) }
             }
         }
     }
@@ -253,6 +260,36 @@ class VesselRepository private constructor(private val appContext: Context) {
     suspend fun preparePlaybackUrl(candidate: StreamCandidate): String = withContext(Dispatchers.IO) {
         requireCore().preparePlaybackUrl(json.encodeToString(candidate))
     }
+
+    suspend fun fetchTextViaProxy(url: String, headers: Map<String, String> = emptyMap()): String =
+        withContext(Dispatchers.IO) {
+            val isLocal = url.startsWith("http://127.0.0.1:") || url.startsWith("http://localhost:")
+            val targetUrl = if (isLocal) {
+                url
+            } else {
+                preparePlaybackUrl(
+                    StreamCandidate(
+                        url = url,
+                        kind = "direct",
+                        label = "Subtitle",
+                        headers = headers,
+                        flags = listOf("requires_proxy"),
+                    ),
+                )
+            }
+            val conn = java.net.URL(targetUrl).openConnection() as java.net.HttpURLConnection
+            conn.connectTimeout = 10_000
+            conn.readTimeout = 15_000
+            try {
+                val code = conn.responseCode
+                if (code !in 200..299) {
+                    throw IllegalStateException("HTTP $code fetching subtitle")
+                }
+                conn.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+            } finally {
+                conn.disconnect()
+            }
+        }
 
     suspend fun recordProgress(progress: PlaybackProgress) = withContext(Dispatchers.IO) {
         requireCore().recordProgressJson(json.encodeToString(progress))

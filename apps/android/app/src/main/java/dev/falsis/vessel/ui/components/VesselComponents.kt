@@ -97,12 +97,6 @@ fun VesselLogoMark(modifier: Modifier = Modifier) {
             close()
         }
         drawPath(path = hull, color = palette.textPrimary)
-        drawLine(
-            color = palette.bgBase,
-            start = Offset(12f * s, 12f * s),
-            end = Offset(12f * s, 20.5f * s),
-            strokeWidth = 1.2f * s,
-        )
     }
 }
 

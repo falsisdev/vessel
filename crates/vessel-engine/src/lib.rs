@@ -1154,7 +1154,9 @@ impl VesselEngine {
             && query.external_ids.mal.is_none()
             && query.external_ids.anilist.is_none()
         {
-            for lang in ["en", "tr"] {
+            for lang in [
+                "en", "tr", "es", "de", "fr", "it", "ru", "ja", "pt", "zh", "ar", "fa",
+            ] {
                 let key = format!("meta3:{}:{}:{lang}", m.plugin_id.as_str(), m.native_id);
                 if let Ok(Some(json_str)) = self.storage.get_metadata_cache(&key).await
                     && let Ok(canon) = serde_json::from_str::<CanonicalMetadata>(&json_str)

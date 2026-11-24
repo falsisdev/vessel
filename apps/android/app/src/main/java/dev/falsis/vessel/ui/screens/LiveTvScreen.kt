@@ -71,6 +71,7 @@ import dev.falsis.vessel.data.MediaSummary
 import dev.falsis.vessel.data.PluginListEntry
 import dev.falsis.vessel.data.StoredIptvChannel
 import dev.falsis.vessel.data.StoredIptvProfile
+import dev.falsis.vessel.data.StreamCandidate
 import dev.falsis.vessel.data.StreamResult
 import dev.falsis.vessel.data.UpsertIptvProfilePayload
 import dev.falsis.vessel.data.VesselRepository
@@ -90,9 +91,14 @@ private fun isLiveTvPlugin(p: PluginListEntry): Boolean {
 fun LiveTvScreen(
     repo: VesselRepository,
     onPlayUrl: (title: String, url: String) -> Unit,
-    onPlayLiveStream: (pluginId: String, detail: MediaDetail, episode: Episode, streams: StreamResult) -> Unit = { pid, d, _, _ ->
-        val url = d.nativeId
-        onPlayUrl(d.title, url)
+    onPlayLiveStream: (
+        pluginId: String,
+        detail: MediaDetail,
+        episode: Episode,
+        streams: StreamResult,
+        channelStreams: Map<String, List<StreamCandidate>>,
+    ) -> Unit = { _, d, _, _, _ ->
+        onPlayUrl(d.title, d.nativeId)
     },
     onOpenDetails: (pluginId: String, nativeId: String) -> Unit,
 ) {
@@ -171,7 +177,7 @@ fun LiveTvScreen(
     }
 
     LaunchedEffect(tab, livePlugins) {
-        if (tab == 1 && livePlugins.isNotEmpty()) {
+        if (tab == 0 && livePlugins.isNotEmpty()) {
             val current = selectedLivePluginId?.takeIf { id -> livePlugins.any { it.manifest.id == id } }
                 ?: livePlugins.first().manifest.id
             if (selectedLivePluginId != current || pluginLiveSections.isEmpty()) {
@@ -210,6 +216,7 @@ fun LiveTvScreen(
                         ),
                         ep,
                         sr,
+                        emptyMap(),
                     )
                 }
             }.onFailure {
@@ -221,11 +228,11 @@ fun LiveTvScreen(
 
     Column(modifier = Modifier.fillMaxSize().background(palette.bgBase)) {
         TabRow(selectedTabIndex = tab) {
-            Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text(VesselI18n.tr("iptv.tab_playlists")) })
-            Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text(VesselI18n.tr("iptv.tab_plugins")) })
+            Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text(VesselI18n.tr("iptv.tab_plugins")) })
+            Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text(VesselI18n.tr("iptv.tab_playlists")) })
         }
 
-        if (tab == 0) {
+        if (tab == 1) {
             Column(
                 modifier = Modifier.fillMaxSize().padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -374,12 +381,130 @@ fun LiveTvScreen(
                                         selectedEpgChannel = ch
                                         scope.launch {
                                             val tvg = ch.tvgId
-                                            if (!tvg.isNullOrBlank()) {
-                                                epgNowNext = runCatching { repo.getEpgNowNext(ch.profileId, tvg) }.getOrNull()
+                                            val guide = if (!tvg.isNullOrBlank()) {
+                                                runCatching { repo.getEpgNowNext(ch.profileId, tvg) }.getOrNull()
+                                            } else {
+                                                null
                                             }
-                                            runCatching { repo.playIptvChannel(ch, ch.userAgent) }
-                                                .onSuccess { url -> onPlayUrl(ch.name, url) }
-                                                .onFailure { repo.notify(it.message ?: "Playback failed") }
+                                            epgNowNext = guide
+
+                                            fun buildChannelCandidates(item: StoredIptvChannel): List<StreamCandidate> {
+                                                val itemProf = profiles.firstOrNull { it.id == item.profileId }
+                                                val ua = itemProf?.userAgent?.takeIf { it.isNotBlank() }
+                                                    ?: item.userAgent?.takeIf { it.isNotBlank() }
+                                                val headers = if (ua != null) mapOf("User-Agent" to ua) else emptyMap()
+                                                val rawUrl = item.streamUrl
+                                                val lowerUrl = rawUrl.lowercase()
+                                                val isXtreamLive = item.streamId.startsWith("xtream-") && lowerUrl.contains("/live/")
+                                                return when {
+                                                    isXtreamLive && lowerUrl.endsWith(".ts") -> {
+                                                        val hlsUrl = rawUrl.dropLast(3) + ".m3u8"
+                                                        listOf(
+                                                            StreamCandidate(
+                                                                url = hlsUrl,
+                                                                kind = "hls",
+                                                                label = "${item.name} (HLS)",
+                                                                isDefault = true,
+                                                                flags = listOf("requires_proxy"),
+                                                                headers = headers,
+                                                            ),
+                                                            StreamCandidate(
+                                                                url = rawUrl,
+                                                                kind = "mpeg_ts",
+                                                                label = "${item.name} (MPEG-TS)",
+                                                                flags = listOf("requires_proxy"),
+                                                                headers = headers,
+                                                            ),
+                                                        )
+                                                    }
+                                                    isXtreamLive && lowerUrl.endsWith(".m3u8") -> {
+                                                        val tsUrl = rawUrl.dropLast(5) + ".ts"
+                                                        listOf(
+                                                            StreamCandidate(
+                                                                url = rawUrl,
+                                                                kind = "hls",
+                                                                label = "${item.name} (HLS)",
+                                                                isDefault = true,
+                                                                flags = listOf("requires_proxy"),
+                                                                headers = headers,
+                                                            ),
+                                                            StreamCandidate(
+                                                                url = tsUrl,
+                                                                kind = "mpeg_ts",
+                                                                label = "${item.name} (MPEG-TS)",
+                                                                flags = listOf("requires_proxy"),
+                                                                headers = headers,
+                                                            ),
+                                                        )
+                                                    }
+                                                    else -> {
+                                                        val inferredKind = when {
+                                                            lowerUrl.contains(".m3u8") -> "hls"
+                                                            lowerUrl.contains(".ts") -> "mpeg_ts"
+                                                            else -> "auto"
+                                                        }
+                                                        listOf(
+                                                            StreamCandidate(
+                                                                url = rawUrl,
+                                                                kind = inferredKind,
+                                                                label = when (inferredKind) {
+                                                                    "hls" -> "${item.name} (HLS)"
+                                                                    "mpeg_ts" -> "${item.name} (MPEG-TS)"
+                                                                    else -> item.name
+                                                                },
+                                                                isDefault = true,
+                                                                flags = listOf("requires_proxy"),
+                                                                headers = headers,
+                                                            ),
+                                                        )
+                                                    }
+                                                }
+                                            }
+
+                                            val channelStreamsMap = mutableMapOf<String, List<StreamCandidate>>()
+                                            val episodes = channels.mapIndexed { idx, item ->
+                                                val sid = item.streamId.ifBlank { item.streamUrl }
+                                                channelStreamsMap[sid] = buildChannelCandidates(item)
+                                                Episode(
+                                                    streamId = sid,
+                                                    season = 1,
+                                                    episode = idx + 1,
+                                                    title = item.name,
+                                                    overview = item.groupTitle,
+                                                    thumbnail = item.logoUrl,
+                                                )
+                                            }
+                                            val targetSid = ch.streamId.ifBlank { ch.streamUrl }
+                                            val activeEp = episodes.firstOrNull { it.streamId == targetSid }
+                                                ?: Episode(
+                                                    streamId = targetSid,
+                                                    season = 1,
+                                                    episode = 1,
+                                                    title = ch.name,
+                                                    overview = ch.groupTitle,
+                                                    thumbnail = ch.logoUrl,
+                                                )
+                                            val activeCandidates = buildChannelCandidates(ch)
+                                            channelStreamsMap.putIfAbsent(targetSid, activeCandidates)
+
+                                            val liveDetail = MediaDetail(
+                                                nativeId = targetSid,
+                                                pluginId = "iptv",
+                                                type = "live",
+                                                title = ch.name,
+                                                poster = ch.logoUrl,
+                                                backdrop = ch.logoUrl,
+                                                synopsis = guide?.now?.let { "Now: ${it.title}" } ?: ch.groupTitle,
+                                                genres = listOfNotNull(ch.groupTitle?.takeIf { it.isNotBlank() } ?: "Live TV"),
+                                                episodes = episodes,
+                                            )
+                                            onPlayLiveStream(
+                                                "iptv",
+                                                liveDetail,
+                                                activeEp,
+                                                StreamResult(streams = activeCandidates),
+                                                channelStreamsMap,
+                                            )
                                         }
                                     },
                             ) {

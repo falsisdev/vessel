@@ -173,7 +173,6 @@ onUnmounted(() => {
               opacity="0.92"
             />
             <path d="M3.5 12L12 20.8L20.5 12H16.2L12 16.4L7.8 12H3.5Z" fill="var(--vessel-text-primary, #eef1fa)" />
-            <path d="M12 12V20.5" stroke="var(--vessel-bg-base, #090a10)" stroke-width="1.2" />
           </g>
         </g>
       </g>

@@ -26,6 +26,11 @@
   </categories>
   <content_rating type="oars-1.1" />
   <releases>
+    <release version="0.1.1-alpha.6" date="2026-11-24">
+      <description>
+        <p>Desktop-parity Android player, live stream proxy &amp; HLS sniffing fixes, background skip-segment enrichment, Live TV plugins tab first, fullscreen Android mode, and unified Vessel logo.</p>
+      </description>
+    </release>
     <release version="0.1.1-alpha.5" date="2026-11-24">
       <description>
         <p>Smart Continue Watching, multi-provider Skip Segments, 4-level offline download hierarchy, and Linux packaging.</p>

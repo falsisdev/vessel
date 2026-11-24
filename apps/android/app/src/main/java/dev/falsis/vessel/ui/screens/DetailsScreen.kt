@@ -127,6 +127,14 @@ fun DetailsScreen(
 
     LaunchedEffect(pluginId, nativeId) { loadAll() }
 
+    LaunchedEffect(pluginId, nativeId) {
+        repo.metadataEnriched.collect { ev ->
+            if (ev.pluginId == pluginId && ev.nativeId == nativeId) {
+                detail = ev.detail
+            }
+        }
+    }
+
     fun progressFor(ep: Episode): PlaybackProgress? =
         progressList.firstOrNull { it.season == ep.season && it.episode == ep.episode }
 

@@ -14,9 +14,9 @@ use std::time::Duration;
 use axum::body::Body;
 use axum::extract::{Path, Query, State};
 use axum::http::header::{
-    ACCEPT_RANGES, ACCESS_CONTROL_ALLOW_HEADERS, ACCESS_CONTROL_ALLOW_METHODS,
+    ACCEPT, ACCEPT_RANGES, ACCESS_CONTROL_ALLOW_HEADERS, ACCESS_CONTROL_ALLOW_METHODS,
     ACCESS_CONTROL_ALLOW_ORIGIN, ACCESS_CONTROL_EXPOSE_HEADERS, CONTENT_LENGTH, CONTENT_RANGE,
-    CONTENT_TYPE, IF_RANGE, RANGE,
+    CONTENT_TYPE, IF_RANGE, RANGE, USER_AGENT,
 };
 use axum::http::{HeaderMap, HeaderName, HeaderValue, Method, StatusCode};
 use axum::middleware;
@@ -26,7 +26,7 @@ use axum::{Json, Router};
 use hmac::{Hmac, KeyInit, Mac};
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
-use tokio::io::{AsyncReadExt, AsyncSeekExt};
+use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 use tokio::sync::oneshot;
 use tokio_util::io::ReaderStream;
@@ -35,15 +35,28 @@ use vessel_domain::{StreamCandidate, StreamFlag, StreamKind, VesselError, Vessel
 use hls::{decode_signed_seg_url, is_hls_playlist, rewrite_m3u8_playlist};
 pub use session::{DEFAULT_SESSION_TTL, ProxySession, ProxySessionStore};
 
+const DEFAULT_PROXY_USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
+const MAX_SNIFFED_PLAYLIST_BYTES: usize = 8 * 1024 * 1024;
+
 /// Decides whether a resolved stream candidate should pass through the local proxy.
 ///
-/// Plain streams (e.g. `.mp4`, `.mkv`) with no custom headers bypass the proxy unless
-/// `always_proxy` is enabled, `RequiresProxy` is set, or the stream is HLS / MPEG-TS.
+/// Plain HTTPS streams (e.g. `.mp4`, `.mkv`) with no custom headers bypass the proxy unless
+/// `always_proxy` is enabled, `RequiresProxy` is set, the URL uses cleartext `http://`
+/// (which mobile OS policies block directly), or the stream is `HLS` / `MPEG-TS` / `Auto`.
 pub fn should_proxy_stream(candidate: &StreamCandidate, always_proxy: bool) -> bool {
+    let is_cleartext_http = candidate
+        .url
+        .trim()
+        .to_ascii_lowercase()
+        .starts_with("http://");
     always_proxy
+        || is_cleartext_http
         || !candidate.headers.is_empty()
         || candidate.flags.contains(&StreamFlag::RequiresProxy)
-        || matches!(candidate.kind, StreamKind::Hls | StreamKind::MpegTs)
+        || matches!(
+            candidate.kind,
+            StreamKind::Hls | StreamKind::MpegTs | StreamKind::Auto
+        )
 }
 
 type HmacSha256 = Hmac<Sha256>;
@@ -360,6 +373,39 @@ async fn local_file_handler(
         .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response())
 }
 
+fn should_sniff_hls_body(final_url: &str, content_type: Option<&str>) -> bool {
+    let path_lower = final_url
+        .split(['?', '#'])
+        .next()
+        .unwrap_or(final_url)
+        .to_ascii_lowercase();
+    for ext in [
+        ".mp4", ".m4v", ".mkv", ".webm", ".avi", ".mov", ".ts", ".m4s", ".m4a", ".aac", ".mp3",
+        ".key", ".vtt", ".srt", ".ass", ".ssa", ".jpg", ".jpeg", ".png", ".webp",
+    ] {
+        if path_lower.ends_with(ext) {
+            return false;
+        }
+    }
+    match content_type.map(|s| s.split(';').next().unwrap_or(s).trim().to_ascii_lowercase()) {
+        None => true,
+        Some(ct) => {
+            !ct.starts_with("video/")
+                && !ct.starts_with("audio/")
+                && !ct.starts_with("image/")
+        }
+    }
+}
+
+fn looks_like_extm3u(bytes: &[u8]) -> bool {
+    let stripped = bytes.strip_prefix(&[0xEF, 0xBB, 0xBF]).unwrap_or(bytes);
+    let trimmed = stripped
+        .iter()
+        .position(|b| !b.is_ascii_whitespace())
+        .map_or(&[][..], |idx| &stripped[idx..]);
+    trimmed.starts_with(b"#EXTM3U")
+}
+
 async fn stream_upstream_target(
     state: &AppState,
     method: &Method,
@@ -374,13 +420,26 @@ async fn stream_upstream_target(
     } else {
         state.client.get(target_url)
     };
+    let mut has_ua = false;
+    let mut has_accept = false;
     for (name, value) in session_headers {
+        if name.eq_ignore_ascii_case("user-agent") {
+            has_ua = true;
+        } else if name.eq_ignore_ascii_case("accept") {
+            has_accept = true;
+        }
         if let (Ok(header_name), Ok(header_val)) = (
             HeaderName::from_bytes(name.as_bytes()),
             HeaderValue::from_str(value),
         ) {
             upstream_req = upstream_req.header(header_name, header_val);
         }
+    }
+    if !has_ua {
+        upstream_req = upstream_req.header(USER_AGENT, DEFAULT_PROXY_USER_AGENT);
+    }
+    if !has_accept {
+        upstream_req = upstream_req.header(ACCEPT, "*/*");
     }
 
     for forward_key in [RANGE, IF_RANGE] {
@@ -389,7 +448,7 @@ async fn stream_upstream_target(
         }
     }
 
-    let upstream_resp = match upstream_req.send().await {
+    let mut upstream_resp = match upstream_req.send().await {
         Ok(resp) => resp,
         Err(err) => {
             return (
@@ -434,6 +493,89 @@ async fn stream_upstream_target(
             )
                 .into_response(),
             Err(err) => (StatusCode::BAD_GATEWAY, err.to_string()).into_response(),
+        };
+    }
+
+    if !is_head && status.is_success() && should_sniff_hls_body(&final_url, content_type.as_deref()) {
+        let first_chunk = match upstream_resp.chunk().await {
+            Ok(c) => c,
+            Err(err) => {
+                return (
+                    StatusCode::BAD_GATEWAY,
+                    format!("[VesselNetworkError]: read upstream chunk: {err}"),
+                )
+                    .into_response();
+            }
+        };
+        let Some(first) = first_chunk else {
+            return Response::builder()
+                .status(status)
+                .body(Body::empty())
+                .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response());
+        };
+        if looks_like_extm3u(&first) {
+            let mut buf = first.to_vec();
+            while buf.len() < MAX_SNIFFED_PLAYLIST_BYTES {
+                match upstream_resp.chunk().await {
+                    Ok(Some(chunk)) => {
+                        if buf.len() + chunk.len() > MAX_SNIFFED_PLAYLIST_BYTES {
+                            return (
+                                StatusCode::BAD_GATEWAY,
+                                "[VesselNetworkError]: sniffed HLS playlist exceeded size limit",
+                            )
+                                .into_response();
+                        }
+                        buf.extend_from_slice(&chunk);
+                    }
+                    Ok(None) => break,
+                    Err(err) => {
+                        return (
+                            StatusCode::BAD_GATEWAY,
+                            format!("[VesselNetworkError]: read sniffed hls playlist: {err}"),
+                        )
+                            .into_response();
+                    }
+                }
+            }
+            let playlist_text = String::from_utf8_lossy(&buf);
+            return match rewrite_m3u8_playlist(
+                &playlist_text,
+                &final_url,
+                &state.base_url,
+                token,
+                &state.signer,
+            ) {
+                Ok(rewritten) => (
+                    status,
+                    [(CONTENT_TYPE, "application/vnd.apple.mpegurl; charset=utf-8")],
+                    rewritten,
+                )
+                    .into_response(),
+                Err(err) => (StatusCode::BAD_GATEWAY, err.to_string()).into_response(),
+            };
+        }
+
+        let mut builder = Response::builder().status(status);
+        for pass_key in [CONTENT_TYPE, CONTENT_LENGTH, CONTENT_RANGE, ACCEPT_RANGES] {
+            if let Some(val) = upstream_resp.headers().get(&pass_key) {
+                builder = builder.header(pass_key, val.clone());
+            }
+        }
+        let (client_read, mut server_write) = tokio::io::duplex(64 * 1024);
+        tokio::spawn(async move {
+            if server_write.write_all(&first).await.is_err() {
+                return;
+            }
+            while let Ok(Some(chunk)) = upstream_resp.chunk().await {
+                if server_write.write_all(&chunk).await.is_err() {
+                    break;
+                }
+            }
+            let _ = server_write.shutdown().await;
+        });
+        return match builder.body(Body::from_stream(ReaderStream::new(client_read))) {
+            Ok(resp) => resp,
+            Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
         };
     }
 
@@ -561,6 +703,10 @@ impl ProxyServer {
             return Err(VesselError::InvalidInput(
                 "stream candidate requires extractor resolution before playback".into(),
             ));
+        }
+
+        if candidate.url.starts_with(&self.base_url()) {
+            return Ok(candidate.url.clone());
         }
 
         if should_proxy_stream(candidate, always_proxy) {
@@ -965,12 +1111,27 @@ mod tests {
             .expect("proxy flagged mkv");
         assert!(flagged_url.starts_with(&format!("{}/s/", server.base_url())));
 
-        // HLS & MPEG-TS always go through the proxy (rewriting / reconnect).
+        // HLS, MPEG-TS, Auto, and cleartext HTTP always go through the proxy (rewriting / Android cleartext safety).
         let hls = sample_candidate("https://cdn.anthology.example/master.m3u8", StreamKind::Hls);
         let mpeg_ts =
             sample_candidate("https://iptv.anthology.example/live.ts", StreamKind::MpegTs);
+        let auto_stream = sample_candidate("https://cdn.anthology.example/live/1", StreamKind::Auto);
+        let cleartext_mp4 =
+            sample_candidate("http://cdn.anthology.example/movie.mp4", StreamKind::Mp4);
         assert!(should_proxy_stream(&hls, false));
         assert!(should_proxy_stream(&mpeg_ts, false));
+        assert!(should_proxy_stream(&auto_stream, false));
+        assert!(should_proxy_stream(&cleartext_mp4, false));
+
+        // Already-local proxy URLs targeting this proxy server must never be double-proxied.
+        let loopback =
+            sample_candidate(&format!("{}/s/abc/master", server.base_url()), StreamKind::Auto);
+        assert_eq!(
+            server
+                .resolve_playback_url(&loopback, true)
+                .expect("preserve own proxy url"),
+            loopback.url
+        );
 
         // Embed / unresolved extractor links must be rejected before playback.
         let embed = sample_candidate("https://embed.anthology.example/v/123", StreamKind::Embed);
@@ -1036,5 +1197,39 @@ mod tests {
         ));
 
         let _ = tokio::fs::remove_dir_all(&dir).await;
+    }
+
+    #[tokio::test]
+    async fn sniffs_mislabeled_hls_playlists_and_rewrites_segments() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
+        let addr = listener.local_addr().expect("addr");
+        let app = Router::new().route(
+            "/live/channel",
+            get(|| async {
+                (
+                    [(CONTENT_TYPE, "text/plain; charset=utf-8")],
+                    "#EXTM3U\n#EXTINF:4.0,\nchunk_0.ts\n",
+                )
+            }),
+        );
+        tokio::spawn(async move {
+            let _ = axum::serve(listener, app).await;
+        });
+
+        let server = ProxyServer::start().await.expect("start proxy");
+        let proxy_url = server
+            .register_stream(format!("http://{addr}/live/channel"), BTreeMap::new())
+            .expect("register");
+        let resp = server.client().get(&proxy_url).send().await.expect("fetch");
+        assert_eq!(resp.status(), StatusCode::OK);
+        assert_eq!(
+            resp.headers()
+                .get(CONTENT_TYPE)
+                .and_then(|v| v.to_str().ok()),
+            Some("application/vnd.apple.mpegurl; charset=utf-8")
+        );
+        let body = resp.text().await.expect("body");
+        assert!(body.contains("/seg?u="));
+        assert!(!body.contains("\nchunk_0.ts"));
     }
 }

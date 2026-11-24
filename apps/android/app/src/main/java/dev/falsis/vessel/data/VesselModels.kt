@@ -123,6 +123,7 @@ data class StreamCandidate(
 data class StreamResult(
     val streams: List<StreamCandidate> = emptyList(),
     val subtitles: List<SubtitleTrack> = emptyList(),
+    val skipSegments: List<SkipSegment> = emptyList(),
 )
 
 @Serializable
@@ -161,10 +162,40 @@ data class PlaybackProgress(
 
 @Serializable
 data class ContinueWatchingEntry(
-    val progress: PlaybackProgress,
+    val media: MediaRef,
+    val title: String,
+    val poster: String? = null,
+    val backdrop: String? = null,
     val mediaType: String = "series",
-    val isNextEpisode: Boolean = false,
-)
+    val streamId: String,
+    val canonicalId: String? = null,
+    val season: Int,
+    val episode: Int,
+    val absoluteEpisode: Int? = null,
+    val episodeTitle: String? = null,
+    val positionMs: Long,
+    val durationMs: Long,
+    val completed: Boolean = false,
+    val lastWatchedAt: String = "",
+) {
+    val progress: PlaybackProgress
+        get() = PlaybackProgress(
+            media = media,
+            streamId = streamId,
+            canonicalId = canonicalId,
+            season = season,
+            episode = episode,
+            absoluteEpisode = absoluteEpisode,
+            title = title,
+            posterUrl = poster,
+            backdropUrl = backdrop,
+            episodeTitle = episodeTitle,
+            positionMs = positionMs,
+            durationMs = durationMs,
+            completed = completed,
+            lastWatchedAt = lastWatchedAt,
+        )
+}
 
 @Serializable
 data class LibraryItem(
@@ -398,6 +429,7 @@ data class StoredIptvProfile(
 data class StoredIptvChannel(
     val id: Long,
     val profileId: String,
+    val streamId: String = "",
     val tvgId: String? = null,
     val name: String,
     val groupTitle: String? = null,
@@ -437,6 +469,13 @@ data class SearchResultEvent(
     val hasMore: Boolean = false,
     val error: String? = null,
     val done: Boolean = false,
+)
+
+@Serializable
+data class MetadataEnrichedEvent(
+    val pluginId: String,
+    val nativeId: String,
+    val detail: MediaDetail,
 )
 
 @Serializable

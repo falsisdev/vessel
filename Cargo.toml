@@ -3,7 +3,7 @@ resolver = "2"
 members = ["apps/desktop/src-tauri", "crates/vessel-domain", "crates/vessel-downloader", "crates/vessel-engine", "crates/vessel-ffi", "crates/vessel-iptv", "crates/vessel-metadata", "crates/vessel-player-mpv", "crates/vessel-plugin-rt", "crates/vessel-proxy", "crates/vessel-storage"]
 
 [workspace.package]
-version = "0.1.1-alpha.5"
+version = "0.1.1-alpha.6"
 edition = "2024"
 rust-version = "1.89"
 license = "GPL-3.0-or-later"

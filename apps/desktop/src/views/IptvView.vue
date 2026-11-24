@@ -22,7 +22,7 @@ const router = useRouter()
 const { t } = useI18n()
 const { setSession } = usePlayerSession()
 
-const activeTab = shallowRef<'playlists' | 'plugins'>('playlists')
+const activeTab = shallowRef<'playlists' | 'plugins'>('plugins')
 const livePlugins = ref<PluginListEntry[]>([])
 const selectedLivePluginId = shallowRef<string>('')
 const pluginLiveSections = ref<HomeSection[]>([])
@@ -415,9 +415,12 @@ async function playChannel(ch: StoredIptvChannel): Promise<void> {
   })
 }
 
-onMounted(() => {
+onMounted(async () => {
   void refreshProfiles()
-  void refreshLivePlugins()
+  await refreshLivePlugins()
+  if (selectedLivePluginId.value && !pluginLiveSections.value.length) {
+    await selectLivePlugin(selectedLivePluginId.value)
+  }
 })
 
 onActivated(() => {
@@ -433,17 +436,6 @@ onActivated(() => {
         <button
           type="button"
           role="tab"
-          :aria-selected="activeTab === 'playlists'"
-          class="v-btn"
-          :class="{ 'v-btn-primary': activeTab === 'playlists' }"
-          @click="switchIptvTab('playlists')"
-        >
-          <Tv :size="15" aria-hidden="true" />
-          <span>{{ t('iptv.tab_playlists') }}</span>
-        </button>
-        <button
-          type="button"
-          role="tab"
           :aria-selected="activeTab === 'plugins'"
           class="v-btn"
           :class="{ 'v-btn-primary': activeTab === 'plugins' }"
@@ -452,6 +444,17 @@ onActivated(() => {
           <Radio :size="15" aria-hidden="true" />
           <span>{{ t('iptv.tab_plugins') }}</span>
           <span v-if="livePlugins.length" class="v-badge">{{ livePlugins.length }}</span>
+        </button>
+        <button
+          type="button"
+          role="tab"
+          :aria-selected="activeTab === 'playlists'"
+          class="v-btn"
+          :class="{ 'v-btn-primary': activeTab === 'playlists' }"
+          @click="switchIptvTab('playlists')"
+        >
+          <Tv :size="15" aria-hidden="true" />
+          <span>{{ t('iptv.tab_playlists') }}</span>
         </button>
       </div>
     </header>

@@ -1,12 +1,18 @@
 package dev.falsis.vessel
 
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -78,6 +84,7 @@ sealed interface OverlayRoute {
         val streamResult: StreamResult,
         val streamIndex: Int,
         val positionMs: Long,
+        val channelStreams: Map<String, List<StreamCandidate>> = emptyMap(),
     ) : OverlayRoute
 }
 
@@ -87,6 +94,12 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            window.attributes = window.attributes.apply {
+                layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+            }
+        }
+        hideSystemBars()
         handleIntent(intent)
 
         val repo = VesselRepository.get(this)
@@ -97,6 +110,20 @@ class MainActivity : ComponentActivity() {
                 onClearDeepLink = { deepLinkSource = null },
             )
         }
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) {
+            hideSystemBars()
+        }
+    }
+
+    private fun hideSystemBars() {
+        val controller = WindowCompat.getInsetsController(window, window.decorView)
+        controller.systemBarsBehavior =
+            WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        controller.hide(WindowInsetsCompat.Type.systemBars())
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -125,16 +152,28 @@ fun VesselAndroidApp(
     val snackbarHostState = remember { SnackbarHostState() }
 
     var selectedTab by remember { mutableIntStateOf(0) }
-    var overlay by remember { mutableStateOf<OverlayRoute?>(null) }
+    var overlayStack by remember { mutableStateOf<List<OverlayRoute>>(emptyList()) }
     var showSplash by remember { mutableStateOf(true) }
 
-    BackHandler(enabled = overlay != null) {
-        overlay = null
+    val overlay = overlayStack.lastOrNull()
+
+    fun pushOverlay(route: OverlayRoute) {
+        overlayStack = overlayStack + route
+    }
+
+    fun popOverlay() {
+        if (overlayStack.isNotEmpty()) {
+            overlayStack = overlayStack.dropLast(1)
+        }
+    }
+
+    BackHandler(enabled = overlayStack.isNotEmpty()) {
+        popOverlay()
     }
 
     LaunchedEffect(deepLinkSource) {
         if (!deepLinkSource.isNullOrBlank()) {
-            overlay = OverlayRoute.Extensions(deepLinkSource)
+            pushOverlay(OverlayRoute.Extensions(deepLinkSource))
             onClearDeepLink()
         }
     }
@@ -148,8 +187,16 @@ fun VesselAndroidApp(
     VesselTheme(themeSpec = theme) {
         CompositionLocalProvider(LocalLayoutDirection provides dir) {
             Box(modifier = Modifier.fillMaxSize()) {
-                Scaffold(snackbarHost = { SnackbarHost(snackbarHostState) }) { innerPadding ->
-                    Box(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
+                Scaffold(
+                    snackbarHost = { SnackbarHost(snackbarHostState) },
+                    contentWindowInsets = WindowInsets(0, 0, 0, 0),
+                ) { innerPadding ->
+                    val contentModifier = if (overlay is OverlayRoute.Player) {
+                        Modifier.fillMaxSize()
+                    } else {
+                        Modifier.fillMaxSize().padding(innerPadding)
+                    }
+                    Box(modifier = contentModifier) {
                         when (val activeOverlay = overlay) {
                             is OverlayRoute.Player -> PlayerScreen(
                                 repo = repo,
@@ -160,25 +207,34 @@ fun VesselAndroidApp(
                                 streamResult = activeOverlay.streamResult,
                                 initialStreamIndex = activeOverlay.streamIndex,
                                 initialPositionMs = activeOverlay.positionMs,
-                                onBack = { overlay = null },
+                                channelStreams = activeOverlay.channelStreams,
+                                onBack = { popOverlay() },
                                 onGoToDetails = {
-                                    overlay = OverlayRoute.Details(activeOverlay.pluginId, activeOverlay.nativeId)
+                                    val detailsRoute = OverlayRoute.Details(activeOverlay.pluginId, activeOverlay.nativeId)
+                                    val prevIsSameDetails = overlayStack.dropLast(1).lastOrNull() == detailsRoute
+                                    if (prevIsSameDetails) {
+                                        popOverlay()
+                                    } else {
+                                        overlayStack = overlayStack.dropLast(1) + detailsRoute
+                                    }
                                 },
                             )
                             is OverlayRoute.Details -> DetailsScreen(
                                 repo = repo,
                                 pluginId = activeOverlay.pluginId,
                                 nativeId = activeOverlay.nativeId,
-                                onBack = { overlay = null },
+                                onBack = { popOverlay() },
                                 onPlayStream = { detail, ep, streams, idx, posMs ->
-                                    overlay = OverlayRoute.Player(
-                                        pluginId = activeOverlay.pluginId,
-                                        nativeId = activeOverlay.nativeId,
-                                        detail = detail,
-                                        episode = ep,
-                                        streamResult = streams,
-                                        streamIndex = idx,
-                                        positionMs = posMs,
+                                    pushOverlay(
+                                        OverlayRoute.Player(
+                                            pluginId = activeOverlay.pluginId,
+                                            nativeId = activeOverlay.nativeId,
+                                            detail = detail,
+                                            episode = ep,
+                                            streamResult = streams,
+                                            streamIndex = idx,
+                                            positionMs = posMs,
+                                        ),
                                     )
                                 },
                             )
@@ -207,14 +263,16 @@ fun VesselAndroidApp(
                                             ),
                                         ),
                                     )
-                                    overlay = OverlayRoute.Player(dl.pluginId, dl.nativeId, offDetail, offEp, offStreams, 0, 0L)
+                                    pushOverlay(
+                                        OverlayRoute.Player(dl.pluginId, dl.nativeId, offDetail, offEp, offStreams, 0, 0L),
+                                    )
                                 },
-                                onBack = { overlay = null },
+                                onBack = { popOverlay() },
                             )
                             is OverlayRoute.Extensions -> ExtensionsScreen(
                                 repo = repo,
                                 initialSourceInput = activeOverlay.initialSource,
-                                onBack = { overlay = null },
+                                onBack = { popOverlay() },
                             )
                             null -> NavigationSuiteScaffold(
                                 navigationSuiteItems = {
@@ -240,7 +298,7 @@ fun VesselAndroidApp(
                                 when (TopTab.entries[selectedTab]) {
                                     TopTab.HOME -> HomeScreen(
                                         repo = repo,
-                                        onOpenDetails = { pid, nid -> overlay = OverlayRoute.Details(pid, nid) },
+                                        onOpenDetails = { pid, nid -> pushOverlay(OverlayRoute.Details(pid, nid)) },
                                         onResumeEntry = { entry ->
                                             scope.launch {
                                                 runCatching {
@@ -253,29 +311,31 @@ fun VesselAndroidApp(
                                                             episode = entry.progress.episode,
                                                             title = entry.progress.episodeTitle,
                                                         )
-                                                    overlay = OverlayRoute.Player(
-                                                        pluginId = entry.progress.media.pluginId,
-                                                        nativeId = entry.progress.media.nativeId,
-                                                        detail = detail,
-                                                        episode = ep,
-                                                        streamResult = sr,
-                                                        streamIndex = 0,
-                                                        positionMs = if (entry.progress.completed) 0L else entry.progress.positionMs,
+                                                    pushOverlay(
+                                                        OverlayRoute.Player(
+                                                            pluginId = entry.progress.media.pluginId,
+                                                            nativeId = entry.progress.media.nativeId,
+                                                            detail = detail,
+                                                            episode = ep,
+                                                            streamResult = sr,
+                                                            streamIndex = 0,
+                                                            positionMs = if (entry.progress.completed) 0L else entry.progress.positionMs,
+                                                        ),
                                                     )
                                                 }.onFailure {
-                                                    overlay = OverlayRoute.Details(entry.progress.media.pluginId, entry.progress.media.nativeId)
+                                                    pushOverlay(OverlayRoute.Details(entry.progress.media.pluginId, entry.progress.media.nativeId))
                                                 }
                                             }
                                         },
-                                        onOpenExtensions = { overlay = OverlayRoute.Extensions(null) },
+                                        onOpenExtensions = { pushOverlay(OverlayRoute.Extensions(null)) },
                                     )
                                     TopTab.SEARCH -> SearchScreen(
                                         repo = repo,
-                                        onOpenDetails = { pid, nid -> overlay = OverlayRoute.Details(pid, nid) },
+                                        onOpenDetails = { pid, nid -> pushOverlay(OverlayRoute.Details(pid, nid)) },
                                     )
                                     TopTab.LIBRARY -> LibraryScreen(
                                         repo = repo,
-                                        onOpenDetails = { pid, nid -> overlay = OverlayRoute.Details(pid, nid) },
+                                        onOpenDetails = { pid, nid -> pushOverlay(OverlayRoute.Details(pid, nid)) },
                                     )
                                     TopTab.LIVE_TV -> LiveTvScreen(
                                         repo = repo,
@@ -289,17 +349,17 @@ fun VesselAndroidApp(
                                             val liveStreams = StreamResult(
                                                 streams = listOf(StreamCandidate(url = url, kind = "auto", label = title, isDefault = true)),
                                             )
-                                            overlay = OverlayRoute.Player("iptv", url, liveDetail, liveEp, liveStreams, 0, 0L)
+                                            pushOverlay(OverlayRoute.Player("iptv", url, liveDetail, liveEp, liveStreams, 0, 0L))
                                         },
-                                        onPlayLiveStream = { pid, detail, ep, sr ->
-                                            overlay = OverlayRoute.Player(pid, detail.nativeId, detail, ep, sr, 0, 0L)
+                                        onPlayLiveStream = { pid, detail, ep, sr, channelStreams ->
+                                            pushOverlay(OverlayRoute.Player(pid, detail.nativeId, detail, ep, sr, 0, 0L, channelStreams))
                                         },
-                                        onOpenDetails = { pid, nid -> overlay = OverlayRoute.Details(pid, nid) },
+                                        onOpenDetails = { pid, nid -> pushOverlay(OverlayRoute.Details(pid, nid)) },
                                     )
                                     TopTab.SETTINGS -> SettingsScreen(
                                         repo = repo,
-                                        onOpenDownloads = { overlay = OverlayRoute.Downloads },
-                                        onOpenExtensions = { overlay = OverlayRoute.Extensions(null) },
+                                        onOpenDownloads = { pushOverlay(OverlayRoute.Downloads) },
+                                        onOpenExtensions = { pushOverlay(OverlayRoute.Extensions(null)) },
                                     )
                                 }
                             }

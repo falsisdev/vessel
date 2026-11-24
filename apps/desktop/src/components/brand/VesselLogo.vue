@@ -21,6 +21,5 @@ withDefaults(
     <rect x="6" y="7.5" width="5.5" height="3.2" rx="0.9" fill="var(--vessel-accent-secondary)" />
     <rect x="12.5" y="7.5" width="5.5" height="3.2" rx="0.9" fill="currentColor" opacity="0.92" />
     <path d="M3.5 12L12 20.8L20.5 12H16.2L12 16.4L7.8 12H3.5Z" fill="currentColor" />
-    <path d="M12 12V20.5" stroke="var(--vessel-bg-base)" stroke-width="1.2" />
   </svg>
 </template>

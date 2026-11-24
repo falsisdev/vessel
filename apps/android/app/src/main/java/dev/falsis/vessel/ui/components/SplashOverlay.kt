@@ -206,12 +206,6 @@ fun VesselSplashOverlay(
                         close()
                     }
                     drawPath(path = bowPath, color = palette.textPrimary.copy(alpha = bowScaleX))
-                    drawLine(
-                        color = palette.bgBase.copy(alpha = bowScaleX),
-                        start = Offset(12f * logoScale, 12f * logoScale),
-                        end = Offset(12f * logoScale, 20.5f * logoScale),
-                        strokeWidth = 1.2f * logoScale,
-                    )
                 }
             }
         }
