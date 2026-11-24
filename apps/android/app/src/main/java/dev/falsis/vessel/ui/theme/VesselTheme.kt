@@ -1,5 +1,6 @@
 package dev.falsis.vessel.ui.theme
 
+import android.app.Activity
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ColorScheme
@@ -11,9 +12,12 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
 import dev.falsis.vessel.data.ThemeColors
 import dev.falsis.vessel.data.ThemeSpec
 
@@ -162,6 +166,18 @@ fun VesselTheme(
     } else {
         val p = themeSpec.toPalette()
         p.toColorScheme() to p
+    }
+
+    val view = LocalView.current
+    if (!view.isInEditMode) {
+        SideEffect {
+            val window = (view.context as? Activity)?.window
+            if (window != null) {
+                val controller = WindowCompat.getInsetsController(window, view)
+                controller.isAppearanceLightStatusBars = !palette.isDark
+                controller.isAppearanceLightNavigationBars = !palette.isDark
+            }
+        }
     }
 
     CompositionLocalProvider(LocalVesselPalette provides palette) {

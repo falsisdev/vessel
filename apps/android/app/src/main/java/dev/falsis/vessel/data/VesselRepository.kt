@@ -292,6 +292,13 @@ class VesselRepository private constructor(private val appContext: Context) {
     suspend fun installSource(rawInput: String, repoId: String? = null): InstallResult = withContext(Dispatchers.IO) {
         val res = json.decodeFromString<InstallResult>(requireCore().installSourceJson(rawInput, repoId))
         refreshCoreState()
+        val curSel = _uiPreferences.value.home.selectedPlugins
+        if (curSel != null) {
+            val nextSel = if (curSel.isEmpty()) null else (curSel + res.pluginId).distinct()
+            runCatching {
+                saveUiPreferences(_uiPreferences.value.copy(home = _uiPreferences.value.home.copy(selectedPlugins = nextSel)))
+            }
+        }
         res
     }
 
