@@ -26,6 +26,11 @@
   </categories>
   <content_rating type="oars-1.1" />
   <releases>
+    <release version="0.1.2" date="2026-11-24">
+      <description>
+        <p>Desktop-parity Android Home catalog feed selector, spotlight hero source &amp; shelf ordering, and standard SemVer release.</p>
+      </description>
+    </release>
     <release version="0.1.1-alpha.6" date="2026-11-24">
       <description>
         <p>Desktop-parity Android player, live stream proxy &amp; HLS sniffing fixes, background skip-segment enrichment, Live TV plugins tab first, fullscreen Android mode, and unified Vessel logo.</p>
