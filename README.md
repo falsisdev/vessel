@@ -16,9 +16,9 @@
   <a href="LICENSE">GPL-3.0 License</a>
 </p>
 
-**Vessel** is a local-first, cross-platform streaming and media center built from the ground up in **Rust**, **Tauri v2**, and **Vue 3 / TypeScript**.
+**Vessel** is a local-first, cross-platform streaming and media center built from the ground up in **Rust**, **Tauri v2**, **Vue 3 / TypeScript**, and **Kotlin Jetpack Compose (`UniFFI`)**.
 
-> **Project Status (`v0.1.1-alpha.4`):** Core Engine (**Milestones 0–5**) and the **Desktop MVP (`apps/desktop`)** for macOS & Windows are active and downloadable. Currently expanding community plugin tooling toward **v1.0 Desktop Packaging (Milestone 6.1)**, followed by **Android / Android TV via UniFFI (Milestone 6.2)**.
+> **Project Status (`v0.1.3`):** Core Engine (`crates/vessel-*`), the **Desktop App (`apps/desktop`)** for macOS, Windows & Linux, and the **Android App (`apps/android` via `vessel-ffi` UniFFI)** are active and downloadable on [GitHub Releases](https://github.com/falsisdev/vessel/releases). Next major milestones include cloud device sync, tracker scrobbling (Simkl/Trakt/AniList/MAL/Kitsu), Android TV remote navigation, and iOS/iPadOS.
 > The earlier Go + SwiftUI prototype is preserved on `archive/v1-go` (`v1-go-archive` tag) and `archive/v1-go-ui-polish` (`v1-go-ui-polish-archive` tag).
 
 ---
@@ -38,18 +38,19 @@
 - **Isolated JS/TS Plugin Runtime (`vessel-plugin-rt`):** Powered by `rquickjs` + `oxc` TypeScript stripping with SQLite compile caching, ES6 module loading (local Dev Mode directories & `.plugin.vessel` zip packages), per-sandbox resource limits (`32 MiB` heap ceiling, `512 KiB` stack, `15s` execution watchdog), an LRU warm plugin pool (`18` plugins, `5-minute` idle TTL), Nuvio scraper compatibility shims (`cheerio`, `axios`, `CryptoJS`, `fetch`), and parallel streaming search with cancellation.
 - **Built-in Plugin SDK (`vessel.*`):** `vessel.http` (with DNS-resolved SSRF protection and per-domain user permission prompts), `vessel.html.parse` (`scraper` CSS selectors), `vessel.crypto` (AES-CBC/GCM/CTR/ECB, HMAC-SHA256, MD5/SHA1/SHA256, RC4, Hex/Base64), `vessel.storage` (isolated KV + `settingsSchema` values), `vessel.unpack` (Dean Edwards P.A.C.K.E.R), and `vessel.evalWithEnv`.
 - **Local HTTP / HLS Proxy (`vessel-proxy`):** Binds `127.0.0.1:0` using `axum` + `reqwest` (`rustls`), ephemeral stream tokens, `HMAC-SHA256` signed sub-URLs (open-relay protected), HTTP `206` Range pass-through, `.m3u8` playlist rewriting (`#EXT-X-KEY`, `#EXT-X-MAP`, `#EXT-X-MEDIA`), offline loopback file serving with path-traversal guards, and Smart Proxy header injection.
-- **Metadata & Skip-Segment Engine (`vessel-metadata`):** Zero-key **AniList**, **Cinemeta** (IMDb), and **AniZip** enrichment plus optional **TMDB** API key support, `Fix Match` manual overrides, `(season, episode) ↔ absolute_episode` coordinate translation, and multi-source skip segments (**`Plugin > TheIntroDB > IntroDB > AniSkip`**) supporting **Intro**, **Recap**, **Credits**, and **Preview** with duration, season, confidence, and negative-flag guards.
+- **Metadata & Skip-Segment Engine (`vessel-metadata`):** Zero-key **AniList**, **Cinemeta (IMDb)**, **MyAnimeList (Jikan)**, **Kitsu**, and **AniZip** enrichment plus optional **TMDB** API key & **Simkl** Client ID support, interactive 6-provider **Fix Match** title search & manual ID overrides, `(season, episode) ↔ absolute_episode` coordinate translation, and multi-source skip segments (**`Plugin > TheIntroDB > IntroDB > AniSkip`**) supporting **Intro**, **Recap**, **Credits**, and **Preview** with duration, season, confidence, and negative-flag guards.
 - **Persistence & Backups (`vessel-storage`):** `rusqlite` (`bundled` + `WAL` + `FTS5`) single-writer actor managing library watch statuses, dual-coordinate watch progress, episode snapshots for automatic next-episode advancement, settings, domain grants, metadata cache, IPTV channels, and `.backup.vessel` JSON export/import (`Merge` & `Overwrite`).
 - **IPTV & EPG (`vessel-iptv`):** Xtream Codes & M3U+ playlist ingestion, XMLTV EPG parsing (Now/Next), custom per-profile `User-Agent`, and instant SQLite `FTS5` channel search.
 - **Offline Downloader (`vessel-downloader`):** Concurrent HTTP `Range` multipart chunk downloads + resume, 8-worker parallel HLS segment downloader with AES-128 decryption, master `EXT-X-MEDIA` audio & subtitle playlist bundling, parallel external subtitle downloads, cooperative instant `pause` / `delete` cancellation, drag-and-drop queue priority reordering, and configurable download folder.
 - **External `mpv` Backend (`vessel-player-mpv`):** JSON IPC controller (`time-pos`, `eof`, `sub-add`, `sub-delay`) for native `mpv` handoff when `mpv` is installed.
 
-### Desktop Application (`apps/desktop` — Tauri v2 + Vue 3 / TypeScript)
-- **Nuvio-Inspired Cinema Home:** Cargo-ship-to-bow-logo splash reveal, crossfading spotlight hero showcase (with configurable Hero & Shelf sources and drag-and-drop shelf ordering), **Smart Continue Watching** rail (hides finished movies/finales, advances shows to the next episode, offers right-click/long-press *Go to Details* context menu, manual Continue Watching editor with live episode durations, remaining time, and progress bars), skeleton shimmer states, hidden scrollbars, and horizontal content shelves with smooth fade route transitions.
-- **Full-Screen CloudStream-Style Player (`/watch`):** Auto-hiding HUD, screen lock, one-click **Skip Intro / Recap / Credits / Preview** button, direct **Back to Details** navigation, in-player **Episodes** drawer (thumbnails & descriptions), live **Sources** switcher, multi-track **Audio** selector (HLS & native WebKit), **Subtitles & Sync** (`-500ms / +500ms`) with full typography/color/edge/backdrop/offset styling, touchpad gestures (swipe seek, vertical volume, pinch fill/fit, optional **Natural Touchpad Scrolling** inversion), playback speed (`0.5x–2x`), keyboard shortcuts, and external **MPV** handoff.
-- **Rich Details & Library:** Seamless atmospheric backdrop, external ID badges, **Fix Match** modal, contextual **Resume** vs **Watch** CTA, 3 episode view modes (`Grid Cards`, `Detailed List`, `Compact Rows`) with per-episode watch progress bars & watched checkmarks, CloudStream-style **Source Resolver** sheet, **Quick Watch Status** card menu (`Watching`, `Plan to Watch`, `Completed`, `On Hold`, `Dropped`) across Home & Search, and top-left one-click library removal.
-- **4-Level Offline Downloads Manager:** Hierarchical **`Content → Season → Episode → Streams`** tree (and **`Content → Streams`** for movies), expandable rows with stream-label offline playback, dedicated offline **Continue Watching** rail, watched checkmarks, drag-and-drop **Download Queue** reordering, instant Pause/Resume/Delete actions, and configurable storage directory.
-- **Live TV, Search, Extensions & Settings:** Global streaming **Search** (`Cmd/Ctrl+K`) with media-type & single-plugin filters; **Live TV** (`M3U/Xtream` + `XMLTV EPG` + dedicated `Live TV Plugins` tab); **Extensions** manager (`https://`, `gh:`, `gl:`, `registry.json` / HTTP shortcodes, `vessel://install`, or local Dev Mode folder); **Settings** with **12 built-in languages** (`en`, `tr`, `es`, `de`, `fr`, `it`, `ru`, `ja`, `pt`, `zh`, `ar`, `fa`), **5 built-in themes** (`Catppuccin Mocha`, `Catppuccin Latte`, `OLED Pitch Black`, `Nord`, `Tokyo Night`) + custom `.theme.vessel` import, modular navigation (`Expanded`, `Pinned`, `Floating Bottom Dock`, `Collapsed Rail`, `Top Navbar`, `Hidden`), live subtitle preview box, custom CSS injection, GitHub Release auto-updater with patch notes, and `.backup.vessel` export/import.
+### Desktop (`apps/desktop`) & Android (`apps/android`) Applications
+- **Nuvio-Inspired Cinema Home:** Opaque cargo-ship-to-bow-logo splash reveal, crossfading spotlight hero with smooth **Ken Burns zoom**, customizable Hero mode (`Full` / `Compact` / `Hidden`) & sources, distinct **Watch Now** (direct stream resolution) vs **More Info** actions, drag-and-drop shelf ordering, **Smart Continue Watching** with manual progress editor, and VOD-only Home isolation (keeping Live TV dedicated to the Live TV screen).
+- **Full-Screen CloudStream-Style Player:** Auto-hiding HUD, screen lock, one-click **Skip Intro / Recap / Credits / Preview**, direct **Go to Details** (automatically omitted for Live TV), in-player **Episodes / Channels**, live **Sources** switcher (including cross-plugin linked sources), multi-track **Audio**, **Subtitles & Sync** (`-500ms / +500ms`) with full styling, gestures, external **MPV** handoff on Desktop, and landscape **Media3 ExoPlayer** on Android.
+- **Rich Details, Fix Match & Multi-Source Linking:** Atmospheric backdrop, external ID badges (`TMDB`, `IMDb`, `Simkl`, `AniList`, `MAL`, `Kitsu`), top-right `⋮` actions menu with 6-provider **Fix Match** title search and per-media **Include Streams From Other Sources** (saved per device so streams from another enabled plugin merge into the same Details page), 3 episode view modes, CloudStream-style **Source Resolver**, and **Quick Watch Status** card menus.
+- **4-Level Offline Downloads Manager:** Hierarchical **`Content → Season → Episode → Streams`** tree (`Content → Streams` for movies), expandable rows with stream-label offline playback, dedicated offline **Continue Watching** rail, drag-and-drop **Download Queue** reordering, instant Pause/Resume/Delete, and configurable storage directory.
+- **Live TV (`Live TV Plugins` + `M3U/Xtream` + `EPG`):** Live TV Plugins tab first with unlimited channels/categories, unified **Favorites** bar pinned at the top upon opening, configurable Live TV layout (**Grid**, **Compact List**, **Large Tiles**, columns, density, logos/category toggles), drag-and-drop plugin & category ordering, and direct-to-player streaming.
+- **Customization & Updater:** **12 built-in languages**, **5 built-in themes** (+ **Dynamic Material You** on Android, `.theme.vessel` import), modular navigation (including **Floating Bottom Navbar** toggle on both Desktop & Android), live subtitle preview, custom CSS injection on Desktop, built-in **GitHub Release auto-updater** (`.dmg`, `.exe`, `.apk`), and `.backup.vessel` export/import.
 
 ---
 
@@ -91,18 +92,20 @@ vessel/
 │   ├── vessel-iptv         # Xtream Codes, M3U+, XMLTV EPG, FTS5 channel search
 │   ├── vessel-downloader   # Range resume & parallel AES-128 HLS offline downloader with instant cancel
 │   ├── vessel-player-mpv   # mpv JSON IPC playback backend
-│   └── vessel-engine       # Pure-Rust VesselEngine facade orchestrating all subsystems
+│   ├── vessel-engine       # Pure-Rust VesselEngine facade orchestrating all subsystems
+│   └── vessel-ffi          # UniFFI library powering Android native Kotlin bindings
 ├── apps/
-│   └── desktop/            # Tauri v2 + Vue 3 / TypeScript desktop application
+│   ├── desktop/            # Tauri v2 + Vue 3 / TypeScript desktop application
+│   └── android/            # Kotlin Jetpack Compose + Media3 ExoPlayer Android app
 └── docs/
     └── wiki/               # Multilingual GitHub Wiki sources (English-first + 11 languages)
 ```
 
 ---
 
-## Installation (Prebuilt Desktop Releases)
+## Installation (Prebuilt Releases)
 
-Prebuilt desktop installers for **macOS** (`.dmg` for Apple Silicon & Intel), **Windows** (`-setup.exe`), and **Linux** (`.AppImage`, `.deb`, `.rpm`, and `.flatpak` bundle — starting from upcoming Linux CI releases) are published on the [GitHub Releases](https://github.com/falsisdev/vessel/releases) page.
+Prebuilt desktop installers for **macOS** (`.dmg` for Apple Silicon & Intel), **Windows** (`-setup.exe`), **Linux** (`.AppImage`, `.deb`, `.rpm`, and `.flatpak`), and **Android** (`.apk`) are published on the [GitHub Releases](https://github.com/falsisdev/vessel/releases) page.
 
 ### Linux Note (`.AppImage` & `.flatpak`)
 - **AppImage:** Make executable with `chmod +x Vessel_*.AppImage` and launch directly.
@@ -169,11 +172,13 @@ See the full [Plugin Development SDK](https://github.com/falsisdev/vessel/wiki/P
 
 ---
 
-## Roadmap (Milestone 6+)
+## Roadmap
 
-- **Milestone 6.1 — Real Plugins & Desktop v1.0:** Production community plugins, Windows `OsKeyringSecretStore`, optional embedded `MpvEmbeddedBackend`, and stable `.dmg` / `.msi` / `.exe` release packaging.
-- **Milestone 6.2 — Android & Android TV:** `crates/vessel-ffi` (`UniFFI`) + `apps/android` (`Kotlin Jetpack Compose` + `Compose for TV` with `mpvkit` / `Media3 ExoPlayer`).
-- **Milestone 6.3 — Long-Term:** `iOS` (`MPVKit` LGPL), Torrent / Debrid / Magnet support, Trakt / Simkl / AniList / MAL sync, external subtitle providers (OpenSubtitles / SubDL), and LAN Sync.
+- **Cloud Sync:** Google Drive account linking for cross-device library, watch progress, linked sources, and preferences sync.
+- **Tracker Integration:** Bidirectional scrobbling, matching, library status edits, and auto-sync with **Simkl**, **Trakt**, **AniList**, **MyAnimeList**, and **Kitsu**.
+- **Android TV:** Full D-pad focus & remote navigation experience built on shared `vessel-ffi` + Compose for TV.
+- **Performance & Media Optimizations:** Expanded player/runtime optimizations and stream extractor polish.
+- **iOS & iPadOS:** Native SwiftUI + `MPVKit` shell powered by `vessel-ffi` `.xcframework`.
 
 ---
 

@@ -3,8 +3,11 @@ package dev.falsis.vessel.ui.theme
 import android.app.Activity
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Shapes
+import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
@@ -17,6 +20,10 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
 import dev.falsis.vessel.data.ThemeColors
 import dev.falsis.vessel.data.ThemeSpec
@@ -180,9 +187,33 @@ fun VesselTheme(
         }
     }
 
+    val VesselCompactTypography = Typography(
+        headlineMedium = TextStyle(fontSize = 23.sp, lineHeight = 28.sp, fontWeight = FontWeight.ExtraBold),
+        headlineSmall = TextStyle(fontSize = 19.sp, lineHeight = 24.sp, fontWeight = FontWeight.Bold),
+        titleLarge = TextStyle(fontSize = 17.sp, lineHeight = 22.sp, fontWeight = FontWeight.Bold),
+        titleMedium = TextStyle(fontSize = 15.sp, lineHeight = 20.sp, fontWeight = FontWeight.SemiBold),
+        titleSmall = TextStyle(fontSize = 13.5.sp, lineHeight = 18.sp, fontWeight = FontWeight.SemiBold),
+        bodyLarge = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
+        bodyMedium = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+        bodySmall = TextStyle(fontSize = 11.5.sp, lineHeight = 16.sp),
+        labelLarge = TextStyle(fontSize = 12.5.sp, lineHeight = 16.sp, fontWeight = FontWeight.SemiBold),
+        labelMedium = TextStyle(fontSize = 11.5.sp, lineHeight = 15.sp, fontWeight = FontWeight.Medium),
+        labelSmall = TextStyle(fontSize = 10.5.sp, lineHeight = 14.sp, fontWeight = FontWeight.Medium),
+    )
+
+    val VesselShapes = Shapes(
+        extraSmall = RoundedCornerShape(6.dp),
+        small = RoundedCornerShape(9.dp),
+        medium = RoundedCornerShape(12.dp),
+        large = RoundedCornerShape(16.dp),
+        extraLarge = RoundedCornerShape(22.dp),
+    )
+
     CompositionLocalProvider(LocalVesselPalette provides palette) {
         MaterialTheme(
             colorScheme = colorScheme,
+            typography = VesselCompactTypography,
+            shapes = VesselShapes,
             content = content,
         )
     }

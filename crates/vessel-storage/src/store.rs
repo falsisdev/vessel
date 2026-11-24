@@ -570,4 +570,64 @@ mod tests {
         assert_eq!(all_ep_rows.len(), 2);
         assert!(all_ep_rows.iter().all(|row| row.completed));
     }
+
+    #[tokio::test]
+    async fn continue_watching_orders_newest_first_even_when_timestamp_empty() {
+        let actor = StorageActor::open_in_memory().await.expect("open actor");
+        let storage = SqliteStorage::new(actor);
+        let anthology = PluginId::new("anthology").expect("valid plugin id");
+
+        let older = MediaRef::new(anthology.clone(), "movie/older").expect("older ref");
+        let newer = MediaRef::new(anthology.clone(), "movie/newer").expect("newer ref");
+
+        storage
+            .upsert_watch_progress(&PlaybackProgress {
+                media: older.clone(),
+                stream_id: "mv-old".into(),
+                canonical_id: None,
+                season: 0,
+                episode: 0,
+                absolute_episode: None,
+                title: Some("Older Entry".into()),
+                poster_url: None,
+                backdrop_url: None,
+                episode_title: None,
+                position_ms: 60_000,
+                duration_ms: 1_800_000,
+                completed: false,
+                last_watched_at: "2026-11-24T09:00:00Z".into(),
+            })
+            .await
+            .expect("save older progress");
+
+        // Simulates callers omitting `last_watched_at`; storage fills current UTC ISO timestamp.
+        storage
+            .upsert_watch_progress(&PlaybackProgress {
+                media: newer.clone(),
+                stream_id: "mv-new".into(),
+                canonical_id: None,
+                season: 0,
+                episode: 0,
+                absolute_episode: None,
+                title: Some("Newer Entry".into()),
+                poster_url: None,
+                backdrop_url: None,
+                episode_title: None,
+                position_ms: 90_000,
+                duration_ms: 1_800_000,
+                completed: false,
+                last_watched_at: String::new(),
+            })
+            .await
+            .expect("save newer progress");
+
+        let cw = storage
+            .list_continue_watching(12)
+            .await
+            .expect("list continue watching");
+        assert_eq!(cw.len(), 2);
+        assert_eq!(cw[0].media.native_id, "movie/newer");
+        assert_eq!(cw[1].media.native_id, "movie/older");
+        assert!(!cw[0].last_watched_at.trim().is_empty());
+    }
 }

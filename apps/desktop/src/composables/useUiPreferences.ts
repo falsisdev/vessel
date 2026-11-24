@@ -7,6 +7,7 @@ export function defaultUiPreferences(): UiPreferences {
   return {
     shell: {
       layout: 'expanded_sidebar',
+      mobileNavLayout: 'standard',
       visibleModules: ['home', 'search', 'library', 'live_tv', 'downloads', 'extensions'],
       density: 'comfortable',
       fontScalePercent: 100,
@@ -65,6 +66,16 @@ export function defaultUiPreferences(): UiPreferences {
       customCssEnabled: false,
       customCss: '',
     },
+    liveTv: {
+      pluginOrder: [],
+      sectionOrderByPlugin: {},
+      favoriteChannels: [],
+      viewMode: 'grid',
+      density: 'comfortable',
+      columns: undefined,
+      showLogos: true,
+      showCategories: true,
+    },
   }
 }
 
@@ -114,6 +125,21 @@ export function useUiPreferences() {
           playback: { ...defaults.playback, ...(loaded.playback ?? {}) },
           subtitles: { ...defaults.subtitles, ...(loaded.subtitles ?? {}) },
           advanced: { ...defaults.advanced, ...(loaded.advanced ?? {}) },
+          liveTv: {
+            pluginOrder: [...(loaded.liveTv?.pluginOrder ?? defaults.liveTv.pluginOrder)],
+            sectionOrderByPlugin: {
+              ...defaults.liveTv.sectionOrderByPlugin,
+              ...(loaded.liveTv?.sectionOrderByPlugin ?? {}),
+            },
+            favoriteChannels: [
+              ...(loaded.liveTv?.favoriteChannels ?? defaults.liveTv.favoriteChannels),
+            ],
+            viewMode: loaded.liveTv?.viewMode ?? defaults.liveTv.viewMode,
+            density: loaded.liveTv?.density ?? defaults.liveTv.density,
+            columns: loaded.liveTv?.columns ?? defaults.liveTv.columns,
+            showLogos: loaded.liveTv?.showLogos ?? defaults.liveTv.showLogos,
+            showCategories: loaded.liveTv?.showCategories ?? defaults.liveTv.showCategories,
+          },
         }
       } finally {
         preferencesLoaded.value = true

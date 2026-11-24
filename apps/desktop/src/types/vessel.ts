@@ -26,7 +26,14 @@ export type UiDensity = 'compact' | 'comfortable' | 'spacious'
 export type CornerStyle = 'sharp' | 'rounded' | 'pill'
 export type HomePreset = 'default' | 'minimal_focus' | 'anime_first' | 'iptv_hub'
 export type HeroBannerMode = 'full' | 'compact' | 'hidden'
-export type CardAspectRatio = 'poster_2x3' | 'wide_16x9' | 'square'
+export type CardAspectRatio =
+  | 'poster_2x3'
+  | 'portrait_3x4'
+  | 'portrait_4x5'
+  | 'square'
+  | 'classic_4x3'
+  | 'wide_16x9'
+  | 'cinema_21x9'
 export type EpisodeListLayout = 'grid_cards' | 'detailed_list' | 'compact_rows'
 export type PlayClickBehavior = 'quick_start_best' | 'always_ask_source'
 
@@ -37,6 +44,7 @@ export interface ExternalIds {
   imdb?: string
   tvdb?: number
   kitsu?: number
+  simkl?: number
 }
 
 export interface MediaSummary {
@@ -125,12 +133,55 @@ export interface StreamCandidate {
   needsExtractor?: boolean
   subtitles: SubtitleTrack[]
   skipSegments?: SkipSegment[]
+  pluginId?: string
+  pluginName?: string
+}
+
+export type MetadataProviderFilter =
+  | 'all'
+  | 'tmdb'
+  | 'imdb'
+  | 'simkl'
+  | 'anilist'
+  | 'mal'
+  | 'kitsu'
+
+export interface MetadataSearchHit {
+  canonicalId: string
+  provider: string
+  title: string
+  originalTitle?: string
+  year?: number
+  mediaType?: string
+  poster?: string
+  synopsis?: string
+  externalIds: ExternalIds
+}
+
+export interface MetadataSearchResponse {
+  hits: MetadataSearchHit[]
+  notes: string[]
+}
+
+export interface LinkedMediaSource {
+  pluginId: string
+  pluginName?: string
+  nativeId: string
+  title: string
+  poster?: string
+}
+
+export interface SearchPage {
+  items: MediaSummary[]
+  hasMore: boolean
 }
 
 export interface StreamResult {
   streams: StreamCandidate[]
   subtitles: SubtitleTrack[]
   skipSegments?: SkipSegment[]
+  pluginId?: string
+  pluginName?: string
 }
 
 export interface HomeSection {
@@ -377,6 +428,7 @@ export interface ThemeSpec {
 export interface UiPreferences {
   shell: {
     layout: NavLayout
+    mobileNavLayout?: 'standard' | 'floating_bottom'
     visibleModules: NavModule[]
     density: UiDensity
     fontScalePercent: number
@@ -435,6 +487,26 @@ export interface UiPreferences {
     customCssEnabled: boolean
     customCss: string
   }
+  liveTv: {
+    pluginOrder: string[]
+    sectionOrderByPlugin: Record<string, string[]>
+    favoriteChannels: FavoriteLiveChannel[]
+    viewMode: LiveTvViewMode
+    density: UiDensity
+    columns?: number
+    showLogos: boolean
+    showCategories: boolean
+  }
+}
+
+export type LiveTvViewMode = 'grid' | 'compact_list' | 'showcase_tiles'
+
+export interface FavoriteLiveChannel {
+  pluginId: string
+  nativeId: string
+  title: string
+  poster?: string
+  sectionTitle?: string
 }
 
 export type CardPreferences = UiPreferences['cards']

@@ -2,7 +2,9 @@
 
 # Player Controls & Skip Segments
 
-Vessel's full-screen `/watch` player delivers a unified playback surface supporting **HLS (`.m3u8`)**, **MPEG-TS**, **MP4 / WebM**, local **Offline Streams**, **Multi-Audio**, styled **Subtitles**, **Touchpad Gestures**, **Automated Intro/Recap/Credits/Preview Skipping**, and external **`mpv`** handoff.
+Vessel's unified playback surface on Desktop (`/watch` WebKit + `mpv`) and Android (landscape-first **Media3 ExoPlayer** `PlayerActivity`) supports **HLS (`.m3u8`)**, **MPEG-TS**, **MP4 / WebM**, local **Offline Streams**, **Multi-Audio**, styled **Subtitles**, **Touchpad / Touch Gestures**, **Automated Intro/Recap/Credits/Preview Skipping**, and external **`mpv`** handoff on Desktop.
+
+*(Note: Dedicated Live TV plugin streams launch directly into the player without Details links, multi-audio drawers, or offline download controls.)*
 
 ---
 

@@ -6,7 +6,8 @@
 
 ## 1. Tam Ekran `/watch` Oynatıcı Özellikleri
 
-- **OynatmaMotorları:** HLS (`.m3u8`), MPEG-TS, MP4/WebM, yerel çevrimdışı yayınlar ve tek tıkla harici **`mpv`** aktarımı (`vessel-player-mpv` JSON IPC üzerinden izleme süresini senkronize tutar).
+- **Çok Platformlu Oynatıcı (Masaüstü & Android):** Masaüstünde WebKit `/watch` ve harici **`mpv`** aktarımı (`vessel-player-mpv`); Android'de varsayılan olarak yatay (**landscape**) açılan **Media3 ExoPlayer** arayüzü ve kompakt kontrol çekmeceleri. *(Not: Canlı TV eklenti kanalları içerik detay sayfasına uğramadan doğrudan oynatıcıyı açar; canlı yayınlarda içerik linki, ses parçası seçimi ve indirme butonu gizlenir.)*
+- **OynatmaMotorları:** HLS (`.m3u8`), MPEG-TS, MP4/WebM ve yerel çevrimdışı yayınlar.
 - **İçerik Sayfasına Doğrudan Dönüş:** Oynatılan videodan ayrılmadan üst bardaki **Detaylar** butonuna basarak doğrudan o içeriğin detay sayfasına dönebilirsiniz.
 - **Ses Parçaları Seçimi:** HLS master manifestlerinden veya yerel video öğesinden gelen çoklu ses kanallarını oynatıcı içindeki **Ses** çekmecesinden seçebilirsiniz.
 - **Gelişmiş Altyazılar & Önizleme:** `.srt`, `.vtt`, `.ass`, `.ssa` desteği; oynatıcı içi `-500ms / +500ms` gecikme ayarı; **Ayarlar → Altyazı Özelleştirme** altında yazı tipi, boyut, kenar stili (`Outline`, `Shadow`, `Box`, `Clean`), arka plan opaklığı, alt boşluk ve **canlı altyazı önizleme kutusu**.

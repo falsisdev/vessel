@@ -57,6 +57,7 @@ export const vesselApi = {
   setAlwaysProxy: (enabled: boolean) => call<void>('set_always_proxy', { enabled }),
   setMetadataEnabled: (enabled: boolean) => call<void>('set_metadata_enabled', { enabled }),
   setTmdbApiKey: (apiKey: string) => call<void>('set_tmdb_api_key', { apiKey }),
+  setSimklClientId: (clientId: string) => call<void>('set_simkl_client_id', { clientId }),
   setDownloadDirectory: (path?: string | null) =>
     call<string>('set_download_directory', { path: path ?? null }),
   pickDownloadDirectory: () => call<string | null>('pick_download_directory'),
@@ -99,6 +100,46 @@ export const vesselApi = {
     call<MediaDetail>('get_details_with_enrichment', { pluginId, nativeId, preferredLang }),
   getStreams: (pluginId: string, episodeId: string) =>
     call<StreamResult>('get_streams', { pluginId, episodeId }),
+  getStreamsWithLinked: (payload: {
+    pluginId: string
+    nativeId: string
+    episodeId: string
+    season: number
+    episode: number
+    absoluteEpisode?: number
+    isMovie: boolean
+  }) => call<StreamResult>('get_streams_with_linked', payload),
+  searchPluginSync: (pluginId: string, query: string, page = 1) =>
+    call<{ items: import('@/types/vessel').MediaSummary[]; hasMore: boolean }>('search_plugin_sync', {
+      pluginId,
+      query,
+      page,
+    }),
+  searchMetadata: (
+    query: string,
+    provider: import('@/types/vessel').MetadataProviderFilter = 'all',
+    preferredLang = 'en',
+  ) =>
+    call<import('@/types/vessel').MetadataSearchResponse>('search_metadata', {
+      query,
+      provider,
+      preferredLang,
+    }),
+  getLinkedSources: (pluginId: string, nativeId: string) =>
+    call<import('@/types/vessel').LinkedMediaSource[]>('get_linked_sources', {
+      pluginId,
+      nativeId,
+    }),
+  setLinkedSources: (
+    pluginId: string,
+    nativeId: string,
+    sources: import('@/types/vessel').LinkedMediaSource[],
+  ) =>
+    call<import('@/types/vessel').LinkedMediaSource[]>('set_linked_sources', {
+      pluginId,
+      nativeId,
+      sources,
+    }),
   setMetadataOverride: (
     pluginId: string,
     nativeId: string,

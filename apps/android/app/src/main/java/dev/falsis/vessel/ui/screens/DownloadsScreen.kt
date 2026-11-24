@@ -1,5 +1,7 @@
 package dev.falsis.vessel.ui.screens
 
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -29,7 +31,6 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -46,13 +47,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import dev.falsis.vessel.data.Episode
 import dev.falsis.vessel.data.LocalPlaybackBundle
-import dev.falsis.vessel.data.MediaDetail
 import dev.falsis.vessel.data.StoredDownload
-import dev.falsis.vessel.data.StreamCandidate
-import dev.falsis.vessel.data.StreamResult
 import dev.falsis.vessel.data.VesselRepository
+import dev.falsis.vessel.ui.components.VesselCompactIconButton
+import dev.falsis.vessel.ui.components.vesselTopSafeInset
 import dev.falsis.vessel.ui.i18n.VesselI18n
 import dev.falsis.vessel.ui.theme.LocalVesselPalette
 import kotlinx.coroutines.launch
@@ -114,8 +113,8 @@ fun DownloadsScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(palette.bgBase)
-            .padding(16.dp),
-        contentPadding = PaddingValues(bottom = 24.dp),
+            .vesselTopSafeInset(),
+        contentPadding = PaddingValues(start = 16.dp, top = 14.dp, end = 16.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item {
@@ -124,16 +123,16 @@ fun DownloadsScreen(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (onBack != null) {
-                        IconButton(onClick = onBack) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = VesselI18n.tr("common.back", "Back"))
+                        VesselCompactIconButton(onClick = onBack, size = 34.dp, containerColor = palette.bgSurface) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = VesselI18n.tr("common.back"), modifier = Modifier.size(18.dp))
                         }
                     }
                     Text(VesselI18n.tr("downloads.title"), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                 }
-                IconButton(onClick = { scope.launch { reload() } }) {
-                    Icon(Icons.Default.Refresh, contentDescription = VesselI18n.tr("common.refresh"))
+                VesselCompactIconButton(onClick = { scope.launch { reload() } }, size = 34.dp, containerColor = palette.bgSurface) {
+                    Icon(Icons.Default.Refresh, contentDescription = VesselI18n.tr("common.refresh"), modifier = Modifier.size(18.dp))
                 }
             }
         }
@@ -168,37 +167,37 @@ fun DownloadsScreen(
                                     color = palette.textMuted,
                                 )
                             }
-                            Row {
+                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
                                 val idx = queue.indexOfFirst { it.id == dl.id }
                                 if (idx > 0) {
-                                    IconButton(onClick = {
+                                    VesselCompactIconButton(size = 28.dp, onClick = {
                                         val ids = queue.map { it.id }.toMutableList()
                                         ids.add(idx - 1, ids.removeAt(idx))
                                         scope.launch { repo.reorderDownloads(ids); reload() }
                                     }) {
-                                        Icon(Icons.Default.ArrowUpward, contentDescription = "Move Up")
+                                        Icon(Icons.Default.ArrowUpward, contentDescription = "Move Up", modifier = Modifier.size(16.dp))
                                     }
                                 }
                                 if (idx >= 0 && idx < queue.lastIndex) {
-                                    IconButton(onClick = {
+                                    VesselCompactIconButton(size = 28.dp, onClick = {
                                         val ids = queue.map { it.id }.toMutableList()
                                         ids.add(idx + 1, ids.removeAt(idx))
                                         scope.launch { repo.reorderDownloads(ids); reload() }
                                     }) {
-                                        Icon(Icons.Default.ArrowDownward, contentDescription = "Move Down")
+                                        Icon(Icons.Default.ArrowDownward, contentDescription = "Move Down", modifier = Modifier.size(16.dp))
                                     }
                                 }
                                 if (dl.status == "downloading" || dl.status == "queued") {
-                                    IconButton(onClick = { scope.launch { repo.pauseDownload(dl.id); reload() } }) {
-                                        Icon(Icons.Default.Pause, contentDescription = VesselI18n.tr("common.pause"))
+                                    VesselCompactIconButton(size = 28.dp, onClick = { scope.launch { repo.pauseDownload(dl.id); reload() } }) {
+                                        Icon(Icons.Default.Pause, contentDescription = VesselI18n.tr("common.pause"), modifier = Modifier.size(16.dp))
                                     }
                                 } else {
-                                    IconButton(onClick = { scope.launch { repo.resumeDownload(dl.id); reload() } }) {
-                                        Icon(Icons.Default.PlayArrow, contentDescription = VesselI18n.tr("common.resume"))
+                                    VesselCompactIconButton(size = 28.dp, onClick = { scope.launch { repo.resumeDownload(dl.id); reload() } }) {
+                                        Icon(Icons.Default.PlayArrow, contentDescription = VesselI18n.tr("common.resume"), modifier = Modifier.size(16.dp))
                                     }
                                 }
-                                IconButton(onClick = { scope.launch { repo.deleteDownload(dl.id); reload() } }) {
-                                    Icon(Icons.Default.Delete, contentDescription = VesselI18n.tr("common.delete"), tint = palette.danger)
+                                VesselCompactIconButton(size = 28.dp, onClick = { scope.launch { repo.deleteDownload(dl.id); reload() } }) {
+                                    Icon(Icons.Default.Delete, contentDescription = VesselI18n.tr("common.delete"), tint = palette.danger, modifier = Modifier.size(16.dp))
                                 }
                             }
                         }
@@ -224,7 +223,13 @@ fun DownloadsScreen(
                     val isMovie = items.all { it.season == null && it.episode == null }
 
                     Surface(shape = RoundedCornerShape(14.dp), color = palette.bgSurface) {
-                        Column(modifier = Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .animateContentSize(tween(220))
+                                .padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -349,7 +354,7 @@ private fun OfflineStreamRow(
                 }
                 Text(dl.streamLabel ?: VesselI18n.tr("downloads.stream_default"), fontWeight = FontWeight.Medium)
             }
-            IconButton(onClick = onDelete, modifier = Modifier.size(28.dp)) {
+            VesselCompactIconButton(onClick = onDelete, size = 28.dp) {
                 Icon(Icons.Default.Delete, contentDescription = VesselI18n.tr("common.delete"), tint = palette.danger, modifier = Modifier.size(16.dp))
             }
         }

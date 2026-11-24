@@ -1,26 +1,46 @@
 <script setup lang="ts">
 import { computed, onActivated, onMounted, ref, shallowRef } from 'vue'
 import { useRouter } from 'vue-router'
-import { Package, Play, Radio, RefreshCw, Star, Trash2, Tv } from 'lucide-vue-next'
+import {
+  ArrowDown,
+  ArrowUp,
+  GripVertical,
+  ListOrdered,
+  Package,
+  Play,
+  Radio,
+  RefreshCw,
+  RotateCcw,
+  SlidersHorizontal,
+  Star,
+  Trash2,
+  Tv,
+} from 'lucide-vue-next'
 import { isTauriRuntime, vesselApi } from '@/api/vessel'
 import IptvProfileForm from '@/components/iptv/IptvProfileForm.vue'
 import { useI18n } from '@/composables/useI18n'
 import { usePlayerSession } from '@/composables/usePlayerSession'
+import { useUiPreferences } from '@/composables/useUiPreferences'
 import { pushToast } from '@/composables/useVesselEvents'
+import { isLiveTvPlugin, resolveLiveGroupName } from '@/utils/liveTv'
 import type {
   EpgNowNext,
+  FavoriteLiveChannel,
   HomeSection,
   IptvKind,
+  LiveTvViewMode,
   MediaSummary,
   PluginListEntry,
   StoredIptvChannel,
   StoredIptvProfile,
   StreamCandidate,
+  UiDensity,
 } from '@/types/vessel'
 
 const router = useRouter()
 const { t } = useI18n()
 const { setSession } = usePlayerSession()
+const { uiPreferences, preferencesLoaded, loadPreferences, savePreferences } = useUiPreferences()
 
 const activeTab = shallowRef<'playlists' | 'plugins'>('plugins')
 const livePlugins = ref<PluginListEntry[]>([])
@@ -28,8 +48,15 @@ const selectedLivePluginId = shallowRef<string>('')
 const pluginLiveSections = ref<HomeSection[]>([])
 const loadingPluginLive = shallowRef(false)
 const pluginChannelFilter = shallowRef('')
+const pluginFavoritesOnly = shallowRef(false)
 const launchingChannelId = shallowRef('')
 const failedPluginLogos = ref<Record<string, boolean>>({})
+const showReorderPanel = shallowRef(false)
+const showViewPanel = shallowRef(false)
+const pluginOrderListRef = ref<HTMLElement | null>(null)
+const sectionOrderListRef = ref<HTMLElement | null>(null)
+const draggingPluginIndex = shallowRef<number | null>(null)
+const draggingSectionIndex = shallowRef<number | null>(null)
 
 const profiles = ref<StoredIptvProfile[]>([])
 const activeProfileId = shallowRef<string>('')
@@ -38,39 +65,69 @@ const selectedGroup = shallowRef<string>('')
 const searchQuery = shallowRef('')
 const favoritesOnly = shallowRef(false)
 const channels = ref<StoredIptvChannel[]>([])
+const favoriteIptvChannels = ref<StoredIptvChannel[]>([])
 const selectedChannel = ref<StoredIptvChannel | null>(null)
 const epg = ref<EpgNowNext | null>(null)
 const syncingProfileId = shallowRef<string>('')
 const failedLogos = ref<Record<number, boolean>>({})
 
-function resolveLiveGroupName(entry: PluginListEntry): string {
-  if (entry.repoId?.trim()) return entry.repoId.trim()
-  const domains = entry.allowedDomains ?? []
-  if (
-    domains.includes('raw.githubusercontent.com') &&
-    (entry.manifest.author === 'falsisdev' ||
-      entry.manifest.author === 'metemel' ||
-      entry.manifest.id.startsWith('anthology') ||
-      entry.manifest.id === 'm3u.anthology.addon')
-  ) {
-    return 'Anthology'
+const livePrefs = computed(() => uiPreferences.value.liveTv)
+const pluginFavorites = computed(() => livePrefs.value.favoriteChannels ?? [])
+
+const liveGridStyle = computed(() => {
+  const cols = livePrefs.value.columns
+  if (cols && cols >= 1 && cols <= 8) {
+    return { gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }
   }
-  if (entry.manifest.id.startsWith('community.anthology')) return 'Anthology'
-  if (entry.sourceType === 'dev_dir') return 'Local Dev Plugins'
-  return 'Standalone Plugins'
+  return undefined
+})
+
+const liveContainerClasses = computed(() => [
+  `mode-${livePrefs.value.viewMode || 'grid'}`,
+  `density-${livePrefs.value.density || 'comfortable'}`,
+  {
+    'hide-logos': !livePrefs.value.showLogos,
+    'hide-categories': !livePrefs.value.showCategories,
+  },
+])
+
+function isEnabledLiveTvPlugin(p: PluginListEntry): boolean {
+  return p.enabled && isLiveTvPlugin(p)
 }
 
-function isLiveTvPlugin(p: PluginListEntry): boolean {
-  if (!p.enabled) return false
-  const caps = p.manifest.capabilities ?? []
-  if (caps.includes('live_tv')) return true
-  const hay = `${p.manifest.id} ${p.manifest.name} ${p.manifest.description ?? ''}`.toLowerCase()
-  return hay.includes('iptv') || hay.includes('canlı tv') || hay.includes('canli tv') || hay.includes('live tv') || hay.includes('_spor')
+function favoriteKey(pluginId: string, nativeId: string): string {
+  return `${pluginId}::${nativeId}`
 }
+
+const pluginFavoriteSet = computed(() => {
+  const s = new Set<string>()
+  for (const f of pluginFavorites.value) {
+    s.add(favoriteKey(f.pluginId, f.nativeId))
+  }
+  return s
+})
+
+function isPluginChannelFavorite(pluginId: string, nativeId: string): boolean {
+  return pluginFavoriteSet.value.has(favoriteKey(pluginId, nativeId))
+}
+
+function orderBySavedIds<T>(items: T[], savedOrder: string[], getId: (item: T) => string): T[] {
+  if (!savedOrder.length || items.length < 2) return items
+  const rank = new Map<string, number>()
+  savedOrder.forEach((id, idx) => rank.set(id, idx))
+  return items
+    .map((item, idx) => ({ item, idx, order: rank.get(getId(item)) ?? Number.MAX_SAFE_INTEGER }))
+    .sort((a, b) => (a.order !== b.order ? a.order - b.order : a.idx - b.idx))
+    .map((entry) => entry.item)
+}
+
+const orderedLivePlugins = computed(() =>
+  orderBySavedIds(livePlugins.value, livePrefs.value.pluginOrder ?? [], (p) => p.manifest.id),
+)
 
 const groupedLivePlugins = computed(() => {
   const buckets = new Map<string, PluginListEntry[]>()
-  for (const p of livePlugins.value) {
+  for (const p of orderedLivePlugins.value) {
     const group = resolveLiveGroupName(p)
     const arr = buckets.get(group)
     if (arr) arr.push(p)
@@ -79,30 +136,248 @@ const groupedLivePlugins = computed(() => {
   return Array.from(buckets.entries()).map(([name, items]) => ({ name, items }))
 })
 
+const orderedPluginLiveSections = computed(() => {
+  const pid = selectedLivePluginId.value
+  const savedOrder = pid ? (livePrefs.value.sectionOrderByPlugin?.[pid] ?? []) : []
+  return orderBySavedIds(pluginLiveSections.value, savedOrder, (sec) => sec.id)
+})
+
 const filteredPluginLiveSections = computed(() => {
   const q = pluginChannelFilter.value.trim().toLowerCase()
-  return pluginLiveSections.value
+  const pid = selectedLivePluginId.value
+  return orderedPluginLiveSections.value
     .map((sec) => ({
       ...sec,
-      items: q ? sec.items.filter((it) => it.title.toLowerCase().includes(q)) : sec.items,
+      items: sec.items.filter((it) => {
+        const matchQ = !q || it.title.toLowerCase().includes(q)
+        const resolvedPid = it.pluginId || pid
+        const matchFav =
+          !pluginFavoritesOnly.value || isPluginChannelFavorite(resolvedPid, it.nativeId)
+        return matchQ && matchFav
+      }),
     }))
     .filter((sec) => sec.items.length > 0)
 })
+
+const filteredPluginFavorites = computed(() => {
+  const q = pluginChannelFilter.value.trim().toLowerCase()
+  if (!q) return pluginFavorites.value
+  return pluginFavorites.value.filter(
+    (f) =>
+      f.title.toLowerCase().includes(q) ||
+      (f.sectionTitle ?? '').toLowerCase().includes(q),
+  )
+})
+
+const totalFavoritesCount = computed(
+  () => pluginFavorites.value.length + favoriteIptvChannels.value.length,
+)
+
+async function patchLivePrefs(patch: Partial<typeof uiPreferences.value.liveTv>): Promise<void> {
+  const next = {
+    ...uiPreferences.value,
+    liveTv: {
+      ...uiPreferences.value.liveTv,
+      ...patch,
+    },
+  }
+  try {
+    await savePreferences(next)
+  } catch (err) {
+    pushToast('error', String(err))
+  }
+}
+
+async function togglePluginFavorite(item: MediaSummary, sectionTitle?: string): Promise<void> {
+  const pluginId = item.pluginId || selectedLivePluginId.value
+  if (!pluginId) return
+  const current = (uiPreferences.value.liveTv.favoriteChannels ?? []).slice()
+  const idx = current.findIndex(
+    (f) => f.pluginId === pluginId && f.nativeId === item.nativeId,
+  )
+  if (idx >= 0) {
+    current.splice(idx, 1)
+  } else {
+    const entry: FavoriteLiveChannel = {
+      pluginId,
+      nativeId: item.nativeId,
+      title: item.title,
+      poster: item.poster,
+      sectionTitle,
+    }
+    current.unshift(entry)
+  }
+  await patchLivePrefs({ favoriteChannels: current })
+}
+
+async function removeFavoritePluginEntry(fav: FavoriteLiveChannel): Promise<void> {
+  const current = (uiPreferences.value.liveTv.favoriteChannels ?? []).filter(
+    (f) => !(f.pluginId === fav.pluginId && f.nativeId === fav.nativeId),
+  )
+  await patchLivePrefs({ favoriteChannels: current })
+}
+
+async function playFavoritePluginEntry(fav: FavoriteLiveChannel): Promise<void> {
+  await playPluginLiveItem(
+    {
+      nativeId: fav.nativeId,
+      pluginId: fav.pluginId,
+      type: 'live',
+      isAnime: false,
+      title: fav.title,
+      poster: fav.poster,
+    },
+    fav.sectionTitle ?? fav.pluginId,
+  )
+}
+
+function setLiveViewMode(mode: LiveTvViewMode): void {
+  void patchLivePrefs({ viewMode: mode })
+}
+
+function setLiveDensity(density: UiDensity): void {
+  void patchLivePrefs({ density })
+}
+
+function setLiveColumns(cols: number | undefined): void {
+  void patchLivePrefs({ columns: cols })
+}
+
+async function persistLiveTvOrder(
+  pluginOrder: string[],
+  sectionOrderByPlugin: Record<string, string[]>,
+): Promise<void> {
+  await patchLivePrefs({ pluginOrder, sectionOrderByPlugin })
+}
+
+async function moveLivePlugin(pluginId: string, delta: -1 | 1): Promise<void> {
+  const ids = orderedLivePlugins.value.map((p) => p.manifest.id)
+  const idx = ids.indexOf(pluginId)
+  const target = idx + delta
+  if (idx < 0 || target < 0 || target >= ids.length) return
+  ;[ids[idx], ids[target]] = [ids[target], ids[idx]]
+  await persistLiveTvOrder(ids, livePrefs.value.sectionOrderByPlugin ?? {})
+}
+
+async function moveLiveSection(sectionId: string, delta: -1 | 1): Promise<void> {
+  const pid = selectedLivePluginId.value
+  if (!pid) return
+  const ids = orderedPluginLiveSections.value.map((s) => s.id)
+  const idx = ids.indexOf(sectionId)
+  const target = idx + delta
+  if (idx < 0 || target < 0 || target >= ids.length) return
+  ;[ids[idx], ids[target]] = [ids[target], ids[idx]]
+  await persistLiveTvOrder(livePrefs.value.pluginOrder ?? [], {
+    ...(livePrefs.value.sectionOrderByPlugin ?? {}),
+    [pid]: ids,
+  })
+}
+
+function startVerticalDrag(
+  kind: 'plugin' | 'section',
+  index: number,
+  ev: PointerEvent,
+): void {
+  if (ev.button !== 0) return
+  ev.preventDefault()
+  const activeDragging = kind === 'plugin' ? draggingPluginIndex : draggingSectionIndex
+  const listElRef = kind === 'plugin' ? pluginOrderListRef : sectionOrderListRef
+  activeDragging.value = index
+
+  const onMove = (moveEv: PointerEvent) => {
+    const listEl = listElRef.value
+    const curIdx = activeDragging.value
+    if (!listEl || curIdx === null) return
+    const rows = Array.from(listEl.children) as HTMLElement[]
+    let targetIdx = curIdx
+    for (let i = 0; i < rows.length; i++) {
+      const rect = rows[i].getBoundingClientRect()
+      const midY = rect.top + rect.height / 2
+      if (moveEv.clientY < midY) {
+        targetIdx = i
+        break
+      }
+      targetIdx = i
+    }
+    if (targetIdx !== curIdx) {
+      if (kind === 'plugin') {
+        const ids = orderedLivePlugins.value.map((p) => p.manifest.id)
+        const [moved] = ids.splice(curIdx, 1)
+        if (!moved) return
+        ids.splice(targetIdx, 0, moved)
+        uiPreferences.value = {
+          ...uiPreferences.value,
+          liveTv: { ...uiPreferences.value.liveTv, pluginOrder: ids },
+        }
+      } else {
+        const pid = selectedLivePluginId.value
+        if (!pid) return
+        const ids = orderedPluginLiveSections.value.map((s) => s.id)
+        const [moved] = ids.splice(curIdx, 1)
+        if (!moved) return
+        ids.splice(targetIdx, 0, moved)
+        uiPreferences.value = {
+          ...uiPreferences.value,
+          liveTv: {
+            ...uiPreferences.value.liveTv,
+            sectionOrderByPlugin: {
+              ...(uiPreferences.value.liveTv.sectionOrderByPlugin ?? {}),
+              [pid]: ids,
+            },
+          },
+        }
+      }
+      activeDragging.value = targetIdx
+    }
+  }
+
+  const onUp = () => {
+    window.removeEventListener('pointermove', onMove)
+    window.removeEventListener('pointerup', onUp)
+    window.removeEventListener('pointercancel', onUp)
+    activeDragging.value = null
+    void savePreferences(uiPreferences.value)
+  }
+
+  window.addEventListener('pointermove', onMove)
+  window.addEventListener('pointerup', onUp)
+  window.addEventListener('pointercancel', onUp)
+}
+
+async function resetLiveOrder(): Promise<void> {
+  const pid = selectedLivePluginId.value
+  const map = { ...(uiPreferences.value.liveTv.sectionOrderByPlugin ?? {}) }
+  if (pid) delete map[pid]
+  await persistLiveTvOrder([], map)
+}
 
 async function refreshLivePlugins(): Promise<void> {
   if (!isTauriRuntime()) return
   try {
     const all = await vesselApi.listPlugins()
-    livePlugins.value = all.filter(isLiveTvPlugin)
+    livePlugins.value = all.filter(isEnabledLiveTvPlugin)
+    const firstId = orderedLivePlugins.value[0]?.manifest.id
     if (
-      livePlugins.value.length &&
+      firstId &&
       (!selectedLivePluginId.value ||
         !livePlugins.value.some((p) => p.manifest.id === selectedLivePluginId.value))
     ) {
-      selectedLivePluginId.value = livePlugins.value[0].manifest.id
+      selectedLivePluginId.value = firstId
     }
   } catch {
     livePlugins.value = []
+  }
+}
+
+async function refreshFavoriteIptv(): Promise<void> {
+  if (!isTauriRuntime()) return
+  try {
+    favoriteIptvChannels.value = await vesselApi.searchIptvChannels({
+      favoritesOnly: true,
+      limit: 200,
+    })
+  } catch {
+    favoriteIptvChannels.value = []
   }
 }
 
@@ -285,7 +560,7 @@ async function selectChannel(ch: StoredIptvChannel): Promise<void> {
 async function toggleFavorite(ch: StoredIptvChannel): Promise<void> {
   try {
     await vesselApi.setIptvFavorite(ch.id, !ch.isFavorite)
-    await runChannelSearch()
+    await Promise.all([runChannelSearch(), refreshFavoriteIptv()])
   } catch (err) {
     pushToast('error', String(err))
   }
@@ -416,7 +691,11 @@ async function playChannel(ch: StoredIptvChannel): Promise<void> {
 }
 
 onMounted(async () => {
+  if (!preferencesLoaded.value) {
+    await loadPreferences()
+  }
   void refreshProfiles()
+  void refreshFavoriteIptv()
   await refreshLivePlugins()
   if (selectedLivePluginId.value && !pluginLiveSections.value.length) {
     await selectLivePlugin(selectedLivePluginId.value)
@@ -424,6 +703,7 @@ onMounted(async () => {
 })
 
 onActivated(() => {
+  void refreshFavoriteIptv()
   void refreshLivePlugins()
 })
 </script>
@@ -458,6 +738,205 @@ onActivated(() => {
         </button>
       </div>
     </header>
+
+    <!-- Top Unified Favorites Section (always immediately visible when opening Live TV) -->
+    <section class="v-card live-favorites-box">
+      <div class="live-section-head" style="justify-content: space-between;">
+        <div class="live-section-head">
+          <Star :size="16" fill="currentColor" style="color: var(--vessel-warning);" aria-hidden="true" />
+          <strong>{{ t('iptv.favorites_section') }}</strong>
+          <span class="v-badge">{{ totalFavoritesCount }}</span>
+        </div>
+        <button
+          type="button"
+          class="v-btn v-btn-sm"
+          :class="{ 'v-btn-primary': showViewPanel }"
+          @click="showViewPanel = !showViewPanel"
+        >
+          <SlidersHorizontal :size="14" aria-hidden="true" />
+          <span>{{ t('iptv.customize_view') }}</span>
+        </button>
+      </div>
+
+      <div v-if="showViewPanel" class="live-view-customizer">
+        <div class="view-pref-group">
+          <span class="v-muted view-pref-label">{{ t('iptv.view_layout') }}</span>
+          <div class="view-pref-chips">
+            <button
+              v-for="m in (['grid', 'compact_list', 'showcase_tiles'] as const)"
+              :key="m"
+              type="button"
+              class="v-btn v-btn-sm"
+              :class="{ 'v-btn-primary': (livePrefs.viewMode || 'grid') === m }"
+              @click="setLiveViewMode(m)"
+            >
+              {{ t(`iptv.layout_${m}`) }}
+            </button>
+          </div>
+        </div>
+        <div class="view-pref-group">
+          <span class="v-muted view-pref-label">{{ t('settings.density') }}</span>
+          <div class="view-pref-chips">
+            <button
+              v-for="d in (['compact', 'comfortable', 'spacious'] as const)"
+              :key="d"
+              type="button"
+              class="v-btn v-btn-sm"
+              :class="{ 'v-btn-primary': (livePrefs.density || 'comfortable') === d }"
+              @click="setLiveDensity(d)"
+            >
+              {{ t(`settings.density_${d}`) }}
+            </button>
+          </div>
+        </div>
+        <div class="view-pref-group">
+          <span class="v-muted view-pref-label">{{ t('iptv.columns_label') }}</span>
+          <div class="view-pref-chips">
+            <button
+              type="button"
+              class="v-btn v-btn-sm"
+              :class="{ 'v-btn-primary': !livePrefs.columns }"
+              @click="setLiveColumns(undefined)"
+            >
+              {{ t('iptv.columns_auto') }}
+            </button>
+            <button
+              v-for="c in [2, 3, 4, 5, 6]"
+              :key="c"
+              type="button"
+              class="v-btn v-btn-sm"
+              :class="{ 'v-btn-primary': livePrefs.columns === c }"
+              @click="setLiveColumns(c)"
+            >
+              {{ c }}
+            </button>
+          </div>
+        </div>
+        <div class="view-pref-toggles">
+          <label class="v-switch">
+            <input
+              :checked="livePrefs.showLogos"
+              type="checkbox"
+              class="v-switch-input"
+              @change="patchLivePrefs({ showLogos: ($event.target as HTMLInputElement).checked })"
+            />
+            <span class="v-switch-track" aria-hidden="true" />
+            <span>{{ t('iptv.show_logos') }}</span>
+          </label>
+          <label class="v-switch">
+            <input
+              :checked="livePrefs.showCategories"
+              type="checkbox"
+              class="v-switch-input"
+              @change="patchLivePrefs({ showCategories: ($event.target as HTMLInputElement).checked })"
+            />
+            <span class="v-switch-track" aria-hidden="true" />
+            <span>{{ t('iptv.show_categories') }}</span>
+          </label>
+        </div>
+      </div>
+
+      <p v-if="!totalFavoritesCount" class="v-muted" style="margin: 0; font-size: 0.85rem;">
+        {{ t('iptv.favorites_empty_hint') }}
+      </p>
+
+      <div
+        v-else
+        class="channels-grid"
+        :class="liveContainerClasses"
+        :style="liveGridStyle"
+      >
+        <div
+          v-for="fav in filteredPluginFavorites"
+          :key="`fav-plug:${fav.pluginId}:${fav.nativeId}`"
+          class="v-card channel-card"
+        >
+          <div v-if="livePrefs.showLogos" class="ch-logo-box">
+            <img
+              v-if="fav.poster && !failedPluginLogos[fav.nativeId]"
+              :src="fav.poster"
+              :alt="fav.title"
+              loading="lazy"
+              decoding="async"
+              class="ch-logo-img"
+              @error="failedPluginLogos = { ...failedPluginLogos, [fav.nativeId]: true }"
+            />
+            <Tv v-else :size="18" class="ch-logo-fallback" aria-hidden="true" />
+          </div>
+          <button
+            type="button"
+            class="ch-info-btn"
+            @click="playFavoritePluginEntry(fav)"
+          >
+            <strong class="ch-name">{{ fav.title }}</strong>
+            <span v-if="livePrefs.showCategories" class="v-muted ch-group">
+              {{ fav.sectionTitle || fav.pluginId }}
+            </span>
+          </button>
+          <div class="ch-actions">
+            <button
+              type="button"
+              class="v-btn v-btn-icon"
+              :aria-label="t('iptv.unfavorite_channel')"
+              @click.stop="removeFavoritePluginEntry(fav)"
+            >
+              <Star :size="14" fill="currentColor" style="color: var(--vessel-warning);" aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              class="v-btn v-btn-icon v-btn-primary"
+              :disabled="launchingChannelId === fav.nativeId"
+              :aria-label="`Play ${fav.title}`"
+              @click="playFavoritePluginEntry(fav)"
+            >
+              <RefreshCw v-if="launchingChannelId === fav.nativeId" :size="14" class="spin" aria-hidden="true" />
+              <Play v-else :size="14" aria-hidden="true" />
+            </button>
+          </div>
+        </div>
+
+        <div
+          v-for="ch in favoriteIptvChannels"
+          :key="`fav-iptv:${ch.id}`"
+          class="v-card channel-card"
+        >
+          <div v-if="livePrefs.showLogos" class="ch-logo-box">
+            <img
+              v-if="ch.logoUrl && !failedLogos[ch.id]"
+              :src="ch.logoUrl"
+              :alt="ch.name"
+              loading="lazy"
+              decoding="async"
+              class="ch-logo-img"
+              @error="failedLogos = { ...failedLogos, [ch.id]: true }"
+            />
+            <Tv v-else :size="18" class="ch-logo-fallback" aria-hidden="true" />
+          </div>
+          <button type="button" class="ch-info-btn" @click="playChannel(ch)">
+            <strong class="ch-name">{{ ch.name }}</strong>
+            <span v-if="livePrefs.showCategories" class="v-muted ch-group">{{ ch.groupTitle }}</span>
+          </button>
+          <div class="ch-actions">
+            <button
+              type="button"
+              class="v-btn v-btn-icon"
+              :aria-label="t('iptv.unfavorite_channel')"
+              @click.stop="toggleFavorite(ch)"
+            >
+              <Star :size="14" fill="currentColor" style="color: var(--vessel-warning);" aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              class="v-btn v-btn-icon v-btn-primary"
+              :aria-label="`Play ${ch.name}`"
+              @click="playChannel(ch)"
+            >
+              <Play :size="14" aria-hidden="true" />
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
 
     <template v-if="activeTab === 'playlists'">
       <IptvProfileForm @submit="createProfile" />
@@ -541,13 +1020,13 @@ onActivated(() => {
 
     <div v-if="!channels.length" class="v-card v-muted">{{ t('common.empty') }}</div>
 
-    <div v-else class="channels-grid">
+    <div v-else class="channels-grid" :class="liveContainerClasses" :style="liveGridStyle">
       <div
         v-for="ch in channels"
         :key="ch.id"
         class="v-card channel-card"
       >
-        <div class="ch-logo-box">
+        <div v-if="livePrefs.showLogos" class="ch-logo-box">
           <img
             v-if="ch.logoUrl && !failedLogos[ch.id]"
             :src="ch.logoUrl"
@@ -561,16 +1040,16 @@ onActivated(() => {
         </div>
         <button type="button" class="ch-info-btn" @click="selectChannel(ch)">
           <strong class="ch-name">{{ ch.name }}</strong>
-          <span class="v-muted ch-group">{{ ch.groupTitle }}</span>
+          <span v-if="livePrefs.showCategories" class="v-muted ch-group">{{ ch.groupTitle }}</span>
         </button>
         <div class="ch-actions">
           <button
             type="button"
             class="v-btn v-btn-icon"
             :aria-label="ch.isFavorite ? `Unfavorite ${ch.name}` : `Favorite ${ch.name}`"
-            @click="toggleFavorite(ch)"
+            @click.stop="toggleFavorite(ch)"
           >
-            <Star :size="14" :fill="ch.isFavorite ? 'currentColor' : 'none'" aria-hidden="true" />
+            <Star :size="14" :fill="ch.isFavorite ? 'currentColor' : 'none'" :style="ch.isFavorite ? 'color: var(--vessel-warning);' : ''" aria-hidden="true" />
           </button>
           <button
             type="button"
@@ -622,6 +1101,24 @@ onActivated(() => {
             class="v-input"
             :placeholder="t('iptv.filter_channels')"
           />
+          <label class="v-switch">
+            <input
+              v-model="pluginFavoritesOnly"
+              type="checkbox"
+              class="v-switch-input"
+            />
+            <span class="v-switch-track" aria-hidden="true" />
+            <span>{{ t('iptv.favorites_only') }}</span>
+          </label>
+          <button
+            type="button"
+            class="v-btn"
+            :class="{ 'v-btn-primary': showReorderPanel }"
+            @click="showReorderPanel = !showReorderPanel"
+          >
+            <ListOrdered :size="14" aria-hidden="true" />
+            <span>{{ t('iptv.reorder') }}</span>
+          </button>
           <button
             type="button"
             class="v-btn"
@@ -633,7 +1130,102 @@ onActivated(() => {
           </button>
         </div>
 
-        <div v-if="loadingPluginLive" class="channels-grid">
+        <div v-if="showReorderPanel" class="v-card reorder-panel">
+          <div class="reorder-head">
+            <strong>{{ t('iptv.reorder_title') }} · {{ t('home.shelf_order_hint') }}</strong>
+            <button type="button" class="v-btn v-btn-sm" @click="resetLiveOrder">
+              <RotateCcw :size="13" aria-hidden="true" />
+              <span>{{ t('iptv.reset_order') }}</span>
+            </button>
+          </div>
+          <div class="reorder-columns">
+            <div v-if="orderedLivePlugins.length > 1" class="reorder-col">
+              <span class="v-muted reorder-subhead">{{ t('iptv.plugin_order') }}</span>
+              <div ref="pluginOrderListRef" class="reorder-list-wrap">
+                <div
+                  v-for="(plug, pIdx) in orderedLivePlugins"
+                  :key="plug.manifest.id"
+                  class="reorder-row"
+                  :class="{ 'is-dragging': draggingPluginIndex === pIdx }"
+                >
+                  <button
+                    type="button"
+                    class="drag-handle"
+                    :aria-label="t('home.shelf_order_hint')"
+                    @pointerdown="startVerticalDrag('plugin', pIdx, $event)"
+                  >
+                    <GripVertical :size="14" aria-hidden="true" />
+                  </button>
+                  <span class="reorder-label">{{ plug.manifest.name }}</span>
+                  <div class="reorder-btns">
+                    <button
+                      type="button"
+                      class="v-btn v-btn-icon v-btn-sm"
+                      :disabled="pIdx === 0"
+                      :aria-label="t('iptv.move_up')"
+                      @click="moveLivePlugin(plug.manifest.id, -1)"
+                    >
+                      <ArrowUp :size="13" aria-hidden="true" />
+                    </button>
+                    <button
+                      type="button"
+                      class="v-btn v-btn-icon v-btn-sm"
+                      :disabled="pIdx === orderedLivePlugins.length - 1"
+                      :aria-label="t('iptv.move_down')"
+                      @click="moveLivePlugin(plug.manifest.id, 1)"
+                    >
+                      <ArrowDown :size="13" aria-hidden="true" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div v-if="orderedPluginLiveSections.length > 1" class="reorder-col">
+              <span class="v-muted reorder-subhead">{{ t('iptv.section_order') }}</span>
+              <div ref="sectionOrderListRef" class="reorder-list-wrap">
+                <div
+                  v-for="(sec, sIdx) in orderedPluginLiveSections"
+                  :key="sec.id"
+                  class="reorder-row"
+                  :class="{ 'is-dragging': draggingSectionIndex === sIdx }"
+                >
+                  <button
+                    type="button"
+                    class="drag-handle"
+                    :aria-label="t('home.shelf_order_hint')"
+                    @pointerdown="startVerticalDrag('section', sIdx, $event)"
+                  >
+                    <GripVertical :size="14" aria-hidden="true" />
+                  </button>
+                  <span class="reorder-label">{{ sec.title }}</span>
+                  <div class="reorder-btns">
+                    <button
+                      type="button"
+                      class="v-btn v-btn-icon v-btn-sm"
+                      :disabled="sIdx === 0"
+                      :aria-label="t('iptv.move_up')"
+                      @click="moveLiveSection(sec.id, -1)"
+                    >
+                      <ArrowUp :size="13" aria-hidden="true" />
+                    </button>
+                    <button
+                      type="button"
+                      class="v-btn v-btn-icon v-btn-sm"
+                      :disabled="sIdx === orderedPluginLiveSections.length - 1"
+                      :aria-label="t('iptv.move_down')"
+                      @click="moveLiveSection(sec.id, 1)"
+                    >
+                      <ArrowDown :size="13" aria-hidden="true" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div v-if="loadingPluginLive" class="channels-grid" :class="liveContainerClasses" :style="liveGridStyle">
           <div v-for="n in 8" :key="n" class="v-skeleton live-skeleton" />
         </div>
 
@@ -647,13 +1239,13 @@ onActivated(() => {
               <h2 class="live-section-title">{{ sec.title }}</h2>
               <span class="v-badge">{{ sec.items.length }}</span>
             </div>
-            <div class="channels-grid">
+            <div class="channels-grid" :class="liveContainerClasses" :style="liveGridStyle">
               <div
                 v-for="item in sec.items"
                 :key="item.nativeId"
                 class="v-card channel-card"
               >
-                <div class="ch-logo-box">
+                <div v-if="livePrefs.showLogos" class="ch-logo-box">
                   <img
                     v-if="item.poster && !failedPluginLogos[item.nativeId]"
                     :src="item.poster"
@@ -671,9 +1263,22 @@ onActivated(() => {
                   @click="playPluginLiveItem(item, sec.title)"
                 >
                   <strong class="ch-name">{{ item.title }}</strong>
-                  <span class="v-muted ch-group">{{ sec.title }}</span>
+                  <span v-if="livePrefs.showCategories" class="v-muted ch-group">{{ sec.title }}</span>
                 </button>
                 <div class="ch-actions">
+                  <button
+                    type="button"
+                    class="v-btn v-btn-icon"
+                    :aria-label="isPluginChannelFavorite(item.pluginId || selectedLivePluginId, item.nativeId) ? t('iptv.unfavorite_channel') : t('iptv.favorite_channel')"
+                    @click.stop="togglePluginFavorite(item, sec.title)"
+                  >
+                    <Star
+                      :size="14"
+                      :fill="isPluginChannelFavorite(item.pluginId || selectedLivePluginId, item.nativeId) ? 'currentColor' : 'none'"
+                      :style="isPluginChannelFavorite(item.pluginId || selectedLivePluginId, item.nativeId) ? 'color: var(--vessel-warning);' : ''"
+                      aria-hidden="true"
+                    />
+                  </button>
                   <button
                     type="button"
                     class="v-btn v-btn-icon v-btn-primary"
@@ -878,5 +1483,183 @@ onActivated(() => {
 
 .live-skeleton {
   height: 70px;
+}
+
+.reorder-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.reorder-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.reorder-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 0.85rem;
+}
+
+.reorder-col {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.reorder-subhead {
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.reorder-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.35rem 0.55rem;
+  border-radius: 10px;
+  background: var(--vessel-surface-input);
+  border: 1px solid var(--vessel-border);
+}
+
+.reorder-label {
+  font-size: 0.84rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.reorder-btns {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex-shrink: 0;
+}
+
+.live-favorites-box {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  border-color: color-mix(in srgb, var(--vessel-warning) 28%, var(--vessel-border));
+}
+
+.live-view-customizer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.9rem 1.4rem;
+  padding: 0.75rem 0.9rem;
+  border-radius: 10px;
+  background: var(--vessel-surface-input);
+  border: 1px solid var(--vessel-border);
+}
+
+.view-pref-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.view-pref-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.view-pref-chips,
+.view-pref-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.75rem;
+}
+
+.reorder-list-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.reorder-row.is-dragging {
+  border-color: var(--vessel-accent);
+  background: rgba(203, 166, 247, 0.16);
+  transform: scale(1.012);
+}
+
+.drag-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--vessel-text-muted);
+  cursor: grab;
+  touch-action: none;
+}
+
+.drag-handle:hover {
+  color: var(--vessel-text-primary);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.channels-grid.mode-compact_list {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.channels-grid.mode-showcase_tiles {
+  grid-template-columns: repeat(auto-fill, minmax(196px, 1fr));
+}
+
+.channels-grid.mode-showcase_tiles .channel-card {
+  flex-direction: column;
+  align-items: stretch;
+  text-align: center;
+  gap: 0.55rem;
+}
+
+.channels-grid.mode-showcase_tiles .ch-logo-box {
+  width: 100%;
+  height: 76px;
+}
+
+.channels-grid.mode-showcase_tiles .ch-info-btn {
+  text-align: center;
+  align-items: center;
+}
+
+.channels-grid.mode-showcase_tiles .ch-actions {
+  justify-content: center;
+}
+
+.channels-grid.density-compact {
+  gap: 0.42rem;
+}
+
+.channels-grid.density-compact .channel-card {
+  padding: 0.55rem 0.7rem;
+}
+
+.channels-grid.density-compact .ch-logo-box {
+  width: 32px;
+  height: 32px;
+}
+
+.channels-grid.density-spacious {
+  gap: 0.9rem;
+}
+
+.channels-grid.density-spacious .channel-card {
+  padding: 1rem 1.1rem;
+}
+
+.channels-grid.density-spacious .ch-logo-box {
+  width: 48px;
+  height: 48px;
 }
 </style>

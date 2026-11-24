@@ -22,7 +22,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.withTransform
-import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import dev.falsis.vessel.ui.theme.LocalVesselPalette
 import kotlin.math.PI
@@ -56,20 +56,21 @@ fun VesselSplashOverlay(
     val turnP = easeInOutCubic(clamp01((p - 0.31f) / 0.18f))
     val settleP = easeOutCubic(clamp01((p - 0.43f) / 0.13f))
     val revealP = easeInOutCubic(clamp01((p - 0.80f) / 0.20f))
-    val overlayAlpha = 1f - revealP
 
+    // Fully opaque solid base layer + subtle accent glow so underlying UI is never visible during splash
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .graphicsLayer { alpha = overlayAlpha }
+            .background(palette.bgBase)
             .background(
                 Brush.radialGradient(
                     colors = listOf(
-                        palette.accent.copy(alpha = 0.09f),
-                        palette.bgBase,
+                        palette.accent.copy(alpha = 0.10f),
+                        Color.Transparent,
                     ),
                 ),
-            ),
+            )
+            .pointerInput(Unit) {},
         contentAlignment = Alignment.Center,
     ) {
         Canvas(modifier = Modifier.size(340.dp, 210.dp)) {

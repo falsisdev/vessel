@@ -26,6 +26,11 @@
   </categories>
   <content_rating type="oars-1.1" />
   <releases>
+    <release version="0.1.3" date="2026-11-25">
+      <description>
+        <p>6-provider interactive Fix Match search, per-media linked stream sources, opaque splash screens, Hero Watch Now &amp; Ken Burns zoom, Android Continue Watching editor, toggleable Android Floating Bottom Navbar, Live TV favorites &amp; layout customization, and uncapped Live TV plugin catalogs.</p>
+      </description>
+    </release>
     <release version="0.1.2" date="2026-11-24">
       <description>
         <p>Desktop-parity Android Home catalog feed selector, spotlight hero source &amp; shelf ordering, and standard SemVer release.</p>

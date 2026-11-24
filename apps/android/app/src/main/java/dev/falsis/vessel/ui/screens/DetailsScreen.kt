@@ -1,58 +1,70 @@
 package dev.falsis.vessel.ui.screens
 
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsIgnoringVisibility
+import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Layers
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -70,16 +82,28 @@ import coil3.compose.AsyncImage
 import dev.falsis.vessel.data.EnqueueDownloadPayload
 import dev.falsis.vessel.data.Episode
 import dev.falsis.vessel.data.LibraryItem
+import dev.falsis.vessel.data.LinkedMediaSource
 import dev.falsis.vessel.data.MediaDetail
 import dev.falsis.vessel.data.MediaRef
+import dev.falsis.vessel.data.MediaSummary
+import dev.falsis.vessel.data.MetadataSearchHit
 import dev.falsis.vessel.data.PlaybackProgress
+import dev.falsis.vessel.data.PluginListEntry
 import dev.falsis.vessel.data.StreamResult
 import dev.falsis.vessel.data.VesselRepository
+import dev.falsis.vessel.ui.components.VesselButton
+import dev.falsis.vessel.ui.components.VesselCompactIconButton
+import dev.falsis.vessel.ui.components.VesselFilterChip
+import dev.falsis.vessel.ui.components.VesselOutlinedButton
+import dev.falsis.vessel.ui.components.VesselTextButton
 import dev.falsis.vessel.ui.i18n.VesselI18n
+import dev.falsis.vessel.ui.isLiveMediaIdentifier
+import dev.falsis.vessel.ui.isLiveTvPlugin
 import dev.falsis.vessel.ui.theme.LocalVesselPalette
+import java.util.Locale
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun DetailsScreen(
     repo: VesselRepository,
@@ -87,10 +111,13 @@ fun DetailsScreen(
     nativeId: String,
     onBack: () -> Unit,
     onPlayStream: (detail: MediaDetail, episode: Episode, streams: StreamResult, selectedIdx: Int, resumePosMs: Long) -> Unit,
+    onPlayLiveReplace: ((detail: MediaDetail, episode: Episode, streams: StreamResult) -> Unit)? = null,
 ) {
     val palette = LocalVesselPalette.current
     val scope = rememberCoroutineScope()
+    val plugins by repo.plugins.collectAsState()
     val prefs by repo.uiPreferences.collectAsState()
+    val activePlugin = remember(plugins, pluginId) { plugins.firstOrNull { it.manifest.id == pluginId } }
 
     var loading by remember { mutableStateOf(true) }
     var detail by remember { mutableStateOf<MediaDetail?>(null) }
@@ -100,6 +127,9 @@ fun DetailsScreen(
     var expandSynopsis by remember { mutableStateOf(false) }
     var showFixMatch by remember { mutableStateOf(false) }
     var showStatusMenu by remember { mutableStateOf(false) }
+    var showMoreMenu by remember { mutableStateOf(false) }
+    var showIncludeSources by remember { mutableStateOf(false) }
+    var linkedSources by remember { mutableStateOf<List<LinkedMediaSource>>(emptyList()) }
 
     var activeEpisodeForSources by remember { mutableStateOf<Episode?>(null) }
     var loadingStreams by remember { mutableStateOf(false) }
@@ -110,7 +140,34 @@ fun DetailsScreen(
         loading = true
         runCatching {
             val loaded = repo.getDetails(pluginId, nativeId)
+            val isLiveRedirect = isLiveMediaIdentifier(
+                mediaType = loaded.type,
+                pluginId = pluginId,
+                streamId = loaded.episodes.firstOrNull()?.streamId,
+                nativeId = nativeId,
+                plugin = activePlugin,
+            )
+            if (isLiveRedirect) {
+                val ep = loaded.episodes.firstOrNull() ?: Episode(
+                    streamId = nativeId,
+                    season = 1,
+                    episode = 1,
+                    title = loaded.title,
+                    thumbnail = loaded.poster,
+                )
+                val sr = repo.getStreams(pluginId, ep.streamId)
+                if (sr.streams.isEmpty()) {
+                    repo.notify(VesselI18n.tr("details.no_streams"))
+                    onBack()
+                } else if (onPlayLiveReplace != null) {
+                    onPlayLiveReplace(loaded.copy(type = "live"), ep, sr)
+                } else {
+                    onPlayStream(loaded.copy(type = "live"), ep, sr, 0, 0L)
+                }
+                return@runCatching
+            }
             detail = loaded
+            linkedSources = runCatching { repo.getLinkedSources(pluginId, nativeId) }.getOrDefault(emptyList())
             val seasons = loaded.episodes.map { it.season }.distinct().sorted()
             if (seasons.isNotEmpty() && selectedSeason !in seasons) {
                 selectedSeason = seasons.first()
@@ -143,7 +200,17 @@ fun DetailsScreen(
         resolvedStreamResult = null
         loadingStreams = true
         scope.launch {
-            runCatching { repo.getStreams(pluginId, ep.streamId) }
+            runCatching {
+                repo.getStreamsWithLinked(
+                    pluginId = pluginId,
+                    nativeId = nativeId,
+                    episodeId = ep.streamId,
+                    season = ep.season,
+                    episode = ep.episode,
+                    absoluteEpisode = ep.absoluteEpisode,
+                    isMovie = detail?.type == "movie",
+                )
+            }
                 .onSuccess { resolvedStreamResult = it }
                 .onFailure { repo.notifyError(it, "Failed to resolve streams") }
             loadingStreams = false
@@ -158,7 +225,17 @@ fun DetailsScreen(
         }
         quickStartingStreamId = ep.streamId
         scope.launch {
-            runCatching { repo.getStreams(pluginId, ep.streamId) }
+            runCatching {
+                repo.getStreamsWithLinked(
+                    pluginId = pluginId,
+                    nativeId = nativeId,
+                    episodeId = ep.streamId,
+                    season = ep.season,
+                    episode = ep.episode,
+                    absoluteEpisode = ep.absoluteEpisode,
+                    isMovie = d.type == "movie",
+                )
+            }
                 .onSuccess { sr ->
                     quickStartingStreamId = null
                     if (sr.streams.isEmpty()) {
@@ -200,6 +277,7 @@ fun DetailsScreen(
                         positionMs = if (markCompleted) 1000L else 0L,
                         durationMs = 1000L,
                         completed = markCompleted,
+                        lastWatchedAt = java.time.Instant.now().toString(),
                     ),
                 )
                 progressList = repo.listMediaWatchProgress(pluginId, nativeId)
@@ -218,7 +296,7 @@ fun DetailsScreen(
         Box(modifier = Modifier.fillMaxSize().background(palette.bgBase), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(VesselI18n.tr("common.empty"))
-                Button(onClick = onBack) { Text(VesselI18n.tr("common.back", "Back")) }
+                VesselButton(onClick = onBack) { Text(VesselI18n.tr("common.back")) }
             }
         }
         return
@@ -270,13 +348,84 @@ fun DetailsScreen(
                             ),
                         ),
                 )
-                Surface(
-                    shape = CircleShape,
-                    color = Color.Black.copy(alpha = 0.45f),
-                    modifier = Modifier.padding(12.dp),
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .windowInsetsPadding(WindowInsets.statusBarsIgnoringVisibility.union(WindowInsets.displayCutout))
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
+                    VesselCompactIconButton(
+                        onClick = onBack,
+                        size = 34.dp,
+                        containerColor = Color.Black.copy(alpha = 0.45f),
+                        borderColor = Color.White.copy(alpha = 0.16f),
+                    ) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = VesselI18n.tr("common.back"),
+                            tint = Color.White,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        if (linkedSources.isNotEmpty()) {
+                            Surface(
+                                shape = RoundedCornerShape(999.dp),
+                                color = Color.Black.copy(alpha = 0.55f),
+                                border = BorderStroke(1.dp, palette.accent.copy(alpha = 0.45f)),
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(999.dp))
+                                    .clickable { showIncludeSources = true },
+                            ) {
+                                Text(
+                                    text = "+${linkedSources.size}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = palette.accent,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                )
+                            }
+                        }
+
+                        Box {
+                            VesselCompactIconButton(
+                                onClick = { showMoreMenu = true },
+                                size = 34.dp,
+                                containerColor = Color.Black.copy(alpha = 0.45f),
+                                borderColor = Color.White.copy(alpha = 0.16f),
+                            ) {
+                                Icon(
+                                    Icons.Default.MoreVert,
+                                    contentDescription = VesselI18n.tr("details.more_actions"),
+                                    tint = Color.White,
+                                    modifier = Modifier.size(18.dp),
+                                )
+                            }
+                            DropdownMenu(expanded = showMoreMenu, onDismissRequest = { showMoreMenu = false }) {
+                                DropdownMenuItem(
+                                    leadingIcon = { Icon(Icons.Default.Layers, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                                    text = { Text(VesselI18n.tr("details.include_sources")) },
+                                    onClick = {
+                                        showMoreMenu = false
+                                        showIncludeSources = true
+                                    },
+                                )
+                                DropdownMenuItem(
+                                    leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                                    text = { Text(VesselI18n.tr("details.fix_match")) },
+                                    onClick = {
+                                        showMoreMenu = false
+                                        showFixMatch = true
+                                    },
+                                )
+                            }
+                        }
                     }
                 }
 
@@ -352,14 +501,14 @@ fun DetailsScreen(
                 if (resumeCandidateEp != null) {
                     val saved = progressFor(resumeCandidateEp)
                     val isBusy = quickStartingStreamId == resumeCandidateEp.streamId
-                    Button(
+                    VesselButton(
                         enabled = !isBusy,
                         onClick = { handleEpisodePlayClick(resumeCandidateEp) },
                     ) {
                         if (isBusy) {
-                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = palette.bgBase)
+                            CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp, color = palette.bgBase)
                         } else {
-                            Icon(Icons.Default.PlayArrow, contentDescription = null)
+                            Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
                         }
                         Spacer(Modifier.width(4.dp))
                         Text(
@@ -370,16 +519,16 @@ fun DetailsScreen(
                             },
                         )
                     }
-                    OutlinedButton(onClick = { openEpisodeSources(resumeCandidateEp) }) {
-                        Icon(Icons.AutoMirrored.Filled.List, contentDescription = null, modifier = Modifier.size(16.dp))
+                    VesselOutlinedButton(onClick = { openEpisodeSources(resumeCandidateEp) }) {
+                        Icon(Icons.AutoMirrored.Filled.List, contentDescription = null, modifier = Modifier.size(15.dp))
                         Spacer(Modifier.width(4.dp))
                         Text(VesselI18n.tr("details.sources"))
                     }
                 }
 
                 Box {
-                    OutlinedButton(onClick = { showStatusMenu = true }) {
-                        Icon(Icons.Default.Bookmark, contentDescription = null, modifier = Modifier.size(15.dp))
+                    VesselOutlinedButton(onClick = { showStatusMenu = true }) {
+                        Icon(Icons.Default.Bookmark, contentDescription = null, modifier = Modifier.size(14.dp))
                         Spacer(Modifier.width(4.dp))
                         Text(
                             currentLibraryStatus?.let { VesselI18n.tr("library.$it") }
@@ -405,7 +554,7 @@ fun DetailsScreen(
                                             ),
                                         )
                                         currentLibraryStatus = status
-                                        repo.notify("${d.title} → ${VesselI18n.tr("library.$status")}")
+                                        repo.notify("${d.title} · ${VesselI18n.tr("library.$status")}")
                                     }
                                 },
                             )
@@ -424,20 +573,17 @@ fun DetailsScreen(
                         }
                     }
                 }
-
-                OutlinedButton(onClick = { showFixMatch = true }) {
-                    Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text(VesselI18n.tr("details.fix_match"))
-                }
             }
         }
 
         // External IDs Badges (matching Desktop DetailsView)
         val extBadges = buildList {
             d.externalIds.tmdb?.let { add("TMDB:$it") }
-            d.externalIds.anilist?.let { add("AniList:$it") }
             d.externalIds.imdb?.let { add(it) }
+            d.externalIds.simkl?.let { add("Simkl:$it") }
+            d.externalIds.anilist?.let { add("AniList:$it") }
+            d.externalIds.mal?.let { add("MAL:$it") }
+            d.externalIds.kitsu?.let { add("Kitsu:$it") }
         }
         if (extBadges.isNotEmpty()) {
             item {
@@ -459,7 +605,7 @@ fun DetailsScreen(
             }
         }
 
-        // Synopsis (tap to expand/collapse)
+        // Synopsis (tap to expand/collapse with smooth height animation)
         d.synopsis?.takeIf { it.isNotBlank() }?.let { syn ->
             item {
                 Text(
@@ -470,6 +616,7 @@ fun DetailsScreen(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier
                         .fillMaxWidth()
+                        .animateContentSize(tween(240))
                         .clickable { expandSynopsis = !expandSynopsis }
                         .padding(horizontal = 16.dp, vertical = 8.dp),
                 )
@@ -484,13 +631,13 @@ fun DetailsScreen(
                         .fillMaxWidth()
                         .horizontalScroll(rememberScrollState())
                         .padding(horizontal = 16.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
                     seasons.forEach { s ->
-                        FilterChip(
+                        VesselFilterChip(
                             selected = selectedSeason == s,
                             onClick = { selectedSeason = s },
-                            label = { Text("${VesselI18n.tr("details.season")} $s") },
+                            label = "${VesselI18n.tr("details.season")} $s",
                         )
                     }
                 }
@@ -551,24 +698,24 @@ fun DetailsScreen(
                                 }
                             }
                         }
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                             if (isQuickBusy) {
-                                CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
                             }
-                            IconButton(onClick = { toggleEpisodeWatched(ep) }) {
+                            VesselCompactIconButton(onClick = { toggleEpisodeWatched(ep) }, size = 30.dp) {
                                 Icon(
                                     imageVector = if (prog?.completed == true) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
                                     contentDescription = VesselI18n.tr("details.watched_badge"),
                                     tint = if (prog?.completed == true) palette.success else palette.textMuted,
-                                    modifier = Modifier.size(20.dp),
+                                    modifier = Modifier.size(18.dp),
                                 )
                             }
-                            IconButton(onClick = { openEpisodeSources(ep) }) {
+                            VesselCompactIconButton(onClick = { openEpisodeSources(ep) }, size = 30.dp) {
                                 Icon(
                                     imageVector = Icons.AutoMirrored.Filled.List,
                                     contentDescription = VesselI18n.tr("details.select_stream"),
                                     tint = palette.textMuted,
-                                    modifier = Modifier.size(20.dp),
+                                    modifier = Modifier.size(18.dp),
                                 )
                             }
                         }
@@ -623,39 +770,60 @@ fun DetailsScreen(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                 ) {
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(candidate.label, fontWeight = FontWeight.SemiBold)
+                                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                        Text(candidate.label, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                                         Text(
-                                            listOfNotNull(candidate.quality, candidate.kind.uppercase(), candidate.audioType).joinToString(" · "),
+                                            listOfNotNull(
+                                                candidate.pluginName ?: candidate.pluginId,
+                                                candidate.quality,
+                                                candidate.kind.uppercase(Locale.US),
+                                                candidate.audioType,
+                                            ).joinToString(" · "),
                                             style = MaterialTheme.typography.labelSmall,
                                             color = palette.textMuted,
                                         )
                                     }
-                                    IconButton(onClick = {
-                                        scope.launch {
-                                            runCatching {
-                                                repo.enqueueDownload(
-                                                    EnqueueDownloadPayload(
-                                                        pluginId = pluginId,
-                                                        nativeId = nativeId,
-                                                        title = d.title,
-                                                        season = if (d.type == "movie") null else epSheet.season,
-                                                        episode = if (d.type == "movie") null else epSheet.episode,
-                                                        streamLabel = candidate.label,
-                                                        kind = if (candidate.kind == "hls" || candidate.url.contains(".m3u8")) "hls" else "direct",
-                                                        sourceUrl = candidate.url,
-                                                        headers = candidate.headers,
-                                                        subtitles = candidate.subtitles + sr.subtitles,
-                                                    ),
-                                                )
-                                            }.onSuccess {
-                                                repo.notify("${VesselI18n.tr("details.download_episode")}: ${candidate.label}")
-                                            }.onFailure {
-                                                repo.notify(it.message ?: "Download failed")
-                                            }
+                                    val isLiveMedia = isLiveMediaIdentifier(
+                                        mediaType = d.type,
+                                        pluginId = pluginId,
+                                        streamId = epSheet.streamId,
+                                        nativeId = nativeId,
+                                        plugin = activePlugin,
+                                    )
+                                    if (!isLiveMedia) {
+                                        VesselCompactIconButton(
+                                            size = 34.dp,
+                                            onClick = {
+                                                scope.launch {
+                                                    runCatching {
+                                                        repo.enqueueDownload(
+                                                            EnqueueDownloadPayload(
+                                                                pluginId = pluginId,
+                                                                nativeId = nativeId,
+                                                                title = d.title,
+                                                                season = if (d.type == "movie") null else epSheet.season,
+                                                                episode = if (d.type == "movie") null else epSheet.episode,
+                                                                streamLabel = candidate.label,
+                                                                kind = if (candidate.kind == "hls" || candidate.url.contains(".m3u8")) "hls" else "direct",
+                                                                sourceUrl = candidate.url,
+                                                                headers = candidate.headers,
+                                                                subtitles = candidate.subtitles + sr.subtitles,
+                                                            ),
+                                                        )
+                                                    }.onSuccess {
+                                                        repo.notify("${VesselI18n.tr("details.download_episode")}: ${candidate.label}")
+                                                    }.onFailure {
+                                                        repo.notifyError(it, "Download failed")
+                                                    }
+                                                }
+                                            },
+                                        ) {
+                                            Icon(
+                                                Icons.Default.Download,
+                                                contentDescription = VesselI18n.tr("details.download_episode"),
+                                                modifier = Modifier.size(18.dp),
+                                            )
                                         }
-                                    }) {
-                                        Icon(Icons.Default.Download, contentDescription = VesselI18n.tr("details.download_episode"))
                                     }
                                 }
                             }
@@ -668,39 +836,443 @@ fun DetailsScreen(
     }
 
     if (showFixMatch) {
-        var canonicalInput by remember { mutableStateOf("") }
-        var disableMeta by remember { mutableStateOf(false) }
+        val initialProvider = remember(showFixMatch, d.externalIds, d.type, d.isAnime) {
+            when {
+                d.externalIds.tmdb != null -> if (d.type == "movie") "tmdb_movie" else "tmdb_tv"
+                d.externalIds.anilist != null -> "anilist"
+                d.externalIds.mal != null -> "mal"
+                d.externalIds.kitsu != null -> "kitsu"
+                d.externalIds.simkl != null -> "simkl"
+                d.externalIds.imdb != null -> "imdb"
+                d.isAnime -> "anilist"
+                d.type == "movie" -> "tmdb_movie"
+                else -> "tmdb_tv"
+            }
+        }
+        val initialId = remember(showFixMatch, d.externalIds) {
+            d.externalIds.tmdb?.toString()
+                ?: d.externalIds.anilist?.toString()
+                ?: d.externalIds.mal?.toString()
+                ?: d.externalIds.kitsu?.toString()
+                ?: d.externalIds.simkl?.toString()
+                ?: d.externalIds.imdb
+                ?: ""
+        }
+        var fixProvider by remember(showFixMatch) { mutableStateOf(initialProvider) }
+        var fixIdInput by remember(showFixMatch) { mutableStateOf(initialId) }
+        var disableMeta by remember(showFixMatch) { mutableStateOf(false) }
+        var searchQuery by remember(showFixMatch) { mutableStateOf(d.title) }
+        var searchFilter by remember(showFixMatch) { mutableStateOf("all") }
+        var searchingMeta by remember(showFixMatch) { mutableStateOf(false) }
+        var hits by remember(showFixMatch) { mutableStateOf<List<MetadataSearchHit>>(emptyList()) }
+        var notes by remember(showFixMatch) { mutableStateOf<List<String>>(emptyList()) }
+        var showManual by remember(showFixMatch) { mutableStateOf(false) }
+
+        fun runSearch() {
+            val q = searchQuery.trim()
+            if (q.isEmpty()) {
+                hits = emptyList()
+                notes = emptyList()
+                return
+            }
+            searchingMeta = true
+            scope.launch {
+                runCatching { repo.searchMetadata(q, searchFilter) }
+                    .onSuccess {
+                        hits = it.hits
+                        notes = it.notes
+                    }
+                    .onFailure { notes = listOf(it.message ?: "Search failed") }
+                searchingMeta = false
+            }
+        }
+
+        LaunchedEffect(showFixMatch) {
+            if (showFixMatch && searchQuery.isNotBlank()) runSearch()
+        }
+
+        fun buildCanonicalId(): String? {
+            val raw = fixIdInput.trim()
+            if (raw.isEmpty()) return null
+            if (':' in raw) return raw
+            return when (fixProvider) {
+                "anilist" -> "anilist:$raw"
+                "mal" -> "mal:$raw"
+                "kitsu" -> "kitsu:$raw"
+                "simkl" -> "simkl:$raw"
+                "tmdb_movie" -> "tmdb:movie:$raw"
+                "imdb" -> "imdb:$raw"
+                else -> "tmdb:tv:$raw"
+            }
+        }
+
         AlertDialog(
             onDismissRequest = { showFixMatch = false },
-            title = { Text(VesselI18n.tr("details.fix_match")) },
+            title = { Text(VesselI18n.tr("details.fix_match"), style = MaterialTheme.typography.titleLarge) },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(VesselI18n.tr("details.fix_match_desc"), style = MaterialTheme.typography.bodySmall)
-                    OutlinedTextField(
-                        value = canonicalInput,
-                        onValueChange = { canonicalInput = it },
-                        placeholder = { Text(VesselI18n.tr("details.canonical_hint")) },
-                        singleLine = true,
-                    )
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 460.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(VesselI18n.tr("details.fix_match_desc"), style = MaterialTheme.typography.bodySmall, color = palette.textMuted)
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        OutlinedTextField(
+                            value = searchQuery,
+                            onValueChange = { searchQuery = it },
+                            placeholder = { Text(VesselI18n.tr("details.match_search_placeholder")) },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f),
+                        )
+                        VesselCompactIconButton(
+                            onClick = { runSearch() },
+                            size = 40.dp,
+                            containerColor = palette.accent,
+                        ) {
+                            Icon(Icons.Default.Search, contentDescription = VesselI18n.tr("common.search"), tint = Color(0xFF11111B), modifier = Modifier.size(18.dp))
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(5.dp),
+                    ) {
+                        listOf(
+                            "all" to VesselI18n.tr("common.all"),
+                            "tmdb" to "TMDB",
+                            "imdb" to "IMDb",
+                            "simkl" to "Simkl",
+                            "anilist" to "AniList",
+                            "mal" to "MyAnimeList",
+                            "kitsu" to "Kitsu",
+                        ).forEach { (key, label) ->
+                            VesselFilterChip(
+                                selected = searchFilter == key,
+                                onClick = {
+                                    searchFilter = key
+                                    runSearch()
+                                },
+                                label = label,
+                            )
+                        }
+                    }
+
+                    notes.forEach { note ->
+                        Text(note, style = MaterialTheme.typography.labelSmall, color = palette.textMuted)
+                    }
+
+                    if (searchingMeta) {
+                        Box(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp)
+                        }
+                    } else if (hits.isNotEmpty()) {
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            hits.forEach { hit ->
+                                Surface(
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = palette.bgElevated,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .clickable {
+                                            showFixMatch = false
+                                            scope.launch {
+                                                runCatching {
+                                                    repo.setMetadataOverride(pluginId, nativeId, hit.canonicalId, false)
+                                                    loadAll()
+                                                }.onSuccess {
+                                                    repo.notify("${VesselI18n.tr("details.match_updated")}: ${hit.title}")
+                                                }.onFailure {
+                                                    repo.notifyError(it, "Failed to update match")
+                                                }
+                                            }
+                                        },
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(8.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        if (!hit.poster.isNullOrBlank()) {
+                                            AsyncImage(
+                                                model = hit.poster,
+                                                contentDescription = hit.title,
+                                                contentScale = ContentScale.Crop,
+                                                modifier = Modifier
+                                                    .width(40.dp)
+                                                    .height(58.dp)
+                                                    .clip(RoundedCornerShape(6.dp))
+                                                    .background(palette.bgSurface),
+                                            )
+                                        }
+                                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                            Text(hit.title, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                            Text(
+                                                listOfNotNull(
+                                                    hit.provider.uppercase(Locale.US),
+                                                    hit.year?.toString(),
+                                                    hit.mediaType,
+                                                    hit.canonicalId,
+                                                ).joinToString(" · "),
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = palette.textMuted,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        Text(VesselI18n.tr("details.match_no_hits"), style = MaterialTheme.typography.bodySmall, color = palette.textMuted)
+                    }
+
+                    VesselTextButton(onClick = { showManual = !showManual }) {
+                        Text(VesselI18n.tr("details.match_manual_toggle"))
+                    }
+
+                    if (showManual) {
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            listOf(
+                                "tmdb_tv" to "TMDB TV",
+                                "tmdb_movie" to "TMDB Movie",
+                                "imdb" to "IMDb",
+                                "simkl" to "Simkl",
+                                "anilist" to "AniList",
+                                "mal" to "MyAnimeList",
+                                "kitsu" to "Kitsu",
+                            ).forEach { (key, label) ->
+                                VesselFilterChip(
+                                    selected = fixProvider == key,
+                                    onClick = { fixProvider = key },
+                                    label = label,
+                                )
+                            }
+                        }
+                        OutlinedTextField(
+                            value = fixIdInput,
+                            onValueChange = { fixIdInput = it },
+                            placeholder = { Text(VesselI18n.tr("details.match_id_placeholder")) },
+                            enabled = !disableMeta,
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { disableMeta = !disableMeta }
+                            .padding(vertical = 2.dp),
+                    ) {
                         Checkbox(checked = disableMeta, onCheckedChange = { disableMeta = it })
-                        Text(VesselI18n.tr("details.fix_match_disable"))
+                        Text(VesselI18n.tr("details.fix_match_disable"), style = MaterialTheme.typography.bodySmall)
                     }
                 }
             },
             confirmButton = {
-                Button(onClick = {
-                    showFixMatch = false
-                    scope.launch {
-                        repo.setMetadataOverride(pluginId, nativeId, canonicalInput.ifBlank { null }, disableMeta)
-                        loadAll()
+                if (showManual || disableMeta) {
+                    VesselButton(onClick = {
+                        showFixMatch = false
+                        val canonical = if (disableMeta) null else buildCanonicalId()
+                        scope.launch {
+                            runCatching {
+                                repo.setMetadataOverride(pluginId, nativeId, canonical, disableMeta)
+                                loadAll()
+                            }.onSuccess {
+                                repo.notify(
+                                    if (disableMeta) VesselI18n.tr("details.match_disabled")
+                                    else VesselI18n.tr("details.match_updated"),
+                                )
+                            }.onFailure {
+                                repo.notifyError(it, "Failed to update match")
+                            }
+                        }
+                    }) {
+                        Text(VesselI18n.tr("details.fix_match_apply"))
                     }
-                }) {
-                    Text(VesselI18n.tr("details.fix_match_apply"))
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showFixMatch = false }) { Text(VesselI18n.tr("common.cancel")) }
+                VesselTextButton(onClick = { showFixMatch = false }) { Text(VesselI18n.tr("common.cancel")) }
+            },
+        )
+    }
+
+    if (showIncludeSources) {
+        val candidatePlugins = remember(plugins, pluginId) {
+            plugins.filter { p ->
+                p.enabled &&
+                    p.manifest.id != pluginId &&
+                    !isLiveTvPlugin(p)
+            }
+        }
+        var targetQuery by remember(showIncludeSources) { mutableStateOf(d.title) }
+        var activeSearchPid by remember(showIncludeSources) { mutableStateOf<String?>(null) }
+        val pluginHits = remember(showIncludeSources) { mutableStateMapOf<String, List<MediaSummary>>() }
+        val pluginBusy = remember(showIncludeSources) { mutableStateMapOf<String, Boolean>() }
+
+        fun searchPlugin(pid: String, onAutoSelectFirst: Boolean = false, pluginObj: PluginListEntry? = null) {
+            val q = targetQuery.trim()
+            if (q.isEmpty()) return
+            pluginBusy[pid] = true
+            activeSearchPid = pid
+            scope.launch {
+                runCatching { repo.searchPluginSync(pid, q) }
+                    .onSuccess { page ->
+                        pluginHits[pid] = page.items
+                        if (onAutoSelectFirst && pluginObj != null) {
+                            val first = page.items.firstOrNull()
+                            if (first != null) {
+                                val next = linkedSources.filterNot { it.pluginId == pid } + LinkedMediaSource(
+                                    pluginId = pid,
+                                    pluginName = pluginObj.manifest.name,
+                                    nativeId = first.nativeId,
+                                    title = first.title,
+                                    poster = first.poster,
+                                )
+                                linkedSources = repo.setLinkedSources(pluginId, nativeId, next)
+                                repo.notify("${pluginObj.manifest.name}: ${first.title}")
+                            } else {
+                                repo.notify("${pluginObj.manifest.name}: ${VesselI18n.tr("common.empty")}")
+                            }
+                        }
+                    }
+                    .onFailure { repo.notifyError(it, "Search failed") }
+                pluginBusy[pid] = false
+            }
+        }
+
+        AlertDialog(
+            onDismissRequest = { showIncludeSources = false },
+            title = { Text(VesselI18n.tr("details.include_sources"), style = MaterialTheme.typography.titleLarge) },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 440.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(VesselI18n.tr("details.include_sources_desc"), style = MaterialTheme.typography.bodySmall, color = palette.textMuted)
+                    OutlinedTextField(
+                        value = targetQuery,
+                        onValueChange = { targetQuery = it },
+                        placeholder = { Text(VesselI18n.tr("details.include_search_placeholder")) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+
+                    if (candidatePlugins.isEmpty()) {
+                        Text(VesselI18n.tr("common.empty"), color = palette.textMuted)
+                    } else {
+                        candidatePlugins.forEach { plug ->
+                            val pid = plug.manifest.id
+                            val linked = linkedSources.firstOrNull { it.pluginId == pid }
+                            val isBusy = pluginBusy[pid] == true
+                            Surface(shape = RoundedCornerShape(10.dp), color = palette.bgElevated) {
+                                Column(modifier = Modifier.fillMaxWidth().padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(plug.manifest.name, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodySmall)
+                                            if (linked != null) {
+                                                Text(
+                                                    "${VesselI18n.tr("details.linked_to")}: ${linked.title}",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = palette.accent,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis,
+                                                )
+                                            }
+                                        }
+                                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                                            if (linked != null) {
+                                                VesselCompactIconButton(size = 28.dp, onClick = { searchPlugin(pid) }) {
+                                                    Icon(Icons.Default.Search, contentDescription = VesselI18n.tr("details.change_linked_match"), modifier = Modifier.size(15.dp))
+                                                }
+                                            }
+                                            VesselCompactIconButton(
+                                                size = 30.dp,
+                                                containerColor = if (linked != null) palette.danger.copy(alpha = 0.16f) else palette.accent.copy(alpha = 0.18f),
+                                                onClick = {
+                                                    if (linked != null) {
+                                                        scope.launch {
+                                                            linkedSources = repo.setLinkedSources(
+                                                                pluginId,
+                                                                nativeId,
+                                                                linkedSources.filterNot { it.pluginId == pid },
+                                                            )
+                                                        }
+                                                    } else if (!isBusy) {
+                                                        searchPlugin(pid, onAutoSelectFirst = true, pluginObj = plug)
+                                                    }
+                                                },
+                                            ) {
+                                                if (isBusy) {
+                                                    CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
+                                                } else if (linked != null) {
+                                                    Icon(Icons.Default.Delete, contentDescription = VesselI18n.tr("common.remove"), tint = palette.danger, modifier = Modifier.size(15.dp))
+                                                } else {
+                                                    Icon(Icons.Default.Check, contentDescription = VesselI18n.tr("details.include_btn"), tint = palette.accent, modifier = Modifier.size(15.dp))
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    val hitsList = pluginHits[pid].orEmpty()
+                                    if (activeSearchPid == pid && hitsList.isNotEmpty()) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                        ) {
+                                            hitsList.forEach { cand ->
+                                                VesselFilterChip(
+                                                    selected = linked?.nativeId == cand.nativeId,
+                                                    onClick = {
+                                                        scope.launch {
+                                                            val next = linkedSources.filterNot { it.pluginId == pid } + LinkedMediaSource(
+                                                                pluginId = pid,
+                                                                pluginName = plug.manifest.name,
+                                                                nativeId = cand.nativeId,
+                                                                title = cand.title,
+                                                                poster = cand.poster,
+                                                            )
+                                                            linkedSources = repo.setLinkedSources(pluginId, nativeId, next)
+                                                            repo.notify("${plug.manifest.name}: ${cand.title}")
+                                                        }
+                                                    },
+                                                    label = cand.title,
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                VesselButton(onClick = { showIncludeSources = false }) {
+                    Text(VesselI18n.tr("common.close"))
+                }
             },
         )
     }

@@ -1,5 +1,7 @@
 //! ThemeSpec tokens and modular UI preferences.
 
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 
 use crate::{VesselError, VesselResult};
@@ -126,11 +128,21 @@ pub enum CornerStyle {
     Pill,
 }
 
+/// Mobile navigation bar style on Android.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MobileNavLayout {
+    #[default]
+    Standard,
+    FloatingBottom,
+}
+
 /// Shell chrome, sidebar module visibility, and density preferences.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct ShellPreferences {
     pub layout: NavLayout,
+    pub mobile_nav_layout: MobileNavLayout,
     pub visible_modules: Vec<NavModule>,
     pub density: UiDensity,
     pub font_scale_percent: u16,
@@ -142,6 +154,7 @@ impl Default for ShellPreferences {
     fn default() -> Self {
         Self {
             layout: NavLayout::default(),
+            mobile_nav_layout: MobileNavLayout::default(),
             visible_modules: vec![
                 NavModule::Home,
                 NavModule::Search,
@@ -210,12 +223,22 @@ impl Default for HomePreferences {
 
 /// Aspect ratio for media poster cards.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
 pub enum CardAspectRatio {
     #[default]
+    #[serde(rename = "poster_2x3", alias = "poster2x3")]
     Poster2x3,
-    Wide16x9,
+    #[serde(rename = "portrait_3x4")]
+    Portrait3x4,
+    #[serde(rename = "portrait_4x5")]
+    Portrait4x5,
+    #[serde(rename = "square")]
     Square,
+    #[serde(rename = "classic_4x3")]
+    Classic4x3,
+    #[serde(rename = "wide_16x9", alias = "wide16x9")]
+    Wide16x9,
+    #[serde(rename = "cinema_21x9")]
+    Cinema21x9,
 }
 
 /// Poster card grid layout and micro-badge toggles.
@@ -368,6 +391,58 @@ pub struct AdvancedUiPreferences {
     pub custom_css: String,
 }
 
+/// Visual layout preset for the Live TV directory.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LiveTvViewMode {
+    #[default]
+    Grid,
+    CompactList,
+    ShowcaseTiles,
+}
+
+/// Persisted favorite Live TV plugin channel stored on-device.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FavoriteLiveChannel {
+    pub plugin_id: String,
+    pub native_id: String,
+    pub title: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub poster: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub section_title: Option<String>,
+}
+
+/// Live TV plugins, view appearance, favorites, and per-plugin category section ordering preferences.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct LiveTvPreferences {
+    pub plugin_order: Vec<String>,
+    pub section_order_by_plugin: BTreeMap<String, Vec<String>>,
+    pub favorite_channels: Vec<FavoriteLiveChannel>,
+    pub view_mode: LiveTvViewMode,
+    pub density: UiDensity,
+    pub columns: Option<u8>,
+    pub show_logos: bool,
+    pub show_categories: bool,
+}
+
+impl Default for LiveTvPreferences {
+    fn default() -> Self {
+        Self {
+            plugin_order: Vec::new(),
+            section_order_by_plugin: BTreeMap::new(),
+            favorite_channels: Vec::new(),
+            view_mode: LiveTvViewMode::default(),
+            density: UiDensity::default(),
+            columns: None,
+            show_logos: true,
+            show_categories: true,
+        }
+    }
+}
+
 /// Declarative, portable UI customization configuration backed by SQLite `settings`.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
@@ -379,6 +454,7 @@ pub struct UiPreferences {
     pub playback: PlaybackPreferences,
     pub subtitles: SubtitlePreferences,
     pub advanced: AdvancedUiPreferences,
+    pub live_tv: LiveTvPreferences,
 }
 
 #[cfg(test)]
@@ -424,5 +500,74 @@ mod tests {
         );
         assert_eq!(prefs.playback.watched_threshold_percent, 90);
         assert!(prefs.cards.blur_nsfw_posters);
+        assert!(prefs.live_tv.show_logos);
+        assert!(prefs.live_tv.show_categories);
+        assert_eq!(prefs.live_tv.view_mode, super::LiveTvViewMode::Grid);
+    }
+
+    #[test]
+    fn round_trips_live_tv_preferences_and_favorites() {
+        let raw = r#"{
+            "liveTv": {
+                "pluginOrder": ["anthology_spor"],
+                "viewMode": "compact_list",
+                "density": "compact",
+                "columns": 3,
+                "showLogos": false,
+                "showCategories": true,
+                "favoriteChannels": [
+                    {
+                        "pluginId": "anthology_spor",
+                        "nativeId": "tv:1",
+                        "title": "Sports 1",
+                        "sectionTitle": "Spor"
+                    }
+                ]
+            }
+        }"#;
+        let parsed: UiPreferences = serde_json::from_str(raw).expect("parse liveTv prefs");
+        assert_eq!(parsed.live_tv.plugin_order, vec!["anthology_spor"]);
+        assert_eq!(parsed.live_tv.view_mode, super::LiveTvViewMode::CompactList);
+        assert_eq!(parsed.live_tv.density, super::UiDensity::Compact);
+        assert_eq!(parsed.live_tv.columns, Some(3));
+        assert!(!parsed.live_tv.show_logos);
+        assert_eq!(parsed.live_tv.favorite_channels.len(), 1);
+        assert_eq!(parsed.live_tv.favorite_channels[0].title, "Sports 1");
+    }
+
+    #[test]
+    fn round_trips_card_aspect_ratio_canonical_and_legacy_names() {
+        use super::CardAspectRatio;
+
+        let wide: UiPreferences =
+            serde_json::from_str(r#"{"cards":{"aspectRatio":"wide_16x9"}}"#).expect("wide_16x9");
+        assert_eq!(wide.cards.aspect_ratio, CardAspectRatio::Wide16x9);
+        let serialized = serde_json::to_string(&wide.cards.aspect_ratio).expect("serialize");
+        assert_eq!(serialized, r#""wide_16x9""#);
+
+        let legacy: UiPreferences = serde_json::from_str(r#"{"cards":{"aspectRatio":"wide16x9"}}"#)
+            .expect("legacy wide16x9");
+        assert_eq!(legacy.cards.aspect_ratio, CardAspectRatio::Wide16x9);
+
+        let poster: UiPreferences =
+            serde_json::from_str(r#"{"cards":{"aspectRatio":"poster_2x3"}}"#).expect("poster_2x3");
+        assert_eq!(poster.cards.aspect_ratio, CardAspectRatio::Poster2x3);
+        assert_eq!(
+            serde_json::to_string(&poster.cards.aspect_ratio).expect("serialize poster"),
+            r#""poster_2x3""#
+        );
+
+        for (raw, expected) in [
+            ("portrait_3x4", CardAspectRatio::Portrait3x4),
+            ("portrait_4x5", CardAspectRatio::Portrait4x5),
+            ("classic_4x3", CardAspectRatio::Classic4x3),
+            ("cinema_21x9", CardAspectRatio::Cinema21x9),
+            ("square", CardAspectRatio::Square),
+        ] {
+            let parsed: UiPreferences =
+                serde_json::from_str(&format!(r#"{{"cards":{{"aspectRatio":"{raw}"}}}}"#))
+                    .expect("parse extended ratio");
+            assert_eq!(parsed.cards.aspect_ratio, expected);
+        }
     }
 }

@@ -26,6 +26,9 @@ Open **Live TV → M3U / Xtream → Add IPTV Profile**:
 
 ## 2. Dedicated Live TV Plugins Tab
 
-Switch to **Live TV → Live TV Plugins** to browse live channels supplied directly by installed plugins carrying the `live_tv` capability (or `Live` content category):
-- Supports live **HLS (`.m3u8`)** and raw **MPEG-TS (`.ts`)** streams natively via `hls.js` and `mpegts.js`, routed transparently through Vessel's loopback Smart Proxy whenever custom `Referer`, `Origin`, or `User-Agent` headers are required.
-- Channels can be filtered by name or opened directly into the `/watch` player (Live mode automatically hides seek/duration bars and switches cleanly between channels).
+Switch to **Live TV → Live TV Plugins** to browse live channels supplied directly by installed plugins carrying the `live_tv` capability (or live categories):
+- **Isolated from Home:** Live TV plugin catalogs are kept out of main Home discovery feeds so Home stays focused on VOD movies, series, and anime.
+- **Persistent Favorites Bar:** Click the **Star (`★`)** icon on any plugin live channel to pin it to the top **Favorites** shelf when opening Live TV.
+- **View Modes & Custom Ordering:** Switch between **Grid**, **Compact List**, and **Large Tiles** views, and **drag-and-drop** plugin groups/categories to prioritize your preferred categories (e.g., placing sports channels first).
+- **Uncapped Catalog Listing:** Displays full channel lists exposed by live plugins without artificial per-catalog item caps.
+- **Direct-to-Player Live Playback:** Clicking a live channel opens the stream directly in the player via **HLS (`.m3u8`)** or **MPEG-TS (`.ts`)** (routed transparently through Smart Proxy for custom headers) without an intermediate Details view, audio-track drawer, or offline download buttons.

@@ -25,7 +25,16 @@ import { useLibraryState } from '@/composables/useLibraryState'
 import { usePlayerSession } from '@/composables/usePlayerSession'
 import { useUiPreferences } from '@/composables/useUiPreferences'
 import { pushToast } from '@/composables/useVesselEvents'
-import type { ContinueWatchingEntry, Episode, MediaSummary, PlaybackProgress, PluginListEntry } from '@/types/vessel'
+import { isLiveMediaIdentifier, isLiveTvPlugin, resolveLiveGroupName } from '@/utils/liveTv'
+import type {
+  ContinueWatchingEntry,
+  Episode,
+  HeroBannerMode,
+  MediaDetail,
+  MediaSummary,
+  PlaybackProgress,
+  PluginListEntry,
+} from '@/types/vessel'
 
 const router = useRouter()
 const { t, currentLang } = useI18n()
@@ -46,6 +55,17 @@ const heroIndex = shallowRef(0)
 const showSourcePicker = shallowRef(false)
 const orderListRef = ref<HTMLElement | null>(null)
 const draggingPluginIndex = shallowRef<number | null>(null)
+const heroDetails = ref<Record<string, MediaDetail>>({})
+const heroSourceModal = ref<{
+  pluginId: string
+  nativeId: string
+  detail: MediaDetail
+  episode: Episode
+  streams: import('@/types/vessel').StreamCandidate[]
+  subtitles: import('@/types/vessel').SubtitleTrack[]
+  skipSegments?: import('@/types/vessel').SkipSegment[]
+  startPositionMs?: number
+} | null>(null)
 
 const editingCwEntry = ref<ContinueWatchingEntry | null>(null)
 const cwEditEpisodes = ref<Episode[]>([])
@@ -72,20 +92,24 @@ let heroAutoTimer: number | null = null
 defineOptions({ name: 'HomeView' })
 
 const enabledPlugins = computed(() => allPlugins.value.filter((p) => p.enabled))
+const livePluginIdSet = computed(
+  () => new Set(allPlugins.value.filter(isLiveTvPlugin).map((p) => p.manifest.id)),
+)
+const homeEligiblePlugins = computed(() =>
+  enabledPlugins.value.filter((p) => !isLiveTvPlugin(p)),
+)
 
 const activeHomePluginIds = computed<string[]>(() => {
-  const enabledSet = new Set(enabledPlugins.value.map((p) => p.manifest.id))
+  const eligibleSet = new Set(homeEligiblePlugins.value.map((p) => p.manifest.id))
   const sel = uiPreferences.value.home.selectedPlugins
   if (sel && sel.length > 0) {
-    return sel.filter((id) => enabledSet.has(id))
+    return sel.filter((id) => eligibleSet.has(id))
   }
   if (sel && sel.length === 0) {
     return []
   }
   // Default when user hasn't picked explicitly yet: smart curated starter set <= 5 VOD/anime plugins
-  const isPureLivePlugin = (p: PluginListEntry) =>
-    p.manifest.capabilities.includes('live_tv') && !p.manifest.capabilities.includes('vod')
-  const vodEnabled = enabledPlugins.value.filter((p) => !isPureLivePlugin(p))
+  const vodEnabled = homeEligiblePlugins.value
   const vodSet = new Set(vodEnabled.map((p) => p.manifest.id))
   const preferred = ['anizium', 'diziwatch', 'yabancidizi', 'animecix', 'seicode']
   const picked: string[] = []
@@ -101,39 +125,29 @@ const activeHomePluginIds = computed<string[]>(() => {
 })
 
 const activeHeroPluginIds = computed<string[]>(() => {
-  const enabledSet = new Set(enabledPlugins.value.map((p) => p.manifest.id))
+  const eligibleSet = new Set(homeEligiblePlugins.value.map((p) => p.manifest.id))
   const sel = uiPreferences.value.home.heroPlugins
   if (!sel || sel.length === 0) return []
-  return sel.filter((id) => enabledSet.has(id))
+  return sel.filter((id) => eligibleSet.has(id))
 })
-
-function resolveGroupName(p: PluginListEntry): string {
-  if (p.repoId?.trim()) return p.repoId.trim()
-  const domains = p.allowedDomains ?? []
-  if (
-    domains.includes('raw.githubusercontent.com') &&
-    (p.manifest.author === 'falsisdev' ||
-      p.manifest.author === 'metemel' ||
-      p.manifest.id.startsWith('anthology') ||
-      p.manifest.id === 'm3u.anthology.addon')
-  ) {
-    return 'Anthology'
-  }
-  if (p.manifest.id.startsWith('community.anthology')) return 'Anthology'
-  if (p.sourceType === 'dev_dir') return 'Local Dev Plugins'
-  return 'Standalone Plugins'
-}
 
 const groupedEnabledPlugins = computed(() => {
   const buckets = new Map<string, PluginListEntry[]>()
-  for (const p of enabledPlugins.value) {
-    const group = resolveGroupName(p)
+  for (const p of homeEligiblePlugins.value) {
+    const group = resolveLiveGroupName(p)
     const arr = buckets.get(group)
     if (arr) arr.push(p)
     else buckets.set(group, [p])
   }
   return Array.from(buckets.entries()).map(([name, items]) => ({ name, items }))
 })
+
+const visibleContinueWatching = computed(() =>
+  continueWatching.value.filter(
+    (entry) =>
+      entry.mediaType !== 'live' && !livePluginIdSet.value.has(entry.media.pluginId),
+  ),
+)
 
 const pluginNameById = computed(() => {
   const map = new Map<string, string>()
@@ -147,7 +161,16 @@ const orderedShelves = computed(() => {
   const order = activeHomePluginIds.value
   const allowed = new Set(order)
   return shelves.value
-    .filter((s) => allowed.has(s.pluginId))
+    .filter((s) => allowed.has(s.pluginId) && !livePluginIdSet.value.has(s.pluginId))
+    .map((shelf) => ({
+      ...shelf,
+      sections: shelf.sections
+        .map((sec) => ({
+          ...sec,
+          items: sec.items.filter((it) => it.type !== 'live'),
+        }))
+        .filter((sec) => sec.items.length > 0),
+    }))
     .slice()
     .sort((a, b) => {
       const ia = order.indexOf(a.pluginId)
@@ -158,20 +181,22 @@ const orderedShelves = computed(() => {
 
 const spotlightPool = computed<Array<MediaSummary & { resolvedPluginId: string }>>(() => {
   const heroIds = activeHeroPluginIds.value
+  const nonLiveShelves = shelves.value.filter((s) => !livePluginIdSet.value.has(s.pluginId))
   const sourceShelves =
     heroIds.length > 0
-      ? shelves.value.filter((s) => heroIds.includes(s.pluginId))
+      ? nonLiveShelves.filter((s) => heroIds.includes(s.pluginId))
       : orderedShelves.value
-  const candidateShelves = sourceShelves.length > 0 ? sourceShelves : shelves.value
+  const candidateShelves = sourceShelves.length > 0 ? sourceShelves : nonLiveShelves
 
   const collected: Array<MediaSummary & { resolvedPluginId: string }> = []
   for (const shelf of candidateShelves) {
     for (const section of shelf.sections) {
       for (const item of section.items) {
-        if (!item.poster) continue
+        const pid = item.pluginId ?? shelf.pluginId
+        if (!item.poster || item.type === 'live' || livePluginIdSet.value.has(pid)) continue
         collected.push({
           ...item,
-          resolvedPluginId: item.pluginId ?? shelf.pluginId,
+          resolvedPluginId: pid,
         })
         if (collected.length >= 6) return collected
       }
@@ -181,9 +206,11 @@ const spotlightPool = computed<Array<MediaSummary & { resolvedPluginId: string }
     for (const shelf of candidateShelves) {
       for (const section of shelf.sections) {
         for (const item of section.items) {
+          const pid = item.pluginId ?? shelf.pluginId
+          if (item.type === 'live' || livePluginIdSet.value.has(pid)) continue
           collected.push({
             ...item,
-            resolvedPluginId: item.pluginId ?? shelf.pluginId,
+            resolvedPluginId: pid,
           })
           if (collected.length >= 6) return collected
         }
@@ -198,6 +225,37 @@ const featuredItem = computed(() => {
   const idx = heroIndex.value % spotlightPool.value.length
   return spotlightPool.value[idx]
 })
+
+const featuredDetail = computed<MediaDetail | null>(() => {
+  const item = featuredItem.value
+  if (!item) return null
+  return heroDetails.value[`${item.resolvedPluginId}:${item.nativeId}`] ?? null
+})
+
+watch(
+  featuredItem,
+  async (item) => {
+    if (!item || !isTauriRuntime()) return
+    const key = `${item.resolvedPluginId}:${item.nativeId}`
+    if (heroDetails.value[key]) return
+    try {
+      const det = await vesselApi.getDetailsWithEnrichment(
+        item.resolvedPluginId,
+        item.nativeId,
+        currentLang.value,
+      )
+      heroDetails.value = { ...heroDetails.value, [key]: det }
+      if (det.backdrop) {
+        const pre = new Image()
+        pre.decoding = 'async'
+        pre.src = det.backdrop
+      }
+    } catch {
+      // Non-fatal
+    }
+  },
+  { immediate: true },
+)
 
 watch(
   spotlightPool,
@@ -303,6 +361,11 @@ async function toggleHeroPlugin(pluginId: string): Promise<void> {
 async function clearHeroPlugins(): Promise<void> {
   uiPreferences.value.home.heroPlugins = null
   heroIndex.value = 0
+  await savePreferences(uiPreferences.value)
+}
+
+async function setHeroBannerMode(mode: HeroBannerMode): Promise<void> {
+  uiPreferences.value.home.heroBanner = mode
   await savePreferences(uiPreferences.value)
 }
 
@@ -432,6 +495,119 @@ async function resumeContinueWatching(entry: ContinueWatchingEntry): Promise<voi
   } catch (err) {
     pushToast('warn', String(err))
     openDetails(entry.media.pluginId, entry.media.nativeId)
+  } finally {
+    resumingKey.value = null
+  }
+}
+
+async function launchHeroStream(
+  modalState: NonNullable<typeof heroSourceModal.value>,
+  streamIndex: number,
+): Promise<void> {
+  const { pluginId, nativeId, detail, episode, streams, subtitles, skipSegments, startPositionMs } = modalState
+  heroSourceModal.value = null
+  setSession({
+    pluginId,
+    nativeId,
+    detail,
+    episode,
+    streams,
+    subtitles,
+    skipSegments,
+    activeStreamIndex: streamIndex,
+    startPositionMs,
+  })
+  await router.push({
+    name: 'player',
+    params: { pluginId, nativeId },
+    query: { streamId: episode.streamId, streamIndex: String(streamIndex) },
+  })
+}
+
+async function watchHeroFeatured(pluginId: string, nativeId: string): Promise<void> {
+  const key = `hero:${pluginId}:${nativeId}`
+  if (resumingKey.value) return
+  resumingKey.value = key
+  try {
+    const cachedDetail = heroDetails.value[`${pluginId}:${nativeId}`]
+    const [detail, progRows] = await Promise.all([
+      cachedDetail ? Promise.resolve(cachedDetail) : vesselApi.getDetailsWithEnrichment(pluginId, nativeId, currentLang.value),
+      vesselApi.listMediaWatchProgress(pluginId, nativeId).catch(() => []),
+    ])
+    const cw = continueWatching.value.find(
+      (c) => c.media.pluginId === pluginId && c.media.nativeId === nativeId,
+    )
+    const activeProg = progRows
+      .filter((p) => !p.completed)
+      .sort((a, b) => b.lastWatchedAt.localeCompare(a.lastWatchedAt))[0]
+    const ep =
+      (cw && detail.episodes.find((e) => e.streamId === cw.streamId)) ??
+      (activeProg && detail.episodes.find((e) => e.streamId === activeProg.streamId)) ??
+      detail.episodes[0] ??
+      (detail.type === 'movie'
+        ? {
+            streamId: detail.nativeId,
+            season: 1,
+            episode: 1,
+            title: detail.title,
+            tags: [],
+          }
+        : null)
+
+    if (!ep) {
+      pushToast('warn', t('details.no_episodes'))
+      return
+    }
+    const streamRes = await vesselApi.getStreamsWithLinked({
+      pluginId,
+      nativeId,
+      episodeId: ep.streamId,
+      season: ep.season,
+      episode: ep.episode,
+      absoluteEpisode: ep.absoluteEpisode,
+      isMovie: detail.type === 'movie',
+    })
+    if (!streamRes.streams.length) {
+      pushToast('warn', t('details.no_streams'))
+      return
+    }
+    const startPos =
+      cw && !cw.completed && cw.streamId === ep.streamId
+        ? cw.positionMs
+        : activeProg && activeProg.streamId === ep.streamId
+          ? activeProg.positionMs
+          : 0
+
+    const playableDefaultIdx = streamRes.streams.findIndex(
+      (s) => s.isDefault && !s.needsExtractor && s.kind !== 'embed',
+    )
+    const firstPlayableIdx = streamRes.streams.findIndex(
+      (s) => !s.needsExtractor && s.kind !== 'embed',
+    )
+    const bestIdx = playableDefaultIdx >= 0 ? playableDefaultIdx : firstPlayableIdx
+
+    const modalData = {
+      pluginId,
+      nativeId,
+      detail,
+      episode: ep,
+      streams: streamRes.streams,
+      subtitles: streamRes.subtitles,
+      skipSegments: streamRes.skipSegments,
+      startPositionMs: startPos > 2000 ? startPos : undefined,
+    }
+
+    const askAlways =
+      uiPreferences.value.playback.clickBehavior === 'always_ask_source' &&
+      streamRes.streams.length > 1
+    if (askAlways || bestIdx < 0) {
+      heroSourceModal.value = modalData
+      return
+    }
+
+    await launchHeroStream(modalData, bestIdx)
+  } catch (err) {
+    pushToast('warn', String(err))
   } finally {
     resumingKey.value = null
   }
@@ -672,6 +848,10 @@ async function dismissContinueWatching(entry: ContinueWatchingEntry): Promise<vo
 }
 
 function openDetails(pluginId: string, nativeId: string): void {
+  if (isLiveMediaIdentifier(undefined, pluginId, nativeId, nativeId, allPlugins.value.find((p) => p.manifest.id === pluginId))) {
+    void watchHeroFeatured(pluginId, nativeId)
+    return
+  }
   void router.push({ name: 'details', params: { pluginId, nativeId } })
 }
 
@@ -688,7 +868,7 @@ function startHeroTimer(): void {
     if (spotlightPool.value.length > 1 && !showSourcePicker.value) {
       heroIndex.value = (heroIndex.value + 1) % spotlightPool.value.length
     }
-  }, 9000)
+  }, 7000)
 }
 
 onMounted(() => {
@@ -722,11 +902,37 @@ onUnmounted(() => {
 
 <template>
   <section class="nuvio-home">
-    <!-- Full-bleed Netflix-style Cinema Spotlight Hero with Overlapping Crossfade -->
+    <!-- Full-bleed Netflix-style Cinema Spotlight Hero with Ken Burns Zoom & Crossfade -->
+    <div
+      v-if="uiPreferences.home.heroBanner === 'hidden' && homeEligiblePlugins.length"
+      class="home-hidden-hero-bar"
+    >
+      <button
+        type="button"
+        class="v-btn v-btn-sm"
+        @click="showSourcePicker = true"
+      >
+        <SlidersHorizontal :size="14" aria-hidden="true" />
+        {{ t('home.feeds') }} ({{ activeHomePluginIds.length }}/{{ homeEligiblePlugins.length }})
+      </button>
+      <button
+        type="button"
+        class="v-btn v-btn-icon v-btn-sm"
+        :aria-label="t('common.refresh')"
+        :disabled="loading"
+        @click="loadHome(true)"
+      >
+        <RefreshCw :size="14" :class="{ spin: loading }" aria-hidden="true" />
+      </button>
+    </div>
+
     <header
       v-if="uiPreferences.home.heroBanner !== 'hidden'"
       class="nuvio-hero"
-      :class="{ 'is-compact': uiPreferences.home.heroBanner === 'compact' }"
+      :class="{
+        'is-compact': uiPreferences.home.heroBanner === 'compact',
+        'is-reduced-motion': uiPreferences.shell.reducedMotion,
+      }"
     >
       <div class="hero-stage-stack">
         <Transition name="hero-crossfade">
@@ -736,14 +942,14 @@ onUnmounted(() => {
             class="hero-stage"
           >
             <img
-              v-if="featuredItem.poster"
-              :src="featuredItem.poster"
+              v-if="featuredDetail?.backdrop || featuredItem.poster"
+              :src="featuredDetail?.backdrop || featuredItem.poster"
               :alt="featuredItem.title"
               width="1440"
               height="680"
               fetchpriority="high"
               decoding="async"
-              class="hero-art"
+              class="hero-art hero-ken-burns"
             />
             <div class="hero-vignette" aria-hidden="true" />
 
@@ -753,24 +959,38 @@ onUnmounted(() => {
                   <Sparkles :size="11" aria-hidden="true" />
                   {{ featuredItem.isAnime ? 'ANIME' : featuredItem.type.toUpperCase() }}
                 </span>
-                <span v-if="featuredItem.year">{{ featuredItem.year }}</span>
-                <span v-if="featuredItem.rating !== undefined" class="hero-rating">
+                <span v-if="featuredDetail?.year ?? featuredItem.year">{{ featuredDetail?.year ?? featuredItem.year }}</span>
+                <span v-if="(featuredDetail?.rating ?? featuredItem.rating) !== undefined" class="hero-rating">
                   <Star :size="13" fill="currentColor" aria-hidden="true" />
-                  {{ featuredItem.rating.toFixed(1) }}
+                  {{ (featuredDetail?.rating ?? featuredItem.rating)!.toFixed(1) }}
                 </span>
-                <span class="source-tag">{{ featuredItem.resolvedPluginId }}</span>
+                <span class="source-tag">{{ pluginNameById.get(featuredItem.resolvedPluginId) ?? featuredItem.resolvedPluginId }}</span>
               </div>
 
               <h1 class="hero-title">{{ featuredItem.title }}</h1>
-              <p class="hero-sub">{{ t('home.hero_subtitle') }}</p>
+              <p class="hero-sub">
+                {{
+                  featuredDetail?.genres?.length
+                    ? featuredDetail.genres.slice(0, 3).join(' • ')
+                    : (featuredDetail?.synopsis || t('home.hero_subtitle'))
+                }}
+              </p>
 
               <div class="hero-actions">
                 <button
                   type="button"
                   class="v-btn v-btn-primary"
-                  @click="openDetails(featuredItem.resolvedPluginId, featuredItem.nativeId)"
+                  :disabled="resumingKey === `hero:${featuredItem.resolvedPluginId}:${featuredItem.nativeId}`"
+                  @click="watchHeroFeatured(featuredItem.resolvedPluginId, featuredItem.nativeId)"
                 >
-                  <Play :size="16" fill="currentColor" aria-hidden="true" /> {{ t('home.watch_now') }}
+                  <RefreshCw
+                    v-if="resumingKey === `hero:${featuredItem.resolvedPluginId}:${featuredItem.nativeId}`"
+                    :size="16"
+                    class="spin"
+                    aria-hidden="true"
+                  />
+                  <Play v-else :size="16" fill="currentColor" aria-hidden="true" />
+                  {{ t('home.watch_now') }}
                 </button>
                 <button
                   type="button"
@@ -780,13 +1000,13 @@ onUnmounted(() => {
                   <Info :size="16" aria-hidden="true" /> {{ t('home.more_info') }}
                 </button>
                 <button
-                  v-if="enabledPlugins.length"
+                  v-if="homeEligiblePlugins.length"
                   type="button"
                   class="v-btn"
                   @click="showSourcePicker = true"
                 >
                   <SlidersHorizontal :size="15" aria-hidden="true" />
-                  {{ t('home.feeds') }} ({{ activeHomePluginIds.length }}/{{ enabledPlugins.length }})
+                  {{ t('home.feeds') }} ({{ activeHomePluginIds.length }}/{{ homeEligiblePlugins.length }})
                 </button>
                 <button
                   type="button"
@@ -827,7 +1047,7 @@ onUnmounted(() => {
                   {{ t('nav.extensions') }}
                 </RouterLink>
                 <button
-                  v-if="enabledPlugins.length"
+                  v-if="homeEligiblePlugins.length"
                   type="button"
                   class="v-btn"
                   @click="showSourcePicker = true"
@@ -882,13 +1102,13 @@ onUnmounted(() => {
     <div class="home-rails-body">
       <!-- Continue Watching Rail -->
       <section
-        v-if="uiPreferences.home.showContinueWatching && continueWatching.length"
+        v-if="uiPreferences.home.showContinueWatching && visibleContinueWatching.length"
         class="nuvio-rail continue-rail"
       >
         <div class="rail-head">
           <div class="rail-title-wrap">
             <h2 class="rail-title">{{ t('home.continue_watching') }}</h2>
-            <span class="rail-source v-muted">{{ continueWatching.length }} {{ t('home.active_count') }}</span>
+            <span class="rail-source v-muted">{{ visibleContinueWatching.length }} {{ t('home.active_count') }}</span>
           </div>
           <div class="rail-arrows">
             <button
@@ -912,7 +1132,7 @@ onUnmounted(() => {
 
         <div id="rail-continue-watching" class="rail-track">
           <article
-            v-for="entry in continueWatching"
+            v-for="entry in visibleContinueWatching"
             :key="`${entry.media.pluginId}:${entry.media.nativeId}`"
             class="cw-card"
             :class="{ 'is-loading': resumingKey === `${entry.media.pluginId}:${entry.media.nativeId}` }"
@@ -1002,14 +1222,14 @@ onUnmounted(() => {
       <div v-else-if="!shelves.length" class="v-card empty-box">
         <p class="v-muted empty-text">
           {{
-            enabledPlugins.length
+            homeEligiblePlugins.length
               ? t('home.empty_selected')
               : t('home.empty_plugins')
           }}
         </p>
         <div class="hero-actions">
           <button
-            v-if="enabledPlugins.length"
+            v-if="homeEligiblePlugins.length"
             type="button"
             class="v-btn v-btn-primary"
             @click="showSourcePicker = true"
@@ -1078,6 +1298,60 @@ onUnmounted(() => {
       </div>
     </div>
 
+    <!-- Hero Quick Source Resolver Modal -->
+    <Teleport to="body">
+      <Transition name="modal-pop">
+        <div
+          v-if="heroSourceModal"
+          class="home-modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          :aria-label="t('details.select_stream')"
+          @click.self="heroSourceModal = null"
+        >
+          <div class="v-card home-picker-modal" style="max-width: 500px;">
+            <div class="picker-head">
+              <div>
+                <h3 class="picker-title">{{ t('details.select_stream') }}</h3>
+                <p class="v-muted picker-sub">
+                  {{ heroSourceModal.detail.title }}
+                  <template v-if="heroSourceModal.detail.type !== 'movie'">
+                    · S{{ heroSourceModal.episode.season }}:E{{ heroSourceModal.episode.episode }}
+                  </template>
+                </p>
+              </div>
+              <button
+                type="button"
+                class="v-btn v-btn-icon"
+                :aria-label="t('common.close')"
+                @click="heroSourceModal = null"
+              >
+                <X :size="16" />
+              </button>
+            </div>
+            <div class="picker-groups">
+              <button
+                v-for="(cand, sIdx) in heroSourceModal.streams"
+                :key="`${cand.url}-${sIdx}`"
+                type="button"
+                class="order-row"
+                style="justify-content: space-between; cursor: pointer; text-align: left;"
+                @click="launchHeroStream(heroSourceModal!, sIdx)"
+              >
+                <div style="display: flex; flex-direction: column; gap: 0.15rem; min-width: 0;">
+                  <strong style="font-size: 0.9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ cand.label }}</strong>
+                  <span class="v-muted" style="font-size: 0.78rem;">
+                    {{ [cand.pluginName || cand.pluginId, cand.quality, cand.kind.toUpperCase(), cand.audioType].filter(Boolean).join(' · ') }}
+                  </span>
+                </div>
+                <Play :size="15" fill="currentColor" style="color: var(--vessel-accent); flex-shrink: 0;" aria-hidden="true" />
+              </button>
+            </div>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
+
     <!-- Customize Home Feeds Modal -->
     <Teleport to="body">
       <Transition name="modal-pop">
@@ -1110,6 +1384,22 @@ onUnmounted(() => {
             <div class="picker-groups">
               <div class="hero-source-section">
                 <div class="picker-group-head">
+                  <strong>{{ t('settings.hero_banner') }}</strong>
+                </div>
+                <div class="hero-chip-grid">
+                  <button
+                    v-for="modeOpt in (['full', 'compact', 'hidden'] as const)"
+                    :key="`hero-mode-${modeOpt}`"
+                    type="button"
+                    class="hero-source-chip"
+                    :class="{ checked: uiPreferences.home.heroBanner === modeOpt }"
+                    @click="setHeroBannerMode(modeOpt)"
+                  >
+                    <span>{{ t(`settings.hero_${modeOpt}`) }}</span>
+                  </button>
+                </div>
+
+                <div class="picker-group-head" style="margin-top: 0.35rem;">
                   <strong>{{ t('home.hero_source_title') }}</strong>
                   <button
                     type="button"
@@ -1125,7 +1415,7 @@ onUnmounted(() => {
                 </p>
                 <div class="hero-chip-grid">
                   <button
-                    v-for="p in enabledPlugins"
+                    v-for="p in homeEligiblePlugins"
                     :key="`hero-${p.manifest.id}`"
                     type="button"
                     class="hero-source-chip"
@@ -1468,8 +1758,35 @@ onUnmounted(() => {
   opacity: 0.92;
   filter: contrast(1.06) saturate(1.14);
   pointer-events: none;
+  transform-origin: center center;
+  transform: scale(1.01);
+  will-change: transform;
+}
+
+.hero-art.hero-ken-burns {
+  animation: hero-ken-burns 7.2s linear forwards;
+}
+
+.nuvio-hero.is-reduced-motion .hero-art.hero-ken-burns {
+  animation: none;
   transform: scale(1.02);
-  transition: transform 6.5s ease-out;
+}
+
+@keyframes hero-ken-burns {
+  0% {
+    transform: scale(1.01);
+  }
+  100% {
+    transform: scale(1.09);
+  }
+}
+
+.home-hidden-hero-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  padding: 1rem 2.75rem 0;
 }
 
 .hero-vignette {

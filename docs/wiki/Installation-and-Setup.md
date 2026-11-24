@@ -2,13 +2,13 @@
 
 # Installation & Setup
 
-This guide covers installing prebuilt **Vessel** Desktop releases on **macOS** and **Windows**, locating your local data directory (`<VesselRoot>`), configuring updates, and building Vessel from source.
+This guide covers installing prebuilt **Vessel** Desktop (`macOS`, `Windows`, `Linux`) and **Android** (`.apk`) releases, locating your local data directory (`<VesselRoot>`), configuring updates, and building Vessel from source.
 
 ---
 
-## 1. Prebuilt Desktop Releases
+## 1. Prebuilt Desktop & Android Releases
 
-Official installers are built automatically via GitHub Actions on every tagged release (`v*`) and published on **[GitHub Releases](https://github.com/falsisdev/vessel/releases)**:
+Official Desktop installers are built automatically via GitHub Actions on every tagged release (`v*`) and published alongside Android APK builds on **[GitHub Releases](https://github.com/falsisdev/vessel/releases)**:
 
 | Platform | Architecture | Package Format | Notes |
 | :--- | :--- | :--- | :--- |
@@ -16,6 +16,7 @@ Official installers are built automatically via GitHub Actions on every tagged r
 | **macOS** | Intel (`x86_64-apple-darwin`) | `.dmg` | Drag `Vessel.app` to Applications |
 | **Windows** | x64 (`x86_64-pc-windows-msvc`) | `-setup.exe` (NSIS) | Built-in WebView2 runtime check |
 | **Linux** | x64 (`x86_64-unknown-linux-gnu`) | `.AppImage`, `.deb`, `.rpm`, `.flatpak` | Sandbox-aware Flatpak (`dev.falsis.vessel`) + native packages |
+| **Android** | ARM64 / ARMv7 / x86_64 (`Universal`) | `.apk` | Direct APK install (`Vessel_*_android.apk`) + in-app update checker |
 
 ---
 

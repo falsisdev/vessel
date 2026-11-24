@@ -14,7 +14,7 @@ O **Vessel** é um centro de mídia e streaming **local-first**, multiplataforma
 
 ---
 
-## Recursos Principais (`v0.1.1-alpha.4`)
+## Recursos Principais (`v0.1.3`)
 
 - **Player em Tela Cheia (`/watch`):** Suporte para HLS (`hls.js`), MPEG-TS (`mpegts.js`), MP4/WebM e envio para **`mpv`** externo via JSON IPC; troca de **Faixas de Áudio**, **Legendas** (`.srt/.vtt/.ass/.ssa`) com sincronia (`-500ms / +500ms`) e pré-visualização, botão direto **Ir para Detalhes** e pulo automático de **Intro / Resumo / Créditos / Prévia** (`Plugin > TheIntroDB > IntroDB > AniSkip`).
 - **Continuar Assistindo Inteligente:** Avança automaticamente para o próximo episódio após concluir o atual, oculta filmes/finais finalizados, oferece menu de contexto (botão direito / toque longo) e editor manual.

@@ -82,6 +82,8 @@ pub struct ExternalIds {
     pub kitsu: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mal: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub simkl: Option<u64>,
 }
 
 impl ExternalIds {
@@ -93,6 +95,7 @@ impl ExternalIds {
             && self.anilist.is_none()
             && self.kitsu.is_none()
             && self.mal.is_none()
+            && self.simkl.is_none()
     }
 
     /// Exports populated IDs in deterministic key order.
@@ -115,6 +118,9 @@ impl ExternalIds {
         }
         if let Some(id) = self.mal {
             map.insert("mal", id.to_string());
+        }
+        if let Some(id) = self.simkl {
+            map.insert("simkl", id.to_string());
         }
         map
     }

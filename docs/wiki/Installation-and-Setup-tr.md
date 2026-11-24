@@ -2,20 +2,21 @@
 
 # Kurulum, Veri Dizini ve Kaynaktan Derleme
 
-Bu sayfa **Vessel** masaüstü uygulamasının **macOS** ve **Windows** kurulum adımlarını, yerel veri dizinini (`<VesselRoot>`) ve kaynak koddan derleme komutlarını içerir.
+Bu sayfa **Vessel** masaüstü (`macOS`, `Windows`, `Linux`) ve mobil (**Android**) kurulum adımlarını, yerel veri dizinini (`<VesselRoot>`) ve kaynak koddan derleme komutlarını içerir.
 
 ---
 
 ## 1. Hazır Sürümleri İndirme (`GitHub Releases`)
 
-Etiketlenen her sürüm (`v*`) GitHub Actions üzerinden otomatik derlenerek **[GitHub Releases](https://github.com/falsisdev/vessel/releases)** sayfasında paylaşılır:
+Etiketlenen her sürüm (`v*`) GitHub Actions üzerinden derlenerek **[GitHub Releases](https://github.com/falsisdev/vessel/releases)** sayfasında paylaşılır (Android `.apk` paketleri de sürüm varlıklarına eklenir):
 
-| İşletim Sistemi | Mimari | Paket Formatı | Açıklama |
+| Platform | Mimari | Paket Formatı | Açıklama |
 | :--- | :--- | :--- | :--- |
 | **macOS** | Apple Silicon (`aarch64-apple-darwin`) | `.dmg` | `Vessel.app` dosyasını Applications klasörüne sürükleyin |
 | **macOS** | Intel (`x86_64-apple-darwin`) | `.dmg` | `Vessel.app` dosyasını Applications klasörüne sürükleyin |
 | **Windows** | x64 (`x86_64-pc-windows-msvc`) | `-setup.exe` (NSIS) | Kurulum sihirbazı |
 | **Linux** | x64 (`x86_64-unknown-linux-gnu`) | `.AppImage`, `.deb`, `.rpm`, `.flatpak` | Flatpak sandbox (`dev.falsis.vessel`) + yerel paketler |
+| **Android** | ARM64 / ARMv7 / x86_64 (`Universal`) | `.apk` | Doğrudan APK kurulumu (`Vessel_*_android.apk`) + uygulama içi güncelleme denetimi |
 
 ---
 

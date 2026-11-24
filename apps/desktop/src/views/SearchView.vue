@@ -6,9 +6,11 @@ import { isTauriRuntime, vesselApi } from '@/api/vessel'
 import MediaCard from '@/components/media/MediaCard.vue'
 import { useI18n } from '@/composables/useI18n'
 import { useLibraryState } from '@/composables/useLibraryState'
+import { usePlayerSession } from '@/composables/usePlayerSession'
 import { useUiPreferences } from '@/composables/useUiPreferences'
 import { pushToast, useVesselEvents } from '@/composables/useVesselEvents'
-import type { PluginListEntry } from '@/types/vessel'
+import { isLiveMediaSummary, isLiveTvPlugin } from '@/utils/liveTv'
+import type { MediaSummary, PluginListEntry } from '@/types/vessel'
 
 defineOptions({ name: 'SearchView' })
 
@@ -16,14 +18,23 @@ const router = useRouter()
 const { t } = useI18n()
 const { uiPreferences } = useUiPreferences()
 const { refreshLibraryState } = useLibraryState()
+const { setSession } = usePlayerSession()
 const { isSearching, searchBuckets, startSearch } = useVesselEvents()
 
 const query = shallowRef('')
 const mediaTypeFilter = shallowRef('')
 const selectedPluginId = shallowRef('')
 const plugins = ref<PluginListEntry[]>([])
+const launchingLiveKey = shallowRef('')
 
 const enabledPlugins = computed(() => plugins.value.filter((p) => p.enabled))
+const pluginMap = computed(() => {
+  const m = new Map<string, PluginListEntry>()
+  for (const p of plugins.value) {
+    m.set(p.manifest.id, p)
+  }
+  return m
+})
 
 const TYPE_PILLS = [
   { value: '', labelKey: 'search.filter_all' },
@@ -111,8 +122,68 @@ async function stopSearch(): Promise<void> {
   }
 }
 
-function openDetails(pluginId: string, nativeId: string): void {
-  void router.push({ name: 'details', params: { pluginId, nativeId } })
+async function handleCardOpen(pluginId: string, nativeId: string): Promise<void> {
+  const items = searchBuckets.value[pluginId] ?? []
+  const matched = items.find((it) => it.nativeId === nativeId)
+  const plug = pluginMap.value.get(pluginId)
+  const isLive = (plug ? isLiveTvPlugin(plug) : false) || (matched ? isLiveMediaSummary(matched, plug) : false)
+  if (!isLive) {
+    void router.push({ name: 'details', params: { pluginId, nativeId } })
+    return
+  }
+  const key = `${pluginId}:${nativeId}`
+  if (launchingLiveKey.value) return
+  launchingLiveKey.value = key
+  try {
+    const detail = await vesselApi.getDetailsWithEnrichment(pluginId, nativeId, 'en')
+    const ep = detail.episodes[0] ?? {
+      streamId: nativeId,
+      season: 1,
+      episode: 1,
+      title: matched?.title ?? detail.title,
+      thumbnail: matched?.poster ?? detail.poster,
+      tags: [],
+    }
+    const streamRes = await vesselApi.getStreams(pluginId, ep.streamId)
+    if (!streamRes.streams.length) {
+      pushToast('warn', t('details.no_streams'))
+      return
+    }
+    setSession({
+      pluginId,
+      nativeId,
+      detail: {
+        ...detail,
+        type: 'live',
+        title: detail.title || matched?.title || nativeId,
+        poster: detail.poster ?? matched?.poster,
+        backdrop: detail.backdrop ?? matched?.poster,
+      },
+      episode: ep,
+      streams: streamRes.streams,
+      subtitles: streamRes.subtitles ?? [],
+      activeStreamIndex: 0,
+    })
+    await router.push({
+      name: 'player',
+      params: { pluginId, nativeId },
+      query: { streamId: ep.streamId },
+    })
+  } catch (err) {
+    pushToast('error', String(err))
+  } finally {
+    launchingLiveKey.value = ''
+  }
+}
+
+function cardItemFor(pluginId: string, item: MediaSummary): MediaSummary {
+  const plug = pluginMap.value.get(pluginId)
+  const forceLive = plug ? isLiveTvPlugin(plug) : false
+  return {
+    ...item,
+    pluginId: item.pluginId ?? pluginId,
+    type: forceLive ? 'live' : item.type,
+  }
 }
 </script>
 
@@ -194,9 +265,9 @@ function openDetails(pluginId: string, nativeId: string): void {
         <MediaCard
           v-for="item in items"
           :key="`${pluginId}:${item.nativeId}`"
-          :item="{ ...item, pluginId: item.pluginId ?? pluginId }"
+          :item="cardItemFor(pluginId, item)"
           :cards="uiPreferences.cards"
-          @open="openDetails"
+          @open="handleCardOpen"
         />
       </div>
     </div>

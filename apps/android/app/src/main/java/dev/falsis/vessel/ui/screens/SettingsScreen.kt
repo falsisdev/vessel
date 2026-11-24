@@ -1,5 +1,11 @@
 package dev.falsis.vessel.ui.screens
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -20,6 +26,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.automirrored.filled.RotateLeft
 import androidx.compose.material.icons.filled.Backup
 import androidx.compose.material.icons.filled.CleaningServices
@@ -27,22 +34,22 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.Tune
-import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -56,12 +63,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import dev.falsis.vessel.BuildConfig
 import dev.falsis.vessel.data.VesselRepository
+import dev.falsis.vessel.ui.components.VesselButton
+import dev.falsis.vessel.ui.components.VesselOutlinedButton
+import dev.falsis.vessel.ui.components.VesselTextButton
+import dev.falsis.vessel.ui.components.vesselTopSafeInset
 import dev.falsis.vessel.ui.i18n.VesselI18n
 import dev.falsis.vessel.ui.theme.DYNAMIC_MATERIAL_THEME_ID
 import dev.falsis.vessel.ui.theme.LocalVesselPalette
@@ -78,15 +91,23 @@ fun SettingsScreen(
     val palette = LocalVesselPalette.current
     val scope = rememberCoroutineScope()
     val clipboard = LocalClipboardManager.current
+    val uriHandler = LocalUriHandler.current
     val themes by repo.themes.collectAsState()
     val activeTheme by repo.activeTheme.collectAsState()
     val activeLocale by repo.locale.collectAsState()
     val engineInfo by repo.engineInfo.collectAsState()
     val plugins by repo.plugins.collectAsState()
     val prefs by repo.uiPreferences.collectAsState()
+    val autoCheckUpdates by repo.autoCheckUpdates.collectAsState()
+    val updateInfo by repo.updateInfo.collectAsState()
+    val checkingUpdate by repo.checkingUpdate.collectAsState()
+    val downloadingUpdate by repo.downloadingUpdate.collectAsState()
+    val updatePercent by repo.updateDownloadPercent.collectAsState()
+    val updateError by repo.updateError.collectAsState()
 
     var showThemeMenu by remember { mutableStateOf(false) }
     var showLocaleMenu by remember { mutableStateOf(false) }
+    var showNavLayoutMenu by remember { mutableStateOf(false) }
     var showHeroModeMenu by remember { mutableStateOf(false) }
     var showPlayClickMenu by remember { mutableStateOf(false) }
     var showAspectMenu by remember { mutableStateOf(false) }
@@ -96,6 +117,7 @@ fun SettingsScreen(
     var themeJsonInput by remember { mutableStateOf("") }
     var showThemeImporter by remember { mutableStateOf(false) }
     var tmdbKey by remember { mutableStateOf("") }
+    var simklClientId by remember { mutableStateOf("") }
     var backupJsonInput by remember { mutableStateOf("") }
     var includeSecretsInBackup by remember { mutableStateOf(false) }
     var confirmResetBackup by remember { mutableStateOf(false) }
@@ -110,8 +132,8 @@ fun SettingsScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(palette.bgBase)
-            .padding(16.dp),
-        contentPadding = PaddingValues(bottom = 36.dp),
+            .vesselTopSafeInset(),
+        contentPadding = PaddingValues(start = 16.dp, top = 14.dp, end = 16.dp, bottom = 36.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         item {
@@ -121,13 +143,17 @@ fun SettingsScreen(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(VesselI18n.tr("settings.title"), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                OutlinedButton(onClick = {
-                    scope.launch {
-                        repo.resetUiPreferences()
-                        repo.notify(VesselI18n.tr("settings.reset_ui"))
-                    }
-                }) {
-                    Icon(Icons.AutoMirrored.Filled.RotateLeft, contentDescription = null, modifier = Modifier.size(16.dp))
+                VesselOutlinedButton(
+                    height = 32.dp,
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                    onClick = {
+                        scope.launch {
+                            repo.resetUiPreferences()
+                            repo.notify(VesselI18n.tr("settings.reset_ui"))
+                        }
+                    },
+                ) {
+                    Icon(Icons.AutoMirrored.Filled.RotateLeft, contentDescription = null, modifier = Modifier.size(14.dp))
                     Spacer(Modifier.width(4.dp))
                     Text(VesselI18n.tr("settings.reset_ui"), style = MaterialTheme.typography.labelSmall)
                 }
@@ -200,14 +226,16 @@ fun SettingsScreen(
                             Text(VesselI18n.tr("settings.theme_label"))
                             if (activeTheme.id == DYNAMIC_MATERIAL_THEME_ID) {
                                 Text(
-                                    "Material You • Dynamic wallpaper & system theme",
+                                    VesselI18n.tr("settings.dynamic_theme_desc"),
                                     style = MaterialTheme.typography.labelSmall,
                                     color = palette.textMuted,
                                 )
                             }
                         }
                         Box {
-                            OutlinedButton(onClick = { showThemeMenu = true }) { Text(activeTheme.name) }
+                            VesselOutlinedButton(onClick = { showThemeMenu = true }, height = 32.dp) {
+                                Text(activeTheme.name, style = MaterialTheme.typography.labelMedium)
+                            }
                             DropdownMenu(expanded = showThemeMenu, onDismissRequest = { showThemeMenu = false }) {
                                 themes.forEach { t ->
                                     DropdownMenuItem(
@@ -226,8 +254,8 @@ fun SettingsScreen(
                     ) {
                         Text(VesselI18n.tr("settings.locale_label"))
                         Box {
-                            OutlinedButton(onClick = { showLocaleMenu = true }) {
-                                Text(VesselI18n.tr("languages.$activeLocale", activeLocale))
+                            VesselOutlinedButton(onClick = { showLocaleMenu = true }, height = 32.dp) {
+                                Text(VesselI18n.tr("languages.$activeLocale", activeLocale), style = MaterialTheme.typography.labelMedium)
                             }
                             DropdownMenu(expanded = showLocaleMenu, onDismissRequest = { showLocaleMenu = false }) {
                                 VesselI18n.bundledCodes.forEach { code ->
@@ -240,30 +268,36 @@ fun SettingsScreen(
                         }
                     }
 
-                    TextButton(onClick = { showThemeImporter = !showThemeImporter }) {
+                    VesselTextButton(onClick = { showThemeImporter = !showThemeImporter }) {
                         Text(VesselI18n.tr("settings.import_theme"))
                     }
-                    if (showThemeImporter) {
-                        OutlinedTextField(
-                            value = themeJsonInput,
-                            onValueChange = { themeJsonInput = it },
-                            placeholder = { Text("Paste .theme.vessel JSON…") },
-                            minLines = 3,
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                        Button(onClick = {
-                            if (themeJsonInput.isBlank()) return@Button
-                            scope.launch {
-                                runCatching { repo.importThemeJson(themeJsonInput) }
-                                    .onSuccess {
-                                        themeJsonInput = ""
-                                        showThemeImporter = false
-                                        repo.notify("Imported theme ${it.name}")
-                                    }
-                                    .onFailure { repo.notify(it.message ?: "Invalid theme JSON") }
+                    AnimatedVisibility(
+                        visible = showThemeImporter,
+                        enter = expandVertically(tween(220)) + fadeIn(tween(180)),
+                        exit = shrinkVertically(tween(180)) + fadeOut(tween(140)),
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedTextField(
+                                value = themeJsonInput,
+                                onValueChange = { themeJsonInput = it },
+                                placeholder = { Text(VesselI18n.tr("settings.theme_paste_hint")) },
+                                minLines = 3,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                            VesselButton(onClick = {
+                                if (themeJsonInput.isBlank()) return@VesselButton
+                                scope.launch {
+                                    runCatching { repo.importThemeJson(themeJsonInput) }
+                                        .onSuccess {
+                                            themeJsonInput = ""
+                                            showThemeImporter = false
+                                            repo.notify(VesselI18n.trf("settings.theme_imported", "name" to it.name))
+                                        }
+                                        .onFailure { repo.notifyError(it, "Invalid theme JSON") }
+                                }
+                            }) {
+                                Text(VesselI18n.tr("settings.import_theme"))
                             }
-                        }) {
-                            Text(VesselI18n.tr("settings.import_theme"))
                         }
                     }
                 }
@@ -284,13 +318,60 @@ fun SettingsScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween,
                     ) {
-                        Text("Hero Banner", modifier = Modifier.weight(1f))
+                        Text(VesselI18n.tr("settings.nav_layout"), modifier = Modifier.weight(1f))
                         Box {
-                            OutlinedButton(onClick = { showHeroModeMenu = true }) { Text(prefs.home.heroBanner.uppercase()) }
-                            DropdownMenu(expanded = showHeroModeMenu, onDismissRequest = { showHeroModeMenu = false }) {
-                                listOf("full", "compact", "hidden").forEach { mode ->
+                            val navLabel = if (prefs.shell.mobileNavLayout == "floating_bottom") {
+                                VesselI18n.tr("settings.layout_floating_bottom")
+                            } else {
+                                VesselI18n.tr("settings.nav_standard")
+                            }
+                            VesselOutlinedButton(onClick = { showNavLayoutMenu = true }, height = 32.dp) {
+                                Text(navLabel, style = MaterialTheme.typography.labelMedium)
+                            }
+                            DropdownMenu(expanded = showNavLayoutMenu, onDismissRequest = { showNavLayoutMenu = false }) {
+                                listOf(
+                                    "standard" to VesselI18n.tr("settings.nav_standard"),
+                                    "floating_bottom" to VesselI18n.tr("settings.layout_floating_bottom"),
+                                ).forEach { (layoutKey, txt) ->
                                     DropdownMenuItem(
-                                        text = { Text(mode.uppercase()) },
+                                        text = { Text(txt) },
+                                        onClick = {
+                                            showNavLayoutMenu = false
+                                            scope.launch {
+                                                repo.saveUiPreferences(
+                                                    prefs.copy(shell = prefs.shell.copy(mobileNavLayout = layoutKey)),
+                                                )
+                                            }
+                                        },
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text(VesselI18n.tr("settings.hero_banner"), modifier = Modifier.weight(1f))
+                        Box {
+                            val heroModeLabel = when (prefs.home.heroBanner) {
+                                "compact" -> VesselI18n.tr("settings.hero_compact")
+                                "hidden" -> VesselI18n.tr("settings.hero_hidden")
+                                else -> VesselI18n.tr("settings.hero_full")
+                            }
+                            VesselOutlinedButton(onClick = { showHeroModeMenu = true }, height = 32.dp) {
+                                Text(heroModeLabel, style = MaterialTheme.typography.labelMedium)
+                            }
+                            DropdownMenu(expanded = showHeroModeMenu, onDismissRequest = { showHeroModeMenu = false }) {
+                                listOf(
+                                    "full" to VesselI18n.tr("settings.hero_full"),
+                                    "compact" to VesselI18n.tr("settings.hero_compact"),
+                                    "hidden" to VesselI18n.tr("settings.hero_hidden"),
+                                ).forEach { (mode, label) ->
+                                    DropdownMenuItem(
+                                        text = { Text(label) },
                                         onClick = {
                                             showHeroModeMenu = false
                                             scope.launch { repo.saveUiPreferences(prefs.copy(home = prefs.home.copy(heroBanner = mode))) }
@@ -313,7 +394,9 @@ fun SettingsScreen(
                             } else {
                                 VesselI18n.tr("settings.play_quick")
                             }
-                            OutlinedButton(onClick = { showPlayClickMenu = true }) { Text(label) }
+                            VesselOutlinedButton(onClick = { showPlayClickMenu = true }, height = 32.dp) {
+                                Text(label, style = MaterialTheme.typography.labelMedium)
+                            }
                             DropdownMenu(expanded = showPlayClickMenu, onDismissRequest = { showPlayClickMenu = false }) {
                                 listOf(
                                     "quick_start_best" to VesselI18n.tr("settings.play_quick"),
@@ -382,16 +465,29 @@ fun SettingsScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween,
                     ) {
-                        Text("Card Aspect Ratio", modifier = Modifier.weight(1f))
+                        Text(VesselI18n.tr("settings.card_aspect_ratio"), modifier = Modifier.weight(1f))
                         Box {
-                            val label = when (prefs.cards.aspectRatio) {
-                                "wide_16x9" -> "16:9"
-                                "square" -> "1:1"
-                                else -> "2:3"
+                            val ratioOptions = listOf(
+                                "poster_2x3" to VesselI18n.tr("settings.ratio_2x3"),
+                                "portrait_3x4" to VesselI18n.tr("settings.ratio_3x4"),
+                                "portrait_4x5" to VesselI18n.tr("settings.ratio_4x5"),
+                                "square" to VesselI18n.tr("settings.ratio_1x1"),
+                                "classic_4x3" to VesselI18n.tr("settings.ratio_4x3"),
+                                "wide_16x9" to VesselI18n.tr("settings.ratio_16x9"),
+                                "cinema_21x9" to VesselI18n.tr("settings.ratio_21x9"),
+                            )
+                            val activeAspectKey = when (prefs.cards.aspectRatio) {
+                                "wide16x9" -> "wide_16x9"
+                                "poster2x3" -> "poster_2x3"
+                                else -> prefs.cards.aspectRatio
                             }
-                            OutlinedButton(onClick = { showAspectMenu = true }) { Text(label) }
+                            val label = ratioOptions.firstOrNull { it.first == activeAspectKey }?.second
+                                ?: VesselI18n.tr("settings.ratio_2x3")
+                            VesselOutlinedButton(onClick = { showAspectMenu = true }, height = 32.dp) {
+                                Text(label, style = MaterialTheme.typography.labelMedium)
+                            }
                             DropdownMenu(expanded = showAspectMenu, onDismissRequest = { showAspectMenu = false }) {
-                                listOf("poster_2x3" to "2:3", "wide_16x9" to "16:9", "square" to "1:1").forEach { (key, txt) ->
+                                ratioOptions.forEach { (key, txt) ->
                                     DropdownMenuItem(
                                         text = { Text(txt) },
                                         onClick = {
@@ -466,14 +562,27 @@ fun SettingsScreen(
                     ) {
                         Text(VesselI18n.tr("subtitles.outline_style"))
                         Box {
-                            OutlinedButton(onClick = { showSubOutlineMenu = true }) { Text(sub.outlineStyle) }
+                            val styleLabel = when (sub.outlineStyle) {
+                                "shadow" -> VesselI18n.tr("subtitles.style_shadow")
+                                "box" -> VesselI18n.tr("subtitles.style_box")
+                                "none" -> VesselI18n.tr("subtitles.style_none")
+                                else -> VesselI18n.tr("subtitles.style_outline")
+                            }
+                            VesselOutlinedButton(onClick = { showSubOutlineMenu = true }, height = 32.dp) {
+                                Text(styleLabel, style = MaterialTheme.typography.labelMedium)
+                            }
                             DropdownMenu(expanded = showSubOutlineMenu, onDismissRequest = { showSubOutlineMenu = false }) {
-                                listOf("outline", "shadow", "box", "none").forEach { style ->
+                                listOf(
+                                    "outline" to VesselI18n.tr("subtitles.style_outline"),
+                                    "shadow" to VesselI18n.tr("subtitles.style_shadow"),
+                                    "box" to VesselI18n.tr("subtitles.style_box"),
+                                    "none" to VesselI18n.tr("subtitles.style_none"),
+                                ).forEach { (styleKey, styleText) ->
                                     DropdownMenuItem(
-                                        text = { Text(style) },
+                                        text = { Text(styleText) },
                                         onClick = {
                                             showSubOutlineMenu = false
-                                            scope.launch { repo.saveUiPreferences(prefs.copy(subtitles = sub.copy(outlineStyle = style))) }
+                                            scope.launch { repo.saveUiPreferences(prefs.copy(subtitles = sub.copy(outlineStyle = styleKey))) }
                                         },
                                     )
                                 }
@@ -488,14 +597,27 @@ fun SettingsScreen(
                     ) {
                         Text(VesselI18n.tr("subtitles.font_family"))
                         Box {
-                            OutlinedButton(onClick = { showSubFontMenu = true }) { Text(sub.fontFamily) }
+                            val fontLabel = when (sub.fontFamily) {
+                                "rounded" -> VesselI18n.tr("subtitles.font_rounded")
+                                "serif" -> VesselI18n.tr("subtitles.font_serif")
+                                "monospace" -> VesselI18n.tr("subtitles.font_mono")
+                                else -> VesselI18n.tr("subtitles.font_sans")
+                            }
+                            VesselOutlinedButton(onClick = { showSubFontMenu = true }, height = 32.dp) {
+                                Text(fontLabel, style = MaterialTheme.typography.labelMedium)
+                            }
                             DropdownMenu(expanded = showSubFontMenu, onDismissRequest = { showSubFontMenu = false }) {
-                                listOf("system-ui", "rounded", "serif", "monospace").forEach { fam ->
+                                listOf(
+                                    "system-ui" to VesselI18n.tr("subtitles.font_sans"),
+                                    "rounded" to VesselI18n.tr("subtitles.font_rounded"),
+                                    "serif" to VesselI18n.tr("subtitles.font_serif"),
+                                    "monospace" to VesselI18n.tr("subtitles.font_mono"),
+                                ).forEach { (famKey, famLabel) ->
                                     DropdownMenuItem(
-                                        text = { Text(fam) },
+                                        text = { Text(famLabel) },
                                         onClick = {
                                             showSubFontMenu = false
-                                            scope.launch { repo.saveUiPreferences(prefs.copy(subtitles = sub.copy(fontFamily = fam))) }
+                                            scope.launch { repo.saveUiPreferences(prefs.copy(subtitles = sub.copy(fontFamily = famKey))) }
                                         },
                                     )
                                 }
@@ -588,31 +710,40 @@ fun SettingsScreen(
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth(),
                         )
+                        OutlinedTextField(
+                            value = simklClientId,
+                            onValueChange = { simklClientId = it },
+                            label = { Text(VesselI18n.tr("settings.simkl_client_id")) },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Button(onClick = {
+                            VesselButton(onClick = {
                                 scope.launch {
                                     repo.setTmdbApiKey(tmdbKey.ifBlank { null })
+                                    repo.setSimklClientId(simklClientId.ifBlank { null })
                                     tmdbKey = ""
-                                    repo.notify("TMDB API key saved")
+                                    simklClientId = ""
+                                    repo.notify(VesselI18n.tr("settings.tmdb_saved"))
                                 }
                             }) {
                                 Text(VesselI18n.tr("settings.save_api_key"))
                             }
-                            OutlinedButton(onClick = {
+                            VesselOutlinedButton(onClick = {
                                 scope.launch {
                                     repo.clearRuntimeCaches()
-                                    repo.notify("Runtime caches cleared")
+                                    repo.notify(VesselI18n.tr("settings.caches_cleared"))
                                 }
                             }) {
-                                Icon(Icons.Default.CleaningServices, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Icon(Icons.Default.CleaningServices, contentDescription = null, modifier = Modifier.size(15.dp))
                                 Spacer(Modifier.width(4.dp))
-                                Text("Clear Cache")
+                                Text(VesselI18n.tr("settings.clear_cache"))
                             }
                         }
 
-                        Text("Root: ${info.rootDir}", style = MaterialTheme.typography.labelSmall, color = palette.textMuted)
-                        Text("Downloads: ${info.downloadsDir}", style = MaterialTheme.typography.labelSmall, color = palette.textMuted)
-                        Text("Proxy: ${info.proxyBaseUrl}", style = MaterialTheme.typography.labelSmall, color = palette.textMuted)
+                        Text("${VesselI18n.tr("settings.root_label")}: ${info.rootDir}", style = MaterialTheme.typography.labelSmall, color = palette.textMuted)
+                        Text("${VesselI18n.tr("settings.downloads_label")}: ${info.downloadsDir}", style = MaterialTheme.typography.labelSmall, color = palette.textMuted)
+                        Text("${VesselI18n.tr("settings.proxy_label")}: ${info.proxyBaseUrl}", style = MaterialTheme.typography.labelSmall, color = palette.textMuted)
                     }
                 }
             }
@@ -624,7 +755,7 @@ fun SettingsScreen(
                 Column(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Icon(Icons.Default.Backup, contentDescription = null, tint = palette.accent, modifier = Modifier.size(18.dp))
-                        Text(VesselI18n.tr("settings.backup_title", "Backup & Restore"), fontWeight = FontWeight.Bold)
+                        Text(VesselI18n.tr("settings.backup_title"), fontWeight = FontWeight.Bold)
                     }
 
                     Row(
@@ -632,30 +763,30 @@ fun SettingsScreen(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Checkbox(checked = includeSecretsInBackup, onCheckedChange = { includeSecretsInBackup = it })
-                        Text(VesselI18n.tr("settings.backup_include_secrets", "Include API keys / secrets"), style = MaterialTheme.typography.bodySmall)
+                        Text(VesselI18n.tr("settings.backup_include_secrets"), style = MaterialTheme.typography.bodySmall)
                     }
 
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(onClick = {
+                        VesselButton(onClick = {
                             scope.launch {
                                 runCatching { repo.exportBackupJson(includeSecretsInBackup) }
                                     .onSuccess {
                                         backupJsonInput = it
-                                        repo.notify("Backup exported")
+                                        repo.notify(VesselI18n.tr("settings.backup_exported"))
                                     }
-                                    .onFailure { repo.notify(it.message ?: "Export failed") }
+                                    .onFailure { repo.notifyError(it, "Export failed") }
                             }
                         }) {
-                            Text(VesselI18n.tr("common.export", "Export"))
+                            Text(VesselI18n.tr("common.export"))
                         }
                         if (backupJsonInput.isNotBlank()) {
-                            OutlinedButton(onClick = {
+                            VesselOutlinedButton(onClick = {
                                 clipboard.setText(AnnotatedString(backupJsonInput))
-                                repo.notify("Copied backup JSON")
+                                repo.notify(VesselI18n.tr("common.copied"))
                             }) {
-                                Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(15.dp))
+                                Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(14.dp))
                                 Spacer(Modifier.width(4.dp))
-                                Text("Copy")
+                                Text(VesselI18n.tr("common.copy"))
                             }
                         }
                     }
@@ -663,26 +794,26 @@ fun SettingsScreen(
                     OutlinedTextField(
                         value = backupJsonInput,
                         onValueChange = { backupJsonInput = it },
-                        placeholder = { Text("Vessel backup JSON…") },
+                        placeholder = { Text(VesselI18n.tr("settings.backup_paste_hint")) },
                         minLines = 3,
                         maxLines = 6,
                         modifier = Modifier.fillMaxWidth(),
                     )
 
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(
+                        VesselOutlinedButton(
                             enabled = backupJsonInput.isNotBlank(),
                             onClick = {
                                 scope.launch {
                                     runCatching { repo.importBackupJson(backupJsonInput, overwrite = false) }
-                                        .onSuccess { repo.notify("Merged backup") }
-                                        .onFailure { repo.notify(it.message ?: "Import failed") }
+                                        .onSuccess { repo.notify(VesselI18n.tr("settings.backup_merged")) }
+                                        .onFailure { repo.notifyError(it, "Import failed") }
                                 }
                             },
                         ) {
-                            Text(VesselI18n.tr("settings.backup_merge", "Merge Import"))
+                            Text(VesselI18n.tr("settings.backup_merge"))
                         }
-                        Button(
+                        VesselButton(
                             enabled = backupJsonInput.isNotBlank(),
                             onClick = {
                                 if (!confirmResetBackup) {
@@ -691,19 +822,188 @@ fun SettingsScreen(
                                     confirmResetBackup = false
                                     scope.launch {
                                         runCatching { repo.importBackupJson(backupJsonInput, overwrite = true) }
-                                            .onSuccess { repo.notify("Restored backup") }
-                                            .onFailure { repo.notify(it.message ?: "Restore failed") }
+                                            .onSuccess { repo.notify(VesselI18n.tr("settings.backup_restored")) }
+                                            .onFailure { repo.notifyError(it, "Restore failed") }
                                     }
                                 }
                             },
                         ) {
                             Text(
                                 if (confirmResetBackup) {
-                                    VesselI18n.tr("common.confirm", "Confirm")
+                                    VesselI18n.tr("common.confirm")
                                 } else {
-                                    VesselI18n.tr("settings.backup_reset", "Reset & Import")
+                                    VesselI18n.tr("settings.backup_reset")
                                 },
                             )
+                        }
+                    }
+                }
+            }
+        }
+
+        // Updates & Release Notes
+        item {
+            Surface(shape = RoundedCornerShape(14.dp), color = palette.bgSurface) {
+                Column(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Icon(Icons.Default.SystemUpdate, contentDescription = null, tint = palette.accent, modifier = Modifier.size(18.dp))
+                        Text(VesselI18n.tr("settings.updates_title"), fontWeight = FontWeight.Bold)
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+                            Text(VesselI18n.tr("settings.updates_auto"), fontWeight = FontWeight.Medium)
+                            Text(
+                                text = VesselI18n.tr("settings.updates_auto_mobile_desc"),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = palette.textMuted,
+                            )
+                        }
+                        Switch(
+                            checked = autoCheckUpdates,
+                            onCheckedChange = { repo.setAutoCheckUpdates(it) },
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        VesselButton(
+                            height = 34.dp,
+                            enabled = !checkingUpdate,
+                            onClick = { scope.launch { repo.checkForAppUpdates(silent = false) } },
+                        ) {
+                            Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(15.dp))
+                            Spacer(Modifier.width(5.dp))
+                            Text(
+                                text = if (checkingUpdate) VesselI18n.tr("settings.checking_updates") else VesselI18n.tr("settings.check_updates"),
+                                style = MaterialTheme.typography.labelMedium,
+                            )
+                        }
+                        Text(
+                            text = updateInfo?.let {
+                                VesselI18n.trf(
+                                    "settings.current_latest_ver",
+                                    "current" to "v${it.currentVersion}",
+                                    "latest" to "v${it.latestVersion}",
+                                )
+                            } ?: "v${BuildConfig.VERSION_NAME}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = palette.textMuted,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+
+                    updateError?.let { err ->
+                        Text(err, style = MaterialTheme.typography.labelSmall, color = palette.danger)
+                    }
+
+                    updateInfo?.let { info ->
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = palette.bgElevated,
+                        ) {
+                            Column(
+                                modifier = Modifier.fillMaxWidth().padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Text(
+                                        text = info.releaseName,
+                                        fontWeight = FontWeight.SemiBold,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                    Surface(
+                                        shape = RoundedCornerShape(999.dp),
+                                        color = if (info.updateAvailable) palette.accent.copy(alpha = 0.2f) else palette.success.copy(alpha = 0.2f),
+                                    ) {
+                                        Text(
+                                            text = if (info.updateAvailable) VesselI18n.tr("settings.update_available") else VesselI18n.tr("settings.up_to_date"),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = if (info.updateAvailable) palette.accent else palette.success,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                        )
+                                    }
+                                }
+
+                                Text(
+                                    text = info.releaseNotes,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = palette.textMuted,
+                                )
+
+                                if (downloadingUpdate) {
+                                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                        Text(
+                                            text = VesselI18n.trf(
+                                                "settings.downloading_update",
+                                                "file" to (info.assetName ?: "vessel.apk"),
+                                                "percent" to (updatePercent ?: 0),
+                                            ),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = palette.textMuted,
+                                        )
+                                        if (updatePercent != null) {
+                                            LinearProgressIndicator(
+                                                progress = { (updatePercent ?: 0) / 100f },
+                                                modifier = Modifier.fillMaxWidth().height(5.dp).clip(RoundedCornerShape(999.dp)),
+                                            )
+                                        } else {
+                                            LinearProgressIndicator(
+                                                modifier = Modifier.fillMaxWidth().height(5.dp).clip(RoundedCornerShape(999.dp)),
+                                            )
+                                        }
+                                    }
+                                }
+
+                                if (info.updateAvailable && info.downloadUrl == null) {
+                                    Text(
+                                        text = VesselI18n.tr("settings.update_asset_pending"),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = palette.textMuted,
+                                    )
+                                }
+
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    if (info.updateAvailable && info.downloadUrl != null) {
+                                        VesselButton(
+                                            height = 32.dp,
+                                            enabled = !downloadingUpdate,
+                                            onClick = { scope.launch { repo.downloadAndInstallUpdate(info) } },
+                                        ) {
+                                            Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(14.dp))
+                                            Spacer(Modifier.width(4.dp))
+                                            Text(
+                                                text = if (downloadingUpdate) {
+                                                    VesselI18n.tr("settings.downloading_short")
+                                                } else {
+                                                    VesselI18n.trf("settings.install_update", "asset" to (info.assetName ?: "APK"))
+                                                },
+                                                style = MaterialTheme.typography.labelSmall,
+                                            )
+                                        }
+                                    }
+                                    VesselOutlinedButton(
+                                        height = 32.dp,
+                                        onClick = { runCatching { uriHandler.openUri(info.htmlUrl) } },
+                                    ) {
+                                        Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(14.dp))
+                                        Spacer(Modifier.width(4.dp))
+                                        Text(VesselI18n.tr("settings.open_releases"), style = MaterialTheme.typography.labelSmall)
+                                    }
+                                }
+                            }
                         }
                     }
                 }

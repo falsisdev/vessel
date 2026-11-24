@@ -61,9 +61,22 @@ onUnmounted(() => {
 })
 
 const ratioClass = computed(() => {
-  if (props.cards.aspectRatio === 'wide_16x9') return 'ratio-wide'
-  if (props.cards.aspectRatio === 'square') return 'ratio-square'
-  return 'ratio-poster'
+  switch (props.cards.aspectRatio) {
+    case 'portrait_3x4':
+      return 'ratio-3x4'
+    case 'portrait_4x5':
+      return 'ratio-4x5'
+    case 'square':
+      return 'ratio-square'
+    case 'classic_4x3':
+      return 'ratio-4x3'
+    case 'wide_16x9':
+      return 'ratio-wide'
+    case 'cinema_21x9':
+      return 'ratio-21x9'
+    default:
+      return 'ratio-poster'
+  }
 })
 
 const ratingText = computed(() =>
@@ -171,7 +184,7 @@ async function clearStatus(): Promise<void> {
         </span>
       </div>
 
-      <div v-if="item.pluginId" class="quick-status-wrap" @click.stop>
+      <div v-if="item.pluginId && item.type !== 'live'" class="quick-status-wrap" @click.stop>
         <button
           type="button"
           class="quick-status-btn"
@@ -396,12 +409,28 @@ async function clearStatus(): Promise<void> {
   aspect-ratio: 2 / 3;
 }
 
-.ratio-wide {
-  aspect-ratio: 16 / 9;
+.ratio-3x4 {
+  aspect-ratio: 3 / 4;
+}
+
+.ratio-4x5 {
+  aspect-ratio: 4 / 5;
 }
 
 .ratio-square {
   aspect-ratio: 1 / 1;
+}
+
+.ratio-4x3 {
+  aspect-ratio: 4 / 3;
+}
+
+.ratio-wide {
+  aspect-ratio: 16 / 9;
+}
+
+.ratio-21x9 {
+  aspect-ratio: 21 / 9;
 }
 
 .poster-shimmer {

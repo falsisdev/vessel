@@ -18,6 +18,7 @@ data class ExternalIds(
     val imdb: String? = null,
     val tvdb: Long? = null,
     val kitsu: Long? = null,
+    val simkl: Long? = null,
 )
 
 @Serializable
@@ -117,6 +118,42 @@ data class StreamCandidate(
     val needsExtractor: Boolean = false,
     val subtitles: List<SubtitleTrack> = emptyList(),
     val skipSegments: List<SkipSegment> = emptyList(),
+    val pluginId: String? = null,
+    val pluginName: String? = null,
+)
+
+@Serializable
+data class MetadataSearchHit(
+    val canonicalId: String,
+    val provider: String,
+    val title: String,
+    val originalTitle: String? = null,
+    val year: Int? = null,
+    val mediaType: String? = null,
+    val poster: String? = null,
+    val synopsis: String? = null,
+    val externalIds: ExternalIds = ExternalIds(),
+)
+
+@Serializable
+data class MetadataSearchResponse(
+    val hits: List<MetadataSearchHit> = emptyList(),
+    val notes: List<String> = emptyList(),
+)
+
+@Serializable
+data class LinkedMediaSource(
+    val pluginId: String,
+    val pluginName: String? = null,
+    val nativeId: String,
+    val title: String,
+    val poster: String? = null,
+)
+
+@Serializable
+data class SearchPageResult(
+    val items: List<MediaSummary> = emptyList(),
+    val hasMore: Boolean = false,
 )
 
 @Serializable
@@ -392,12 +429,45 @@ data class SubtitlePreferences(
 )
 
 @Serializable
+data class FavoriteLiveChannel(
+    val pluginId: String,
+    val nativeId: String,
+    val title: String,
+    val poster: String? = null,
+    val sectionTitle: String? = null,
+)
+
+@Serializable
+data class LiveTvPreferences(
+    val pluginOrder: List<String> = emptyList(),
+    val sectionOrderByPlugin: Map<String, List<String>> = emptyMap(),
+    val favoriteChannels: List<FavoriteLiveChannel> = emptyList(),
+    val viewMode: String = "grid",
+    val density: String = "comfortable",
+    val columns: Int? = null,
+    val showLogos: Boolean = true,
+    val showCategories: Boolean = true,
+)
+
+@Serializable
+data class ShellPreferences(
+    val layout: String = "expanded_sidebar",
+    val mobileNavLayout: String = "standard",
+    val density: String = "comfortable",
+    val fontScalePercent: Int = 100,
+    val cornerStyle: String = "rounded",
+    val reducedMotion: Boolean = false,
+)
+
+@Serializable
 data class UiPreferences(
+    val shell: ShellPreferences = ShellPreferences(),
     val home: HomePreferences = HomePreferences(),
     val cards: CardPreferences = CardPreferences(),
     val details: DetailsPreferences = DetailsPreferences(),
     val playback: PlaybackPreferences = PlaybackPreferences(),
     val subtitles: SubtitlePreferences = SubtitlePreferences(),
+    val liveTv: LiveTvPreferences = LiveTvPreferences(),
 )
 
 @Serializable
@@ -542,4 +612,19 @@ data class UpsertIptvProfilePayload(
     val password: String? = null,
     val epgUrl: String? = null,
     val userAgent: String? = null,
+)
+
+@Serializable
+data class AppUpdateInfo(
+    val currentVersion: String,
+    val latestVersion: String,
+    val tagName: String,
+    val updateAvailable: Boolean,
+    val releaseName: String,
+    val releaseNotes: String,
+    val publishedAt: String? = null,
+    val htmlUrl: String,
+    val assetName: String? = null,
+    val assetSizeBytes: Long? = null,
+    val downloadUrl: String? = null,
 )

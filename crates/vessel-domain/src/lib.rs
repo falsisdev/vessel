@@ -18,8 +18,8 @@ pub use event::{
 };
 pub use ids::{ExternalIds, MediaRef, PluginId};
 pub use media::{
-    ContentRating, Episode, EpisodeTag, MediaDetail, MediaRelation, MediaSummary, MediaType,
-    PlaybackProgress, RelationKind, SeasonSummary,
+    ContentRating, Episode, EpisodeTag, LinkedMediaSource, MediaDetail, MediaRelation,
+    MediaSummary, MediaType, PlaybackProgress, RelationKind, SeasonSummary,
 };
 #[cfg(feature = "http-client")]
 pub use net::http_client_builder;
@@ -40,9 +40,9 @@ pub use stream::{
 };
 pub use ui::{
     AdvancedUiPreferences, CardAspectRatio, CardPreferences, CornerStyle, DetailsPreferences,
-    EpisodeListLayout, HeroBannerMode, HomePreferences, HomePreset, NavLayout, NavModule,
-    PlayClickBehavior, PlaybackPreferences, ShellPreferences, ThemeColors, ThemeSpec, UiDensity,
-    UiPreferences,
+    EpisodeListLayout, FavoriteLiveChannel, HeroBannerMode, HomePreferences, HomePreset,
+    LiveTvPreferences, LiveTvViewMode, MobileNavLayout, NavLayout, NavModule, PlayClickBehavior,
+    PlaybackPreferences, ShellPreferences, ThemeColors, ThemeSpec, UiDensity, UiPreferences,
 };
 
 /// Returns the crate version embedded at compile time from `Cargo.toml`.

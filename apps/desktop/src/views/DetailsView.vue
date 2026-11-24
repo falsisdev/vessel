@@ -6,16 +6,21 @@ import {
   AlignJustify,
   ArrowLeft,
   BookmarkPlus,
+  Check,
   CheckCircle2,
   Download,
+  Layers,
   LayoutGrid,
   List,
   Loader2,
+  MoreVertical,
   Play,
   RefreshCw,
+  Search,
   Server,
   Star,
   Subtitles,
+  Trash2,
   Wrench,
   X,
 } from 'lucide-vue-next'
@@ -25,13 +30,19 @@ import { useLibraryState } from '@/composables/useLibraryState'
 import { usePlayerSession } from '@/composables/usePlayerSession'
 import { useUiPreferences } from '@/composables/useUiPreferences'
 import { pushToast, useVesselEvents } from '@/composables/useVesselEvents'
+import { isLiveMediaIdentifier, isLiveTvPlugin } from '@/utils/liveTv'
 import type {
   ContinueWatchingEntry,
   Episode,
   EpisodeListLayout,
   LibraryStatus,
+  LinkedMediaSource,
   MediaDetail,
+  MediaSummary,
+  MetadataProviderFilter,
+  MetadataSearchHit,
   PlaybackProgress,
+  PluginListEntry,
   SkipSegment,
   StreamCandidate,
   SubtitleTrack,
@@ -73,12 +84,29 @@ function episodeProgressPercent(ep: Episode): number {
   return Math.min(99, Math.max(4, Math.round((prog.positionMs / prog.durationMs) * 100)))
 }
 
-// Fix Match Modal state
+// Fix Match Modal state (interactive 6-provider search + manual ID fallback)
 const showFixMatchModal = shallowRef(false)
-const fixProvider = shallowRef<'anilist' | 'tmdb_tv' | 'tmdb_movie' | 'imdb'>('tmdb_tv')
+const fixProvider = shallowRef<'tmdb_tv' | 'tmdb_movie' | 'imdb' | 'simkl' | 'anilist' | 'mal' | 'kitsu'>('tmdb_tv')
 const fixIdInput = shallowRef('')
 const fixDisableEnrichment = shallowRef(false)
 const savingFixMatch = shallowRef(false)
+const fixSearchQuery = shallowRef('')
+const fixSearchFilter = shallowRef<MetadataProviderFilter>('all')
+const fixSearchLoading = shallowRef(false)
+const fixSearchHits = ref<MetadataSearchHit[]>([])
+const fixSearchNotes = ref<string[]>([])
+const showManualFixId = shallowRef(false)
+
+// Top-right 3-dot menu & linked external stream sources ("Include Other Sources")
+const showMoreMenu = shallowRef(false)
+const showIncludeSourcesModal = shallowRef(false)
+const linkedSources = ref<LinkedMediaSource[]>([])
+const availablePlugins = ref<PluginListEntry[]>([])
+const includeSearchQuery = shallowRef('')
+const activeTargetSearchPlugin = shallowRef<string | null>(null)
+const targetPluginHits = ref<Record<string, MediaSummary[]>>({})
+const targetPluginSearching = ref<Record<string, boolean>>({})
+const savingLinkedSources = shallowRef(false)
 
 // CloudStream-style source resolver modal state
 const resolverEpisode = ref<Episode | null>(null)
@@ -168,15 +196,66 @@ async function refreshResumeState(): Promise<void> {
   }
 }
 
+const isLiveMedia = computed(() => {
+  const p = availablePlugins.value.find((pl) => pl.manifest.id === props.pluginId) ?? null
+  return isLiveMediaIdentifier(
+    detail.value?.type,
+    props.pluginId,
+    detail.value?.episodes[0]?.streamId,
+    props.nativeId,
+    p,
+  )
+})
+
+async function redirectLiveToPlayer(res: MediaDetail): Promise<void> {
+  const ep = res.episodes[0] ?? {
+    streamId: props.nativeId,
+    season: 1,
+    episode: 1,
+    title: res.title,
+    thumbnail: res.poster,
+    tags: [],
+  }
+  const streamRes = await vesselApi.getStreams(props.pluginId, ep.streamId)
+  if (!streamRes.streams.length) {
+    pushToast('warn', t('details.no_streams'))
+    router.back()
+    return
+  }
+  setSession({
+    pluginId: props.pluginId,
+    nativeId: props.nativeId,
+    detail: { ...res, type: 'live' },
+    episode: ep,
+    streams: streamRes.streams,
+    subtitles: streamRes.subtitles ?? [],
+    activeStreamIndex: 0,
+  })
+  await router.replace({
+    name: 'player',
+    params: { pluginId: props.pluginId, nativeId: props.nativeId },
+    query: { streamId: ep.streamId },
+  })
+}
+
 async function loadDetails(): Promise<void> {
   loading.value = true
   try {
-    const [res] = await Promise.all([
+    const [res, linked, pluginsList] = await Promise.all([
       vesselApi.getDetailsWithEnrichment(props.pluginId, props.nativeId, currentLang.value),
+      vesselApi.getLinkedSources(props.pluginId, props.nativeId).catch(() => []),
+      availablePlugins.value.length ? Promise.resolve(availablePlugins.value) : vesselApi.listPlugins().catch(() => []),
       refreshResumeState(),
       refreshLibraryState(),
     ])
+    if (pluginsList.length) availablePlugins.value = pluginsList
+    const plug = pluginsList.find((pl) => pl.manifest.id === props.pluginId) ?? null
+    if (isLiveMediaIdentifier(res.type, props.pluginId, res.episodes[0]?.streamId, props.nativeId, plug)) {
+      await redirectLiveToPlayer(res)
+      return
+    }
     detail.value = res
+    linkedSources.value = linked
     if (res.episodes.length) {
       const match = resumeEntry.value
       selectedSeason.value =
@@ -210,6 +289,40 @@ async function saveLibrary(status: LibraryStatus): Promise<void> {
   }
 }
 
+async function runFixMatchSearch(): Promise<void> {
+  const q = fixSearchQuery.value.trim()
+  if (!q) {
+    fixSearchHits.value = []
+    fixSearchNotes.value = []
+    return
+  }
+  fixSearchLoading.value = true
+  try {
+    const res = await vesselApi.searchMetadata(q, fixSearchFilter.value, currentLang.value)
+    fixSearchHits.value = res.hits
+    fixSearchNotes.value = res.notes
+  } catch (err) {
+    fixSearchHits.value = []
+    fixSearchNotes.value = [String(err)]
+  } finally {
+    fixSearchLoading.value = false
+  }
+}
+
+async function applyMetadataHit(hit: MetadataSearchHit): Promise<void> {
+  savingFixMatch.value = true
+  try {
+    await vesselApi.setMetadataOverride(props.pluginId, props.nativeId, hit.canonicalId, false)
+    showFixMatchModal.value = false
+    await loadDetails()
+    pushToast('info', `${t('details.match_updated')}: ${hit.title}`)
+  } catch (err) {
+    pushToast('error', String(err))
+  } finally {
+    savingFixMatch.value = false
+  }
+}
+
 function openFixMatchModal(): void {
   const ids = detail.value?.externalIds
   if (ids?.tmdb) {
@@ -218,6 +331,15 @@ function openFixMatchModal(): void {
   } else if (ids?.anilist) {
     fixProvider.value = 'anilist'
     fixIdInput.value = String(ids.anilist)
+  } else if (ids?.mal) {
+    fixProvider.value = 'mal'
+    fixIdInput.value = String(ids.mal)
+  } else if (ids?.kitsu) {
+    fixProvider.value = 'kitsu'
+    fixIdInput.value = String(ids.kitsu)
+  } else if (ids?.simkl) {
+    fixProvider.value = 'simkl'
+    fixIdInput.value = String(ids.simkl)
   } else if (ids?.imdb) {
     fixProvider.value = 'imdb'
     fixIdInput.value = ids.imdb
@@ -225,7 +347,13 @@ function openFixMatchModal(): void {
     fixIdInput.value = ''
   }
   fixDisableEnrichment.value = false
+  showManualFixId.value = false
+  fixSearchQuery.value = detail.value?.title ?? ''
+  fixSearchFilter.value = 'all'
+  fixSearchHits.value = []
+  fixSearchNotes.value = []
   showFixMatchModal.value = true
+  void runFixMatchSearch()
 }
 
 function buildCanonicalId(): string | null {
@@ -235,6 +363,12 @@ function buildCanonicalId(): string | null {
   switch (fixProvider.value) {
     case 'anilist':
       return `anilist:${raw}`
+    case 'mal':
+      return `mal:${raw}`
+    case 'kitsu':
+      return `kitsu:${raw}`
+    case 'simkl':
+      return `simkl:${raw}`
     case 'tmdb_tv':
       return `tmdb:tv:${raw}`
     case 'tmdb_movie':
@@ -256,7 +390,7 @@ async function applyFixMatch(): Promise<void> {
     )
     showFixMatchModal.value = false
     await loadDetails()
-    pushToast('info', fixDisableEnrichment.value ? 'Disabled external metadata' : 'Updated metadata match')
+    pushToast('info', fixDisableEnrichment.value ? t('details.match_disabled') : t('details.match_updated'))
   } catch (err) {
     pushToast('error', String(err))
   } finally {
@@ -264,7 +398,99 @@ async function applyFixMatch(): Promise<void> {
   }
 }
 
-/** Opens the CloudStream-style source resolver sheet before launching any player. */
+const selectableSourcePlugins = computed(() => {
+  return availablePlugins.value.filter(
+    (p) =>
+      p.enabled &&
+      p.manifest.id !== props.pluginId &&
+      !isLiveTvPlugin(p),
+  )
+})
+
+function findLinkedFor(pluginId: string): LinkedMediaSource | undefined {
+  return linkedSources.value.find((s) => s.pluginId === pluginId)
+}
+
+async function openIncludeSourcesModal(): Promise<void> {
+  showMoreMenu.value = false
+  includeSearchQuery.value = detail.value?.title ?? ''
+  activeTargetSearchPlugin.value = null
+  showIncludeSourcesModal.value = true
+  try {
+    const [all, currentLinked] = await Promise.all([
+      vesselApi.listPlugins(),
+      vesselApi.getLinkedSources(props.pluginId, props.nativeId),
+    ])
+    availablePlugins.value = all
+    linkedSources.value = currentLinked
+  } catch (err) {
+    pushToast('error', String(err))
+  }
+}
+
+async function searchInTargetPlugin(pluginId: string): Promise<void> {
+  const q = includeSearchQuery.value.trim()
+  if (!q) return
+  targetPluginSearching.value = { ...targetPluginSearching.value, [pluginId]: true }
+  activeTargetSearchPlugin.value = pluginId
+  try {
+    const page = await vesselApi.searchPluginSync(pluginId, q, 1)
+    targetPluginHits.value = { ...targetPluginHits.value, [pluginId]: page.items }
+  } catch (err) {
+    pushToast('error', String(err))
+  } finally {
+    targetPluginSearching.value = { ...targetPluginSearching.value, [pluginId]: false }
+  }
+}
+
+async function toggleLinkedPlugin(plugin: PluginListEntry): Promise<void> {
+  const existing = findLinkedFor(plugin.manifest.id)
+  if (existing) {
+    savingLinkedSources.value = true
+    try {
+      linkedSources.value = await vesselApi.setLinkedSources(
+        props.pluginId,
+        props.nativeId,
+        linkedSources.value.filter((s) => s.pluginId !== plugin.manifest.id),
+      )
+    } catch (err) {
+      pushToast('error', String(err))
+    } finally {
+      savingLinkedSources.value = false
+    }
+    return
+  }
+
+  await searchInTargetPlugin(plugin.manifest.id)
+  const hits = targetPluginHits.value[plugin.manifest.id] ?? []
+  if (hits.length > 0) {
+    await bindLinkedSourceHit(plugin, hits[0])
+  } else {
+    pushToast('warn', `${plugin.manifest.name}: ${t('common.empty')}`)
+  }
+}
+
+async function bindLinkedSourceHit(plugin: PluginListEntry, item: MediaSummary): Promise<void> {
+  savingLinkedSources.value = true
+  try {
+    const entry: LinkedMediaSource = {
+      pluginId: plugin.manifest.id,
+      pluginName: plugin.manifest.name,
+      nativeId: item.nativeId,
+      title: item.title,
+      poster: item.poster,
+    }
+    const next = [...linkedSources.value.filter((s) => s.pluginId !== plugin.manifest.id), entry]
+    linkedSources.value = await vesselApi.setLinkedSources(props.pluginId, props.nativeId, next)
+    pushToast('info', `${plugin.manifest.name}: ${item.title}`)
+  } catch (err) {
+    pushToast('error', String(err))
+  } finally {
+    savingLinkedSources.value = false
+  }
+}
+
+/** Opens the CloudStream-style source resolver sheet (merging primary + linked providers). */
 async function openSourceResolver(ep: Episode): Promise<void> {
   resolverEpisode.value = ep
   resolvingStreams.value = true
@@ -274,7 +500,15 @@ async function openSourceResolver(ep: Episode): Promise<void> {
   episodeSkipSegments.value = []
 
   try {
-    const res = await vesselApi.getStreams(props.pluginId, ep.streamId)
+    const res = await vesselApi.getStreamsWithLinked({
+      pluginId: props.pluginId,
+      nativeId: props.nativeId,
+      episodeId: ep.streamId,
+      season: ep.season,
+      episode: ep.episode,
+      absoluteEpisode: ep.absoluteEpisode,
+      isMovie: detail.value?.type === 'movie',
+    })
     if (resolverEpisode.value?.streamId !== ep.streamId) return
     streamChoices.value = res.streams
     episodeSubtitles.value = res.subtitles
@@ -429,8 +663,46 @@ onActivated(() => {
 
         <div class="hero-nav-row">
           <button type="button" class="v-btn v-btn-sm" @click="router.back()">
-            <ArrowLeft :size="14" aria-hidden="true" /> Back
+            <ArrowLeft :size="14" aria-hidden="true" /> {{ t('common.back') }}
           </button>
+
+          <div class="hero-top-actions">
+            <button
+              v-if="linkedSources.length"
+              type="button"
+              class="v-btn v-btn-sm"
+              @click="openIncludeSourcesModal"
+            >
+              <Layers :size="14" aria-hidden="true" />
+              +{{ linkedSources.length }} {{ t('details.linked_sources_badge') }}
+            </button>
+
+            <div class="more-menu-wrap">
+              <button
+                type="button"
+                class="v-btn v-btn-icon v-btn-sm"
+                :aria-label="t('details.more_actions')"
+                @click="showMoreMenu = !showMoreMenu"
+              >
+                <MoreVertical :size="16" aria-hidden="true" />
+              </button>
+              <div v-if="showMoreMenu" class="v-card hero-more-dropdown">
+                <button type="button" class="hero-menu-item" @click="openIncludeSourcesModal">
+                  <Layers :size="14" aria-hidden="true" />
+                  <span>{{ t('details.include_sources') }}</span>
+                </button>
+                <button
+                  v-if="uiPreferences.details.showFixMatch"
+                  type="button"
+                  class="hero-menu-item"
+                  @click="showMoreMenu = false; openFixMatchModal()"
+                >
+                  <Wrench :size="14" aria-hidden="true" />
+                  <span>{{ t('details.fix_match') }}</span>
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
 
         <div class="hero-stage">
@@ -454,8 +726,11 @@ onActivated(() => {
               <span v-if="detail.status">{{ detail.status }}</span>
               <template v-if="uiPreferences.details.showExternalIdBadges">
                 <span v-if="detail.externalIds.anilist">AniList #{{ detail.externalIds.anilist }}</span>
+                <span v-if="detail.externalIds.mal">MAL #{{ detail.externalIds.mal }}</span>
+                <span v-if="detail.externalIds.kitsu">Kitsu #{{ detail.externalIds.kitsu }}</span>
                 <span v-if="detail.externalIds.tmdb">TMDB #{{ detail.externalIds.tmdb }}</span>
                 <span v-if="detail.externalIds.imdb">IMDb {{ detail.externalIds.imdb }}</span>
+                <span v-if="detail.externalIds.simkl">Simkl #{{ detail.externalIds.simkl }}</span>
               </template>
             </div>
 
@@ -507,15 +782,6 @@ onActivated(() => {
                   <option value="dropped">{{ t('library.dropped') }}</option>
                 </select>
               </div>
-
-              <button
-                v-if="uiPreferences.details.showFixMatch"
-                type="button"
-                class="v-btn"
-                @click="openFixMatchModal"
-              >
-                <Wrench :size="14" aria-hidden="true" /> {{ t('details.fix_match') }}
-              </button>
             </div>
           </div>
         </div>
@@ -684,7 +950,7 @@ onActivated(() => {
         </div>
       </div>
 
-      <!-- Fix Match Modal -->
+      <!-- Fix Match Modal (6-provider title search + manual ID fallback) -->
       <Teleport to="body">
         <Transition name="modal-pop">
           <div
@@ -694,7 +960,7 @@ onActivated(() => {
             aria-modal="true"
             :aria-label="t('details.fix_match')"
           >
-            <div class="v-card stream-modal">
+            <div class="v-card stream-modal fix-modal-wide">
               <div class="picker-head">
                 <div class="picker-title-group">
                   <h3 class="picker-title">{{ t('details.fix_match') }}</h3>
@@ -712,42 +978,258 @@ onActivated(() => {
                 </button>
               </div>
 
-              <div class="fix-form">
-                <div class="fix-row">
-                  <select v-model="fixProvider" aria-label="Metadata source" class="v-select fix-provider">
-                    <option value="tmdb_tv">TMDB TV</option>
-                    <option value="tmdb_movie">TMDB Movie</option>
-                    <option value="anilist">AniList</option>
-                    <option value="imdb">IMDb</option>
-                  </select>
-                  <input
-                    v-model="fixIdInput"
-                    name="canonicalId"
-                    autocomplete="off"
-                    aria-label="External metadata ID"
-                    class="v-input"
-                    placeholder="e.g. 1399, 918, tt0944947…"
-                  />
-                </div>
-
-                <label class="v-switch">
-                  <input v-model="fixDisableEnrichment" type="checkbox" class="v-switch-input" />
-                  <span class="v-switch-track" aria-hidden="true" />
-                  <span>{{ t('details.fix_match_disable') }}</span>
-                </label>
+              <div class="fix-search-bar">
+                <input
+                  v-model="fixSearchQuery"
+                  type="search"
+                  class="v-input"
+                  :placeholder="t('details.match_search_placeholder')"
+                  @keydown.enter.prevent="runFixMatchSearch"
+                />
+                <button
+                  type="button"
+                  class="v-btn v-btn-primary"
+                  :disabled="fixSearchLoading"
+                  @click="runFixMatchSearch"
+                >
+                  <Loader2 v-if="fixSearchLoading" :size="14" class="spin" aria-hidden="true" />
+                  <Search v-else :size="14" aria-hidden="true" />
+                  {{ t('common.search') }}
+                </button>
               </div>
+
+              <div class="fix-provider-chips">
+                <button
+                  v-for="opt in [
+                    { key: 'all', label: t('common.all') },
+                    { key: 'tmdb', label: 'TMDB' },
+                    { key: 'imdb', label: 'IMDb' },
+                    { key: 'simkl', label: 'Simkl' },
+                    { key: 'anilist', label: 'AniList' },
+                    { key: 'mal', label: 'MyAnimeList' },
+                    { key: 'kitsu', label: 'Kitsu' },
+                  ]"
+                  :key="opt.key"
+                  type="button"
+                  class="v-btn v-btn-sm"
+                  :class="{ 'v-btn-primary': fixSearchFilter === opt.key }"
+                  @click="fixSearchFilter = opt.key as MetadataProviderFilter; void runFixMatchSearch()"
+                >
+                  {{ opt.label }}
+                </button>
+              </div>
+
+              <div v-if="fixSearchNotes.length" class="fix-notes-box">
+                <p v-for="(n, idx) in fixSearchNotes" :key="idx" class="v-muted fix-note-line">{{ n }}</p>
+              </div>
+
+              <div v-if="fixSearchLoading" class="resolver-state compact">
+                <Loader2 :size="22" class="spin accent-icon" aria-hidden="true" />
+                <span class="v-muted">{{ t('search.searching') }}</span>
+              </div>
+
+              <div v-else-if="fixSearchHits.length" class="fix-hits-list">
+                <button
+                  v-for="hit in fixSearchHits"
+                  :key="hit.canonicalId"
+                  type="button"
+                  class="fix-hit-card"
+                  :disabled="savingFixMatch"
+                  @click="applyMetadataHit(hit)"
+                >
+                  <img
+                    v-if="hit.poster"
+                    :src="hit.poster"
+                    :alt="hit.title"
+                    loading="lazy"
+                    class="fix-hit-poster"
+                  />
+                  <div v-else class="fix-hit-poster placeholder" />
+                  <div class="fix-hit-body">
+                    <div class="fix-hit-top">
+                      <strong class="fix-hit-title">{{ hit.title }}</strong>
+                      <span class="v-badge v-badge-accent">{{ hit.provider.toUpperCase() }}</span>
+                    </div>
+                    <div class="v-muted fix-hit-meta">
+                      <span v-if="hit.year">{{ hit.year }}</span>
+                      <span v-if="hit.mediaType">· {{ hit.mediaType }}</span>
+                      <span>· <code>{{ hit.canonicalId }}</code></span>
+                    </div>
+                    <p v-if="hit.synopsis" class="v-muted fix-hit-syn">{{ hit.synopsis }}</p>
+                  </div>
+                </button>
+              </div>
+
+              <div v-else class="v-muted fix-empty-hits">
+                {{ t('details.match_no_hits') }}
+              </div>
+
+              <div class="manual-id-section">
+                <button
+                  type="button"
+                  class="v-btn v-btn-sm"
+                  @click="showManualFixId = !showManualFixId"
+                >
+                  {{ t('details.match_manual_toggle') }}
+                </button>
+
+                <div v-if="showManualFixId" class="fix-form">
+                  <div class="fix-row">
+                    <select v-model="fixProvider" aria-label="Metadata source" class="v-select fix-provider">
+                      <option value="tmdb_tv">TMDB TV</option>
+                      <option value="tmdb_movie">TMDB Movie</option>
+                      <option value="imdb">IMDb</option>
+                      <option value="simkl">Simkl</option>
+                      <option value="anilist">AniList</option>
+                      <option value="mal">MyAnimeList</option>
+                      <option value="kitsu">Kitsu</option>
+                    </select>
+                    <input
+                      v-model="fixIdInput"
+                      name="canonicalId"
+                      autocomplete="off"
+                      aria-label="External metadata ID"
+                      class="v-input"
+                      placeholder="e.g. 1399, 918, tt0944947…"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <label class="v-switch">
+                <input v-model="fixDisableEnrichment" type="checkbox" class="v-switch-input" />
+                <span class="v-switch-track" aria-hidden="true" />
+                <span>{{ t('details.fix_match_disable') }}</span>
+              </label>
 
               <div class="fix-actions">
                 <button type="button" class="v-btn" @click="showFixMatchModal = false">
                   {{ t('common.cancel') }}
                 </button>
                 <button
+                  v-if="showManualFixId || fixDisableEnrichment"
                   type="button"
                   class="v-btn v-btn-primary"
                   :disabled="savingFixMatch"
                   @click="applyFixMatch"
                 >
                   {{ savingFixMatch ? t('common.loading') : t('details.fix_match_apply') }}
+                </button>
+              </div>
+            </div>
+          </div>
+        </Transition>
+      </Teleport>
+
+      <!-- Include Streams From Other Sources Modal -->
+      <Teleport to="body">
+        <Transition name="modal-pop">
+          <div
+            v-if="showIncludeSourcesModal"
+            class="stream-backdrop"
+            role="dialog"
+            aria-modal="true"
+            :aria-label="t('details.include_sources')"
+          >
+            <div class="v-card stream-modal fix-modal-wide">
+              <div class="picker-head">
+                <div class="picker-title-group">
+                  <h3 class="picker-title">{{ t('details.include_sources') }}</h3>
+                  <span class="v-muted picker-sub">
+                    {{ t('details.include_sources_desc') }}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  class="v-btn v-btn-icon"
+                  aria-label="Close Include Sources dialog"
+                  @click="showIncludeSourcesModal = false"
+                >
+                  <X :size="16" aria-hidden="true" />
+                </button>
+              </div>
+
+              <div class="fix-search-bar">
+                <input
+                  v-model="includeSearchQuery"
+                  type="search"
+                  class="v-input"
+                  :placeholder="t('details.include_search_placeholder')"
+                />
+              </div>
+
+              <div class="linked-plugins-list">
+                <div
+                  v-for="plug in selectableSourcePlugins"
+                  :key="plug.manifest.id"
+                  class="linked-plugin-item"
+                >
+                  <div class="linked-plugin-row">
+                    <div class="linked-plugin-info">
+                      <strong>{{ plug.manifest.name }}</strong>
+                      <span v-if="findLinkedFor(plug.manifest.id)" class="v-muted linked-match-line">
+                        {{ t('details.linked_to') }}: <strong>{{ findLinkedFor(plug.manifest.id)?.title }}</strong>
+                      </span>
+                    </div>
+                    <div class="linked-plugin-btns">
+                      <button
+                        v-if="findLinkedFor(plug.manifest.id)"
+                        type="button"
+                        class="v-btn v-btn-sm"
+                        :disabled="targetPluginSearching[plug.manifest.id]"
+                        @click="searchInTargetPlugin(plug.manifest.id)"
+                      >
+                        <Search :size="13" aria-hidden="true" />
+                        {{ t('details.change_linked_match') }}
+                      </button>
+                      <button
+                        type="button"
+                        class="v-btn v-btn-sm"
+                        :class="findLinkedFor(plug.manifest.id) ? 'v-btn-danger' : 'v-btn-primary'"
+                        :disabled="savingLinkedSources || targetPluginSearching[plug.manifest.id]"
+                        @click="toggleLinkedPlugin(plug)"
+                      >
+                        <Loader2
+                          v-if="targetPluginSearching[plug.manifest.id]"
+                          :size="13"
+                          class="spin"
+                          aria-hidden="true"
+                        />
+                        <Trash2
+                          v-else-if="findLinkedFor(plug.manifest.id)"
+                          :size="13"
+                          aria-hidden="true"
+                        />
+                        <Check v-else :size="13" aria-hidden="true" />
+                        {{ findLinkedFor(plug.manifest.id) ? t('common.remove') : t('details.include_btn') }}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div
+                    v-if="activeTargetSearchPlugin === plug.manifest.id && (targetPluginHits[plug.manifest.id]?.length ?? 0) > 0"
+                    class="linked-hits-strip"
+                  >
+                    <button
+                      v-for="cand in targetPluginHits[plug.manifest.id]"
+                      :key="cand.nativeId"
+                      type="button"
+                      class="v-btn v-btn-sm"
+                      :class="{ 'v-btn-primary': findLinkedFor(plug.manifest.id)?.nativeId === cand.nativeId }"
+                      @click="bindLinkedSourceHit(plug, cand)"
+                    >
+                      {{ cand.title }}
+                    </button>
+                  </div>
+                </div>
+                <div v-if="!selectableSourcePlugins.length" class="v-muted fix-empty-hits">
+                  {{ t('common.empty') }}
+                </div>
+              </div>
+
+              <div class="fix-actions">
+                <button type="button" class="v-btn v-btn-primary" @click="showIncludeSourcesModal = false">
+                  {{ t('common.close') }}
                 </button>
               </div>
             </div>
@@ -829,6 +1311,9 @@ onActivated(() => {
                     <div class="cs-source-info">
                       <span class="stream-label">{{ cand.label }}</span>
                       <div class="cs-source-tags">
+                        <span v-if="cand.pluginName || cand.pluginId" class="v-badge v-badge-accent">
+                          {{ cand.pluginName || cand.pluginId }}
+                        </span>
                         <span class="v-badge v-badge-accent">{{ cand.kind.toUpperCase() }}</span>
                         <span v-if="cand.quality" class="v-badge">{{ cand.quality }}</span>
                         <span v-if="cand.audioType" class="v-badge v-badge-warn">
@@ -846,6 +1331,7 @@ onActivated(() => {
                   </button>
 
                   <button
+                    v-if="!isLiveMedia"
                     type="button"
                     class="v-btn v-btn-icon"
                     :aria-label="`Download ${cand.label}`"
@@ -1034,8 +1520,54 @@ onActivated(() => {
 
 .hero-nav-row {
   position: relative;
-  z-index: 2;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
   margin-bottom: 1.5rem;
+}
+
+.hero-top-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.more-menu-wrap {
+  position: relative;
+}
+
+.hero-more-dropdown {
+  position: absolute;
+  top: calc(100% + 0.4rem);
+  right: 0;
+  min-width: 210px;
+  padding: 0.35rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  z-index: 30;
+}
+
+.hero-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  width: 100%;
+  padding: 0.5rem 0.7rem;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--vessel-text-primary);
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.hero-menu-item:hover {
+  background: var(--vessel-surface-elevated);
 }
 
 .hero-stage {
@@ -1637,5 +2169,154 @@ onActivated(() => {
   to {
     transform: rotate(360deg);
   }
+}
+
+.fix-modal-wide {
+  width: min(640px, 100%);
+}
+
+.fix-search-bar {
+  display: flex;
+  gap: 0.55rem;
+}
+
+.fix-search-bar .v-input {
+  flex: 1;
+}
+
+.fix-provider-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.fix-notes-box {
+  padding: 0.5rem 0.75rem;
+  border-radius: 10px;
+  background: var(--vessel-surface-input);
+  border: 1px solid var(--vessel-border);
+}
+
+.fix-note-line {
+  margin: 0;
+  font-size: 0.8rem;
+}
+
+.fix-hits-list,
+.linked-plugins-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.fix-hit-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.55rem;
+  border-radius: 12px;
+  border: 1px solid var(--vessel-border);
+  background: var(--vessel-surface-card);
+  text-align: left;
+  cursor: pointer;
+}
+
+.fix-hit-card:hover {
+  border-color: var(--vessel-accent);
+  background: var(--vessel-surface-elevated);
+}
+
+.fix-hit-poster {
+  width: 48px;
+  height: 70px;
+  border-radius: 7px;
+  object-fit: cover;
+  flex-shrink: 0;
+  background: var(--vessel-surface-input);
+}
+
+.fix-hit-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.22rem;
+}
+
+.fix-hit-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.45rem;
+}
+
+.fix-hit-title {
+  font-size: 0.9rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fix-hit-meta {
+  font-size: 0.76rem;
+}
+
+.fix-hit-syn {
+  margin: 0;
+  font-size: 0.76rem;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.fix-empty-hits {
+  font-size: 0.84rem;
+  padding: 0.65rem 0;
+}
+
+.manual-id-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  align-items: flex-start;
+}
+
+.linked-plugin-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: 12px;
+  border: 1px solid var(--vessel-border);
+  background: var(--vessel-surface-card);
+}
+
+.linked-plugin-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+}
+
+.linked-plugin-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.linked-match-line {
+  font-size: 0.78rem;
+}
+
+.linked-plugin-btns,
+.linked-hits-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
 }
 </style>

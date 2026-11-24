@@ -851,6 +851,18 @@ internal open class UniffiVTableCallbackInterfaceEngineEventListener(
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
 // For large crates we prevent `MethodTooLargeException` (see #2340)
 // N.B. the name of the extension is very misleading, since it is 
 // rather `InterfaceTooLargeException`, caused by too many methods 
@@ -890,11 +902,15 @@ fun uniffi_vessel_ffi_checksum_method_vesselmobilecore_get_epg_now_next_json(
 ): Short
 fun uniffi_vessel_ffi_checksum_method_vesselmobilecore_get_home_feeds_json(
 ): Short
+fun uniffi_vessel_ffi_checksum_method_vesselmobilecore_get_linked_sources_json(
+): Short
 fun uniffi_vessel_ffi_checksum_method_vesselmobilecore_get_plugin_settings_json(
 ): Short
 fun uniffi_vessel_ffi_checksum_method_vesselmobilecore_get_skip_segments_json(
 ): Short
 fun uniffi_vessel_ffi_checksum_method_vesselmobilecore_get_streams_json(
+): Short
+fun uniffi_vessel_ffi_checksum_method_vesselmobilecore_get_streams_with_linked_json(
 ): Short
 fun uniffi_vessel_ffi_checksum_method_vesselmobilecore_get_ui_preferences_json(
 ): Short
@@ -948,6 +964,10 @@ fun uniffi_vessel_ffi_checksum_method_vesselmobilecore_resume_download_json(
 ): Short
 fun uniffi_vessel_ffi_checksum_method_vesselmobilecore_search_iptv_channels_json(
 ): Short
+fun uniffi_vessel_ffi_checksum_method_vesselmobilecore_search_metadata_json(
+): Short
+fun uniffi_vessel_ffi_checksum_method_vesselmobilecore_search_plugin_sync_json(
+): Short
 fun uniffi_vessel_ffi_checksum_method_vesselmobilecore_search_streams(
 ): Short
 fun uniffi_vessel_ffi_checksum_method_vesselmobilecore_set_always_proxy(
@@ -956,6 +976,8 @@ fun uniffi_vessel_ffi_checksum_method_vesselmobilecore_set_download_directory(
 ): Short
 fun uniffi_vessel_ffi_checksum_method_vesselmobilecore_set_iptv_favorite(
 ): Short
+fun uniffi_vessel_ffi_checksum_method_vesselmobilecore_set_linked_sources_json(
+): Short
 fun uniffi_vessel_ffi_checksum_method_vesselmobilecore_set_metadata_enabled(
 ): Short
 fun uniffi_vessel_ffi_checksum_method_vesselmobilecore_set_metadata_override(
@@ -963,6 +985,8 @@ fun uniffi_vessel_ffi_checksum_method_vesselmobilecore_set_metadata_override(
 fun uniffi_vessel_ffi_checksum_method_vesselmobilecore_set_plugin_enabled(
 ): Short
 fun uniffi_vessel_ffi_checksum_method_vesselmobilecore_set_plugin_settings_json(
+): Short
+fun uniffi_vessel_ffi_checksum_method_vesselmobilecore_set_simkl_client_id(
 ): Short
 fun uniffi_vessel_ffi_checksum_method_vesselmobilecore_set_tmdb_api_key(
 ): Short
@@ -1064,11 +1088,15 @@ fun uniffi_vessel_ffi_fn_method_vesselmobilecore_get_epg_now_next_json(`ptr`: Po
 ): RustBuffer.ByValue
 fun uniffi_vessel_ffi_fn_method_vesselmobilecore_get_home_feeds_json(`ptr`: Pointer,`pluginIds`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
+fun uniffi_vessel_ffi_fn_method_vesselmobilecore_get_linked_sources_json(`ptr`: Pointer,`pluginId`: RustBuffer.ByValue,`nativeId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
 fun uniffi_vessel_ffi_fn_method_vesselmobilecore_get_plugin_settings_json(`ptr`: Pointer,`pluginId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 fun uniffi_vessel_ffi_fn_method_vesselmobilecore_get_skip_segments_json(`ptr`: Pointer,`payloadJson`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 fun uniffi_vessel_ffi_fn_method_vesselmobilecore_get_streams_json(`ptr`: Pointer,`pluginId`: RustBuffer.ByValue,`episodeId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_vessel_ffi_fn_method_vesselmobilecore_get_streams_with_linked_json(`ptr`: Pointer,`pluginId`: RustBuffer.ByValue,`nativeId`: RustBuffer.ByValue,`episodeId`: RustBuffer.ByValue,`season`: Int,`episode`: Int,`absoluteEpisode`: RustBuffer.ByValue,`isMovie`: Byte,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 fun uniffi_vessel_ffi_fn_method_vesselmobilecore_get_ui_preferences_json(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
@@ -1122,6 +1150,10 @@ fun uniffi_vessel_ffi_fn_method_vesselmobilecore_resume_download_json(`ptr`: Poi
 ): RustBuffer.ByValue
 fun uniffi_vessel_ffi_fn_method_vesselmobilecore_search_iptv_channels_json(`ptr`: Pointer,`profileId`: RustBuffer.ByValue,`query`: RustBuffer.ByValue,`groupTitle`: RustBuffer.ByValue,`favoritesOnly`: Byte,`limit`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
+fun uniffi_vessel_ffi_fn_method_vesselmobilecore_search_metadata_json(`ptr`: Pointer,`query`: RustBuffer.ByValue,`provider`: RustBuffer.ByValue,`preferredLang`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_vessel_ffi_fn_method_vesselmobilecore_search_plugin_sync_json(`ptr`: Pointer,`pluginId`: RustBuffer.ByValue,`query`: RustBuffer.ByValue,`page`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
 fun uniffi_vessel_ffi_fn_method_vesselmobilecore_search_streams(`ptr`: Pointer,`query`: RustBuffer.ByValue,`filtersJson`: RustBuffer.ByValue,`page`: RustBuffer.ByValue,`pluginIds`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 fun uniffi_vessel_ffi_fn_method_vesselmobilecore_set_always_proxy(`ptr`: Pointer,`enabled`: Byte,uniffi_out_err: UniffiRustCallStatus, 
@@ -1130,6 +1162,8 @@ fun uniffi_vessel_ffi_fn_method_vesselmobilecore_set_download_directory(`ptr`: P
 ): RustBuffer.ByValue
 fun uniffi_vessel_ffi_fn_method_vesselmobilecore_set_iptv_favorite(`ptr`: Pointer,`channelId`: Long,`isFavorite`: Byte,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
+fun uniffi_vessel_ffi_fn_method_vesselmobilecore_set_linked_sources_json(`ptr`: Pointer,`pluginId`: RustBuffer.ByValue,`nativeId`: RustBuffer.ByValue,`sourcesJson`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
 fun uniffi_vessel_ffi_fn_method_vesselmobilecore_set_metadata_enabled(`ptr`: Pointer,`enabled`: Byte,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
 fun uniffi_vessel_ffi_fn_method_vesselmobilecore_set_metadata_override(`ptr`: Pointer,`pluginId`: RustBuffer.ByValue,`nativeId`: RustBuffer.ByValue,`canonicalId`: RustBuffer.ByValue,`isDisabled`: Byte,uniffi_out_err: UniffiRustCallStatus, 
@@ -1137,6 +1171,8 @@ fun uniffi_vessel_ffi_fn_method_vesselmobilecore_set_metadata_override(`ptr`: Po
 fun uniffi_vessel_ffi_fn_method_vesselmobilecore_set_plugin_enabled(`ptr`: Pointer,`pluginId`: RustBuffer.ByValue,`enabled`: Byte,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
 fun uniffi_vessel_ffi_fn_method_vesselmobilecore_set_plugin_settings_json(`ptr`: Pointer,`pluginId`: RustBuffer.ByValue,`valuesJson`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): Unit
+fun uniffi_vessel_ffi_fn_method_vesselmobilecore_set_simkl_client_id(`ptr`: Pointer,`clientId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
 fun uniffi_vessel_ffi_fn_method_vesselmobilecore_set_tmdb_api_key(`ptr`: Pointer,`apiKey`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
@@ -1318,6 +1354,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_vessel_ffi_checksum_method_vesselmobilecore_get_home_feeds_json() != 17480.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_vessel_ffi_checksum_method_vesselmobilecore_get_linked_sources_json() != 34314.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_vessel_ffi_checksum_method_vesselmobilecore_get_plugin_settings_json() != 18009.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -1325,6 +1364,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_vessel_ffi_checksum_method_vesselmobilecore_get_streams_json() != 62526.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_vessel_ffi_checksum_method_vesselmobilecore_get_streams_with_linked_json() != 54730.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_vessel_ffi_checksum_method_vesselmobilecore_get_ui_preferences_json() != 4131.toShort()) {
@@ -1405,6 +1447,12 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_vessel_ffi_checksum_method_vesselmobilecore_search_iptv_channels_json() != 36854.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_vessel_ffi_checksum_method_vesselmobilecore_search_metadata_json() != 30418.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_vessel_ffi_checksum_method_vesselmobilecore_search_plugin_sync_json() != 43197.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_vessel_ffi_checksum_method_vesselmobilecore_search_streams() != 23064.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -1417,6 +1465,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_vessel_ffi_checksum_method_vesselmobilecore_set_iptv_favorite() != 6490.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_vessel_ffi_checksum_method_vesselmobilecore_set_linked_sources_json() != 35636.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_vessel_ffi_checksum_method_vesselmobilecore_set_metadata_enabled() != 4869.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -1427,6 +1478,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_vessel_ffi_checksum_method_vesselmobilecore_set_plugin_settings_json() != 1912.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_vessel_ffi_checksum_method_vesselmobilecore_set_simkl_client_id() != 25047.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_vessel_ffi_checksum_method_vesselmobilecore_set_tmdb_api_key() != 47146.toShort()) {
@@ -1887,11 +1941,15 @@ public interface VesselMobileCoreInterface {
     
     fun `getHomeFeedsJson`(`pluginIds`: List<kotlin.String>?): kotlin.String
     
+    fun `getLinkedSourcesJson`(`pluginId`: kotlin.String, `nativeId`: kotlin.String): kotlin.String
+    
     fun `getPluginSettingsJson`(`pluginId`: kotlin.String): kotlin.String
     
     fun `getSkipSegmentsJson`(`payloadJson`: kotlin.String): kotlin.String
     
     fun `getStreamsJson`(`pluginId`: kotlin.String, `episodeId`: kotlin.String): kotlin.String
+    
+    fun `getStreamsWithLinkedJson`(`pluginId`: kotlin.String, `nativeId`: kotlin.String, `episodeId`: kotlin.String, `season`: kotlin.UInt, `episode`: kotlin.UInt, `absoluteEpisode`: kotlin.UInt?, `isMovie`: kotlin.Boolean): kotlin.String
     
     fun `getUiPreferencesJson`(): kotlin.String
     
@@ -1945,6 +2003,10 @@ public interface VesselMobileCoreInterface {
     
     fun `searchIptvChannelsJson`(`profileId`: kotlin.String?, `query`: kotlin.String?, `groupTitle`: kotlin.String?, `favoritesOnly`: kotlin.Boolean, `limit`: kotlin.UInt?): kotlin.String
     
+    fun `searchMetadataJson`(`query`: kotlin.String, `provider`: kotlin.String?, `preferredLang`: kotlin.String?): kotlin.String
+    
+    fun `searchPluginSyncJson`(`pluginId`: kotlin.String, `query`: kotlin.String, `page`: kotlin.UInt?): kotlin.String
+    
     fun `searchStreams`(`query`: kotlin.String, `filtersJson`: kotlin.String?, `page`: kotlin.UInt?, `pluginIds`: List<kotlin.String>?): kotlin.String
     
     fun `setAlwaysProxy`(`enabled`: kotlin.Boolean)
@@ -1953,6 +2015,8 @@ public interface VesselMobileCoreInterface {
     
     fun `setIptvFavorite`(`channelId`: kotlin.Long, `isFavorite`: kotlin.Boolean)
     
+    fun `setLinkedSourcesJson`(`pluginId`: kotlin.String, `nativeId`: kotlin.String, `sourcesJson`: kotlin.String): kotlin.String
+    
     fun `setMetadataEnabled`(`enabled`: kotlin.Boolean)
     
     fun `setMetadataOverride`(`pluginId`: kotlin.String, `nativeId`: kotlin.String, `canonicalId`: kotlin.String?, `isDisabled`: kotlin.Boolean)
@@ -1960,6 +2024,8 @@ public interface VesselMobileCoreInterface {
     fun `setPluginEnabled`(`pluginId`: kotlin.String, `enabled`: kotlin.Boolean)
     
     fun `setPluginSettingsJson`(`pluginId`: kotlin.String, `valuesJson`: kotlin.String)
+    
+    fun `setSimklClientId`(`clientId`: kotlin.String?)
     
     fun `setTmdbApiKey`(`apiKey`: kotlin.String?)
     
@@ -2214,6 +2280,19 @@ open class VesselMobileCore: Disposable, AutoCloseable, VesselMobileCoreInterfac
     
 
     
+    @Throws(FfiException::class)override fun `getLinkedSourcesJson`(`pluginId`: kotlin.String, `nativeId`: kotlin.String): kotlin.String {
+            return FfiConverterString.lift(
+    callWithPointer {
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_vessel_ffi_fn_method_vesselmobilecore_get_linked_sources_json(
+        it, FfiConverterString.lower(`pluginId`),FfiConverterString.lower(`nativeId`),_status)
+}
+    }
+    )
+    }
+    
+
+    
     @Throws(FfiException::class)override fun `getPluginSettingsJson`(`pluginId`: kotlin.String): kotlin.String {
             return FfiConverterString.lift(
     callWithPointer {
@@ -2246,6 +2325,19 @@ open class VesselMobileCore: Disposable, AutoCloseable, VesselMobileCoreInterfac
     uniffiRustCallWithError(FfiException) { _status ->
     UniffiLib.INSTANCE.uniffi_vessel_ffi_fn_method_vesselmobilecore_get_streams_json(
         it, FfiConverterString.lower(`pluginId`),FfiConverterString.lower(`episodeId`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    @Throws(FfiException::class)override fun `getStreamsWithLinkedJson`(`pluginId`: kotlin.String, `nativeId`: kotlin.String, `episodeId`: kotlin.String, `season`: kotlin.UInt, `episode`: kotlin.UInt, `absoluteEpisode`: kotlin.UInt?, `isMovie`: kotlin.Boolean): kotlin.String {
+            return FfiConverterString.lift(
+    callWithPointer {
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_vessel_ffi_fn_method_vesselmobilecore_get_streams_with_linked_json(
+        it, FfiConverterString.lower(`pluginId`),FfiConverterString.lower(`nativeId`),FfiConverterString.lower(`episodeId`),FfiConverterUInt.lower(`season`),FfiConverterUInt.lower(`episode`),FfiConverterOptionalUInt.lower(`absoluteEpisode`),FfiConverterBoolean.lower(`isMovie`),_status)
 }
     }
     )
@@ -2585,6 +2677,32 @@ open class VesselMobileCore: Disposable, AutoCloseable, VesselMobileCoreInterfac
     
 
     
+    @Throws(FfiException::class)override fun `searchMetadataJson`(`query`: kotlin.String, `provider`: kotlin.String?, `preferredLang`: kotlin.String?): kotlin.String {
+            return FfiConverterString.lift(
+    callWithPointer {
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_vessel_ffi_fn_method_vesselmobilecore_search_metadata_json(
+        it, FfiConverterString.lower(`query`),FfiConverterOptionalString.lower(`provider`),FfiConverterOptionalString.lower(`preferredLang`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    @Throws(FfiException::class)override fun `searchPluginSyncJson`(`pluginId`: kotlin.String, `query`: kotlin.String, `page`: kotlin.UInt?): kotlin.String {
+            return FfiConverterString.lift(
+    callWithPointer {
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_vessel_ffi_fn_method_vesselmobilecore_search_plugin_sync_json(
+        it, FfiConverterString.lower(`pluginId`),FfiConverterString.lower(`query`),FfiConverterOptionalUInt.lower(`page`),_status)
+}
+    }
+    )
+    }
+    
+
+    
     @Throws(FfiException::class)override fun `searchStreams`(`query`: kotlin.String, `filtersJson`: kotlin.String?, `page`: kotlin.UInt?, `pluginIds`: List<kotlin.String>?): kotlin.String {
             return FfiConverterString.lift(
     callWithPointer {
@@ -2635,6 +2753,19 @@ open class VesselMobileCore: Disposable, AutoCloseable, VesselMobileCoreInterfac
     
 
     
+    @Throws(FfiException::class)override fun `setLinkedSourcesJson`(`pluginId`: kotlin.String, `nativeId`: kotlin.String, `sourcesJson`: kotlin.String): kotlin.String {
+            return FfiConverterString.lift(
+    callWithPointer {
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_vessel_ffi_fn_method_vesselmobilecore_set_linked_sources_json(
+        it, FfiConverterString.lower(`pluginId`),FfiConverterString.lower(`nativeId`),FfiConverterString.lower(`sourcesJson`),_status)
+}
+    }
+    )
+    }
+    
+
+    
     @Throws(FfiException::class)override fun `setMetadataEnabled`(`enabled`: kotlin.Boolean)
         = 
     callWithPointer {
@@ -2677,6 +2808,18 @@ open class VesselMobileCore: Disposable, AutoCloseable, VesselMobileCoreInterfac
     uniffiRustCallWithError(FfiException) { _status ->
     UniffiLib.INSTANCE.uniffi_vessel_ffi_fn_method_vesselmobilecore_set_plugin_settings_json(
         it, FfiConverterString.lower(`pluginId`),FfiConverterString.lower(`valuesJson`),_status)
+}
+    }
+    
+    
+
+    
+    @Throws(FfiException::class)override fun `setSimklClientId`(`clientId`: kotlin.String?)
+        = 
+    callWithPointer {
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_vessel_ffi_fn_method_vesselmobilecore_set_simkl_client_id(
+        it, FfiConverterOptionalString.lower(`clientId`),_status)
 }
     }
     

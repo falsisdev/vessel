@@ -17,24 +17,25 @@ Vessel's desktop interface (`apps/desktop`) combines **Tauri v2** with **Vue 3**
 ## 2. Home (`HomeView`)
 
 ### Spotlight Hero Banner
-- Full-bleed crossfading showcase displaying backdrops, year/rating tags, synopsis, **Watch Now**, and **More Info** buttons.
-- Customize which plugins power the Hero banner inside **Choose Home Feeds → Spotlight Hero Source** (`Auto` or specific pinned plugins).
+- Full-bleed crossfading showcase with subtle smooth **zoom animation** and automatic slide advancement, displaying backdrops, year/rating tags, synopsis, **Watch Now**, and **More Info** buttons.
+- **Watch Now** vs **More Info:** **Watch Now** resolves and starts playback directly on Home (or opens an inline stream picker dialog when **Always Ask Source** is active or extraction/multiple streams require choosing) without redirecting to Details, while **More Info** opens the full Media Details view.
+- Customize banner presentation (`Full`, `Compact`, or `Hidden`) in Settings and pick which plugins power the Hero banner inside **Choose Home Feeds → Spotlight Hero Source** (`Auto` or specific pinned plugins).
 
 ### Feed Selection & Shelf Ordering
-- Click **Feeds** (or **Choose Home Feeds**) on Home to choose which active plugins display shelves on the Home screen.
+- Click **Feeds** (or **Choose Home Feeds**) on Home to choose which active plugins display shelves on the Home screen. *(Live TV plugins are isolated on the dedicated **Live TV** tab rather than cluttering Home.)*
 - Plugins unchecked from Home remain fast and active in **Global Search**.
 - Drag handles inside **Active Home Shelf Order** reorder your shelves from top to bottom.
 
 ### Smart Continue Watching
-Vessel automatically tracks dual-coordinate playback progress (`(season, episode)` + `absoluteEpisode`):
+Vessel automatically tracks dual-coordinate playback progress (`(season, episode)` + `absoluteEpisode`), ordered with your **most recently watched entry on the left**:
 - **Movies:** Displays movie title without redundant season/episode badges. Once watched past the completion threshold (default `90%`), completed movies **automatically leave** Continue Watching while remaining marked as watched in your SQLite database.
 - **Series & Anime:** Finishing an episode automatically removes the completed episode and surfaces the **Next Episode (`Up Next`)** (powered by locally persisted episode snapshots). Finishing the **series finale** automatically removes the show from Continue Watching.
 - **Uniform Cards & Truncation:** All Continue Watching cards share a uniform `16:9` footprint; long show/episode labels truncate cleanly with ellipsis (`...`).
 - **Context Menu (`Right-Click` or `Long-Press`):** Open a quick menu directly from any Continue Watching card with **Go to Details** and edit shortcuts.
-- **Manual Continue Watching Editor:** Click the **Edit (Pencil)** icon on a Continue Watching card to switch season/episode or adjust watched minutes manually; **Total Duration** updates automatically (read-only) from the selected episode's known duration, or click **Mark Finished / Next** to advance immediately.
+- **Manual Continue Watching Editor (Desktop & Android):** Click the **Edit (Pencil)** icon on a Continue Watching card to switch season/episode or adjust watched progress percentage/minutes manually; **Total Duration** updates automatically (read-only) from the selected episode's known duration, or click **Mark Finished / Next** / **Remove** to update immediately.
 
 ### Quick Watch Status on Cards
-Hover over any poster card on **Home** or **Search** to open the top-right **Quick Watch Status** button without visiting the Details page:
+Click the subtle top-right **Quick Watch Status** badge on **Home** or **Search** poster cards without visiting the Details page:
 - **Watching**
 - **Plan to Watch**
 - **Completed**
@@ -56,7 +57,9 @@ Hover over any poster card on **Home** or **Search** to open the top-right **Qui
 
 - **Atmospheric Backdrop & Metadata:** Displays full-bleed backdrop art, Genres, Year, Rating, Synopsis, and External ID badges (`AniList`, `TMDB`, `IMDb`, `MAL`) when enriched.
 - **Contextual CTA:** Automatically shows **Resume (`S·E`)** when saved watch progress exists, or **Watch** otherwise.
-- **Fix Match Modal:** Incorrect external metadata match? Click **Fix Match**, bind an exact ID (e.g. `anilist:918`, `tmdb:tv:1399`, `imdb:tt0944947`), or toggle **Disable external metadata for this title** to rely strictly on plugin data.
+- **Top-Right `⋮` Menu (`Fix Match` & `Include Streams From Other Sources`):**
+  - **Fix Match:** Search directly across **TMDB, IMDb, Simkl, AniList, MyAnimeList, and Kitsu** by title, bind a manual canonical ID fallback, or toggle **Disable external metadata for this title**.
+  - **Include Streams From Other Sources:** Link additional installed plugins directly to the current Details page (persisted locally on your device and editable anytime) so streams from linked extensions are queried and merged seamlessly without leaving your preferred source layout.
 - **Episode View Modes:** Switch between **Grid Cards** (with AniZip stills & titles), **Detailed List**, and **Compact Rows**.
 - **Per-Episode Progress & Watched Badges:** Each episode card renders its watched progress bar underneath and a green **Watched** badge once completed. Real metadata episode titles replace generic placeholders (e.g. `1. Sezon 3. Bölüm`) whenever available.
 - **Source Resolver Sheet:** Clicking an episode or **Streams** opens a live stream picker showing stream labels, quality, language, audio classification (`Sub`, `Dub`, `Original`), and direct **Download** buttons alongside playback.

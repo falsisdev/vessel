@@ -1,5 +1,10 @@
 package dev.falsis.vessel.ui.screens
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -10,6 +15,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -19,25 +25,17 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -48,16 +46,28 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import dev.falsis.vessel.data.Episode
 import dev.falsis.vessel.data.LibraryItem
+import dev.falsis.vessel.data.MediaDetail
 import dev.falsis.vessel.data.MediaRef
 import dev.falsis.vessel.data.MediaSummary
+import dev.falsis.vessel.data.StreamResult
 import dev.falsis.vessel.data.VesselRepository
 import dev.falsis.vessel.ui.components.MediaPosterCard
+import dev.falsis.vessel.ui.components.VesselFilterChip
+import dev.falsis.vessel.ui.components.VesselOutlinedButton
+import dev.falsis.vessel.ui.components.VesselSearchField
+import dev.falsis.vessel.ui.components.VesselTextButton
+import dev.falsis.vessel.ui.components.isLandscapeCardRatio
+import dev.falsis.vessel.ui.components.vesselTopSafeInset
 import dev.falsis.vessel.ui.i18n.VesselI18n
+import dev.falsis.vessel.ui.isLiveMediaSummary
+import dev.falsis.vessel.ui.isLiveTvPlugin
 import dev.falsis.vessel.ui.theme.LocalVesselPalette
 import kotlinx.coroutines.launch
 
@@ -65,13 +75,16 @@ import kotlinx.coroutines.launch
 fun SearchScreen(
     repo: VesselRepository,
     onOpenDetails: (pluginId: String, nativeId: String) -> Unit,
+    onPlayLiveStream: (pluginId: String, detail: MediaDetail, episode: Episode, streams: StreamResult) -> Unit = { _, _, _, _ -> },
 ) {
     val palette = LocalVesselPalette.current
     val scope = rememberCoroutineScope()
     val plugins by repo.plugins.collectAsState()
     val prefs by repo.uiPreferences.collectAsState()
     val enabledPlugins = remember(plugins) { plugins.filter { it.enabled } }
+    val pluginMap = remember(plugins) { plugins.associateBy { it.manifest.id } }
     val pluginNameMap = remember(plugins) { plugins.associate { it.manifest.id to it.manifest.name } }
+    var launchingLiveKey by remember { mutableStateOf<String?>(null) }
 
     var query by remember { mutableStateOf("") }
     var selectedType by remember { mutableStateOf("all") }
@@ -80,6 +93,15 @@ fun SearchScreen(
     var activeSearchId by remember { mutableStateOf<String?>(null) }
     var searching by remember { mutableStateOf(false) }
     var results by remember { mutableStateOf<List<Pair<String, MediaSummary>>>(emptyList()) }
+    var libraryStatusMap by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+
+    LaunchedEffect(Unit) {
+        runCatching {
+            libraryStatusMap = repo.listLibrary().associate {
+                "${it.media.pluginId}:${it.media.nativeId}" to it.status
+            }
+        }
+    }
 
     LaunchedEffect(Unit) {
         repo.searchEvents.collect { ev ->
@@ -130,12 +152,15 @@ fun SearchScreen(
         filtered.groupBy { it.first }.toList()
     }
 
+    val isWideCard = isLandscapeCardRatio(prefs.cards.aspectRatio)
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(palette.bgBase)
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+            .vesselTopSafeInset()
+            .padding(start = 16.dp, top = 14.dp, end = 16.dp, bottom = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -145,44 +170,35 @@ fun SearchScreen(
             Text(VesselI18n.tr("search.title"), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
             if (searching) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Surface(shape = RoundedCornerShape(50), color = palette.accent.copy(alpha = 0.16f)) {
+                    Surface(shape = RoundedCornerShape(999.dp), color = palette.accent.copy(alpha = 0.16f)) {
                         Row(
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            horizontalArrangement = Arrangement.spacedBy(5.dp),
                         ) {
-                            CircularProgressIndicator(modifier = Modifier.size(12.dp), strokeWidth = 2.dp, color = palette.accent)
+                            CircularProgressIndicator(modifier = Modifier.size(11.dp), strokeWidth = 2.dp, color = palette.accent)
                             Text(VesselI18n.tr("search.searching"), style = MaterialTheme.typography.labelSmall, color = palette.accent)
                         }
                     }
-                    TextButton(onClick = { stopSearch() }) {
-                        Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(15.dp))
-                        Spacer(Modifier.width(2.dp))
+                    VesselTextButton(onClick = { stopSearch() }, height = 28.dp) {
+                        Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(14.dp))
+                        Spacer(Modifier.width(3.dp))
                         Text(VesselI18n.tr("common.cancel"))
                     }
                 }
             }
         }
 
-        OutlinedTextField(
+        VesselSearchField(
             value = query,
             onValueChange = { query = it },
-            placeholder = { Text(VesselI18n.tr("search.placeholder")) },
-            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-            trailingIcon = {
-                if (query.isNotEmpty()) {
-                    IconButton(onClick = {
-                        query = ""
-                        results = emptyList()
-                        stopSearch()
-                    }) {
-                        Icon(Icons.Default.Clear, contentDescription = null)
-                    }
-                }
+            placeholder = VesselI18n.tr("search.placeholder"),
+            imeAction = ImeAction.Search,
+            onSearch = { triggerSearch() },
+            onClear = {
+                results = emptyList()
+                stopSearch()
             },
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-            keyboardActions = KeyboardActions(onSearch = { triggerSearch() }),
             modifier = Modifier.fillMaxWidth(),
         )
 
@@ -190,7 +206,7 @@ fun SearchScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             listOf(
@@ -199,18 +215,29 @@ fun SearchScreen(
                 "series" to VesselI18n.tr("search.filter_series"),
                 "anime" to VesselI18n.tr("search.filter_anime"),
             ).forEach { (key, label) ->
-                FilterChip(
+                VesselFilterChip(
                     selected = selectedType == key,
                     onClick = { selectedType = key },
-                    label = { Text(label) },
+                    label = label,
                 )
             }
 
             Box {
                 val pluginLabel = enabledPlugins.firstOrNull { it.manifest.id == selectedPluginId }?.manifest?.name
                     ?: VesselI18n.tr("search.all_plugins")
-                OutlinedButton(onClick = { showPluginMenu = true }) {
-                    Text(pluginLabel, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                VesselOutlinedButton(
+                    onClick = { showPluginMenu = true },
+                    height = 30.dp,
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                ) {
+                    Text(
+                        text = pluginLabel,
+                        style = MaterialTheme.typography.labelMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Spacer(Modifier.width(3.dp))
+                    Icon(Icons.Default.ExpandMore, contentDescription = null, modifier = Modifier.size(15.dp))
                 }
                 DropdownMenu(expanded = showPluginMenu, onDismissRequest = { showPluginMenu = false }) {
                     DropdownMenuItem(
@@ -236,65 +263,123 @@ fun SearchScreen(
         }
 
         if (searching) {
-            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            LinearProgressIndicator(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(2.dp)
+                    .clip(RoundedCornerShape(999.dp)),
+                color = palette.accent,
+            )
         }
 
-        if (groupedBuckets.isEmpty() && !searching) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(VesselI18n.tr("search.empty"), color = palette.textMuted)
-            }
-        } else {
-            LazyVerticalGrid(
-                columns = GridCells.Adaptive(minSize = if (prefs.cards.aspectRatio == "wide_16x9") 180.dp else 124.dp),
-                contentPadding = PaddingValues(bottom = 24.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp),
-                modifier = Modifier.fillMaxSize(),
-            ) {
-                groupedBuckets.forEach { (pluginId, bucketItems) ->
-                    item(key = "hdr:$pluginId", span = { GridItemSpan(maxLineSpan) }) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            Text(
-                                text = pluginNameMap[pluginId] ?: pluginId,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                            )
-                            Surface(color = palette.bgSurface, shape = RoundedCornerShape(50)) {
+        AnimatedContent(
+            targetState = groupedBuckets.isEmpty() && !searching,
+            transitionSpec = { fadeIn(tween(200)).togetherWith(fadeOut(tween(150))) },
+            label = "search_results_transition",
+            modifier = Modifier.fillMaxSize(),
+        ) { showEmpty ->
+            if (showEmpty) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text(VesselI18n.tr("search.empty"), color = palette.textMuted)
+                }
+            } else {
+                LazyVerticalGrid(
+                    columns = GridCells.Adaptive(minSize = if (isWideCard) 168.dp else 110.dp),
+                    contentPadding = PaddingValues(top = 2.dp, bottom = 24.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
+                    modifier = Modifier.fillMaxSize(),
+                ) {
+                    groupedBuckets.forEach { (pluginId, bucketItems) ->
+                        item(key = "hdr:$pluginId", span = { GridItemSpan(maxLineSpan) }) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
                                 Text(
-                                    text = "${bucketItems.size}",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = palette.textMuted,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                    text = pluginNameMap[pluginId] ?: pluginId,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
                                 )
+                                Surface(color = palette.bgSurface, shape = RoundedCornerShape(999.dp)) {
+                                    Text(
+                                        text = "${bucketItems.size}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = palette.textMuted,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                    )
+                                }
                             }
                         }
-                    }
 
-                    items(bucketItems, key = { "${it.first}:${it.second.nativeId}" }) { (pid, item) ->
-                        MediaPosterCard(
-                            item = item,
-                            cards = prefs.cards,
-                            onClick = { onOpenDetails(pid, item.nativeId) },
-                            onQuickStatus = { status ->
-                                scope.launch {
-                                    repo.upsertLibrary(
-                                        LibraryItem(
-                                            media = MediaRef(pid, item.nativeId),
-                                            mediaType = item.type,
-                                            isAnime = item.isAnime,
-                                            title = item.title,
-                                            posterUrl = item.poster,
-                                            status = status,
-                                        ),
-                                    )
-                                    repo.notify("${item.title} → $status")
-                                }
-                            },
-                        )
+                        items(bucketItems, key = { "${it.first}:${it.second.nativeId}" }) { (pid, item) ->
+                            val itemKey = "$pid:${item.nativeId}"
+                            val plug = pluginMap[pid]
+                            val isLiveItem = (plug != null && isLiveTvPlugin(plug)) || isLiveMediaSummary(item, plug)
+                            MediaPosterCard(
+                                item = if (isLiveItem) item.copy(type = "live") else item,
+                                cards = prefs.cards,
+                                currentStatus = if (isLiveItem) null else libraryStatusMap[itemKey],
+                                fillGridWidth = true,
+                                onClick = {
+                                    if (!isLiveItem) {
+                                        onOpenDetails(pid, item.nativeId)
+                                    } else if (launchingLiveKey == null) {
+                                        launchingLiveKey = itemKey
+                                        scope.launch {
+                                            runCatching {
+                                                val detail = repo.getDetails(pid, item.nativeId)
+                                                val ep = detail.episodes.firstOrNull() ?: Episode(
+                                                    streamId = item.nativeId,
+                                                    season = 1,
+                                                    episode = 1,
+                                                    title = item.title,
+                                                    thumbnail = item.poster,
+                                                )
+                                                val sr = repo.getStreams(pid, ep.streamId)
+                                                if (sr.streams.isEmpty()) {
+                                                    repo.notify(VesselI18n.tr("details.no_streams"))
+                                                } else {
+                                                    onPlayLiveStream(
+                                                        pid,
+                                                        detail.copy(
+                                                            type = "live",
+                                                            title = detail.title.ifBlank { item.title },
+                                                            poster = detail.poster ?: item.poster,
+                                                            backdrop = detail.backdrop ?: item.poster,
+                                                        ),
+                                                        ep,
+                                                        sr,
+                                                    )
+                                                }
+                                            }.onFailure {
+                                                repo.notifyError(it, "Failed to play ${item.title}")
+                                            }
+                                            launchingLiveKey = null
+                                        }
+                                    }
+                                },
+                                onQuickStatus = if (isLiveItem) null else { status ->
+                                    scope.launch {
+                                        repo.upsertLibrary(
+                                            LibraryItem(
+                                                media = MediaRef(pid, item.nativeId),
+                                                mediaType = item.type,
+                                                isAnime = item.isAnime,
+                                                title = item.title,
+                                                posterUrl = item.poster,
+                                                status = status,
+                                            ),
+                                        )
+                                        libraryStatusMap = libraryStatusMap + (itemKey to status)
+                                        repo.notify("${item.title} · ${VesselI18n.tr("library.$status")}")
+                                    }
+                                },
+                            )
+                        }
                     }
                 }
             }

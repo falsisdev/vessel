@@ -46,9 +46,7 @@ onMounted(() => {
       }
       if (glow) glow.setAttribute('opacity', '0.7')
       if (overlay) {
-        const reveal = easeInOutCubic(clamp01((p - 0.55) / 0.45))
-        overlay.style.opacity = (1 - reveal).toFixed(3)
-        if (reveal > 0.15) overlay.style.pointerEvents = 'none'
+        overlay.style.opacity = '1'
       }
       if (p < 1) {
         rafId = requestAnimationFrame(frame)
@@ -64,7 +62,7 @@ onMounted(() => {
     const turnP = easeInOutCubic(clamp01((p - 0.31) / 0.18))
     // Phase 3 (0.49 -> 0.80): settled centered hold (~0.9s) so the Vessel logo is clearly visible
     const settleP = easeOutCubic(clamp01((p - 0.43) / 0.13))
-    // Phase 4 (0.80 -> 1.00): overlay dissolves directly into the live app as logo zooms subtly
+    // Phase 4 (0.80 -> 1.00): keep overlay 100% opaque while logo gives a subtle settle pulse before closing
     const revealP = easeInOutCubic(clamp01((p - 0.80) / 0.20))
 
     if (waves) {
@@ -90,7 +88,7 @@ onMounted(() => {
     if (bow) {
       const bowScaleX = clamp01((turnP - 0.32) / 0.68)
       const settleScale = lerp(0.92, 1.0, settleP)
-      const revealZoom = lerp(1.0, 1.14, revealP)
+      const revealZoom = lerp(1.0, 1.06, revealP)
       const finalScaleX = bowScaleX * settleScale * revealZoom
       const finalScaleY = settleScale * revealZoom
       bow.setAttribute('transform', `scale(${finalScaleX.toFixed(3)}, ${finalScaleY.toFixed(3)})`)
@@ -103,10 +101,7 @@ onMounted(() => {
     }
 
     if (overlay) {
-      overlay.style.opacity = (1 - revealP).toFixed(3)
-      if (revealP > 0.15) {
-        overlay.style.pointerEvents = 'none'
-      }
+      overlay.style.opacity = '1'
     }
 
     if (p < 1) {

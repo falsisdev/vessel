@@ -56,8 +56,17 @@ function applyDocumentLang(lang: string): void {
 }
 
 export function useI18n() {
-  function t(key: string): string {
-    return lookupPath(customDict.value, key) ?? lookupPath(enLocale, key) ?? key
+  function t(
+    key: string,
+    params?: Record<string, string | number | null | undefined>,
+  ): string {
+    let text = lookupPath(customDict.value, key) ?? lookupPath(enLocale, key) ?? key
+    if (params) {
+      for (const [name, value] of Object.entries(params)) {
+        text = text.replaceAll(`{${name}}`, value == null ? '' : String(value))
+      }
+    }
+    return text
   }
 
   function getLocaleLabel(code: string): string {

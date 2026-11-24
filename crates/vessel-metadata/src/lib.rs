@@ -8,7 +8,10 @@ pub mod skip;
 
 use vessel_domain::{MediaDetail, SkipSegment, VesselResult};
 
-pub use clients::{MIN_MATCH_CONFIDENCE, MetaEndpoints, MetadataClients, title_match_confidence};
+pub use clients::{
+    MIN_MATCH_CONFIDENCE, MetaEndpoints, MetadataClients, MetadataProviderFilter,
+    MetadataSearchHit, MetadataSearchResponse, title_match_confidence,
+};
 pub use coordinates::{
     CanonicalEpisodeMeta, SeasonSpan, absolute_to_season_episode, align_episode_metadata,
     season_episode_to_absolute,
@@ -77,6 +80,25 @@ impl MetadataService {
         tmdb_api_key: Option<&str>,
         allow_external: bool,
     ) -> VesselResult<EnrichmentOutcome> {
+        self.enrich_detail_with_keys(
+            raw_detail,
+            preferred_lang,
+            tmdb_api_key,
+            None,
+            allow_external,
+        )
+        .await
+    }
+
+    /// Enriches `raw_detail` using optional TMDB API key and optional Simkl Client ID.
+    pub async fn enrich_detail_with_keys(
+        &self,
+        raw_detail: &MediaDetail,
+        preferred_lang: &str,
+        tmdb_api_key: Option<&str>,
+        simkl_client_id: Option<&str>,
+        allow_external: bool,
+    ) -> VesselResult<EnrichmentOutcome> {
         if !allow_external {
             return Ok(EnrichmentOutcome {
                 detail: raw_detail.clone(),
@@ -86,7 +108,7 @@ impl MetadataService {
 
         let Some(canonical) = self
             .clients
-            .resolve_for_detail(raw_detail, preferred_lang, tmdb_api_key)
+            .resolve_for_detail_with_keys(raw_detail, preferred_lang, tmdb_api_key, simkl_client_id)
             .await?
         else {
             return Ok(EnrichmentOutcome {
@@ -100,6 +122,26 @@ impl MetadataService {
             detail: merged,
             canonical: Some(canonical),
         })
+    }
+
+    /// Searches across TMDB, IMDb, Simkl, AniList, MyAnimeList, and Kitsu for Fix Match.
+    pub async fn search_interactive(
+        &self,
+        query: &str,
+        provider: MetadataProviderFilter,
+        preferred_lang: &str,
+        tmdb_api_key: Option<&str>,
+        simkl_client_id: Option<&str>,
+    ) -> MetadataSearchResponse {
+        self.clients
+            .search_interactive(
+                query,
+                provider,
+                preferred_lang,
+                tmdb_api_key,
+                simkl_client_id,
+            )
+            .await
     }
 }
 
@@ -233,6 +275,7 @@ mod tests {
             tmdb_api_base: format!("{base}/tmdb"),
             tmdb_image_base: "https://image.tmdb.org/t/p".into(),
             cinemeta_base: format!("{base}/cinemeta"),
+            ..MetaEndpoints::default()
         }
     }
 

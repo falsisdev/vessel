@@ -14,10 +14,10 @@ use tokio::task::{JoinHandle, JoinSet};
 use tokio_util::sync::CancellationToken;
 use vessel_domain::{
     ContentProvider, DomainGrantSource, DownloadStatus, EngineEvent, EventSink, ExternalIds,
-    HomeFeed, LibraryItem, LibraryStatus, LogLevel, MediaDetail, MediaRef, MediaType,
-    PlaybackProgress, PlaybackRequest, PlayerBackend, PluginId, SecretStore, SkipSegment,
-    StoragePort, StreamCandidate, StreamKind, StreamResult, SubtitleFormat, SubtitleSource,
-    SubtitleTrack, UiPreferences, VesselError, VesselPaths, VesselResult,
+    HomeFeed, LibraryItem, LibraryStatus, LinkedMediaSource, LogLevel, MediaDetail, MediaRef,
+    MediaType, PlaybackProgress, PlaybackRequest, PlayerBackend, PluginId, SearchPage, SecretStore,
+    SkipSegment, StoragePort, StreamCandidate, StreamKind, StreamResult, SubtitleFormat,
+    SubtitleSource, SubtitleTrack, UiPreferences, VesselError, VesselPaths, VesselResult,
 };
 use vessel_iptv::{IptvClient, channel_to_stream_candidate, xtream::xtream_xmltv_url};
 use vessel_metadata::{
@@ -37,7 +37,9 @@ use vessel_storage::{
 pub use pool::{DEFAULT_IDLE_TTL, DEFAULT_MAX_WARM_PLUGINS, PluginPool};
 pub use vessel_downloader::{DownloadManager, DownloadRequest};
 pub use vessel_iptv::{EpgNowNext, EpgProgram, IptvChannel, IptvKind, IptvProfile};
-pub use vessel_metadata::SkipQuery;
+pub use vessel_metadata::{
+    MetadataProviderFilter, MetadataSearchHit, MetadataSearchResponse, SkipQuery,
+};
 
 /// Local playback bundle resolved through the loopback file server (`http://127.0.0.1:<port>/local/<token>/...`).
 #[derive(Debug, Clone, serde::Serialize)]
@@ -109,6 +111,8 @@ fn next_unique_id(prefix: &str) -> String {
 
 /// Secret key name used when a user optionally configures their own TMDB v3 API key.
 pub const TMDB_API_KEY_SECRET: &str = "tmdb_api_key";
+/// Secret key name used when a user optionally configures their own Simkl Client ID.
+pub const SIMKL_CLIENT_ID_SECRET: &str = "simkl_client_id";
 
 /// Parameters for resolving a `StreamCandidate` and starting playback cleanly.
 #[derive(Debug, Clone)]
@@ -992,6 +996,194 @@ impl VesselEngine {
         Ok(())
     }
 
+    /// Searches a single plugin directly without fanning out across all plugins.
+    pub async fn search_plugin_sync(
+        &self,
+        plugin_id: &PluginId,
+        query: &str,
+        page: u32,
+    ) -> VesselResult<SearchPage> {
+        let provider = self.pool.get_or_load(plugin_id).await?;
+        provider.search(query, &BTreeMap::new(), page.max(1)).await
+    }
+
+    /// Searches across TMDB, IMDb, Simkl, AniList, MyAnimeList, and Kitsu for interactive Fix Match.
+    pub async fn search_metadata(
+        &self,
+        query: &str,
+        provider: MetadataProviderFilter,
+        preferred_lang: &str,
+    ) -> VesselResult<MetadataSearchResponse> {
+        let tmdb_key = self.secrets.get(TMDB_API_KEY_SECRET).await?;
+        let simkl_key = self.secrets.get(SIMKL_CLIENT_ID_SECRET).await?;
+        Ok(self
+            .metadata
+            .search_interactive(
+                query,
+                provider,
+                preferred_lang,
+                tmdb_key.as_deref(),
+                simkl_key.as_deref(),
+            )
+            .await)
+    }
+
+    fn linked_sources_key(media: &MediaRef) -> String {
+        format!(
+            "linked_sources:{}:{}",
+            media.plugin_id.as_str(),
+            media.native_id
+        )
+    }
+
+    /// Returns user-linked secondary stream providers saved for `media`.
+    pub async fn get_linked_sources(
+        &self,
+        media: &MediaRef,
+    ) -> VesselResult<Vec<LinkedMediaSource>> {
+        let key = Self::linked_sources_key(media);
+        Ok(self
+            .storage
+            .get_json_setting::<Vec<LinkedMediaSource>>(&key)
+            .await?
+            .unwrap_or_default())
+    }
+
+    /// Persists user-linked secondary stream providers for `media` on this device.
+    pub async fn set_linked_sources(
+        &self,
+        media: &MediaRef,
+        sources: Vec<LinkedMediaSource>,
+    ) -> VesselResult<Vec<LinkedMediaSource>> {
+        let mut deduped: Vec<LinkedMediaSource> = Vec::new();
+        for src in sources {
+            if src.plugin_id == media.plugin_id && src.native_id == media.native_id {
+                continue;
+            }
+            if let Some(pos) = deduped.iter().position(|x| x.plugin_id == src.plugin_id) {
+                deduped[pos] = src;
+            } else {
+                deduped.push(src);
+            }
+        }
+        let key = Self::linked_sources_key(media);
+        self.storage.set_json_setting(&key, &deduped).await?;
+        Ok(deduped)
+    }
+
+    /// Resolves playable stream candidates from `media.plugin_id` plus any persisted linked providers.
+    pub async fn streams_with_linked(
+        &self,
+        media: &MediaRef,
+        episode_id: &str,
+        season: u32,
+        episode: u32,
+        absolute_episode: Option<u32>,
+        is_movie: bool,
+    ) -> VesselResult<StreamResult> {
+        let plugins_list = self.list_plugins().await.unwrap_or_default();
+        let name_map: HashMap<String, String> = plugins_list
+            .into_iter()
+            .map(|p| (p.manifest.id.as_str().to_owned(), p.manifest.name))
+            .collect();
+        let primary_name = name_map
+            .get(media.plugin_id.as_str())
+            .cloned()
+            .unwrap_or_else(|| media.plugin_id.as_str().to_owned());
+
+        let linked = self.get_linked_sources(media).await.unwrap_or_default();
+        let primary_res = self.streams(&media.plugin_id, episode_id).await;
+
+        let mut merged = StreamResult::default();
+        let mut primary_err: Option<VesselError> = None;
+
+        match primary_res {
+            Ok(mut res) => {
+                for cand in &mut res.streams {
+                    cand.plugin_id = Some(media.plugin_id.as_str().to_owned());
+                    cand.plugin_name = Some(primary_name.clone());
+                }
+                merged.streams.extend(res.streams);
+                merged.subtitles.extend(res.subtitles);
+                merged.skip_segments.extend(res.skip_segments);
+            }
+            Err(err) => {
+                if linked.is_empty() {
+                    return Err(err);
+                }
+                primary_err = Some(err);
+            }
+        }
+
+        if linked.is_empty() {
+            return Ok(merged);
+        }
+
+        let mut set = JoinSet::new();
+        for link in linked {
+            let link_pid = link.plugin_id.clone();
+            let link_nid = link.native_id.clone();
+            let link_name = link
+                .plugin_name
+                .clone()
+                .or_else(|| name_map.get(link_pid.as_str()).cloned())
+                .unwrap_or_else(|| link_pid.as_str().to_owned());
+            let pool = Arc::clone(&self.pool);
+            let details_cache = Arc::clone(&self.details_cache);
+            set.spawn(async move {
+                let cached = {
+                    let guard = details_cache.lock().await;
+                    let key = (link_pid.clone(), link_nid.clone());
+                    guard
+                        .get(&key)
+                        .filter(|(ts, _)| ts.elapsed() < DETAILS_CACHE_TTL)
+                        .map(|(_, d)| d.clone())
+                };
+                let provider = pool.get_or_load(&link_pid).await.ok()?;
+                let detail = match cached {
+                    Some(d) => d,
+                    None => {
+                        let fetched = provider.details(&link_nid).await.ok()?;
+                        let mut guard = details_cache.lock().await;
+                        guard.insert(
+                            (link_pid.clone(), link_nid.clone()),
+                            (Instant::now(), fetched.clone()),
+                        );
+                        fetched
+                    }
+                };
+                let matched_ep = match_linked_episode(
+                    &detail.episodes,
+                    season,
+                    episode,
+                    absolute_episode,
+                    is_movie,
+                )?;
+                let mut sr = provider.streams(&matched_ep.stream_id).await.ok()?;
+                for cand in &mut sr.streams {
+                    cand.plugin_id = Some(link_pid.as_str().to_owned());
+                    cand.plugin_name = Some(link_name.clone());
+                }
+                Some(sr)
+            });
+        }
+
+        while let Some(res) = set.join_next().await {
+            if let Ok(Some(sr)) = res {
+                merged.streams.extend(sr.streams);
+                merged.subtitles.extend(sr.subtitles);
+                merged.skip_segments.extend(sr.skip_segments);
+            }
+        }
+
+        if merged.streams.is_empty()
+            && let Some(err) = primary_err
+        {
+            return Err(err);
+        }
+        Ok(merged)
+    }
+
     /// Resolves playable stream candidates for an episode or movie from `plugin_id`.
     pub async fn streams(
         &self,
@@ -1566,11 +1758,51 @@ impl VesselEngine {
     }
 }
 
+fn match_linked_episode(
+    episodes: &[vessel_domain::Episode],
+    season: u32,
+    episode: u32,
+    absolute_episode: Option<u32>,
+    is_movie: bool,
+) -> Option<&vessel_domain::Episode> {
+    if episodes.is_empty() {
+        return None;
+    }
+    if is_movie {
+        return episodes.first();
+    }
+    episodes
+        .iter()
+        .find(|e| e.season == season && e.episode == episode)
+        .or_else(|| {
+            let abs = absolute_episode?;
+            episodes
+                .iter()
+                .find(|e| e.absolute_episode == Some(abs) || (e.season == 1 && e.episode == abs))
+        })
+        .or_else(|| episodes.iter().find(|e| e.episode == episode))
+}
+
 fn apply_canonical_override_hint(detail: &mut MediaDetail, canonical_id: &str) {
     detail.external_ids = ExternalIds::default();
     if let Some(rest) = canonical_id.strip_prefix("anilist:") {
         if let Ok(id) = rest.parse::<u64>() {
             detail.external_ids.anilist = Some(id);
+            detail.is_anime = true;
+        }
+    } else if let Some(rest) = canonical_id.strip_prefix("mal:") {
+        if let Ok(id) = rest.parse::<u64>() {
+            detail.external_ids.mal = Some(id);
+            detail.is_anime = true;
+        }
+    } else if let Some(rest) = canonical_id.strip_prefix("kitsu:") {
+        if let Ok(id) = rest.parse::<u64>() {
+            detail.external_ids.kitsu = Some(id);
+            detail.is_anime = true;
+        }
+    } else if let Some(rest) = canonical_id.strip_prefix("simkl:") {
+        if let Ok(id) = rest.parse::<u64>() {
+            detail.external_ids.simkl = Some(id);
         }
     } else if let Some(rest) = canonical_id.strip_prefix("tmdb:movie:") {
         if let Ok(id) = rest.parse::<u64>() {
@@ -1636,11 +1868,13 @@ async fn run_enrichment_and_emit(
     }
 
     let tmdb_key = secrets.get(TMDB_API_KEY_SECRET).await?;
+    let simkl_key = secrets.get(SIMKL_CLIENT_ID_SECRET).await?;
     let outcome = metadata
-        .enrich_detail(
+        .enrich_detail_with_keys(
             &query_detail,
             preferred_lang,
             tmdb_key.as_deref(),
+            simkl_key.as_deref(),
             metadata_enabled,
         )
         .await?;
@@ -1750,9 +1984,9 @@ mod tests {
     use axum::routing::get;
     use tokio::net::TcpListener;
     use vessel_domain::{
-        EngineEvent, EventSink, MediaRef, MediaType, PlaybackProgress, PlaybackRequest,
-        PlayerBackend, PluginId, PluginManifest, StreamFlag, StreamKind, SubtitleTrack,
-        VesselError, VesselResult,
+        EngineEvent, EventSink, LinkedMediaSource, MediaRef, MediaType, PlaybackProgress,
+        PlaybackRequest, PlayerBackend, PluginId, PluginManifest, StreamFlag, StreamKind,
+        SubtitleTrack, VesselError, VesselResult,
     };
     use vessel_plugin_rt::{LoadedPackage, PluginBundle, SourceResolver, sha256_hex};
     use vessel_proxy::ProxyServer;
@@ -2155,6 +2389,7 @@ mod tests {
             tmdb_api_base: format!("{base}/tmdb"),
             tmdb_image_base: "https://image.tmdb.org/t/p".into(),
             cinemeta_base: format!("{base}/cinemeta"),
+            ..vessel_metadata::MetaEndpoints::default()
         });
 
         let plugin_a_ts = r#"
@@ -2244,6 +2479,8 @@ mod tests {
                     needs_extractor: false,
                     subtitles: Vec::new(),
                     skip_segments: Vec::new(),
+                    plugin_id: None,
+                    plugin_name: None,
                 },
                 extra_subtitles: Vec::new(),
                 start_position_ms: None,
@@ -2436,6 +2673,125 @@ mod tests {
             .await
             .expect("delete download");
         let _ = tokio::fs::remove_dir_all(&dl_root).await;
+        engine.shutdown().await;
+    }
+
+    #[tokio::test]
+    async fn linked_sources_persist_and_merge_streams_across_plugins() {
+        let (engine, _, _) = test_engine().await;
+        let anthology_ts = r#"
+            export default {
+                async getDetails(id) {
+                    return {
+                        pluginId: "anthology",
+                        nativeId: id,
+                        type: "series",
+                        isAnime: true,
+                        title: "Gintama",
+                        episodes: [{ streamId: "ant-ep-1", season: 1, episode: 1 }]
+                    };
+                },
+                async getStreams(sid) {
+                    return {
+                        streams: [{ url: `https://cdn.anthology.example/${sid}.m3u8`, kind: "hls", label: "Anthology 1080p", isDefault: true }]
+                    };
+                }
+            };
+        "#;
+        let mirror_ts = r#"
+            export default {
+                async search(query) {
+                    return {
+                        items: [{ nativeId: "mir-gintama", type: "series", isAnime: true, title: `Mirror: ${query}` }],
+                        hasMore: false
+                    };
+                },
+                async getDetails(id) {
+                    return {
+                        pluginId: "mirror-src",
+                        nativeId: id,
+                        type: "series",
+                        isAnime: true,
+                        title: "Gintama",
+                        episodes: [{ streamId: "mir-ep-1", season: 1, episode: 1 }]
+                    };
+                },
+                async getStreams(sid) {
+                    return {
+                        streams: [{ url: `https://cdn.mirror.example/${sid}.mp4`, kind: "mp4", label: "Mirror 720p" }]
+                    };
+                }
+            };
+        "#;
+
+        engine
+            .install_package(
+                build_plugin_package("anthology", anthology_ts),
+                None,
+                "local",
+                "/tmp/linked-a",
+            )
+            .await
+            .expect("install anthology");
+        engine
+            .install_package(
+                build_plugin_package("mirror-src", mirror_ts),
+                None,
+                "local",
+                "/tmp/linked-b",
+            )
+            .await
+            .expect("install mirror-src");
+
+        let anthology = PluginId::new("anthology").expect("id a");
+        let mirror = PluginId::new("mirror-src").expect("id b");
+        let search_page = engine
+            .search_plugin_sync(&mirror, "Gintama", 1)
+            .await
+            .expect("search single mirror plugin");
+        assert_eq!(search_page.items.len(), 1);
+        assert_eq!(search_page.items[0].native_id, "mir-gintama");
+
+        let media = MediaRef::new(anthology, "/anime/gintama").expect("media");
+        let saved = engine
+            .set_linked_sources(
+                &media,
+                vec![LinkedMediaSource {
+                    plugin_id: mirror.clone(),
+                    plugin_name: Some("Mirror Source".into()),
+                    native_id: "mir-gintama".into(),
+                    title: "Gintama".into(),
+                    poster: None,
+                }],
+            )
+            .await
+            .expect("save linked sources");
+        assert_eq!(saved.len(), 1);
+
+        let loaded = engine
+            .get_linked_sources(&media)
+            .await
+            .expect("load linked");
+        assert_eq!(loaded, saved);
+
+        let merged = engine
+            .streams_with_linked(&media, "ant-ep-1", 1, 1, None, false)
+            .await
+            .expect("resolve merged streams");
+        assert_eq!(merged.streams.len(), 2);
+        assert!(
+            merged
+                .streams
+                .iter()
+                .any(|s| s.plugin_id.as_deref() == Some("anthology"))
+        );
+        assert!(
+            merged
+                .streams
+                .iter()
+                .any(|s| s.plugin_id.as_deref() == Some("mirror-src"))
+        );
+
         engine.shutdown().await;
     }
 }

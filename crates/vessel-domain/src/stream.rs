@@ -149,6 +149,10 @@ pub struct StreamCandidate {
     pub subtitles: Vec<SubtitleTrack>,
     #[serde(default, skip_serializing_if = "Vec::is_empty", alias = "segments")]
     pub skip_segments: Vec<SkipSegment>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plugin_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plugin_name: Option<String>,
 }
 
 /// Combined stream candidates and episode-level subtitle tracks from `getStreams`.
@@ -161,6 +165,10 @@ pub struct StreamResult {
     pub subtitles: Vec<SubtitleTrack>,
     #[serde(default, skip_serializing_if = "Vec::is_empty", alias = "segments")]
     pub skip_segments: Vec<SkipSegment>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plugin_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plugin_name: Option<String>,
 }
 
 #[cfg(test)]

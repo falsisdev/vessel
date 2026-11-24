@@ -177,7 +177,21 @@ fn select_best_asset<'a>(
                 }
             }
             "windows" => {
-                if lower.ends_with("-setup.exe") {
+                let is_arm64 = lower.contains("arm64") || lower.contains("aarch64");
+                if target_arch == "aarch64" && !is_arm64 {
+                    // Prefer arm64 on Windows ARM, fall back to x64 emulation if unavailable
+                    if lower.ends_with("-setup.exe") {
+                        55
+                    } else if lower.ends_with(".exe") {
+                        45
+                    } else if lower.ends_with(".msi") {
+                        35
+                    } else {
+                        -1
+                    }
+                } else if target_arch == "x86_64" && is_arm64 {
+                    -1
+                } else if lower.ends_with("-setup.exe") {
                     100
                 } else if lower.ends_with(".exe") {
                     90
@@ -339,10 +353,11 @@ pub async fn check_app_update(state: State<'_, AppState>) -> Result<AppUpdateInf
 
     let cur_is_prerelease = parse_semver(&current_version).is_some_and(|v| v.is_prerelease);
     let list_url =
-        format!("https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/releases?per_page=20");
+        format!("https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/releases?per_page=30");
     let resp = client
         .get(&list_url)
         .header(reqwest::header::ACCEPT, "application/vnd.github+json")
+        .header("X-GitHub-Api-Version", "2022-11-28")
         .send()
         .await
         .map_err(|err| format!("[VesselNetworkError]: check GitHub releases failed: {err}"))?;

@@ -48,10 +48,12 @@ All 11 semantic color tokens bind automatically to CSS custom properties (`--ves
 ## 2. Modular Shell Layouts & Custom CSS
 
 Under **Settings → Modular UI Preferences**:
-- **6 Navigation Layouts:** `Expanded Sidebar`, `Pinned Always-Open Sidebar`, `Floating Bottom Dock`, `Collapsed Icon Rail`, `Top Navbar`, `Hidden` (`Settings` stays accessible).
+- **6 Navigation Layouts (Desktop):** `Expanded Sidebar`, `Pinned Always-Open Sidebar`, `Floating Bottom Dock`, `Collapsed Icon Rail`, `Top Navbar`, `Hidden` (`Settings` stays accessible).
+- **Android Navigation Layout:** Switch between adaptive `Standard` bottom/rail navigation (`NavigationSuiteScaffold`) and a pill-style **`Floating Bottom`** bar.
+- **Home Showcase Customization (Desktop & Android):** Configure Spotlight Hero banner mode (`Full`, `Compact`, `Hidden`) and customize card aspect ratios (`poster`, `square`, `landscape` variants).
 - **3 Interface Densities:** `Compact`, `Comfortable`, `Spacious`.
 - **3 Corner Styles:** `Sharp`, `Rounded`, `Pill`.
-- **Card & Details Toggles:** Toggle plugin badges, rating chips, spoiler-free episode overviews/thumbnails, NSFW poster blur, Play Click Behavior (`Quick Start Best` vs `Always Ask Source`), and `Custom CSS Injection` for power users.
+- **Card & Details Toggles:** Toggle plugin badges, rating chips, spoiler-free episode overviews/thumbnails, NSFW poster blur, Play Click Behavior (`Quick Start Best` vs `Always Ask Source`), and `Custom CSS Injection` for power users (Desktop).
 - **Reset All UI Defaults:** Restores defaults without touching your library, downloads, or plugins.
 
 ---

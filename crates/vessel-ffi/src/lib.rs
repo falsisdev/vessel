@@ -10,14 +10,14 @@ use serde::{Deserialize, Serialize};
 use tokio::runtime::{Builder, Runtime};
 use tokio::task::JoinSet;
 use vessel_domain::{
-    EngineEvent, EventSink, ExternalIds, HomeSection, LibraryItem, LibraryStatus, PlaybackProgress,
-    PlaybackRequest, PlayerBackend, PluginId, PluginManifest, RepoIndex, SecretStore, SkipSegment,
-    StreamCandidate, SubtitleTrack, ThemeColors, ThemeSpec, UiPreferences, VesselError,
-    VesselPaths, VesselResult,
+    EngineEvent, EventSink, ExternalIds, HomeSection, LibraryItem, LibraryStatus,
+    LinkedMediaSource, PlaybackProgress, PlaybackRequest, PlayerBackend, PluginId, PluginManifest,
+    RepoIndex, SecretStore, SkipSegment, StreamCandidate, SubtitleTrack, ThemeColors, ThemeSpec,
+    UiPreferences, VesselError, VesselPaths, VesselResult,
 };
 use vessel_engine::{
-    DownloadRequest, IptvKind, IptvProfile, PlayCandidateRequest, SkipQuery, TMDB_API_KEY_SECRET,
-    VesselEngine,
+    DownloadRequest, IptvKind, IptvProfile, MetadataProviderFilter, PlayCandidateRequest,
+    SIMKL_CLIENT_ID_SECRET, SkipQuery, TMDB_API_KEY_SECRET, VesselEngine,
 };
 use vessel_plugin_rt::{ResolvedSource, SourceTrustBadge};
 use vessel_storage::{BackupImportMode, DownloadKind};
@@ -478,6 +478,21 @@ impl VesselMobileCore {
         Ok(())
     }
 
+    pub fn set_simkl_client_id(&self, client_id: Option<String>) -> Result<(), FfiError> {
+        let trimmed = client_id.unwrap_or_default().trim().to_owned();
+        self.runtime.block_on(async {
+            if trimmed.is_empty() {
+                self.engine.secrets().delete(SIMKL_CLIENT_ID_SECRET).await
+            } else {
+                self.engine
+                    .secrets()
+                    .set(SIMKL_CLIENT_ID_SECRET, &trimmed)
+                    .await
+            }
+        })?;
+        Ok(())
+    }
+
     pub fn set_download_directory(&self, path: Option<String>) -> Result<String, FfiError> {
         let cleaned = path.unwrap_or_default().trim().to_owned();
         let target = if cleaned.is_empty() {
@@ -800,6 +815,95 @@ impl VesselMobileCore {
             .runtime
             .block_on(self.engine.streams(&pid, &episode_id))?;
         to_json(&streams)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn get_streams_with_linked_json(
+        &self,
+        plugin_id: String,
+        native_id: String,
+        episode_id: String,
+        season: u32,
+        episode: u32,
+        absolute_episode: Option<u32>,
+        is_movie: bool,
+    ) -> Result<String, FfiError> {
+        let pid = PluginId::new(plugin_id)?;
+        let media = vessel_domain::MediaRef::new(pid, native_id)?;
+        let res = self.runtime.block_on(self.engine.streams_with_linked(
+            &media,
+            &episode_id,
+            season,
+            episode,
+            absolute_episode,
+            is_movie,
+        ))?;
+        to_json(&res)
+    }
+
+    pub fn search_plugin_sync_json(
+        &self,
+        plugin_id: String,
+        query: String,
+        page: Option<u32>,
+    ) -> Result<String, FfiError> {
+        let pid = PluginId::new(plugin_id)?;
+        let res = self.runtime.block_on(self.engine.search_plugin_sync(
+            &pid,
+            &query,
+            page.unwrap_or(1),
+        ))?;
+        to_json(&res)
+    }
+
+    pub fn search_metadata_json(
+        &self,
+        query: String,
+        provider: Option<String>,
+        preferred_lang: Option<String>,
+    ) -> Result<String, FfiError> {
+        let filter = match provider.as_deref().map(str::trim).unwrap_or("all") {
+            "tmdb" | "tmdb_tv" | "tmdb_movie" => MetadataProviderFilter::Tmdb,
+            "imdb" => MetadataProviderFilter::Imdb,
+            "simkl" => MetadataProviderFilter::Simkl,
+            "anilist" => MetadataProviderFilter::Anilist,
+            "mal" => MetadataProviderFilter::Mal,
+            "kitsu" => MetadataProviderFilter::Kitsu,
+            _ => MetadataProviderFilter::All,
+        };
+        let lang = preferred_lang.unwrap_or_else(|| "en".into());
+        let res = self
+            .runtime
+            .block_on(self.engine.search_metadata(&query, filter, &lang))?;
+        to_json(&res)
+    }
+
+    pub fn get_linked_sources_json(
+        &self,
+        plugin_id: String,
+        native_id: String,
+    ) -> Result<String, FfiError> {
+        let pid = PluginId::new(plugin_id)?;
+        let media = vessel_domain::MediaRef::new(pid, native_id)?;
+        let list = self
+            .runtime
+            .block_on(self.engine.get_linked_sources(&media))?;
+        to_json(&list)
+    }
+
+    pub fn set_linked_sources_json(
+        &self,
+        plugin_id: String,
+        native_id: String,
+        sources_json: String,
+    ) -> Result<String, FfiError> {
+        let pid = PluginId::new(plugin_id)?;
+        let media = vessel_domain::MediaRef::new(pid, native_id)?;
+        let sources: Vec<LinkedMediaSource> = from_json(&sources_json, "Vec<LinkedMediaSource>")?;
+        let saved = self
+            .runtime
+            .block_on(self.engine.set_linked_sources(&media, sources))?;
+        to_json(&saved)
     }
 
     pub fn set_metadata_override(

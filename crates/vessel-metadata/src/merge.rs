@@ -56,6 +56,9 @@ pub fn canonical_id_from_external_ids(ids: &ExternalIds, media_type: MediaType) 
     if let Some(kitsu) = ids.kitsu {
         return Some(format!("kitsu:{kitsu}"));
     }
+    if let Some(simkl) = ids.simkl {
+        return Some(format!("simkl:{simkl}"));
+    }
     None
 }
 
@@ -145,6 +148,7 @@ pub fn merge_detail_with_override(
             .or(enriched.external_ids.anilist);
         merged.external_ids.kitsu = merged.external_ids.kitsu.or(enriched.external_ids.kitsu);
         merged.external_ids.mal = merged.external_ids.mal.or(enriched.external_ids.mal);
+        merged.external_ids.simkl = merged.external_ids.simkl.or(enriched.external_ids.simkl);
     }
 
     // Clear cloned poster thumbnails on episodes so external episode stills replace show-poster placeholders.

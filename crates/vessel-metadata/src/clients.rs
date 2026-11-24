@@ -21,6 +21,10 @@ pub struct MetaEndpoints {
     pub tmdb_api_base: String,
     pub tmdb_image_base: String,
     pub cinemeta_base: String,
+    pub jikan_base: String,
+    pub kitsu_base: String,
+    pub simkl_base: String,
+    pub imdb_suggest_base: String,
 }
 
 impl Default for MetaEndpoints {
@@ -30,8 +34,55 @@ impl Default for MetaEndpoints {
             tmdb_api_base: "https://api.themoviedb.org/3".into(),
             tmdb_image_base: "https://image.tmdb.org/t/p".into(),
             cinemeta_base: "https://v3-cinemeta.strem.io".into(),
+            jikan_base: "https://api.jikan.moe/v4".into(),
+            kitsu_base: "https://kitsu.io/api/edge".into(),
+            simkl_base: "https://api.simkl.com".into(),
+            imdb_suggest_base: "https://v3.sg.media-imdb.com/suggestion".into(),
         }
     }
+}
+
+/// Filter selecting which metadata database(s) interactive Fix Match search queries.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MetadataProviderFilter {
+    #[default]
+    All,
+    Tmdb,
+    Imdb,
+    Simkl,
+    Anilist,
+    Mal,
+    Kitsu,
+}
+
+/// Interactive search result shown in the Fix Match picker across providers.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MetadataSearchHit {
+    pub canonical_id: String,
+    pub provider: String,
+    pub title: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub original_title: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub year: Option<u16>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub media_type: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub poster: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub synopsis: Option<String>,
+    pub external_ids: ExternalIds,
+}
+
+/// Combined search hits and non-fatal provider guidance notes (e.g. missing optional API keys).
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MetadataSearchResponse {
+    pub hits: Vec<MetadataSearchHit>,
+    #[serde(default)]
+    pub notes: Vec<String>,
 }
 
 fn clean_search_title(input: &str) -> String {
@@ -367,12 +418,170 @@ struct TmdbSearchResponse {
 #[derive(Deserialize)]
 struct TmdbSearchItem {
     id: u64,
+    media_type: Option<String>,
     title: Option<String>,
     name: Option<String>,
     original_title: Option<String>,
     original_name: Option<String>,
+    overview: Option<String>,
+    poster_path: Option<String>,
     release_date: Option<String>,
     first_air_date: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct JikanListResponse {
+    #[serde(default)]
+    data: Vec<JikanAnime>,
+}
+
+#[derive(Deserialize)]
+struct JikanSingleResponse {
+    data: Option<JikanAnime>,
+}
+
+#[derive(Deserialize)]
+struct JikanAnime {
+    mal_id: u64,
+    title: Option<String>,
+    title_english: Option<String>,
+    title_japanese: Option<String>,
+    synopsis: Option<String>,
+    year: Option<u16>,
+    score: Option<f32>,
+    episodes: Option<u32>,
+    aired: Option<JikanAired>,
+    images: Option<JikanImages>,
+    #[serde(default)]
+    genres: Vec<JikanNamed>,
+}
+
+#[derive(Deserialize)]
+struct JikanAired {
+    from: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct JikanImages {
+    jpg: Option<JikanImageSet>,
+    webp: Option<JikanImageSet>,
+}
+
+#[derive(Deserialize)]
+struct JikanImageSet {
+    large_image_url: Option<String>,
+    image_url: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct JikanNamed {
+    name: String,
+}
+
+#[derive(Deserialize)]
+struct KitsuListResponse {
+    #[serde(default)]
+    data: Vec<KitsuItem>,
+}
+
+#[derive(Deserialize)]
+struct KitsuSingleResponse {
+    data: Option<KitsuItem>,
+}
+
+#[derive(Deserialize)]
+struct KitsuItem {
+    id: String,
+    attributes: KitsuAttributes,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct KitsuAttributes {
+    canonical_title: Option<String>,
+    #[serde(default)]
+    titles: BTreeMap<String, Option<String>>,
+    synopsis: Option<String>,
+    start_date: Option<String>,
+    average_rating: Option<String>,
+    episode_count: Option<u32>,
+    poster_image: Option<KitsuImage>,
+    cover_image: Option<KitsuImage>,
+}
+
+#[derive(Deserialize)]
+struct KitsuImage {
+    large: Option<String>,
+    medium: Option<String>,
+    original: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct ImdbSuggestEnvelope {
+    #[serde(default)]
+    d: Vec<ImdbSuggestItem>,
+}
+
+#[derive(Deserialize)]
+struct ImdbSuggestItem {
+    id: String,
+    l: Option<String>,
+    q: Option<String>,
+    qid: Option<String>,
+    y: Option<u16>,
+    i: Option<ImdbSuggestImg>,
+}
+
+#[derive(Deserialize)]
+struct ImdbSuggestImg {
+    #[serde(rename = "imageUrl")]
+    image_url: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct SimklSearchItem {
+    title: Option<String>,
+    year: Option<u16>,
+    poster: Option<String>,
+    #[serde(rename = "type")]
+    kind: Option<String>,
+    ids: Option<SimklIds>,
+}
+
+#[derive(Deserialize)]
+struct SimklIds {
+    simkl: Option<u64>,
+    simkl_id: Option<u64>,
+    imdb: Option<String>,
+    tmdb: Option<serde_json::Value>,
+    mal: Option<serde_json::Value>,
+    anilist: Option<serde_json::Value>,
+    kitsu: Option<serde_json::Value>,
+}
+
+#[derive(Deserialize)]
+struct SimklDetail {
+    title: Option<String>,
+    en_title: Option<String>,
+    year: Option<u16>,
+    overview: Option<String>,
+    poster: Option<String>,
+    fanart: Option<String>,
+    total_episodes: Option<u32>,
+    #[serde(default)]
+    genres: Vec<String>,
+    ratings: Option<SimklRatings>,
+    ids: Option<SimklIds>,
+}
+
+#[derive(Deserialize)]
+struct SimklRatings {
+    simkl: Option<SimklRatingScore>,
+}
+
+#[derive(Deserialize)]
+struct SimklRatingScore {
+    rating: Option<f32>,
 }
 
 #[derive(Deserialize)]
@@ -586,11 +795,66 @@ impl MetadataClients {
         preferred_lang: &str,
         tmdb_api_key: Option<&str>,
     ) -> VesselResult<Option<CanonicalMetadata>> {
+        self.resolve_for_detail_with_keys(detail, preferred_lang, tmdb_api_key, None)
+            .await
+    }
+
+    /// Resolves canonical metadata with optional TMDB API key and optional Simkl Client ID.
+    pub async fn resolve_for_detail_with_keys(
+        &self,
+        detail: &MediaDetail,
+        preferred_lang: &str,
+        tmdb_api_key: Option<&str>,
+        simkl_client_id: Option<&str>,
+    ) -> VesselResult<Option<CanonicalMetadata>> {
         if let Some(anilist_id) = detail.external_ids.anilist
             && let Some(mut meta) = self.fetch_anilist_by_id(anilist_id).await?
         {
-            self.enrich_anime_episodes(anilist_id, preferred_lang, tmdb_api_key, &mut meta)
-                .await;
+            self.enrich_anime_episodes_by(
+                "anilist_id",
+                anilist_id,
+                preferred_lang,
+                tmdb_api_key,
+                &mut meta,
+            )
+            .await;
+            return Ok(Some(meta));
+        }
+
+        if let Some(mal_id) = detail.external_ids.mal
+            && let Some(mut meta) = self.fetch_mal_by_id(mal_id).await?
+        {
+            self.enrich_anime_episodes_by(
+                "mal_id",
+                mal_id,
+                preferred_lang,
+                tmdb_api_key,
+                &mut meta,
+            )
+            .await;
+            return Ok(Some(meta));
+        }
+
+        if let Some(kitsu_id) = detail.external_ids.kitsu
+            && let Some(mut meta) = self.fetch_kitsu_by_id(kitsu_id).await?
+        {
+            self.enrich_anime_episodes_by(
+                "kitsu_id",
+                kitsu_id,
+                preferred_lang,
+                tmdb_api_key,
+                &mut meta,
+            )
+            .await;
+            return Ok(Some(meta));
+        }
+
+        if let Some(simkl_id) = detail.external_ids.simkl
+            && let Some(client_id) = simkl_client_id.filter(|k| !k.trim().is_empty())
+            && let Some(meta) = self
+                .fetch_simkl_by_id(simkl_id, detail.media_type, client_id)
+                .await?
+        {
             return Ok(Some(meta));
         }
 
@@ -605,7 +869,7 @@ impl MetadataClients {
 
         if let Some(ref imdb_id) = detail.external_ids.imdb
             && let Some(meta) = self
-                .fetch_cinemeta_by_id(imdb_id, detail.media_type)
+                .fetch_cinemeta_any_type(imdb_id, detail.media_type)
                 .await?
         {
             return Ok(Some(meta));
@@ -617,8 +881,14 @@ impl MetadataClients {
                 .await?
         {
             if let Some(anilist_id) = meta.external_ids.anilist {
-                self.enrich_anime_episodes(anilist_id, preferred_lang, tmdb_api_key, &mut meta)
-                    .await;
+                self.enrich_anime_episodes_by(
+                    "anilist_id",
+                    anilist_id,
+                    preferred_lang,
+                    tmdb_api_key,
+                    &mut meta,
+                )
+                .await;
             }
             return Ok(Some(meta));
         }
@@ -651,9 +921,10 @@ impl MetadataClients {
         Ok(candidates.into_iter().next().map(anilist_to_canonical))
     }
 
-    async fn enrich_anime_episodes(
+    async fn enrich_anime_episodes_by(
         &self,
-        anilist_id: u64,
+        id_param: &str,
+        id_value: u64,
         preferred_lang: &str,
         tmdb_api_key: Option<&str>,
         meta: &mut CanonicalMetadata,
@@ -665,7 +936,7 @@ impl MetadataClients {
             return;
         }
 
-        let url = format!("https://api.ani.zip/mappings?anilist_id={anilist_id}");
+        let url = format!("https://api.ani.zip/mappings?{id_param}={id_value}");
         if let Ok(resp) = self.http.get(&url).send().await
             && resp.status().is_success()
             && let Ok(body) = resp.json::<AniZipResponse>().await
@@ -1105,4 +1376,672 @@ impl MetadataClients {
             None => Ok(None),
         }
     }
+
+    async fn fetch_cinemeta_any_type(
+        &self,
+        imdb_id: &str,
+        preferred: MediaType,
+    ) -> VesselResult<Option<CanonicalMetadata>> {
+        if let Some(hit) = self.fetch_cinemeta_by_id(imdb_id, preferred).await? {
+            return Ok(Some(hit));
+        }
+        let alt = match preferred {
+            MediaType::Movie => MediaType::Series,
+            MediaType::Series | MediaType::Live => MediaType::Movie,
+        };
+        self.fetch_cinemeta_by_id(imdb_id, alt).await
+    }
+
+    async fn fetch_mal_by_id(&self, mal_id: u64) -> VesselResult<Option<CanonicalMetadata>> {
+        let url = format!("{}/anime/{mal_id}/full", self.endpoints.jikan_base);
+        let resp = self.http.get(&url).send().await.map_err(|err| {
+            VesselError::Network(format!("[VesselNetworkError]: Jikan detail failed: {err}"))
+        })?;
+        if !resp.status().is_success() {
+            return Ok(None);
+        }
+        let parsed: JikanSingleResponse = resp.json().await.map_err(|err| {
+            VesselError::Network(format!("[VesselNetworkError]: decode Jikan detail: {err}"))
+        })?;
+        Ok(parsed.data.map(jikan_to_canonical))
+    }
+
+    async fn fetch_kitsu_by_id(&self, kitsu_id: u64) -> VesselResult<Option<CanonicalMetadata>> {
+        let url = format!("{}/anime/{kitsu_id}", self.endpoints.kitsu_base);
+        let resp = self
+            .http
+            .get(&url)
+            .header("Accept", "application/vnd.api+json")
+            .send()
+            .await
+            .map_err(|err| {
+                VesselError::Network(format!("[VesselNetworkError]: Kitsu detail failed: {err}"))
+            })?;
+        if !resp.status().is_success() {
+            return Ok(None);
+        }
+        let parsed: KitsuSingleResponse = resp.json().await.map_err(|err| {
+            VesselError::Network(format!("[VesselNetworkError]: decode Kitsu detail: {err}"))
+        })?;
+        Ok(parsed.data.and_then(kitsu_to_canonical))
+    }
+
+    async fn fetch_simkl_by_id(
+        &self,
+        simkl_id: u64,
+        preferred: MediaType,
+        client_id: &str,
+    ) -> VesselResult<Option<CanonicalMetadata>> {
+        let paths = match preferred {
+            MediaType::Movie => ["movies", "anime", "tv"],
+            MediaType::Series | MediaType::Live => ["tv", "anime", "movies"],
+        };
+        for kind_path in paths {
+            let url = format!(
+                "{}/{kind_path}/{simkl_id}?extended=full&client_id={client_id}",
+                self.endpoints.simkl_base
+            );
+            let Ok(resp) = self.http.get(&url).send().await else {
+                continue;
+            };
+            if !resp.status().is_success() {
+                continue;
+            }
+            if let Ok(detail) = resp.json::<SimklDetail>().await {
+                return Ok(Some(simkl_to_canonical(simkl_id, detail)));
+            }
+        }
+        Ok(None)
+    }
+
+    /// Interactive title search across TMDB, IMDb, Simkl, AniList, MyAnimeList, and Kitsu for Fix Match.
+    pub async fn search_interactive(
+        &self,
+        query: &str,
+        provider: MetadataProviderFilter,
+        preferred_lang: &str,
+        tmdb_api_key: Option<&str>,
+        simkl_client_id: Option<&str>,
+    ) -> MetadataSearchResponse {
+        let clean = clean_search_title(query);
+        let q = if clean.is_empty() {
+            query.trim().to_owned()
+        } else {
+            clean
+        };
+        if q.is_empty() {
+            return MetadataSearchResponse::default();
+        }
+
+        let tmdb_key = tmdb_api_key
+            .map(str::trim)
+            .filter(|k| !k.is_empty())
+            .map(str::to_owned);
+        let simkl_key = simkl_client_id
+            .map(str::trim)
+            .filter(|k| !k.is_empty())
+            .map(str::to_owned);
+
+        let want =
+            |p: MetadataProviderFilter| provider == MetadataProviderFilter::All || provider == p;
+        let mut notes = Vec::new();
+
+        if want(MetadataProviderFilter::Tmdb)
+            && tmdb_key.is_none()
+            && provider == MetadataProviderFilter::Tmdb
+        {
+            notes.push("TMDB search needs an optional TMDB API key in Settings (keyless IMDb, AniList, MyAnimeList & Kitsu work without a key).".into());
+        }
+        if want(MetadataProviderFilter::Simkl)
+            && simkl_key.is_none()
+            && provider == MetadataProviderFilter::Simkl
+        {
+            notes.push("Simkl search requires a Simkl Client ID in Settings (or enter a manual Simkl ID below).".into());
+        }
+
+        let anilist_fut = async {
+            if want(MetadataProviderFilter::Anilist) {
+                self.search_anilist_hits(&q).await
+            } else {
+                Vec::new()
+            }
+        };
+        let mal_fut = async {
+            if want(MetadataProviderFilter::Mal) {
+                self.search_mal_hits(&q).await
+            } else {
+                Vec::new()
+            }
+        };
+        let kitsu_fut = async {
+            if want(MetadataProviderFilter::Kitsu) {
+                self.search_kitsu_hits(&q).await
+            } else {
+                Vec::new()
+            }
+        };
+        let imdb_fut = async {
+            if want(MetadataProviderFilter::Imdb) {
+                self.search_imdb_hits(&q).await
+            } else {
+                Vec::new()
+            }
+        };
+        let tmdb_fut = async {
+            if want(MetadataProviderFilter::Tmdb) {
+                if let Some(ref key) = tmdb_key {
+                    self.search_tmdb_hits(&q, preferred_lang, key).await
+                } else {
+                    Vec::new()
+                }
+            } else {
+                Vec::new()
+            }
+        };
+        let simkl_fut = async {
+            if want(MetadataProviderFilter::Simkl) {
+                if let Some(ref cid) = simkl_key {
+                    self.search_simkl_hits(&q, cid).await
+                } else {
+                    Vec::new()
+                }
+            } else {
+                Vec::new()
+            }
+        };
+
+        let (tmdb_hits, imdb_hits, simkl_hits, anilist_hits, mal_hits, kitsu_hits) = tokio::join!(
+            tmdb_fut,
+            imdb_fut,
+            simkl_fut,
+            anilist_fut,
+            mal_fut,
+            kitsu_fut
+        );
+
+        let mut hits = Vec::new();
+        hits.extend(tmdb_hits);
+        hits.extend(imdb_hits);
+        hits.extend(simkl_hits);
+        hits.extend(anilist_hits);
+        hits.extend(mal_hits);
+        hits.extend(kitsu_hits);
+
+        MetadataSearchResponse { hits, notes }
+    }
+
+    async fn search_anilist_hits(&self, query: &str) -> Vec<MetadataSearchHit> {
+        let Ok(items) = self
+            .execute_anilist_candidates(AniListRequest {
+                query: ANILIST_SEARCH_QUERY,
+                variables: serde_json::json!({ "search": query }),
+            })
+            .await
+        else {
+            return Vec::new();
+        };
+        items
+            .into_iter()
+            .map(|m| {
+                let c = anilist_to_canonical(m);
+                MetadataSearchHit {
+                    canonical_id: c.canonical_id,
+                    provider: "anilist".into(),
+                    title: c.title,
+                    original_title: c.original_title,
+                    year: c.year,
+                    media_type: Some("anime".into()),
+                    poster: c.poster,
+                    synopsis: c.synopsis.map(|s| s.chars().take(220).collect()),
+                    external_ids: c.external_ids,
+                }
+            })
+            .collect()
+    }
+
+    async fn search_mal_hits(&self, query: &str) -> Vec<MetadataSearchHit> {
+        let Ok(resp) = self
+            .http
+            .get(format!("{}/anime", self.endpoints.jikan_base))
+            .query(&[("q", query), ("limit", "8")])
+            .send()
+            .await
+        else {
+            return Vec::new();
+        };
+        if !resp.status().is_success() {
+            return Vec::new();
+        }
+        let Ok(parsed) = resp.json::<JikanListResponse>().await else {
+            return Vec::new();
+        };
+        parsed
+            .data
+            .into_iter()
+            .map(|item| {
+                let c = jikan_to_canonical(item);
+                MetadataSearchHit {
+                    canonical_id: c.canonical_id,
+                    provider: "mal".into(),
+                    title: c.title,
+                    original_title: c.original_title,
+                    year: c.year,
+                    media_type: Some("anime".into()),
+                    poster: c.poster,
+                    synopsis: c.synopsis.map(|s| s.chars().take(220).collect()),
+                    external_ids: c.external_ids,
+                }
+            })
+            .collect()
+    }
+
+    async fn search_kitsu_hits(&self, query: &str) -> Vec<MetadataSearchHit> {
+        let Ok(resp) = self
+            .http
+            .get(format!("{}/anime", self.endpoints.kitsu_base))
+            .header("Accept", "application/vnd.api+json")
+            .query(&[("filter[text]", query), ("page[limit]", "8")])
+            .send()
+            .await
+        else {
+            return Vec::new();
+        };
+        if !resp.status().is_success() {
+            return Vec::new();
+        }
+        let Ok(parsed) = resp.json::<KitsuListResponse>().await else {
+            return Vec::new();
+        };
+        parsed
+            .data
+            .into_iter()
+            .filter_map(kitsu_to_canonical)
+            .map(|c| MetadataSearchHit {
+                canonical_id: c.canonical_id,
+                provider: "kitsu".into(),
+                title: c.title,
+                original_title: c.original_title,
+                year: c.year,
+                media_type: Some("anime".into()),
+                poster: c.poster,
+                synopsis: c.synopsis.map(|s| s.chars().take(220).collect()),
+                external_ids: c.external_ids,
+            })
+            .collect()
+    }
+
+    async fn search_imdb_hits(&self, query: &str) -> Vec<MetadataSearchHit> {
+        let first_ch = query
+            .chars()
+            .find(|c| c.is_ascii_alphanumeric())
+            .map(|c| c.to_ascii_lowercase())
+            .unwrap_or('a');
+        let suggest_url = format!(
+            "{}/{}/{}.json",
+            self.endpoints.imdb_suggest_base,
+            first_ch,
+            encode_path_segment(&query.to_ascii_lowercase())
+        );
+
+        let mut out = Vec::new();
+        if let Ok(resp) = self.http.get(&suggest_url).send().await
+            && resp.status().is_success()
+            && let Ok(parsed) = resp.json::<ImdbSuggestEnvelope>().await
+        {
+            for item in parsed.d {
+                if !item.id.starts_with("tt") {
+                    continue;
+                }
+                let Some(title) = item.l.filter(|s| !s.trim().is_empty()) else {
+                    continue;
+                };
+                let qid = item
+                    .qid
+                    .as_deref()
+                    .or(item.q.as_deref())
+                    .unwrap_or("")
+                    .to_ascii_lowercase();
+                let media_type = if qid.contains("series") || qid.contains("tv") {
+                    "series"
+                } else {
+                    "movie"
+                };
+                out.push(MetadataSearchHit {
+                    canonical_id: format!("imdb:{}", item.id),
+                    provider: "imdb".into(),
+                    title,
+                    original_title: None,
+                    year: item.y,
+                    media_type: Some(media_type.into()),
+                    poster: item.i.and_then(|img| img.image_url),
+                    synopsis: None,
+                    external_ids: ExternalIds {
+                        imdb: Some(item.id),
+                        ..ExternalIds::default()
+                    },
+                });
+                if out.len() >= 8 {
+                    return out;
+                }
+            }
+        }
+
+        if out.is_empty() {
+            for kind in ["series", "movie"] {
+                let url = format!(
+                    "{}/catalog/{kind}/top/search={}.json",
+                    self.endpoints.cinemeta_base,
+                    encode_path_segment(query)
+                );
+                if let Ok(resp) = self.http.get(&url).send().await
+                    && resp.status().is_success()
+                    && let Ok(parsed) = resp.json::<CinemetaCatalogEnvelope>().await
+                {
+                    for meta in parsed.metas.into_iter().take(5) {
+                        if !meta.id.starts_with("tt") {
+                            continue;
+                        }
+                        let year = parse_cinemeta_year(&meta);
+                        let title = meta.name.unwrap_or_else(|| meta.id.clone());
+                        out.push(MetadataSearchHit {
+                            canonical_id: format!("imdb:{}", meta.id),
+                            provider: "imdb".into(),
+                            title,
+                            original_title: None,
+                            year,
+                            media_type: Some(kind.into()),
+                            poster: meta.poster,
+                            synopsis: meta.description.map(|s| s.chars().take(220).collect()),
+                            external_ids: ExternalIds {
+                                imdb: Some(meta.id),
+                                ..ExternalIds::default()
+                            },
+                        });
+                    }
+                }
+            }
+        }
+        out
+    }
+
+    async fn search_tmdb_hits(
+        &self,
+        query: &str,
+        preferred_lang: &str,
+        api_key: &str,
+    ) -> Vec<MetadataSearchHit> {
+        let lang = map_tmdb_lang(preferred_lang);
+        let Ok(resp) = self
+            .http
+            .get(format!("{}/search/multi", self.endpoints.tmdb_api_base))
+            .query(&[("api_key", api_key), ("query", query), ("language", &lang)])
+            .send()
+            .await
+        else {
+            return Vec::new();
+        };
+        if !resp.status().is_success() {
+            return Vec::new();
+        }
+        let Ok(body) = resp.json::<TmdbSearchResponse>().await else {
+            return Vec::new();
+        };
+        body.results
+            .into_iter()
+            .filter_map(|item| {
+                let mtype = match item.media_type.as_deref() {
+                    Some("movie") => "movie",
+                    Some("tv") => "tv",
+                    _ => return None,
+                };
+                let title = item.title.or(item.name)?;
+                let original_title = item.original_title.or(item.original_name);
+                let year = parse_year_prefix(
+                    item.release_date
+                        .as_deref()
+                        .or(item.first_air_date.as_deref()),
+                );
+                let poster = item
+                    .poster_path
+                    .map(|p| format!("{}/w342{p}", self.endpoints.tmdb_image_base));
+                Some(MetadataSearchHit {
+                    canonical_id: format!("tmdb:{mtype}:{}", item.id),
+                    provider: "tmdb".into(),
+                    title,
+                    original_title,
+                    year,
+                    media_type: Some(if mtype == "tv" {
+                        "series".into()
+                    } else {
+                        "movie".into()
+                    }),
+                    poster,
+                    synopsis: item
+                        .overview
+                        .filter(|s| !s.trim().is_empty())
+                        .map(|s| s.chars().take(220).collect()),
+                    external_ids: ExternalIds {
+                        tmdb: Some(item.id),
+                        ..ExternalIds::default()
+                    },
+                })
+            })
+            .take(8)
+            .collect()
+    }
+
+    async fn search_simkl_hits(&self, query: &str, client_id: &str) -> Vec<MetadataSearchHit> {
+        let mut out = Vec::new();
+        for kind in ["tv", "anime", "movie"] {
+            let Ok(resp) = self
+                .http
+                .get(format!("{}/search/{kind}", self.endpoints.simkl_base))
+                .query(&[("q", query), ("limit", "4"), ("client_id", client_id)])
+                .send()
+                .await
+            else {
+                continue;
+            };
+            if !resp.status().is_success() {
+                continue;
+            }
+            let Ok(items) = resp.json::<Vec<SimklSearchItem>>().await else {
+                continue;
+            };
+            for item in items {
+                let Some(ids) = item.ids else { continue };
+                let Some(simkl_id) = ids.simkl.or(ids.simkl_id) else {
+                    continue;
+                };
+                let Some(title) = item.title.filter(|s| !s.trim().is_empty()) else {
+                    continue;
+                };
+                let poster = item
+                    .poster
+                    .map(|p| format!("https://simkl.in/posters/{p}_m.jpg"));
+                let mtype = item.kind.unwrap_or_else(|| {
+                    if kind == "movie" {
+                        "movie".into()
+                    } else if kind == "anime" {
+                        "anime".into()
+                    } else {
+                        "series".into()
+                    }
+                });
+                out.push(MetadataSearchHit {
+                    canonical_id: format!("simkl:{simkl_id}"),
+                    provider: "simkl".into(),
+                    title,
+                    original_title: None,
+                    year: item.year,
+                    media_type: Some(mtype),
+                    poster,
+                    synopsis: None,
+                    external_ids: simkl_ids_to_external(simkl_id, &ids),
+                });
+            }
+        }
+        out
+    }
+}
+
+fn json_u64(val: Option<&serde_json::Value>) -> Option<u64> {
+    let v = val?;
+    v.as_u64()
+        .or_else(|| v.as_str()?.trim().parse::<u64>().ok())
+}
+
+fn simkl_ids_to_external(simkl_id: u64, ids: &SimklIds) -> ExternalIds {
+    ExternalIds {
+        simkl: Some(simkl_id),
+        imdb: ids.imdb.clone().filter(|s| !s.trim().is_empty()),
+        tmdb: json_u64(ids.tmdb.as_ref()),
+        mal: json_u64(ids.mal.as_ref()),
+        anilist: json_u64(ids.anilist.as_ref()),
+        kitsu: json_u64(ids.kitsu.as_ref()),
+        ..ExternalIds::default()
+    }
+}
+
+fn simkl_to_canonical(simkl_id: u64, d: SimklDetail) -> CanonicalMetadata {
+    let external_ids = d
+        .ids
+        .as_ref()
+        .map(|ids| simkl_ids_to_external(simkl_id, ids))
+        .unwrap_or(ExternalIds {
+            simkl: Some(simkl_id),
+            ..ExternalIds::default()
+        });
+    let season_spans = d
+        .total_episodes
+        .filter(|c| *c > 0)
+        .map(|c| {
+            vec![SeasonSpan {
+                season: 1,
+                episode_count: c,
+            }]
+        })
+        .unwrap_or_default();
+    CanonicalMetadata {
+        canonical_id: format!("simkl:{simkl_id}"),
+        external_ids,
+        title: d
+            .en_title
+            .or(d.title)
+            .unwrap_or_else(|| format!("Simkl #{simkl_id}")),
+        original_title: None,
+        year: d.year,
+        synopsis: d.overview.filter(|s| !s.trim().is_empty()),
+        synopsis_lang: Some("en".into()),
+        poster: d
+            .poster
+            .map(|p| format!("https://simkl.in/posters/{p}_m.jpg")),
+        backdrop: d
+            .fanart
+            .map(|f| format!("https://simkl.in/fanart/{f}_medium.jpg")),
+        genres: d.genres,
+        rating: d.ratings.and_then(|r| r.simkl).and_then(|s| s.rating),
+        season_spans,
+        episodes: Vec::new(),
+    }
+}
+
+fn jikan_to_canonical(a: JikanAnime) -> CanonicalMetadata {
+    let year = a
+        .year
+        .or_else(|| parse_year_prefix(a.aired.as_ref().and_then(|x| x.from.as_deref())));
+    let poster = a.images.and_then(|imgs| {
+        imgs.jpg
+            .and_then(|j| j.large_image_url.or(j.image_url))
+            .or_else(|| imgs.webp.and_then(|w| w.large_image_url.or(w.image_url)))
+    });
+    let title = a
+        .title_english
+        .clone()
+        .or_else(|| a.title.clone())
+        .unwrap_or_else(|| format!("MAL #{}", a.mal_id));
+    let season_spans = a
+        .episodes
+        .filter(|c| *c > 0)
+        .map(|c| {
+            vec![SeasonSpan {
+                season: 1,
+                episode_count: c,
+            }]
+        })
+        .unwrap_or_default();
+    CanonicalMetadata {
+        canonical_id: format!("mal:{}", a.mal_id),
+        external_ids: ExternalIds {
+            mal: Some(a.mal_id),
+            ..ExternalIds::default()
+        },
+        title,
+        original_title: a.title_japanese.or(a.title),
+        year,
+        synopsis: a.synopsis.filter(|s| !s.trim().is_empty()),
+        synopsis_lang: Some("en".into()),
+        poster,
+        backdrop: None,
+        genres: a.genres.into_iter().map(|g| g.name).collect(),
+        rating: a.score,
+        season_spans,
+        episodes: Vec::new(),
+    }
+}
+
+fn kitsu_to_canonical(item: KitsuItem) -> Option<CanonicalMetadata> {
+    let id = item.id.trim().parse::<u64>().ok()?;
+    let attrs = item.attributes;
+    let title = attrs
+        .titles
+        .get("en")
+        .and_then(|o| o.clone())
+        .or_else(|| attrs.titles.get("en_jp").and_then(|o| o.clone()))
+        .or(attrs.canonical_title.clone())
+        .unwrap_or_else(|| format!("Kitsu #{id}"));
+    let original_title = attrs
+        .titles
+        .get("ja_jp")
+        .and_then(|o| o.clone())
+        .or(attrs.canonical_title);
+    let poster = attrs
+        .poster_image
+        .and_then(|i| i.large.or(i.original).or(i.medium));
+    let backdrop = attrs
+        .cover_image
+        .and_then(|i| i.large.or(i.original).or(i.medium));
+    let rating = attrs
+        .average_rating
+        .as_deref()
+        .and_then(|s| s.parse::<f32>().ok())
+        .map(|v| v / 10.0);
+    let season_spans = attrs
+        .episode_count
+        .filter(|c| *c > 0)
+        .map(|c| {
+            vec![SeasonSpan {
+                season: 1,
+                episode_count: c,
+            }]
+        })
+        .unwrap_or_default();
+    Some(CanonicalMetadata {
+        canonical_id: format!("kitsu:{id}"),
+        external_ids: ExternalIds {
+            kitsu: Some(id),
+            ..ExternalIds::default()
+        },
+        title,
+        original_title,
+        year: parse_year_prefix(attrs.start_date.as_deref()),
+        synopsis: attrs.synopsis.filter(|s| !s.trim().is_empty()),
+        synopsis_lang: Some("en".into()),
+        poster,
+        backdrop,
+        genres: Vec::new(),
+        rating,
+        season_spans,
+        episodes: Vec::new(),
+    })
 }

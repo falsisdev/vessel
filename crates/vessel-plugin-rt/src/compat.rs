@@ -698,7 +698,14 @@ export default definePlugin({{
         if (typeof provider.getCatalog !== "function") {{
             return {{ sections: [] }};
         }}
-        const catalogs = normalizeCatalogTargets().slice(0, 4);
+        const allCatalogs = normalizeCatalogTargets();
+        const isLiveProvider =
+            (Array.isArray(META.capabilities) && META.capabilities.includes("live_tv")) ||
+            allCatalogs.some((c) => {{
+                const t = String(c.type || "").toLowerCase();
+                return t === "tv" || t === "live";
+            }});
+        const catalogs = isLiveProvider ? allCatalogs : allCatalogs.slice(0, 4);
         const sections = [];
         for (const cat of catalogs) {{
             try {{
@@ -708,8 +715,10 @@ export default definePlugin({{
                     extra: {{}},
                 }});
                 const list = Array.isArray(res) ? res : (res && Array.isArray(res.metas) ? res.metas : []);
-                const items = list
-                    .slice(0, 30)
+                const catType = String(cat.type || "").toLowerCase();
+                const isLiveCat = isLiveProvider || catType === "tv" || catType === "live";
+                const sliced = isLiveCat ? list : list.slice(0, 30);
+                const items = sliced
                     .map((it) => mapSummary(it, cat.type || "series"))
                     .filter(Boolean);
                 if (items.length > 0) {{
@@ -938,13 +947,28 @@ function splitTypedId(compositeId) {{
 
 export default definePlugin({{
     async getHomeFeed() {{
-        const catalogs = Array.isArray(CFG.catalogs) ? CFG.catalogs.slice(0, 5) : [];
+        const allCatalogs = Array.isArray(CFG.catalogs) ? CFG.catalogs : [];
+        const isLiveAddon =
+            (Array.isArray(CFG.types) &&
+                CFG.types.some((t) => {{
+                    const lt = String(t || "").toLowerCase();
+                    return lt === "tv" || lt === "live";
+                }})) ||
+            allCatalogs.some((c) => {{
+                const lt = String(c.type || "").toLowerCase();
+                return lt === "tv" || lt === "live";
+            }});
+        const catalogs = isLiveAddon ? allCatalogs : allCatalogs.slice(0, 5);
         const sections = [];
         for (const cat of catalogs) {{
             const url = `${{CFG.baseUrl}}/catalog/${{encodeURIComponent(cat.type)}}/${{encodeURIComponent(cat.id)}}.json`;
             const data = await fetchJsonOrNull(url);
             const metas = data && Array.isArray(data.metas) ? data.metas : [];
-            const items = metas.slice(0, 30).map((m) => mapSummary(m, cat.type)).filter(Boolean);
+            const catType = String(cat.type || "").toLowerCase();
+            const isLiveCat = isLiveAddon || catType === "tv" || catType === "live";
+            const items = (isLiveCat ? metas : metas.slice(0, 30))
+                .map((m) => mapSummary(m, cat.type))
+                .filter(Boolean);
             if (items.length > 0) {{
                 sections.push({{
                     id: String(cat.id),

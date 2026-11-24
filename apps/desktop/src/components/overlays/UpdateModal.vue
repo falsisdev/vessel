@@ -73,7 +73,7 @@ const {
 
           <div v-if="downloadingUpdate && downloadProgress" class="progress-box">
             <div class="progress-labels">
-              <span>Downloading {{ downloadProgress.fileName }}…</span>
+              <span>{{ t('settings.downloading_update', { file: downloadProgress.fileName, percent: downloadProgress.percent ?? 0 }) }}</span>
               <span>{{ downloadProgress.percent ?? 0 }}%</span>
             </div>
             <div class="progress-track">
@@ -88,9 +88,13 @@ const {
             Installer opened from <code>{{ installedPath }}</code>
           </p>
 
+          <p v-else-if="!updateInfo.downloadUrl" class="v-muted saved-note">
+            {{ t('settings.update_asset_pending') }}
+          </p>
+
           <div class="update-actions">
             <button type="button" class="v-btn v-btn-sm" @click="skipUpdateVersion">
-              Skip v{{ updateInfo.latestVersion }}
+              {{ t('settings.skip_version', { version: `v${updateInfo.latestVersion}` }) }}
             </button>
             <button
               type="button"
@@ -98,7 +102,7 @@ const {
               @click="vesselApi.openExternalUrl(updateInfo.htmlUrl)"
             >
               <ExternalLink :size="14" aria-hidden="true" />
-              GitHub Release
+              {{ t('settings.open_releases') }}
             </button>
             <button
               v-if="updateInfo.downloadUrl"
@@ -108,7 +112,7 @@ const {
               @click="downloadAndInstallUpdate"
             >
               <Download :size="15" aria-hidden="true" />
-              {{ downloadingUpdate ? 'Downloading…' : `Install (${updateInfo.assetName})` }}
+              {{ downloadingUpdate ? t('settings.downloading_short') : t('settings.install_update', { asset: updateInfo.assetName }) }}
             </button>
           </div>
         </div>

@@ -375,7 +375,11 @@ impl SqliteStorage {
                              id, plugin_id, native_id, stream_id, canonical_id, season, episode,
                              absolute_episode, position_ms, duration_ms, completed, last_watched_at,
                              title, poster_url, backdrop_url, episode_title
-                         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)
+                         ) VALUES (
+                             ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11,
+                             COALESCE(NULLIF(trim(?12), ''), strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+                             ?13, ?14, ?15, ?16
+                         )
                          ON CONFLICT(plugin_id, native_id, season, episode) DO UPDATE SET
                              stream_id = excluded.stream_id,
                              canonical_id = excluded.canonical_id,
@@ -383,7 +387,7 @@ impl SqliteStorage {
                              position_ms = excluded.position_ms,
                              duration_ms = excluded.duration_ms,
                              completed = excluded.completed,
-                             last_watched_at = excluded.last_watched_at,
+                             last_watched_at = COALESCE(NULLIF(trim(excluded.last_watched_at), ''), strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
                              title = COALESCE(NULLIF(excluded.title, ''), watch_progress.title),
                              poster_url = COALESCE(NULLIF(excluded.poster_url, ''), watch_progress.poster_url),
                              backdrop_url = COALESCE(NULLIF(excluded.backdrop_url, ''), watch_progress.backdrop_url),
@@ -526,7 +530,10 @@ impl SqliteStorage {
                            AND wp.stream_id NOT LIKE 'tv\_%' ESCAPE '\'
                            AND wp.stream_id NOT LIKE 'iptv\_%' ESCAPE '\'
                            AND wp.stream_id NOT LIKE 'vns::tv::%'
-                         ORDER BY wp.last_watched_at DESC
+                         ORDER BY
+                             CASE WHEN trim(wp.last_watched_at) = '' THEN 0 ELSE 1 END DESC,
+                             wp.last_watched_at DESC,
+                             wp.rowid DESC
                          LIMIT ?1",
                     )
                     .map_err(map_sql_err)?;

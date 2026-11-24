@@ -1,5 +1,12 @@
 package dev.falsis.vessel.ui.screens
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -28,20 +35,14 @@ import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Language
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.AssistChip
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -56,12 +57,20 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import dev.falsis.vessel.data.PluginListEntry
 import dev.falsis.vessel.data.ResolvedSource
 import dev.falsis.vessel.data.VesselRepository
+import dev.falsis.vessel.ui.components.VesselButton
+import dev.falsis.vessel.ui.components.VesselCompactIconButton
+import dev.falsis.vessel.ui.components.VesselFilterChip
+import dev.falsis.vessel.ui.components.VesselOutlinedButton
+import dev.falsis.vessel.ui.components.VesselSearchField
+import dev.falsis.vessel.ui.components.VesselTextButton
+import dev.falsis.vessel.ui.components.vesselTopSafeInset
 import dev.falsis.vessel.ui.i18n.VesselI18n
 import dev.falsis.vessel.ui.theme.LocalVesselPalette
 import kotlinx.coroutines.delay
@@ -259,16 +268,16 @@ fun ExtensionsScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(palette.bgBase)
-            .padding(16.dp),
-        contentPadding = PaddingValues(bottom = 28.dp),
+            .vesselTopSafeInset(),
+        contentPadding = PaddingValues(start = 16.dp, top = 14.dp, end = 16.dp, bottom = 28.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         // Header
         item {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (onBack != null) {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = VesselI18n.tr("common.back", "Back"))
+                    VesselCompactIconButton(onClick = onBack, size = 34.dp, containerColor = palette.bgSurface) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = VesselI18n.tr("common.back"), modifier = Modifier.size(18.dp))
                     }
                 }
                 Text(VesselI18n.tr("extensions.title"), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
@@ -290,20 +299,21 @@ fun ExtensionsScreen(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Button(onClick = { inspectSource() }, enabled = !resolving && !batchInstalling) {
+                        VesselButton(onClick = { inspectSource() }, enabled = !resolving && !batchInstalling) {
                             Text(VesselI18n.tr("extensions.resolve"))
                         }
                         listOf("anthology", "tr").forEach { code ->
-                            AssistChip(
+                            VesselFilterChip(
+                                selected = sourceInput.trim().equals(code, ignoreCase = true),
                                 onClick = {
                                     sourceInput = code
                                     inspectSource()
                                 },
-                                label = { Text(code) },
+                                label = code,
                             )
                         }
                         if (resolving) {
-                            CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.5.dp)
+                            CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
                         }
                     }
                 }
@@ -355,34 +365,34 @@ fun ExtensionsScreen(
                                         color = palette.accent,
                                     )
                                 }
-                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    Button(
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    VesselButton(
                                         onClick = { installAllFromRepo() },
                                         enabled = !batchInstalling && enabledTargets > 0,
+                                        height = 32.dp,
                                     ) {
-                                        Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(16.dp))
-                                        Spacer(Modifier.width(6.dp))
+                                        Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(14.dp))
+                                        Spacer(Modifier.width(5.dp))
                                         Text(
                                             if (batchInstalling && batchProgress != null) {
-                                                "${VesselI18n.tr("common.loading", "Installing")} ($batchProgress)"
+                                                "${VesselI18n.tr("common.loading")} ($batchProgress)"
                                             } else {
-                                                VesselI18n.tr("extensions.install_all", "Install All")
+                                                VesselI18n.tr("extensions.install_all")
                                             },
                                         )
                                     }
-                                    IconButton(onClick = { resolved = null }, enabled = !batchInstalling) {
-                                        Icon(Icons.Default.Close, contentDescription = VesselI18n.tr("common.close", "Close"))
+                                    VesselCompactIconButton(onClick = { resolved = null }, enabled = !batchInstalling, size = 30.dp) {
+                                        Icon(Icons.Default.Close, contentDescription = VesselI18n.tr("common.close"), modifier = Modifier.size(16.dp))
                                     }
                                 }
                             }
 
                             if (repoObj.plugins.size > 4) {
-                                OutlinedTextField(
+                                VesselSearchField(
                                     value = repoFilter,
                                     onValueChange = { repoFilter = it },
-                                    placeholder = { Text(VesselI18n.tr("extensions.filter_repo", "Filter repository…")) },
-                                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                                    singleLine = true,
+                                    placeholder = VesselI18n.tr("extensions.filter_repo"),
+                                    imeAction = ImeAction.Done,
                                     modifier = Modifier.fillMaxWidth(),
                                 )
                             }
@@ -434,15 +444,17 @@ fun ExtensionsScreen(
                                             )
                                         }
                                     }
-                                    Button(
+                                    VesselButton(
                                         enabled = !isBusy,
+                                        height = 31.dp,
+                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
                                         onClick = {
                                             scope.launch {
                                                 installingTarget = installTarget
                                                 val repoLabel = repoObj.name.ifBlank { repoObj.id }
                                                 runCatching { repo.installSource(installTarget, repoLabel) }
-                                                    .onSuccess { repo.notify("${entry.name} installed") }
-                                                    .onFailure { repo.notify(it.message ?: "Install failed") }
+                                                    .onSuccess { repo.notify(VesselI18n.trf("extensions.installed_msg", "name" to entry.name)) }
+                                                    .onFailure { repo.notifyError(it, VesselI18n.tr("extensions.install_failed")) }
                                                 installingTarget = null
                                             }
                                         },
@@ -450,9 +462,10 @@ fun ExtensionsScreen(
                                         Text(
                                             when {
                                                 installingTarget == installTarget -> batchProgress ?: "..."
-                                                isInstalled -> VesselI18n.tr("common.reinstall", "Reinstall")
+                                                isInstalled -> VesselI18n.tr("common.reinstall")
                                                 else -> VesselI18n.tr("extensions.install_now")
                                             },
+                                            style = MaterialTheme.typography.labelSmall,
                                         )
                                     }
                                 }
@@ -469,26 +482,27 @@ fun ExtensionsScreen(
                                         Text(it, style = MaterialTheme.typography.bodySmall, color = palette.textMuted)
                                     }
                                 }
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Button(
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    VesselButton(
                                         enabled = !batchInstalling && installingTarget == null,
+                                        height = 32.dp,
                                         onClick = {
                                             scope.launch {
                                                 installingTarget = sourceInput.trim()
                                                 runCatching { repo.installSource(sourceInput.trim(), null) }
                                                     .onSuccess {
-                                                        repo.notify("${pkgManifest.name} installed")
+                                                        repo.notify(VesselI18n.trf("extensions.installed_msg", "name" to pkgManifest.name))
                                                         resolved = null
                                                     }
-                                                    .onFailure { repo.notify(it.message ?: "Install failed") }
+                                                    .onFailure { repo.notifyError(it, VesselI18n.tr("extensions.install_failed")) }
                                                 installingTarget = null
                                             }
                                         },
                                     ) {
                                         Text(VesselI18n.tr("extensions.install_now"))
                                     }
-                                    IconButton(onClick = { resolved = null }) {
-                                        Icon(Icons.Default.Close, contentDescription = VesselI18n.tr("common.close", "Close"))
+                                    VesselCompactIconButton(onClick = { resolved = null }, size = 30.dp) {
+                                        Icon(Icons.Default.Close, contentDescription = VesselI18n.tr("common.close"), modifier = Modifier.size(16.dp))
                                     }
                                 }
                             }
@@ -506,12 +520,11 @@ fun ExtensionsScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    OutlinedTextField(
+                    VesselSearchField(
                         value = installedFilter,
                         onValueChange = { installedFilter = it },
-                        placeholder = { Text(VesselI18n.tr("extensions.filter_installed", "Search installed…")) },
-                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                        singleLine = true,
+                        placeholder = VesselI18n.tr("extensions.filter_installed"),
+                        imeAction = ImeAction.Done,
                         modifier = Modifier.weight(1f),
                     )
                     Surface(
@@ -595,7 +608,7 @@ fun ExtensionsScreen(
                                 overflow = TextOverflow.Ellipsis,
                             )
                             Text(
-                                text = "${group.enabledCount}/${group.items.size} ${VesselI18n.tr("home.active_count", "active")} · ${group.homeCount} Home",
+                                text = "${group.enabledCount}/${group.items.size} ${VesselI18n.tr("home.active_count")} · ${group.homeCount} ${VesselI18n.tr("extensions.home_label")}",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = palette.textMuted,
                             )
@@ -610,7 +623,7 @@ fun ExtensionsScreen(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        OutlinedButton(
+                        VesselOutlinedButton(
                             onClick = {
                                 val next = selectedHomeSet.toMutableSet()
                                 val showAll = group.homeCount == 0
@@ -620,26 +633,29 @@ fun ExtensionsScreen(
                                 }
                                 scope.launch {
                                     saveHomeSelection(next)
-                                    repo.notify(if (showAll) "Pinned ${group.name} to Home" else "Cleared ${group.name} from Home")
+                                    repo.notify(
+                                        if (showAll) VesselI18n.trf("extensions.pinned_home", "name" to group.name)
+                                        else VesselI18n.trf("extensions.cleared_home", "name" to group.name),
+                                    )
                                 }
                             },
-                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                            modifier = Modifier.height(34.dp),
+                            height = 30.dp,
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
                         ) {
-                            Icon(Icons.Default.Home, contentDescription = null, modifier = Modifier.size(14.dp))
+                            Icon(Icons.Default.Home, contentDescription = null, modifier = Modifier.size(13.dp))
                             Spacer(Modifier.width(4.dp))
                             Text(
                                 text = if (group.homeCount == 0) {
-                                    VesselI18n.tr("extensions.pin_home", "Pin Home")
+                                    VesselI18n.tr("extensions.pin_home")
                                 } else {
-                                    VesselI18n.tr("extensions.clear_home", "Clear Home")
+                                    VesselI18n.tr("extensions.clear_home")
                                 },
                                 style = MaterialTheme.typography.labelSmall,
                             )
                         }
 
                         val enableTarget = group.enabledCount < group.items.size
-                        OutlinedButton(
+                        VesselOutlinedButton(
                             onClick = {
                                 scope.launch {
                                     for (item in group.items) {
@@ -647,17 +663,20 @@ fun ExtensionsScreen(
                                             repo.setPluginEnabled(item.manifest.id, enableTarget)
                                         }
                                     }
-                                    repo.notify("${if (enableTarget) "Enabled" else "Disabled"} ${group.name}")
+                                    repo.notify(
+                                        if (enableTarget) VesselI18n.trf("extensions.enabled_group", "name" to group.name)
+                                        else VesselI18n.trf("extensions.disabled_group", "name" to group.name),
+                                    )
                                 }
                             },
-                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                            modifier = Modifier.height(34.dp),
+                            height = 30.dp,
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
                         ) {
                             Text(
                                 text = if (enableTarget) {
-                                    VesselI18n.tr("extensions.enable_all", "Enable All")
+                                    VesselI18n.tr("extensions.enable_all")
                                 } else {
-                                    VesselI18n.tr("extensions.disable_all", "Disable All")
+                                    VesselI18n.tr("extensions.disable_all")
                                 },
                                 style = MaterialTheme.typography.labelSmall,
                             )
@@ -666,7 +685,7 @@ fun ExtensionsScreen(
                         Spacer(Modifier.weight(1f))
 
                         val confirmingGroup = confirmRemoveGroup == group.name
-                        TextButton(
+                        VesselTextButton(
                             onClick = {
                                 if (!confirmingGroup) {
                                     confirmRemoveGroup = group.name
@@ -680,25 +699,29 @@ fun ExtensionsScreen(
                                         if (prefs.home.selectedPlugins != null) {
                                             saveHomeSelection(selectedHomeSet - ids)
                                         }
-                                        repo.notify("Removed ${group.name}")
+                                        repo.notify(VesselI18n.trf("extensions.removed_group", "name" to group.name))
                                     }
                                 }
                             },
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                            modifier = Modifier.height(34.dp),
+                            height = 30.dp,
+                            contentColor = palette.danger,
                         ) {
-                            Icon(Icons.Default.Delete, contentDescription = null, tint = palette.danger, modifier = Modifier.size(15.dp))
-                            Spacer(Modifier.width(4.dp))
+                            Icon(Icons.Default.Delete, contentDescription = null, tint = palette.danger, modifier = Modifier.size(14.dp))
+                            Spacer(Modifier.width(3.dp))
                             Text(
-                                text = if (confirmingGroup) VesselI18n.tr("common.confirm", "Confirm") else VesselI18n.tr("common.remove", "Remove"),
+                                text = if (confirmingGroup) VesselI18n.tr("common.confirm") else VesselI18n.tr("common.remove"),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = palette.danger,
                             )
                         }
                     }
 
-                    // Expanded Sublist of Plugins inside this Group
-                    if (expanded) {
+                    // Expanded Sublist of Plugins inside this Group (smooth expand/collapse)
+                    AnimatedVisibility(
+                        visible = expanded,
+                        enter = expandVertically(tween(220)) + fadeIn(tween(180)),
+                        exit = shrinkVertically(tween(180)) + fadeOut(tween(140)),
+                    ) {
                         HorizontalDivider(color = palette.border.copy(alpha = 0.45f))
                         Column(
                             modifier = Modifier
@@ -762,7 +785,7 @@ fun ExtensionsScreen(
                                                     ) {
                                                         Icon(Icons.Default.Language, contentDescription = null, tint = palette.textMuted, modifier = Modifier.size(11.dp))
                                                         Text(
-                                                            text = "${plugin.allowedDomains.size} domain",
+                                                            text = VesselI18n.trf("extensions.domains_count", "count" to plugin.allowedDomains.size),
                                                             style = MaterialTheme.typography.labelSmall,
                                                             color = palette.textMuted,
                                                         )
@@ -774,8 +797,9 @@ fun ExtensionsScreen(
                                         // Per-plugin Home toggle + Enabled Switch + Uninstall
                                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                                             val onHome = plugin.enabled && plugin.manifest.id in selectedHomeSet
-                                            IconButton(
+                                            VesselCompactIconButton(
                                                 enabled = plugin.enabled,
+                                                size = 30.dp,
                                                 onClick = {
                                                     val next = selectedHomeSet.toMutableSet()
                                                     if (onHome) next.remove(plugin.manifest.id)
@@ -785,9 +809,9 @@ fun ExtensionsScreen(
                                             ) {
                                                 Icon(
                                                     imageVector = Icons.Default.Home,
-                                                    contentDescription = "Home",
+                                                    contentDescription = VesselI18n.tr("extensions.home_label"),
                                                     tint = if (onHome) palette.accent else palette.textMuted.copy(alpha = 0.45f),
-                                                    modifier = Modifier.size(18.dp),
+                                                    modifier = Modifier.size(16.dp),
                                                 )
                                             }
 
@@ -799,7 +823,8 @@ fun ExtensionsScreen(
                                             )
 
                                             val confirming = confirmUninstallId == plugin.manifest.id
-                                            IconButton(
+                                            VesselCompactIconButton(
+                                                size = 30.dp,
                                                 onClick = {
                                                     if (!confirming) {
                                                         confirmUninstallId = plugin.manifest.id
@@ -813,6 +838,7 @@ fun ExtensionsScreen(
                                                     imageVector = Icons.Default.Delete,
                                                     contentDescription = VesselI18n.tr("common.uninstall"),
                                                     tint = if (confirming) palette.warning else palette.danger,
+                                                    modifier = Modifier.size(16.dp),
                                                 )
                                             }
                                         }

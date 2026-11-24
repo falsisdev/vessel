@@ -23,7 +23,7 @@ Eklentiler internete yalnızca `manifest.json` içinde beyan ettikleri alan adla
 
 **Canlı TV** ekranında iki sekme yer alır:
 1. **M3U / Xtream:** M3U+ oynatma listesi veya Xtream Codes (`Sunucu + Kullanıcı Adı + Şifre`) profili ekleyin; kanal özel `User-Agent` tanımlayın; XMLTV EPG ile kanallardaki **Şimdi** ve **Sonraki** yayın bilgilerini görüntüleyin; SQLite **FTS5** ile anında arama yapın ve favorilerinizi kaydedin.
-2. **Canlı TV Eklentileri:** `live_tv` yeteneğine sahip kurulu eklentilerden gelen canlı HLS/MPEG-TS kanallarını tek yerden filtreleyip izleyin.
+2. **Canlı TV Eklentileri:** `live_tv` yeteneğine sahip kurulu eklentilerden gelen canlı HLS/MPEG-TS kanallarını tek yerden filtreleyip izleyin. Canlı eklenti katalogları ana sayfayı kalabalıklaştırmaz; tüm kanallar (sınırsız katalog listeleme), üst **Favoriler (`★`)** şeridi, görünüm seçenekleri (**Izgara**, **Kompakt Liste**, **Büyük Kareler**), sürükle-bırak kategori/eklenti sıralama ve detay sayfası olmadan doğrudan oynatıcıya geçiş özellikleri ile sunulur.
 
 ---
 

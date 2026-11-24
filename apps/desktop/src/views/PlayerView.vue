@@ -34,7 +34,8 @@ import { usePlayerSession } from '@/composables/usePlayerSession'
 import { useUiPreferences } from '@/composables/useUiPreferences'
 import { useVesselEvents } from '@/composables/useVesselEvents'
 import { parseSubtitles, type SubtitleCue } from '@/utils/subtitleParser'
-import type { Episode, SkipSegment, StreamCandidate, SubtitleTrack } from '@/types/vessel'
+import { isLiveMediaIdentifier } from '@/utils/liveTv'
+import type { Episode, PluginListEntry, SkipSegment, StreamCandidate, SubtitleTrack } from '@/types/vessel'
 
 const props = defineProps<{
   pluginId: string
@@ -109,6 +110,7 @@ const gestureLabel = ref<string>('')
 const audioTracks = ref<AudioTrackOption[]>([])
 const skipSegments = ref<SkipSegment[]>([])
 const dismissedSkipKeys = ref<Set<string>>(new Set())
+const loadedPlugins = ref<PluginListEntry[]>([])
 
 let skipFetchSeq = 0
 let lastFetchedSkipDurationMs = 0
@@ -425,19 +427,19 @@ const session = computed(() => activeSession.value)
 const detail = computed(() => session.value?.detail ?? null)
 const currentEpisode = computed(() => session.value?.episode ?? null)
 const isLive = computed(() => {
-  if (detail.value?.type === 'live') return true
-  const sid = currentEpisode.value?.streamId?.toLowerCase() ?? ''
-  const nid = props.nativeId.toLowerCase()
-  return (
-    props.pluginId === 'iptv' ||
-    sid.startsWith('tv:') ||
-    sid.startsWith('tv_') ||
-    sid.startsWith('iptv_') ||
-    sid.startsWith('vns::tv::') ||
-    nid.startsWith('tv:') ||
-    nid.startsWith('tv_') ||
-    nid.startsWith('iptv_')
+  const activePlugin = loadedPlugins.value.find((p) => p.manifest.id === props.pluginId) ?? null
+  return isLiveMediaIdentifier(
+    detail.value?.type,
+    props.pluginId,
+    currentEpisode.value?.streamId,
+    props.nativeId,
+    activePlugin,
   )
+})
+watch(isLive, (live) => {
+  if (live && (activeDrawer.value === 'audio' || activeDrawer.value === 'subtitles')) {
+    activeDrawer.value = null
+  }
 })
 const streams = computed(() => session.value?.streams ?? [])
 const activeStream = computed<StreamCandidate | null>(() => {
@@ -949,7 +951,7 @@ function goBack(): void {
   }
   if (window.history.length > 1) {
     router.back()
-  } else if (props.pluginId === 'iptv') {
+  } else if (isLive.value || props.pluginId === 'iptv') {
     void router.push({ name: 'iptv' })
   } else {
     void router.push({
@@ -964,7 +966,7 @@ function goToDetails(): void {
   if (document.fullscreenElement) {
     void document.exitFullscreen().catch(() => {})
   }
-  if (props.pluginId === 'iptv') {
+  if (isLive.value || props.pluginId === 'iptv') {
     void router.push({ name: 'iptv' })
     return
   }
@@ -1357,6 +1359,9 @@ watch(
 onMounted(async () => {
   window.addEventListener('keydown', handleKeydown)
   document.addEventListener('fullscreenchange', onFullscreenChange)
+  void vesselApi.listPlugins().then((list) => {
+    loadedPlugins.value = list
+  }).catch(() => {})
   await ensureSessionLoaded()
   progressTimer = window.setInterval(() => {
     if (isPlaying.value) {
@@ -1470,7 +1475,7 @@ onUnmounted(() => {
           >
             Switch Source ({{ streams.length }})
           </button>
-          <button type="button" class="v-btn v-btn-ghost" @click="goToDetails">
+          <button v-if="!isLive" type="button" class="v-btn v-btn-ghost" @click="goToDetails">
             {{ t('player.go_to_details') }}
           </button>
         </div>
@@ -1506,7 +1511,7 @@ onUnmounted(() => {
                   LIVE
                 </span>
                 <button
-                  v-if="props.pluginId !== 'iptv'"
+                  v-if="!isLive"
                   type="button"
                   class="cs-show-title cs-title-link"
                   :title="t('player.go_to_details')"
@@ -1539,7 +1544,7 @@ onUnmounted(() => {
 
           <div class="cs-top-actions">
             <button
-              v-if="props.pluginId !== 'iptv'"
+              v-if="!isLive"
               type="button"
               class="cs-pill-btn"
               :title="t('player.go_to_details')"
@@ -1572,6 +1577,7 @@ onUnmounted(() => {
               <span>Sources ({{ streams.length }})</span>
             </button>
             <button
+              v-if="!isLive"
               type="button"
               class="cs-pill-btn"
               :class="{ active: activeDrawer === 'audio' }"
@@ -1870,6 +1876,9 @@ onUnmounted(() => {
             <div class="cs-item-main">
               <span class="cs-item-title">{{ stream.label }}</span>
               <div class="cs-source-tags">
+                <span v-if="stream.pluginName || stream.pluginId" class="cs-tag accent">
+                  {{ stream.pluginName || stream.pluginId }}
+                </span>
                 <span class="cs-tag">{{ stream.kind.toUpperCase() }}</span>
                 <span v-if="stream.quality" class="cs-tag accent">{{ stream.quality }}</span>
                 <span v-if="stream.language" class="cs-tag">{{ stream.language }}</span>
@@ -1884,8 +1893,8 @@ onUnmounted(() => {
           </button>
         </div>
 
-        <!-- AUDIO TRACKS LIST -->
-        <div v-else-if="activeDrawer === 'audio'" class="cs-drawer-body">
+        <!-- AUDIO TRACKS LIST (VOD only) -->
+        <div v-else-if="activeDrawer === 'audio' && !isLive" class="cs-drawer-body">
           <button
             v-for="trk in audioTracks"
             :key="`${trk.source}-${trk.id}`"

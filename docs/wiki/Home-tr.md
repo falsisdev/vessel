@@ -32,9 +32,10 @@ Merkezi sunuculara yaslanan uygulamaların aksine Vessel tüm bileşenleri doğr
 
 ---
 
-## Hızlı Özellik Özeti (`v0.1.1-alpha.4`)
+## Hızlı Özellik Özeti (`v0.1.3`)
 
 - **Oynatma (`/watch`):** HLS (`hls.js`), MPEG-TS (`mpegts.js`), MP4/WebM, çoklu ses parçası seçimi, `.srt/.vtt/.ass/.ssa` altyazı & `-500ms / +500ms` senkronizasyon, touchpad kaydırma + **Doğal Kaydırma (Natural Scrolling)** desteği, **İntro / Özet / Kapanış / Önizleme Atla** (`Plugin > TheIntroDB > IntroDB > AniSkip`), doğrudan **Detaylara Git** butonu ve harici `mpv` aktarımı.
 - **İzlemeye Devam Et:** Biten filmler ve sezon/dizi finalleri listeden otomatik kalkar, diziler otomatik bir sonraki bölüme ilerler; uzun bölüm başlıkları `...` ile dengelenir; kalem simgesi ile manuel bölüm ve ilerleme düzenleme (toplam süre seçilen bölümün gerçek süresinden salt okunur gelir).
 - **4 Seviyeli Çevrimdışı İndirmeler:** **İçerik → Sezon → Bölüm → İndirilen Kaynaklar** ağacı (filmlerde doğrudan **İçerik → Kaynaklar**), çoklu iş parçacıklı HLS (`8` worker AES-128) ve HTTP Range indirmeleri, altyazı/ses dosyalarını birlikte indirme, anında duraklatma/silme iptali, sürükle-bırak kuyruk sıralama, indirilenlere özel İzlemeye Devam Et şeridi ve özel indirme konumu seçimi.
-- **Kişiselleştirme:** **12 dil** (yerelleştirilmiş dil adlarıyla), **5 yerleşik tema** + `.theme.vessel` JSON içe aktarma, **Floating Bottom Dock** dahil 6 menü düzeni, canlı altyazı önizleme kutusu ve özel CSS desteği.
+- **Kişiselleştirme:** **12 dil** (yerelleştirilmiş dil adlarıyla), **5 yerleşik tema** + `.theme.vessel` JSON içe aktarma, masaüstünde 6 menü düzeni (**Floating Bottom Dock** dahil), Android'de **Standart / Yüzen Alt Çubuk** seçeneği, özelleştirilebilir Hero ve afiş en-boy oranları, canlı altyazı önizleme kutusu ve özel CSS desteği.
+- **Android Uygulaması (`apps/android`) & Gelişmiş Özellikler:** `vessel-ffi` + Jetpack Compose + Media3 ExoPlayer (yatay oynatıcı, Skip Intro/Outro), **6 kaynaklı Fix Match başlık araması** (`TMDB`, `IMDb`, `Simkl`, `AniList`, `MyAnimeList`, `Kitsu`), detay ekranı `⋮` menüsünden **Başka Kaynaktan Akış Dahil Et**, **İzlemeye Devam Et** hızlı düzenleme penceresi ve **Canlı TV** favorileri / sürükle-bırak sıralama / sınırsız katalog desteği.

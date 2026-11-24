@@ -19,6 +19,7 @@ const {
   downloadingUpdate,
   downloadProgress,
   autoCheckEnabled,
+  lastCheckError,
   loadUpdatePreferences,
   checkForUpdates,
   toggleAutoCheck,
@@ -29,6 +30,7 @@ const engineInfo = shallowRef<EngineInfo | null>(null)
 const alwaysProxy = shallowRef(false)
 const metadataEnabled = shallowRef(true)
 const tmdbApiKey = shallowRef('')
+const simklClientId = shallowRef('')
 const downloadDirInput = shallowRef('')
 const themeJsonInput = shallowRef('')
 const backupJsonInput = shallowRef('')
@@ -125,6 +127,16 @@ async function saveTmdbKey(): Promise<void> {
     await vesselApi.setTmdbApiKey(tmdbApiKey.value)
     tmdbApiKey.value = ''
     pushToast('info', 'Saved TMDB API key to SecretStore')
+  } catch (err) {
+    pushToast('error', String(err))
+  }
+}
+
+async function saveSimklClientId(): Promise<void> {
+  try {
+    await vesselApi.setSimklClientId(simklClientId.value)
+    simklClientId.value = ''
+    pushToast('info', 'Saved Simkl Client ID to SecretStore')
   } catch (err) {
     pushToast('error', String(err))
   }
@@ -248,6 +260,23 @@ async function handleImportBackup(mode: 'smart_merge' | 'reset_and_import'): Pro
 
       <div class="v-setting-row">
         <div class="setting-copy">
+          <strong>{{ t('settings.hero_banner') }}</strong>
+          <span class="v-muted">{{ t('settings.hero_banner_desc') }}</span>
+        </div>
+        <select
+          v-model="uiPreferences.home.heroBanner"
+          :aria-label="t('settings.hero_banner')"
+          class="v-select v-setting-control"
+          @change="persistUi"
+        >
+          <option value="full">{{ t('settings.hero_full') }}</option>
+          <option value="compact">{{ t('settings.hero_compact') }}</option>
+          <option value="hidden">{{ t('settings.hero_hidden') }}</option>
+        </select>
+      </div>
+
+      <div class="v-setting-row">
+        <div class="setting-copy">
           <strong>{{ t('settings.nav_layout') }}</strong>
           <span class="v-muted">{{ t('settings.nav_layout_desc') }}</span>
         </div>
@@ -326,6 +355,27 @@ async function handleImportBackup(mode: 'smart_merge' | 'reset_and_import'): Pro
           <input v-model="uiPreferences.cards.showRating" type="checkbox" class="v-switch-input" />
           <span class="v-switch-track" aria-hidden="true" />
         </label>
+      </div>
+
+      <div class="v-setting-row">
+        <div class="setting-copy">
+          <strong>{{ t('settings.card_aspect_ratio') }}</strong>
+          <span class="v-muted">{{ t('settings.card_aspect_ratio_desc') }}</span>
+        </div>
+        <select
+          v-model="uiPreferences.cards.aspectRatio"
+          :aria-label="t('settings.card_aspect_ratio')"
+          class="v-select v-setting-control"
+          @change="persistUi"
+        >
+          <option value="poster_2x3">{{ t('settings.ratio_2x3') }}</option>
+          <option value="portrait_3x4">{{ t('settings.ratio_3x4') }}</option>
+          <option value="portrait_4x5">{{ t('settings.ratio_4x5') }}</option>
+          <option value="square">{{ t('settings.ratio_1x1') }}</option>
+          <option value="classic_4x3">{{ t('settings.ratio_4x3') }}</option>
+          <option value="wide_16x9">{{ t('settings.ratio_16x9') }}</option>
+          <option value="cinema_21x9">{{ t('settings.ratio_21x9') }}</option>
+        </select>
       </div>
 
       <div class="v-setting-row">
@@ -541,6 +591,19 @@ async function handleImportBackup(mode: 'smart_merge' | 'reset_and_import'): Pro
         <button type="button" class="v-btn" @click="saveTmdbKey">{{ t('settings.save_api_key') }}</button>
       </div>
 
+      <div class="inline-row">
+        <input
+          v-model="simklClientId"
+          type="password"
+          name="simklClientId"
+          autocomplete="off"
+          aria-label="Simkl Client ID"
+          class="v-input"
+          :placeholder="t('settings.simkl_client_id')"
+        />
+        <button type="button" class="v-btn" @click="saveSimklClientId">{{ t('settings.save_api_key') }}</button>
+      </div>
+
       <div class="download-dir-block">
         <div class="setting-copy">
           <strong>{{ t('settings.download_dir') }}</strong>
@@ -646,12 +709,13 @@ async function handleImportBackup(mode: 'smart_merge' | 'reset_and_import'): Pro
         </button>
         <span class="v-muted update-status-line">
           <template v-if="updateInfo">
-            Current: <code>v{{ updateInfo.currentVersion }}</code> · Latest:
-            <code>v{{ updateInfo.latestVersion }}</code>
+            {{ t('settings.current_latest_ver', { current: `v${updateInfo.currentVersion}`, latest: `v${updateInfo.latestVersion}` }) }}
           </template>
           <template v-else>Repository: <code>falsisdev/vessel</code></template>
         </span>
       </div>
+
+      <p v-if="lastCheckError" class="update-error-line">{{ lastCheckError }}</p>
 
       <div v-if="updateInfo" class="release-notes-box">
         <div class="release-notes-head">
@@ -679,7 +743,7 @@ async function handleImportBackup(mode: 'smart_merge' | 'reset_and_import'): Pro
         <div v-if="downloadingUpdate && downloadProgress" class="update-progress-wrap">
           <div class="inline-row">
             <span class="v-muted">
-              Downloading {{ downloadProgress.fileName }} ({{ downloadProgress.percent ?? 0 }}%)
+              {{ t('settings.downloading_update', { file: downloadProgress.fileName, percent: downloadProgress.percent ?? 0 }) }}
             </span>
           </div>
           <div class="update-progress-track">
@@ -690,6 +754,10 @@ async function handleImportBackup(mode: 'smart_merge' | 'reset_and_import'): Pro
           </div>
         </div>
 
+        <p v-if="updateInfo.updateAvailable && !updateInfo.downloadUrl" class="v-muted update-pending-note">
+          {{ t('settings.update_asset_pending') }}
+        </p>
+
         <div class="inline-row">
           <button
             v-if="updateInfo.updateAvailable && updateInfo.downloadUrl"
@@ -699,7 +767,7 @@ async function handleImportBackup(mode: 'smart_merge' | 'reset_and_import'): Pro
             @click="downloadAndInstallUpdate"
           >
             <Download :size="14" aria-hidden="true" />
-            Download &amp; Install {{ updateInfo.assetName }}
+            {{ t('settings.install_update', { asset: updateInfo.assetName }) }}
             <template v-if="updateInfo.assetSizeBytes">
               ({{ formatBytes(updateInfo.assetSizeBytes) }})
             </template>
@@ -786,6 +854,17 @@ async function handleImportBackup(mode: 'smart_merge' | 'reset_and_import'): Pro
 
 .update-status-line {
   font-size: 0.84rem;
+}
+
+.update-error-line {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--vessel-danger);
+}
+
+.update-pending-note {
+  margin: 0;
+  font-size: 0.82rem;
 }
 
 .release-notes-box {

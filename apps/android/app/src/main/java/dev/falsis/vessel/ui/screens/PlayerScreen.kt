@@ -11,8 +11,11 @@ import android.view.WindowManager
 import android.widget.FrameLayout
 import androidx.annotation.OptIn
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.BorderStroke
@@ -156,6 +159,7 @@ import dev.falsis.vessel.data.SubtitleTrack
 import dev.falsis.vessel.data.UiPreferences
 import dev.falsis.vessel.data.VesselRepository
 import dev.falsis.vessel.ui.i18n.VesselI18n
+import dev.falsis.vessel.ui.isLiveMediaIdentifier
 import dev.falsis.vessel.ui.theme.LocalVesselPalette
 import dev.falsis.vessel.ui.theme.parseHexColor
 import dev.falsis.vessel.ui.utils.SubtitleCue
@@ -213,6 +217,7 @@ fun PlayerScreen(
     val palette = LocalVesselPalette.current
     val scope = rememberCoroutineScope()
     val prefs by repo.uiPreferences.collectAsState()
+    val plugins by repo.plugins.collectAsState()
     val audioManager = remember(context) {
         context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
     }
@@ -225,22 +230,19 @@ fun PlayerScreen(
     }
     var currentStartPosMs by remember(episode) { mutableLongStateOf(initialPositionMs) }
 
-    val isLive = remember(activeDetail.type, pluginId, nativeId, currentEpisode.streamId) {
-        val sid = currentEpisode.streamId.lowercase(Locale.US)
-        val nid = nativeId.lowercase(Locale.US)
-        activeDetail.type.equals("live", ignoreCase = true) ||
-            pluginId == "iptv" ||
-            sid.startsWith("tv:") ||
-            sid.startsWith("tv_") ||
-            sid.startsWith("iptv_") ||
-            sid.startsWith("vns::tv::") ||
-            nid.startsWith("tv:") ||
-            nid.startsWith("tv_") ||
-            nid.startsWith("iptv_")
+    val activePlugin = remember(plugins, pluginId) { plugins.firstOrNull { it.manifest.id == pluginId } }
+    val isLive = remember(activeDetail.type, pluginId, nativeId, currentEpisode.streamId, activePlugin) {
+        isLiveMediaIdentifier(
+            mediaType = activeDetail.type,
+            pluginId = pluginId,
+            streamId = currentEpisode.streamId,
+            nativeId = nativeId,
+            plugin = activePlugin,
+        )
     }
 
     var isLocked by remember { mutableStateOf(false) }
-    var isLandscape by remember { mutableStateOf(false) }
+    var isLandscape by remember { mutableStateOf(true) }
     var controlsVisible by remember { mutableStateOf(true) }
     var interactionNonce by remember { mutableIntStateOf(0) }
     var resizeMode by remember { mutableIntStateOf(AspectRatioFrameLayout.RESIZE_MODE_FIT) }
@@ -255,6 +257,12 @@ fun PlayerScreen(
     var switchingEpisode by remember { mutableStateOf(false) }
     var forceHlsRetry by remember { mutableStateOf(false) }
     var forceProxyRetry by remember { mutableStateOf(false) }
+
+    LaunchedEffect(isLive) {
+        if (isLive && (activeDrawer == PlayerDrawer.AUDIO || activeDrawer == PlayerDrawer.SUBTITLES)) {
+            activeDrawer = null
+        }
+    }
     var lastLoadWasProxied by remember { mutableStateOf(false) }
 
     var audioTracks by remember { mutableStateOf<List<TrackOption>>(emptyList()) }
@@ -268,10 +276,10 @@ fun PlayerScreen(
     var loadingSubtitle by remember { mutableStateOf(false) }
     var subtitleError by remember { mutableStateOf<String?>(null) }
 
-    var skipSegments by remember { mutableStateOf<List<SkipSegment>>(emptyList()) }
-    var skipFetchSeq by remember { mutableIntStateOf(0) }
-    var lastSkipFetchDurationMs by remember { mutableLongStateOf(-1L) }
-    var dismissedSkipKeys by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var skipSegments by remember(currentEpisode) { mutableStateOf<List<SkipSegment>>(emptyList()) }
+    var skipFetchSeq by remember(currentEpisode) { mutableIntStateOf(0) }
+    var lastSkipFetchDurationMs by remember(currentEpisode) { mutableLongStateOf(-1L) }
+    var dismissedSkipKeys by remember(currentEpisode) { mutableStateOf<Set<String>>(emptySet()) }
     var dismissUpNext by remember(currentEpisode) { mutableStateOf(false) }
 
     var currentPosMs by remember { mutableLongStateOf(initialPositionMs) }
@@ -448,15 +456,30 @@ fun PlayerScreen(
         }
     }
 
-    // Listen for background MetadataEnriched events so Skip Intro/Recap/Credits load even if user entered Player directly
-    LaunchedEffect(pluginId, nativeId) {
+    // Listen for background MetadataEnriched events & fallback refresh so Skip Intro/Recap/Credits load even if entered Player early
+    LaunchedEffect(pluginId, nativeId, isLive) {
+        if (isLive) return@LaunchedEffect
         repo.metadataEnriched.collect { ev ->
             if (ev.pluginId == pluginId && ev.nativeId == nativeId) {
-                activeDetail = if (isLive) ev.detail.copy(type = "live") else ev.detail
-                if (!isLive) {
-                    refreshSkipSegments(totalDurMs)
-                }
+                activeDetail = ev.detail
+                refreshSkipSegments(totalDurMs)
             }
+        }
+    }
+
+    LaunchedEffect(pluginId, nativeId, currentEpisode.streamId, isLive) {
+        if (isLive) return@LaunchedEffect
+        val ids = activeDetail.externalIds
+        if (ids.tmdb == null && ids.imdb == null && ids.anilist == null && ids.mal == null) {
+            delay(1800L)
+            runCatching { repo.getDetails(pluginId, nativeId) }
+                .onSuccess { fresh ->
+                    val fIds = fresh.externalIds
+                    if (fIds.tmdb != null || fIds.imdb != null || fIds.anilist != null || fIds.mal != null) {
+                        activeDetail = fresh
+                        refreshSkipSegments(totalDurMs)
+                    }
+                }
         }
     }
 
@@ -761,6 +784,7 @@ fun PlayerScreen(
                     positionMs = posMs,
                     durationMs = durMs,
                     completed = completed,
+                    lastWatchedAt = java.time.Instant.now().toString(),
                 ),
             )
         }
@@ -795,6 +819,8 @@ fun PlayerScreen(
         insetsController?.systemBarsBehavior =
             WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         insetsController?.hide(WindowInsetsCompat.Type.systemBars())
+        // Default to landscape orientation when entering Player
+        activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
 
         onDispose {
             val pos = exoPlayer.currentPosition.coerceAtLeast(0L)
@@ -869,9 +895,9 @@ fun PlayerScreen(
     }
 
     val fitLabel = when (resizeMode) {
-        AspectRatioFrameLayout.RESIZE_MODE_ZOOM -> "Fill"
-        AspectRatioFrameLayout.RESIZE_MODE_FILL -> "Stretch"
-        else -> "Fit"
+        AspectRatioFrameLayout.RESIZE_MODE_ZOOM -> VesselI18n.tr("player.fit_fill")
+        AspectRatioFrameLayout.RESIZE_MODE_FILL -> VesselI18n.tr("player.fit_stretch")
+        else -> VesselI18n.tr("player.fit_contain")
     }
 
     fun togglePlayPause() {
@@ -884,7 +910,7 @@ fun PlayerScreen(
         activity?.requestedOrientation = if (isLandscape) {
             ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
         } else {
-            ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
         }
         bumpControls()
     }
@@ -897,9 +923,9 @@ fun PlayerScreen(
         }
         resizeMode = nextMode
         val nextLabel = when (nextMode) {
-            AspectRatioFrameLayout.RESIZE_MODE_ZOOM -> "Fill"
-            AspectRatioFrameLayout.RESIZE_MODE_FILL -> "Stretch"
-            else -> "Fit"
+            AspectRatioFrameLayout.RESIZE_MODE_ZOOM -> VesselI18n.tr("player.fit_fill")
+            AspectRatioFrameLayout.RESIZE_MODE_FILL -> VesselI18n.tr("player.fit_stretch")
+            else -> VesselI18n.tr("player.fit_contain")
         }
         showHud(nextLabel)
         bumpControls()
@@ -994,7 +1020,7 @@ fun PlayerScreen(
                             )
                             exoPlayer.seekTo(target)
                             currentPosMs = target
-                            showHud(if (delta < 0) "« -10sn" else "+10sn »")
+                            showHud(if (delta < 0) VesselI18n.tr("player.seek_back_10") else VesselI18n.tr("player.seek_fwd_10"))
                             bumpControls()
                         },
                     )
@@ -1222,7 +1248,7 @@ fun PlayerScreen(
                                     Text("${VesselI18n.tr("details.sources", "Kaynaklar")} (${activeStreamResult.streams.size})")
                                 }
                             }
-                            if (pluginId != "iptv") {
+                            if (!isLive) {
                                 TextButton(onClick = onGoToDetails) {
                                     Text(VesselI18n.tr("player.go_to_details"))
                                 }
@@ -1297,15 +1323,15 @@ fun PlayerScreen(
                     ) {
                         HudCircleIconButton(
                             onClick = onBack,
-                            size = 38.dp,
+                            size = 34.dp,
                         ) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White, modifier = Modifier.size(19.dp))
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = VesselI18n.tr("common.back"), tint = Color.White, modifier = Modifier.size(17.dp))
                         }
 
                         Column(
                             modifier = Modifier
                                 .weight(1f)
-                                .let { m -> if (pluginId != "iptv") m.clickable { onGoToDetails() } else m },
+                                .let { m -> if (!isLive) m.clickable { onGoToDetails() } else m },
                             verticalArrangement = Arrangement.spacedBy(2.dp),
                         ) {
                             Row(
@@ -1375,13 +1401,19 @@ fun PlayerScreen(
                                 }
                                 activeCandidate?.let { cand ->
                                     val q = cand.quality ?: cand.kind.uppercase(Locale.US)
+                                    val srcLabel = cand.pluginName ?: cand.pluginId
+                                    val chipText = listOfNotNull(
+                                        srcLabel?.takeIf { it.isNotBlank() && it != pluginId },
+                                        cand.label,
+                                        q.takeIf { it.isNotBlank() },
+                                    ).joinToString(" · ")
                                     Surface(
                                         shape = RoundedCornerShape(999.dp),
                                         color = palette.accent.copy(alpha = 0.20f),
                                         border = BorderStroke(1.dp, palette.accent.copy(alpha = 0.42f)),
                                     ) {
                                         Text(
-                                            text = if (q.isNotBlank()) "${cand.label} · $q" else cand.label,
+                                            text = chipText,
                                             color = palette.accent.copy(alpha = 0.95f),
                                             style = MaterialTheme.typography.labelSmall,
                                             fontWeight = FontWeight.SemiBold,
@@ -1449,19 +1481,19 @@ fun PlayerScreen(
                     Row(
                         modifier = Modifier.align(Alignment.Center),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(if (wideLayout) 24.dp else 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(if (wideLayout) 20.dp else 14.dp),
                     ) {
                         if (!isLive || episodes.size > 1) {
                             HudCircleIconButton(
                                 enabled = prevEpisode != null,
                                 onClick = { prevEpisode?.let(::playEpisode) },
-                                size = 48.dp,
+                                size = 40.dp,
                             ) {
                                 Icon(
                                     Icons.Default.SkipPrevious,
                                     contentDescription = "Previous",
                                     tint = if (prevEpisode != null) Color.White else Color.White.copy(alpha = 0.35f),
-                                    modifier = Modifier.size(22.dp),
+                                    modifier = Modifier.size(20.dp),
                                 )
                             }
                         }
@@ -1473,17 +1505,18 @@ fun PlayerScreen(
                                     currentPosMs = target
                                     bumpControls()
                                 },
-                                size = 48.dp,
+                                size = 40.dp,
                             ) {
-                                Icon(Icons.Default.Replay10, contentDescription = "-10s", tint = Color.White, modifier = Modifier.size(24.dp))
+                                Icon(Icons.Default.Replay10, contentDescription = "-10s", tint = Color.White, modifier = Modifier.size(20.dp))
                             }
                         }
                         Surface(
                             shape = CircleShape,
                             color = palette.accent,
-                            shadowElevation = 10.dp,
+                            shadowElevation = 8.dp,
                             modifier = Modifier
-                                .size(68.dp)
+                                .size(54.dp)
+                                .clip(CircleShape)
                                 .clickable { togglePlayPause() },
                         ) {
                             Box(contentAlignment = Alignment.Center) {
@@ -1491,7 +1524,7 @@ fun PlayerScreen(
                                     imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                                     contentDescription = if (isPlaying) "Pause" else "Play",
                                     tint = Color(0xFF0B0B12),
-                                    modifier = Modifier.size(32.dp),
+                                    modifier = Modifier.size(26.dp),
                                 )
                             }
                         }
@@ -1504,22 +1537,22 @@ fun PlayerScreen(
                                     currentPosMs = target
                                     bumpControls()
                                 },
-                                size = 48.dp,
+                                size = 40.dp,
                             ) {
-                                Icon(Icons.Default.Forward10, contentDescription = "+10s", tint = Color.White, modifier = Modifier.size(24.dp))
+                                Icon(Icons.Default.Forward10, contentDescription = "+10s", tint = Color.White, modifier = Modifier.size(20.dp))
                             }
                         }
                         if (!isLive || episodes.size > 1) {
                             HudCircleIconButton(
                                 enabled = nextEpisode != null,
                                 onClick = { nextEpisode?.let(::playEpisode) },
-                                size = 48.dp,
+                                size = 40.dp,
                             ) {
                                 Icon(
                                     Icons.Default.SkipNext,
                                     contentDescription = "Next",
                                     tint = if (nextEpisode != null) Color.White else Color.White.copy(alpha = 0.35f),
-                                    modifier = Modifier.size(22.dp),
+                                    modifier = Modifier.size(20.dp),
                                 )
                             }
                         }
@@ -1706,17 +1739,17 @@ fun PlayerScreen(
                             if (!isLive && nextEpisode != null) {
                                 PlayerHudPill(
                                     icon = { Icon(Icons.Default.SkipNext, contentDescription = null, tint = Color.White, modifier = Modifier.size(13.dp)) },
-                                    label = "Next E${nextEpisode.episode}",
+                                    label = VesselI18n.trf("player.next_ep_short", "ep" to nextEpisode.episode),
                                     active = true,
                                     onClick = { playEpisode(nextEpisode) },
                                 )
                             }
-                            HudCircleIconButton(onClick = ::toggleOrientation, size = 36.dp) {
+                            HudCircleIconButton(onClick = ::toggleOrientation, size = 32.dp) {
                                 Icon(
                                     if (isLandscape) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
-                                    contentDescription = "Fullscreen / Rotate",
+                                    contentDescription = VesselI18n.tr("common.landscape"),
                                     tint = Color.White,
-                                    modifier = Modifier.size(18.dp),
+                                    modifier = Modifier.size(16.dp),
                                 )
                             }
                         }
@@ -1725,15 +1758,15 @@ fun PlayerScreen(
             }
         }
 
-        // Floating Skip Intro / Recap / Credits / Preview Pill (Desktop .cs-skip-floating parity)
+        // Floating Verified Skip Segment Button (Desktop .cs-skip-floating parity)
         AnimatedVisibility(
             visible = !isLocked && activeSkip != null && activeDrawer == null,
-            enter = fadeIn(),
-            exit = fadeOut(),
+            enter = fadeIn(tween(220)) + scaleIn(initialScale = 0.94f, animationSpec = tween(220)),
+            exit = fadeOut(tween(180)) + scaleOut(targetScale = 0.96f, animationSpec = tween(180)),
             modifier = Modifier
                 .align(Alignment.BottomEnd)
                 .systemBarsPadding()
-                .padding(end = 20.dp, bottom = if (controlsVisible) 128.dp else 28.dp),
+                .padding(end = 16.dp, bottom = if (controlsVisible) 104.dp else 20.dp),
         ) {
             activeSkip?.let { seg ->
                 val durMs = totalDurMs.takeIf { it > 10_000L } ?: 0L
@@ -1753,12 +1786,12 @@ fun PlayerScreen(
                     shape = RoundedCornerShape(999.dp),
                     color = Color(0xE60E0F18),
                     border = BorderStroke(1.dp, Color.White.copy(alpha = 0.28f)),
-                    shadowElevation = 12.dp,
+                    shadowElevation = 10.dp,
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(7.dp),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
                             modifier = Modifier
                                 .clickable {
                                     dismissedSkipKeys = dismissedSkipKeys + segKey
@@ -1777,29 +1810,29 @@ fun PlayerScreen(
                                         }
                                     }
                                 }
-                                .padding(start = 16.dp, end = 12.dp, top = 10.dp, bottom = 10.dp),
+                                .padding(start = 13.dp, end = 10.dp, top = 7.dp, bottom = 7.dp),
                         ) {
-                            Icon(Icons.Default.FastForward, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                            Icon(Icons.Default.FastForward, contentDescription = null, tint = Color.White, modifier = Modifier.size(15.dp))
                             Text(
                                 text = skipLabel,
                                 color = Color.White,
-                                style = MaterialTheme.typography.labelLarge,
+                                style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.Bold,
                             )
                         }
                         Box(
                             modifier = Modifier
                                 .width(1.dp)
-                                .height(22.dp)
+                                .height(18.dp)
                                 .background(Color.White.copy(alpha = 0.16f)),
                         )
                         Box(
                             modifier = Modifier
                                 .clickable { dismissedSkipKeys = dismissedSkipKeys + segKey }
-                                .padding(start = 10.dp, end = 14.dp, top = 10.dp, bottom = 10.dp),
+                                .padding(start = 8.dp, end = 11.dp, top = 7.dp, bottom = 7.dp),
                             contentAlignment = Alignment.Center,
                         ) {
-                            Icon(Icons.Default.Close, contentDescription = VesselI18n.tr("common.close"), tint = Color.White.copy(alpha = 0.78f), modifier = Modifier.size(15.dp))
+                            Icon(Icons.Default.Close, contentDescription = VesselI18n.tr("common.close"), tint = Color.White.copy(alpha = 0.78f), modifier = Modifier.size(13.dp))
                         }
                     }
                 }
@@ -1859,11 +1892,11 @@ fun PlayerScreen(
             }
         }
 
-        // Slide-Over Right Drawer (Desktop .cs-drawer glassmorphic parity)
+        // Compact Slide-Over Right Drawer (Desktop .cs-drawer glassmorphic parity)
         AnimatedVisibility(
             visible = activeDrawer != null && !isLocked,
-            enter = slideInHorizontally(initialOffsetX = { it }) + fadeIn(),
-            exit = slideOutHorizontally(targetOffsetX = { it }) + fadeOut(),
+            enter = slideInHorizontally(tween(240), initialOffsetX = { it }) + fadeIn(tween(200)),
+            exit = slideOutHorizontally(tween(200), targetOffsetX = { it }) + fadeOut(tween(180)),
             modifier = Modifier.fillMaxSize(),
         ) {
             BoxWithConstraints(
@@ -1874,16 +1907,16 @@ fun PlayerScreen(
                         indication = null,
                     ) { activeDrawer = null },
             ) {
-                val drawerWidth = minOf(370.dp, maxWidth - 24.dp)
+                val drawerWidth = if (maxWidth > 600.dp) minOf(300.dp, maxWidth * 0.44f) else minOf(296.dp, maxWidth * 0.84f)
                 Surface(
-                    shape = RoundedCornerShape(18.dp),
+                    shape = RoundedCornerShape(14.dp),
                     color = DrawerSurfaceColor,
                     border = BorderStroke(1.dp, Color.White.copy(alpha = 0.12f)),
-                    shadowElevation = 24.dp,
+                    shadowElevation = 20.dp,
                     modifier = Modifier
                         .align(Alignment.CenterEnd)
                         .systemBarsPadding()
-                        .padding(12.dp)
+                        .padding(8.dp)
                         .width(drawerWidth)
                         .fillMaxHeight()
                         .clickable(
@@ -1892,36 +1925,36 @@ fun PlayerScreen(
                         ) {},
                 ) {
                     Column(modifier = Modifier.fillMaxSize()) {
-                        // Drawer Header
+                        // Compact Drawer Header
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 14.dp),
+                                .padding(horizontal = 13.dp, vertical = 10.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween,
                         ) {
                             val drawerTitle = when (activeDrawer) {
                                 PlayerDrawer.EPISODES ->
-                                    if (isLive) "${VesselI18n.tr("iptv.channels", "Kanallar")} (${episodes.size})"
-                                    else "${VesselI18n.tr("details.episodes", "Bölümler")} (${episodes.size})"
+                                    if (isLive) "${VesselI18n.tr("iptv.channels")} (${episodes.size})"
+                                    else "${VesselI18n.tr("details.episodes")} (${episodes.size})"
                                 PlayerDrawer.SOURCES ->
-                                    "${VesselI18n.tr("details.sources", "Kaynaklar")} (${activeStreamResult.streams.size})"
+                                    "${VesselI18n.tr("details.sources")} (${activeStreamResult.streams.size})"
                                 PlayerDrawer.AUDIO ->
-                                    "${VesselI18n.tr("player.audio_tracks", "Ses Parçaları")}${if (audioTracks.isNotEmpty()) " (${audioTracks.size})" else ""}"
+                                    "${VesselI18n.tr("player.audio_tracks")}${if (audioTracks.isNotEmpty()) " (${audioTracks.size})" else ""}"
                                 PlayerDrawer.SUBTITLES ->
-                                    "${VesselI18n.tr("settings.tab_subtitles", "Altyazılar")} & Sync"
+                                    VesselI18n.tr("player.subtitles_sync")
                                 PlayerDrawer.SETTINGS ->
-                                    VesselI18n.tr("nav.settings", "Oynatıcı Ayarları")
+                                    VesselI18n.tr("nav.settings")
                                 null -> ""
                             }
                             Text(
                                 text = drawerTitle,
                                 color = Color.White,
-                                style = MaterialTheme.typography.titleMedium,
+                                style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.Bold,
                             )
-                            HudCircleIconButton(onClick = { activeDrawer = null }, size = 34.dp) {
-                                Icon(Icons.Default.Close, contentDescription = VesselI18n.tr("common.close"), tint = Color.White, modifier = Modifier.size(17.dp))
+                            HudCircleIconButton(onClick = { activeDrawer = null }, size = 28.dp) {
+                                Icon(Icons.Default.Close, contentDescription = VesselI18n.tr("common.close"), tint = Color.White, modifier = Modifier.size(14.dp))
                             }
                         }
                         HorizontalDivider(color = Color.White.copy(alpha = 0.10f))
@@ -2019,6 +2052,9 @@ fun PlayerScreen(
                                                 Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                                                     Text(cand.label, color = Color.White, fontWeight = FontWeight.SemiBold)
                                                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                                        (cand.pluginName ?: cand.pluginId)?.takeIf { it.isNotBlank() }?.let { src ->
+                                                            DrawerTagBadge(src, accent = true, accentColor = palette.accent)
+                                                        }
                                                         DrawerTagBadge(cand.kind.uppercase(Locale.US), accent = false, accentColor = palette.accent)
                                                         cand.quality?.takeIf { it.isNotBlank() }?.let {
                                                             DrawerTagBadge(it, accent = true, accentColor = palette.accent)
@@ -2038,7 +2074,7 @@ fun PlayerScreen(
                             }
 
                             PlayerDrawer.AUDIO -> {
-                                Column(
+                                if (!isLive) Column(
                                     modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp),
                                     verticalArrangement = Arrangement.spacedBy(8.dp),
                                 ) {
@@ -2091,11 +2127,11 @@ fun PlayerScreen(
 
                             PlayerDrawer.SUBTITLES -> {
                                 Column(
-                                    modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp),
-                                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                                    modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(9.dp),
+                                    verticalArrangement = Arrangement.spacedBy(7.dp),
                                 ) {
                                     // Subtitle Delay (-500ms / +500ms) — Desktop parity
-                                    DrawerSettingBlock(title = VesselI18n.tr("player.subtitles_delay", "Altyazı Gecikmesi")) {
+                                    DrawerSettingBlock(title = VesselI18n.tr("player.subtitles_delay")) {
                                         Row(
                                             modifier = Modifier.fillMaxWidth(),
                                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -2111,7 +2147,7 @@ fun PlayerScreen(
                                                 text = "$subtitleDelayMs ms",
                                                 color = Color.White,
                                                 fontWeight = FontWeight.Bold,
-                                                style = MaterialTheme.typography.labelLarge,
+                                                style = MaterialTheme.typography.labelMedium,
                                             )
                                             PlayerHudPill(
                                                 icon = null,
@@ -2123,7 +2159,7 @@ fun PlayerScreen(
                                     }
 
                                     // Font Size Slider
-                                    DrawerSettingBlock(title = "${VesselI18n.tr("subtitles.font_size", "Yazı Boyutu")} (${prefs.subtitles.fontSizePx}px)") {
+                                    DrawerSettingBlock(title = "${VesselI18n.tr("subtitles.font_size")} (${prefs.subtitles.fontSizePx}px)") {
                                         Slider(
                                             value = prefs.subtitles.fontSizePx.toFloat().coerceIn(16f, 52f),
                                             onValueChange = { v ->
@@ -2131,6 +2167,7 @@ fun PlayerScreen(
                                                 saveSubPrefs { it.copy(subtitles = it.subtitles.copy(fontSizePx = rounded.coerceIn(16, 52))) }
                                             },
                                             valueRange = 16f..52f,
+                                            modifier = Modifier.height(24.dp),
                                             colors = SliderDefaults.colors(
                                                 thumbColor = palette.accent,
                                                 activeTrackColor = palette.accent,
@@ -2140,7 +2177,7 @@ fun PlayerScreen(
                                     }
 
                                     // Bottom Offset Slider
-                                    DrawerSettingBlock(title = "${VesselI18n.tr("subtitles.bottom_offset", "Alt Konum Yüksekliği")} (${prefs.subtitles.bottomOffsetPx}px)") {
+                                    DrawerSettingBlock(title = "${VesselI18n.tr("subtitles.bottom_offset")} (${prefs.subtitles.bottomOffsetPx}px)") {
                                         Slider(
                                             value = prefs.subtitles.bottomOffsetPx.toFloat().coerceIn(16f, 220f),
                                             onValueChange = { v ->
@@ -2148,6 +2185,7 @@ fun PlayerScreen(
                                                 saveSubPrefs { it.copy(subtitles = it.subtitles.copy(bottomOffsetPx = rounded.coerceIn(16, 220))) }
                                             },
                                             valueRange = 16f..220f,
+                                            modifier = Modifier.height(24.dp),
                                             colors = SliderDefaults.colors(
                                                 thumbColor = palette.accent,
                                                 activeTrackColor = palette.accent,
@@ -2157,7 +2195,7 @@ fun PlayerScreen(
                                     }
 
                                     // Background Opacity Slider
-                                    DrawerSettingBlock(title = "${VesselI18n.tr("subtitles.bg_opacity", "Arka Plan Opaklığı")} (${prefs.subtitles.backgroundOpacity}%)") {
+                                    DrawerSettingBlock(title = "${VesselI18n.tr("subtitles.bg_opacity")} (${prefs.subtitles.backgroundOpacity}%)") {
                                         Slider(
                                             value = prefs.subtitles.backgroundOpacity.toFloat().coerceIn(0f, 100f),
                                             onValueChange = { v ->
@@ -2165,6 +2203,7 @@ fun PlayerScreen(
                                                 saveSubPrefs { it.copy(subtitles = it.subtitles.copy(backgroundOpacity = rounded.coerceIn(0, 100))) }
                                             },
                                             valueRange = 0f..100f,
+                                            modifier = Modifier.height(24.dp),
                                             colors = SliderDefaults.colors(
                                                 thumbColor = palette.accent,
                                                 activeTrackColor = palette.accent,
@@ -2174,16 +2213,16 @@ fun PlayerScreen(
                                     }
 
                                     // Font Family Chips
-                                    DrawerSettingBlock(title = VesselI18n.tr("subtitles.font_family", "Yazı Tipi")) {
+                                    DrawerSettingBlock(title = VesselI18n.tr("subtitles.font_family")) {
                                         FlowRow(
-                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                                            horizontalArrangement = Arrangement.spacedBy(5.dp),
+                                            verticalArrangement = Arrangement.spacedBy(5.dp),
                                         ) {
                                             listOf(
-                                                "system-ui" to "Sans",
-                                                "rounded" to "Rounded",
-                                                "serif" to "Serif",
-                                                "monospace" to "Mono",
+                                                "system-ui" to VesselI18n.tr("subtitles.font_sans"),
+                                                "rounded" to VesselI18n.tr("subtitles.font_rounded"),
+                                                "serif" to VesselI18n.tr("subtitles.font_serif"),
+                                                "monospace" to VesselI18n.tr("subtitles.font_mono"),
                                             ).forEach { (id, label) ->
                                                 DrawerChipButton(
                                                     label = label,
@@ -2196,16 +2235,16 @@ fun PlayerScreen(
                                     }
 
                                     // Outline Style Chips
-                                    DrawerSettingBlock(title = VesselI18n.tr("subtitles.outline_style", "Kenar / Gölge Stili")) {
+                                    DrawerSettingBlock(title = VesselI18n.tr("subtitles.outline_style")) {
                                         FlowRow(
-                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                                            horizontalArrangement = Arrangement.spacedBy(5.dp),
+                                            verticalArrangement = Arrangement.spacedBy(5.dp),
                                         ) {
                                             listOf(
-                                                "outline" to VesselI18n.tr("subtitles.style_outline", "Konturlu"),
-                                                "shadow" to VesselI18n.tr("subtitles.style_shadow", "Gölgeli"),
-                                                "box" to VesselI18n.tr("subtitles.style_box", "Kutu"),
-                                                "none" to VesselI18n.tr("subtitles.style_none", "Sade"),
+                                                "outline" to VesselI18n.tr("subtitles.style_outline"),
+                                                "shadow" to VesselI18n.tr("subtitles.style_shadow"),
+                                                "box" to VesselI18n.tr("subtitles.style_box"),
+                                                "none" to VesselI18n.tr("subtitles.style_none"),
                                             ).forEach { (id, label) ->
                                                 DrawerChipButton(
                                                     label = label,
@@ -2218,9 +2257,9 @@ fun PlayerScreen(
                                     }
 
                                     // Text Color Dots + Bold Toggle
-                                    DrawerSettingBlock(title = VesselI18n.tr("subtitles.text_color", "Yazı Rengi")) {
+                                    DrawerSettingBlock(title = VesselI18n.tr("subtitles.text_color")) {
                                         Row(
-                                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
                                             verticalAlignment = Alignment.CenterVertically,
                                         ) {
                                             listOf("#ffffff", "#fde047", "#67e8f9", "#f9a8d4", "#a7f3d0").forEach { hex ->
@@ -2229,11 +2268,11 @@ fun PlayerScreen(
                                                     shape = CircleShape,
                                                     color = parseHexColor(hex, Color.White),
                                                     border = BorderStroke(
-                                                        width = if (sel) 2.5.dp else 1.5.dp,
+                                                        width = if (sel) 2.dp else 1.dp,
                                                         color = if (sel) palette.accent else Color.White.copy(alpha = 0.35f),
                                                     ),
                                                     modifier = Modifier
-                                                        .size(26.dp)
+                                                        .size(20.dp)
                                                         .clickable {
                                                             saveSubPrefs { it.copy(subtitles = it.subtitles.copy(textColor = hex)) }
                                                         },
@@ -2265,9 +2304,9 @@ fun PlayerScreen(
                                         },
                                     ) {
                                         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                                            Text(VesselI18n.tr("player.subtitles_off"), color = Color.White, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                                            Text(VesselI18n.tr("player.subtitles_off"), color = Color.White, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                                             if (allOff) {
-                                                Icon(Icons.Default.Check, contentDescription = null, tint = palette.accent, modifier = Modifier.size(17.dp))
+                                                Icon(Icons.Default.Check, contentDescription = null, tint = palette.accent, modifier = Modifier.size(15.dp))
                                             }
                                         }
                                     }
@@ -2343,14 +2382,14 @@ fun PlayerScreen(
                                         )
                                     } else if (activeExternalSubIndex >= 0 && externalCues.isNotEmpty()) {
                                         Text(
-                                            text = "Loaded ${externalCues.size} subtitle cues.",
+                                            text = VesselI18n.trf("player.cues_loaded", "count" to externalCues.size),
                                             style = MaterialTheme.typography.labelSmall,
                                             color = Color.White.copy(alpha = 0.65f),
                                             modifier = Modifier.padding(4.dp),
                                         )
                                     } else if (availableExternalSubs.isEmpty() && embeddedSubTracks.isEmpty()) {
                                         Text(
-                                            text = VesselI18n.tr("player.no_subtitles", "Bu kaynak için altyazı bulunamadı."),
+                                            text = VesselI18n.tr("player.no_subtitles"),
                                             style = MaterialTheme.typography.bodySmall,
                                             color = Color.White.copy(alpha = 0.65f),
                                             modifier = Modifier.padding(4.dp),
@@ -2361,14 +2400,14 @@ fun PlayerScreen(
 
                             PlayerDrawer.SETTINGS -> {
                                 Column(
-                                    modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp),
-                                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                                    modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(9.dp),
+                                    verticalArrangement = Arrangement.spacedBy(7.dp),
                                 ) {
                                     if (!isLive) {
-                                        DrawerSettingBlock(title = VesselI18n.tr("player.playback_speed", "Oynatma Hızı")) {
+                                        DrawerSettingBlock(title = VesselI18n.tr("player.playback_speed")) {
                                             FlowRow(
-                                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                                verticalArrangement = Arrangement.spacedBy(6.dp),
+                                                horizontalArrangement = Arrangement.spacedBy(5.dp),
+                                                verticalArrangement = Arrangement.spacedBy(5.dp),
                                             ) {
                                                 listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f).forEach { spd ->
                                                     DrawerChipButton(
@@ -2386,15 +2425,15 @@ fun PlayerScreen(
                                         }
                                     }
 
-                                    DrawerSettingBlock(title = VesselI18n.tr("player.aspect_ratio", "Video Fit / Aspect")) {
+                                    DrawerSettingBlock(title = VesselI18n.tr("player.aspect_ratio")) {
                                         FlowRow(
-                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                                            horizontalArrangement = Arrangement.spacedBy(5.dp),
+                                            verticalArrangement = Arrangement.spacedBy(5.dp),
                                         ) {
                                             listOf(
-                                                AspectRatioFrameLayout.RESIZE_MODE_FIT to "Fit",
-                                                AspectRatioFrameLayout.RESIZE_MODE_ZOOM to "Fill",
-                                                AspectRatioFrameLayout.RESIZE_MODE_FILL to "Stretch",
+                                                AspectRatioFrameLayout.RESIZE_MODE_FIT to VesselI18n.tr("player.fit_contain"),
+                                                AspectRatioFrameLayout.RESIZE_MODE_ZOOM to VesselI18n.tr("player.fit_fill"),
+                                                AspectRatioFrameLayout.RESIZE_MODE_FILL to VesselI18n.tr("player.fit_stretch"),
                                             ).forEach { (mode, label) ->
                                                 DrawerChipButton(
                                                     label = label,
@@ -2441,7 +2480,7 @@ private fun TopActionPillsRow(
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (pluginId != "iptv") {
+        if (!isLive) {
             PlayerHudPill(
                 icon = { Icon(Icons.Default.Info, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp)) },
                 label = VesselI18n.tr("player.go_to_details"),
@@ -2469,12 +2508,14 @@ private fun TopActionPillsRow(
             active = activeDrawer == PlayerDrawer.SOURCES,
             onClick = { onToggleDrawer(PlayerDrawer.SOURCES) },
         )
-        PlayerHudPill(
-            icon = { Icon(Icons.Default.Audiotrack, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp)) },
-            label = if (audioCount > 1) "${VesselI18n.tr("player.audio", "Ses")} ($audioCount)" else VesselI18n.tr("player.audio", "Ses"),
-            active = activeDrawer == PlayerDrawer.AUDIO,
-            onClick = { onToggleDrawer(PlayerDrawer.AUDIO) },
-        )
+        if (!isLive) {
+            PlayerHudPill(
+                icon = { Icon(Icons.Default.Audiotrack, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp)) },
+                label = if (audioCount > 1) "${VesselI18n.tr("player.audio", "Ses")} ($audioCount)" else VesselI18n.tr("player.audio", "Ses"),
+                active = activeDrawer == PlayerDrawer.AUDIO,
+                onClick = { onToggleDrawer(PlayerDrawer.AUDIO) },
+            )
+        }
         if (!isLive) {
             PlayerHudPill(
                 icon = { Icon(Icons.Default.ClosedCaption, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp)) },
@@ -2490,8 +2531,8 @@ private fun TopActionPillsRow(
             onClick = { onToggleDrawer(PlayerDrawer.SETTINGS) },
         )
         PlayerHudPill(
-            icon = { Icon(Icons.Default.ScreenRotation, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp)) },
-            label = if (isLandscape) "Dikey" else "Yatay",
+            icon = { Icon(Icons.Default.ScreenRotation, contentDescription = null, tint = Color.White, modifier = Modifier.size(13.dp)) },
+            label = if (isLandscape) VesselI18n.tr("common.portrait") else VesselI18n.tr("common.landscape"),
             active = isLandscape,
             onClick = onToggleOrientation,
         )
@@ -2642,7 +2683,7 @@ private fun DesktopScrubberBar(
 private fun HudCircleIconButton(
     onClick: () -> Unit,
     enabled: Boolean = true,
-    size: androidx.compose.ui.unit.Dp = 38.dp,
+    size: androidx.compose.ui.unit.Dp = 34.dp,
     content: @Composable () -> Unit,
 ) {
     Surface(
@@ -2681,8 +2722,8 @@ private fun PlayerHudPill(
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(5.dp),
-            modifier = Modifier.padding(horizontal = 11.dp, vertical = 7.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
         ) {
             icon?.invoke()
             Text(
@@ -2704,7 +2745,7 @@ private fun DrawerItemCard(
     content: @Composable () -> Unit,
 ) {
     Surface(
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(10.dp),
         color = if (active) accentColor.copy(alpha = 0.18f) else Color.White.copy(alpha = 0.04f),
         border = BorderStroke(
             width = 1.dp,
@@ -2712,10 +2753,10 @@ private fun DrawerItemCard(
         ),
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(10.dp))
             .clickable(onClick = onClick),
     ) {
-        Box(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+        Box(modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp)) {
             content()
         }
     }
@@ -2728,15 +2769,16 @@ private fun DrawerTagBadge(
     accentColor: Color,
 ) {
     Surface(
-        shape = RoundedCornerShape(6.dp),
+        shape = RoundedCornerShape(5.dp),
         color = if (accent) accentColor.copy(alpha = 0.26f) else Color.White.copy(alpha = 0.10f),
     ) {
         Text(
             text = text,
             color = if (accent) accentColor.copy(alpha = 0.95f) else Color.White.copy(alpha = 0.85f),
             style = MaterialTheme.typography.labelSmall,
+            fontSize = 9.5.sp,
             fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+            modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.5.dp),
         )
     }
 }
@@ -2747,19 +2789,19 @@ private fun DrawerSettingBlock(
     content: @Composable () -> Unit,
 ) {
     Surface(
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(10.dp),
         color = Color.White.copy(alpha = 0.04f),
         border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(
-            modifier = Modifier.padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.padding(9.dp),
+            verticalArrangement = Arrangement.spacedBy(5.dp),
         ) {
             Text(
                 text = title,
                 color = Color.White.copy(alpha = 0.78f),
-                style = MaterialTheme.typography.labelMedium,
+                style = MaterialTheme.typography.labelSmall,
                 fontWeight = FontWeight.Bold,
             )
             content()
@@ -2789,8 +2831,9 @@ private fun DrawerChipButton(
             text = label,
             color = if (active) Color(0xFF0B0B12) else Color.White,
             style = MaterialTheme.typography.labelSmall,
+            fontSize = 11.sp,
             fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+            modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
         )
     }
 }

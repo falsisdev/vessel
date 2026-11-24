@@ -8,13 +8,14 @@ use serde::{Deserialize, Serialize};
 use tauri::State;
 use tokio::task::JoinSet;
 use vessel_domain::{
-    ExternalIds, HomeSection, LibraryItem, LibraryStatus, MediaDetail, MediaRef, MediaType,
-    PlaybackProgress, PluginId, PluginManifest, RepoIndex, SecretStore, SkipSegment,
-    StreamCandidate, StreamResult, SubtitleTrack, ThemeColors, ThemeSpec, UiPreferences,
-    VesselPaths, VesselResult,
+    ExternalIds, HomeSection, LibraryItem, LibraryStatus, LinkedMediaSource, MediaDetail, MediaRef,
+    MediaType, PlaybackProgress, PluginId, PluginManifest, RepoIndex, SearchPage, SecretStore,
+    SkipSegment, StreamCandidate, StreamResult, SubtitleTrack, ThemeColors, ThemeSpec,
+    UiPreferences, VesselPaths, VesselResult,
 };
 use vessel_engine::{
-    DownloadRequest, EpgNowNext, IptvKind, IptvProfile, LocalPlaybackBundle, PlayCandidateRequest,
+    DownloadRequest, EpgNowNext, IptvKind, IptvProfile, LocalPlaybackBundle,
+    MetadataProviderFilter, MetadataSearchResponse, PlayCandidateRequest, SIMKL_CLIENT_ID_SECRET,
     SkipQuery, TMDB_API_KEY_SECRET, VesselEngine,
 };
 use vessel_plugin_rt::{ResolvedSource, SourceTrustBadge};
@@ -387,6 +388,25 @@ pub async fn set_tmdb_api_key(state: State<'_, AppState>, api_key: String) -> Re
 }
 
 #[tauri::command]
+pub async fn set_simkl_client_id(
+    state: State<'_, AppState>,
+    client_id: String,
+) -> Result<(), String> {
+    let trimmed = client_id.trim();
+    if trimmed.is_empty() {
+        map_err(state.engine.secrets().delete(SIMKL_CLIENT_ID_SECRET).await)
+    } else {
+        map_err(
+            state
+                .engine
+                .secrets()
+                .set(SIMKL_CLIENT_ID_SECRET, trimmed)
+                .await,
+        )
+    }
+}
+
+#[tauri::command]
 pub async fn get_ui_preferences(state: State<'_, AppState>) -> Result<UiPreferences, String> {
     map_err(state.engine.get_ui_preferences().await)
 }
@@ -716,6 +736,94 @@ pub async fn get_streams(
 ) -> Result<StreamResult, String> {
     let pid = map_err(PluginId::new(plugin_id))?;
     map_err(state.engine.streams(&pid, &episode_id).await)
+}
+
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+pub async fn get_streams_with_linked(
+    state: State<'_, AppState>,
+    plugin_id: String,
+    native_id: String,
+    episode_id: String,
+    season: u32,
+    episode: u32,
+    absolute_episode: Option<u32>,
+    is_movie: bool,
+) -> Result<StreamResult, String> {
+    let pid = map_err(PluginId::new(plugin_id))?;
+    let media = map_err(MediaRef::new(pid, native_id))?;
+    map_err(
+        state
+            .engine
+            .streams_with_linked(
+                &media,
+                &episode_id,
+                season,
+                episode,
+                absolute_episode,
+                is_movie,
+            )
+            .await,
+    )
+}
+
+#[tauri::command]
+pub async fn search_plugin_sync(
+    state: State<'_, AppState>,
+    plugin_id: String,
+    query: String,
+    page: Option<u32>,
+) -> Result<SearchPage, String> {
+    let pid = map_err(PluginId::new(plugin_id))?;
+    map_err(
+        state
+            .engine
+            .search_plugin_sync(&pid, &query, page.unwrap_or(1))
+            .await,
+    )
+}
+
+#[tauri::command]
+pub async fn search_metadata(
+    state: State<'_, AppState>,
+    query: String,
+    provider: Option<String>,
+    preferred_lang: Option<String>,
+) -> Result<MetadataSearchResponse, String> {
+    let filter = match provider.as_deref().map(str::trim).unwrap_or("all") {
+        "tmdb" | "tmdb_tv" | "tmdb_movie" => MetadataProviderFilter::Tmdb,
+        "imdb" => MetadataProviderFilter::Imdb,
+        "simkl" => MetadataProviderFilter::Simkl,
+        "anilist" => MetadataProviderFilter::Anilist,
+        "mal" => MetadataProviderFilter::Mal,
+        "kitsu" => MetadataProviderFilter::Kitsu,
+        _ => MetadataProviderFilter::All,
+    };
+    let lang = preferred_lang.unwrap_or_else(|| "en".to_string());
+    map_err(state.engine.search_metadata(&query, filter, &lang).await)
+}
+
+#[tauri::command]
+pub async fn get_linked_sources(
+    state: State<'_, AppState>,
+    plugin_id: String,
+    native_id: String,
+) -> Result<Vec<LinkedMediaSource>, String> {
+    let pid = map_err(PluginId::new(plugin_id))?;
+    let media = map_err(MediaRef::new(pid, native_id))?;
+    map_err(state.engine.get_linked_sources(&media).await)
+}
+
+#[tauri::command]
+pub async fn set_linked_sources(
+    state: State<'_, AppState>,
+    plugin_id: String,
+    native_id: String,
+    sources: Vec<LinkedMediaSource>,
+) -> Result<Vec<LinkedMediaSource>, String> {
+    let pid = map_err(PluginId::new(plugin_id))?;
+    let media = map_err(MediaRef::new(pid, native_id))?;
+    map_err(state.engine.set_linked_sources(&media, sources).await)
 }
 
 #[tauri::command]

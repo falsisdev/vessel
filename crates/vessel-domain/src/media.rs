@@ -178,6 +178,19 @@ pub struct PlaybackProgress {
     pub last_watched_at: String,
 }
 
+/// User-selected cross-plugin stream source linked to a detail page.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LinkedMediaSource {
+    pub plugin_id: PluginId,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plugin_name: Option<String>,
+    pub native_id: String,
+    pub title: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub poster: Option<String>,
+}
+
 impl PlaybackProgress {
     /// Returns watched fraction in `[0.0, 1.0]`, returning `0.0` when duration is zero.
     pub fn completion_ratio(&self) -> f64 {

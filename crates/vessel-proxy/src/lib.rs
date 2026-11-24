@@ -390,9 +390,7 @@ fn should_sniff_hls_body(final_url: &str, content_type: Option<&str>) -> bool {
     match content_type.map(|s| s.split(';').next().unwrap_or(s).trim().to_ascii_lowercase()) {
         None => true,
         Some(ct) => {
-            !ct.starts_with("video/")
-                && !ct.starts_with("audio/")
-                && !ct.starts_with("image/")
+            !ct.starts_with("video/") && !ct.starts_with("audio/") && !ct.starts_with("image/")
         }
     }
 }
@@ -496,7 +494,8 @@ async fn stream_upstream_target(
         };
     }
 
-    if !is_head && status.is_success() && should_sniff_hls_body(&final_url, content_type.as_deref()) {
+    if !is_head && status.is_success() && should_sniff_hls_body(&final_url, content_type.as_deref())
+    {
         let first_chunk = match upstream_resp.chunk().await {
             Ok(c) => c,
             Err(err) => {
@@ -1067,6 +1066,8 @@ mod tests {
             needs_extractor: false,
             subtitles: Vec::new(),
             skip_segments: Vec::new(),
+            plugin_id: None,
+            plugin_name: None,
         }
     }
 
@@ -1115,7 +1116,8 @@ mod tests {
         let hls = sample_candidate("https://cdn.anthology.example/master.m3u8", StreamKind::Hls);
         let mpeg_ts =
             sample_candidate("https://iptv.anthology.example/live.ts", StreamKind::MpegTs);
-        let auto_stream = sample_candidate("https://cdn.anthology.example/live/1", StreamKind::Auto);
+        let auto_stream =
+            sample_candidate("https://cdn.anthology.example/live/1", StreamKind::Auto);
         let cleartext_mp4 =
             sample_candidate("http://cdn.anthology.example/movie.mp4", StreamKind::Mp4);
         assert!(should_proxy_stream(&hls, false));
@@ -1124,8 +1126,10 @@ mod tests {
         assert!(should_proxy_stream(&cleartext_mp4, false));
 
         // Already-local proxy URLs targeting this proxy server must never be double-proxied.
-        let loopback =
-            sample_candidate(&format!("{}/s/abc/master", server.base_url()), StreamKind::Auto);
+        let loopback = sample_candidate(
+            &format!("{}/s/abc/master", server.base_url()),
+            StreamKind::Auto,
+        );
         assert_eq!(
             server
                 .resolve_playback_url(&loopback, true)

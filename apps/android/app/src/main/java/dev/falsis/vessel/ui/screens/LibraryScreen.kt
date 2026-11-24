@@ -1,6 +1,12 @@
 package dev.falsis.vessel.ui.screens
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,12 +25,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -40,11 +42,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import dev.falsis.vessel.data.LibraryItem
 import dev.falsis.vessel.data.MediaSummary
 import dev.falsis.vessel.data.VesselRepository
 import dev.falsis.vessel.ui.components.MediaPosterCard
+import dev.falsis.vessel.ui.components.VesselFilterChip
+import dev.falsis.vessel.ui.components.VesselSearchField
+import dev.falsis.vessel.ui.components.isLandscapeCardRatio
+import dev.falsis.vessel.ui.components.vesselTopSafeInset
 import dev.falsis.vessel.ui.i18n.VesselI18n
 import dev.falsis.vessel.ui.theme.LocalVesselPalette
 import kotlinx.coroutines.launch
@@ -72,12 +79,15 @@ fun LibraryScreen(
         if (q.isEmpty()) itemsList else itemsList.filter { it.title.lowercase().contains(q) }
     }
 
+    val isWideCard = isLandscapeCardRatio(prefs.cards.aspectRatio)
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(palette.bgBase)
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+            .vesselTopSafeInset()
+            .padding(start = 16.dp, top = 14.dp, end = 16.dp, bottom = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -85,12 +95,12 @@ fun LibraryScreen(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(VesselI18n.tr("library.title"), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-            Surface(color = palette.bgSurface, shape = RoundedCornerShape(50)) {
+            Surface(color = palette.bgSurface, shape = RoundedCornerShape(999.dp)) {
                 Text(
                     text = "${filteredItems.size}",
-                    style = MaterialTheme.typography.labelMedium,
+                    style = MaterialTheme.typography.labelSmall,
                     color = palette.textMuted,
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 3.dp),
                 )
             }
         }
@@ -99,7 +109,7 @@ fun LibraryScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             listOf(
                 null to VesselI18n.tr("library.all"),
@@ -109,79 +119,87 @@ fun LibraryScreen(
                 "on_hold" to VesselI18n.tr("library.on_hold"),
                 "dropped" to VesselI18n.tr("library.dropped"),
             ).forEach { (status, label) ->
-                FilterChip(
+                VesselFilterChip(
                     selected = selectedFilter == status,
                     onClick = { selectedFilter = status },
-                    label = { Text(label) },
+                    label = label,
                 )
             }
         }
 
         if (itemsList.isNotEmpty()) {
-            OutlinedTextField(
+            VesselSearchField(
                 value = searchText,
                 onValueChange = { searchText = it },
-                placeholder = { Text(VesselI18n.tr("common.search", "Search…")) },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                singleLine = true,
+                placeholder = VesselI18n.tr("common.search"),
+                imeAction = ImeAction.Done,
                 modifier = Modifier.fillMaxWidth(),
             )
         }
 
-        if (filteredItems.isEmpty()) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(VesselI18n.tr("common.empty"), color = palette.textMuted)
-            }
-        } else {
-            LazyVerticalGrid(
-                columns = GridCells.Adaptive(minSize = if (prefs.cards.aspectRatio == "wide_16x9") 180.dp else 124.dp),
-                contentPadding = PaddingValues(bottom = 24.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp),
-                modifier = Modifier.fillMaxSize(),
-            ) {
-                items(filteredItems, key = { "${it.media.pluginId}:${it.media.nativeId}" }) { item ->
-                    Box {
-                        MediaPosterCard(
-                            item = MediaSummary(
-                                nativeId = item.media.nativeId,
-                                pluginId = item.media.pluginId,
-                                type = item.mediaType,
-                                isAnime = item.isAnime,
-                                title = item.title,
-                                poster = item.posterUrl,
-                                year = item.year,
-                            ),
-                            cards = prefs.cards,
-                            onClick = { onOpenDetails(item.media.pluginId, item.media.nativeId) },
-                            onQuickStatus = { newStatus ->
-                                scope.launch {
-                                    repo.upsertLibrary(item.copy(status = newStatus))
-                                    reload()
-                                }
-                            },
-                        )
-                        // Top-left non-overlapping delete icon matching Desktop .lib-remove-btn
-                        IconButton(
-                            onClick = {
-                                scope.launch {
-                                    repo.deleteLibraryItem(item.media.pluginId, item.media.nativeId)
-                                    reload()
-                                }
-                            },
-                            modifier = Modifier
-                                .align(Alignment.TopStart)
-                                .padding(4.dp)
-                                .size(26.dp)
-                                .clip(CircleShape)
-                                .background(Color.Black.copy(alpha = 0.68f)),
-                        ) {
-                            Icon(
-                                Icons.Default.Close,
-                                contentDescription = VesselI18n.tr("library.remove_item"),
-                                tint = Color.White,
-                                modifier = Modifier.size(14.dp),
+        AnimatedContent(
+            targetState = filteredItems.isEmpty(),
+            transitionSpec = { fadeIn(tween(200)).togetherWith(fadeOut(tween(150))) },
+            label = "library_grid_transition",
+            modifier = Modifier.fillMaxSize(),
+        ) { isEmpty ->
+            if (isEmpty) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text(VesselI18n.tr("common.empty"), color = palette.textMuted)
+                }
+            } else {
+                LazyVerticalGrid(
+                    columns = GridCells.Adaptive(minSize = if (isWideCard) 168.dp else 110.dp),
+                    contentPadding = PaddingValues(top = 2.dp, bottom = 24.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
+                    modifier = Modifier.fillMaxSize(),
+                ) {
+                    items(filteredItems, key = { "${it.media.pluginId}:${it.media.nativeId}" }) { item ->
+                        Box(modifier = Modifier.fillMaxWidth()) {
+                            MediaPosterCard(
+                                item = MediaSummary(
+                                    nativeId = item.media.nativeId,
+                                    pluginId = item.media.pluginId,
+                                    type = item.mediaType,
+                                    isAnime = item.isAnime,
+                                    title = item.title,
+                                    poster = item.posterUrl,
+                                    year = item.year,
+                                ),
+                                cards = prefs.cards,
+                                currentStatus = item.status,
+                                fillGridWidth = true,
+                                onClick = { onOpenDetails(item.media.pluginId, item.media.nativeId) },
+                                onQuickStatus = { newStatus ->
+                                    scope.launch {
+                                        repo.upsertLibrary(item.copy(status = newStatus))
+                                        reload()
+                                    }
+                                },
                             )
+                            // Minimal background-free remove icon at top-left (non-overlapping with bottom title)
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier
+                                    .align(Alignment.TopStart)
+                                    .padding(3.dp)
+                                    .size(24.dp)
+                                    .clip(CircleShape)
+                                    .clickable {
+                                        scope.launch {
+                                            repo.deleteLibraryItem(item.media.pluginId, item.media.nativeId)
+                                            reload()
+                                        }
+                                    },
+                            ) {
+                                Icon(
+                                    Icons.Default.Close,
+                                    contentDescription = VesselI18n.tr("library.remove_item"),
+                                    tint = Color.White.copy(alpha = 0.88f),
+                                    modifier = Modifier.size(14.dp),
+                                )
+                            }
                         }
                     }
                 }

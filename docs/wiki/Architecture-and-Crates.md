@@ -2,7 +2,7 @@
 
 # Architecture & Rust Crates
 
-Vessel strictly separates **core domain logic** (pure Rust) from **UI shells** (`Tauri v2` + `Vue 3`, and future `UniFFI` Android/iOS shells). This ensures zero business-logic duplication, deterministic testing, and high performance.
+Vessel strictly separates **core domain logic** (pure Rust) from **UI shells** (`Tauri v2` + `Vue 3` on Desktop, and `UniFFI` + **Kotlin Jetpack Compose** on Android, with iOS planned on the same `vessel-ffi` bridge). This ensures zero business-logic duplication, deterministic testing, and high performance.
 
 ---
 
@@ -10,11 +10,11 @@ Vessel strictly separates **core domain logic** (pure Rust) from **UI shells** (
 
 ```mermaid
 flowchart LR
-    UI["Desktop UI (Vue 3 / TypeScript)"] <-->|Tauri Commands & Events| Engine["vessel-engine (VesselEngine)"]
+    UI["Desktop UI (Vue 3) & Android (Jetpack Compose)"] <-->|Tauri Commands / UniFFI| Engine["vessel-engine (VesselEngine)"]
     Engine --> Pool["PluginPool (18 warm QuickJS sandboxes)"]
     Pool --> RT["vessel-plugin-rt (rquickjs + oxc)"]
     RT -->|SSRF + DomainPolicy| Net["Remote Sites / APIs"]
-    Engine --> Meta["vessel-metadata (AniList, Cinemeta, AniZip, TMDB)"]
+    Engine --> Meta["vessel-metadata (AniList, Cinemeta, AniZip, TMDB, Jikan, Kitsu, Simkl)"]
     Engine --> Skip["Skip Resolver (Plugin > TheIntroDB > IntroDB > AniSkip)"]
     Engine --> IPTV["vessel-iptv (M3U+, Xtream, XMLTV)"]
     Engine --> DL["vessel-downloader (HLS AES-128 + Range)"]
@@ -28,7 +28,7 @@ flowchart LR
 
 ---
 
-## Workspace Crates Overview (11 Members)
+## Workspace Crates Overview (10 Rust Crates + 2 App Shells)
 
 | Crate / App | Role & Responsibilities |
 | :--- | :--- |
