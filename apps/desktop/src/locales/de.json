@@ -69,7 +69,8 @@
     "cw_progress": "Fortschritt",
     "cw_watched_min": "Gesehen (Min.)",
     "cw_duration_min": "Gesamtdauer (Min.)",
-    "cw_mark_done": "Als gesehen markieren / Nächste"
+    "cw_mark_done": "Als gesehen markieren / Nächste",
+    "go_to_details": "Zu den Details"
   },
   "search": {
     "title": "Suche",
@@ -244,7 +245,13 @@
     "subtitles_delay": "Untertitel-Verzögerung",
     "subtitles_off": "Aus (Keine Untertitel)",
     "error_unsupported": "Dieses Stream-Format wird vom integrierten Player nicht unterstützt. Wähle eine andere Quelle oder installiere mpv.",
-    "error_failed": "Stream konnte nicht geladen werden oder ist abgebrochen. Wähle eine andere Quelle."
+    "error_failed": "Stream konnte nicht geladen werden oder ist abgebrochen. Wähle eine andere Quelle.",
+    "go_to_details": "Details",
+    "skip_intro": "Intro überspringen",
+    "skip_recap": "Rückblick überspringen",
+    "skip_credits": "Abspann überspringen",
+    "skip_preview": "Vorschau überspringen",
+    "next_episode": "Nächste Folge"
   },
   "overlay": {
     "domain_title": "Plugin-Domain-Berechtigung",

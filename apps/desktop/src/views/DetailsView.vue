@@ -32,6 +32,7 @@ import type {
   LibraryStatus,
   MediaDetail,
   PlaybackProgress,
+  SkipSegment,
   StreamCandidate,
   SubtitleTrack,
 } from '@/types/vessel'
@@ -85,6 +86,7 @@ const resolvingStreams = shallowRef(false)
 const resolverError = shallowRef<string>('')
 const streamChoices = ref<StreamCandidate[]>([])
 const episodeSubtitles = ref<SubtitleTrack[]>([])
+const episodeSkipSegments = ref<SkipSegment[]>([])
 
 function cleanSynopsis(raw?: string): string {
   if (!raw) return ''
@@ -269,12 +271,14 @@ async function openSourceResolver(ep: Episode): Promise<void> {
   resolverError.value = ''
   streamChoices.value = []
   episodeSubtitles.value = []
+  episodeSkipSegments.value = []
 
   try {
     const res = await vesselApi.getStreams(props.pluginId, ep.streamId)
     if (resolverEpisode.value?.streamId !== ep.streamId) return
     streamChoices.value = res.streams
     episodeSubtitles.value = res.subtitles
+    episodeSkipSegments.value = res.skipSegments ?? []
     if (!res.streams.length) {
       resolverError.value = `No playable streams found from '${props.pluginId}' for Episode ${ep.episode}.`
     }
@@ -294,6 +298,7 @@ function closeSourceResolver(): void {
   resolverError.value = ''
   streamChoices.value = []
   episodeSubtitles.value = []
+  episodeSkipSegments.value = []
 }
 
 async function startStream(ep: Episode, candidate: StreamCandidate): Promise<void> {
@@ -309,6 +314,7 @@ async function startStream(ep: Episode, candidate: StreamCandidate): Promise<voi
     episode: ep,
     streams: streamChoices.value.length ? [...streamChoices.value] : [candidate],
     subtitles: [...episodeSubtitles.value],
+    skipSegments: [...episodeSkipSegments.value],
     activeStreamIndex: candidateIndex,
   })
   closeSourceResolver()

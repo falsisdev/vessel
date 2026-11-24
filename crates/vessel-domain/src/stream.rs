@@ -89,6 +89,39 @@ pub struct SubtitleTrack {
     pub is_default: bool,
 }
 
+/// Category of a skippable timeline interval (`intro`, `recap`, `credits`, `preview`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SkipSegmentType {
+    #[serde(alias = "op", alias = "opening")]
+    Intro,
+    Recap,
+    #[serde(alias = "outro", alias = "ed", alias = "ending")]
+    Credits,
+    Preview,
+}
+
+/// Time-bounded segment inside a stream/episode that the player can offer to skip.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SkipSegment {
+    #[serde(rename = "type", alias = "kind", alias = "skipType")]
+    pub kind: SkipSegmentType,
+    #[serde(alias = "start_ms", alias = "startTimeMs")]
+    pub start_ms: u64,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "end_ms",
+        alias = "endTimeMs"
+    )]
+    pub end_ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub confidence: Option<u8>,
+}
+
 /// Single playable or embed stream candidate returned by a provider or extractor.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -114,6 +147,8 @@ pub struct StreamCandidate {
     pub needs_extractor: bool,
     #[serde(default)]
     pub subtitles: Vec<SubtitleTrack>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty", alias = "segments")]
+    pub skip_segments: Vec<SkipSegment>,
 }
 
 /// Combined stream candidates and episode-level subtitle tracks from `getStreams`.
@@ -124,6 +159,8 @@ pub struct StreamResult {
     pub streams: Vec<StreamCandidate>,
     #[serde(default)]
     pub subtitles: Vec<SubtitleTrack>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty", alias = "segments")]
+    pub skip_segments: Vec<SkipSegment>,
 }
 
 #[cfg(test)]

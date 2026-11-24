@@ -69,7 +69,8 @@
     "cw_progress": "İzleme İlerlemesi",
     "cw_watched_min": "İzlenen (dk)",
     "cw_duration_min": "Toplam Süre (dk)",
-    "cw_mark_done": "Bitti İşaretle / Sonraki"
+    "cw_mark_done": "Bitti İşaretle / Sonraki",
+    "go_to_details": "İçeriğe Git"
   },
   "search": {
     "title": "Ara",
@@ -244,7 +245,13 @@
     "subtitles_delay": "Altyazı Gecikmesi",
     "subtitles_off": "Kapalı (Altyazısız)",
     "error_unsupported": "Bu yayın biçimi yerleşik WebView oynatıcı tarafından desteklenmiyor. Başka bir kaynak seçin veya mpv kurun.",
-    "error_failed": "Akış yüklenemedi veya koptu. Başka bir kaynak seçin veya tekrar deneyin."
+    "error_failed": "Akış yüklenemedi veya koptu. Başka bir kaynak seçin veya tekrar deneyin.",
+    "go_to_details": "İçeriğe Git",
+    "skip_intro": "İntroyu Atla",
+    "skip_recap": "Özeti Atla",
+    "skip_credits": "Jeneriği Atla",
+    "skip_preview": "Fragmanı Atla",
+    "next_episode": "Sonraki Bölüm"
   },
   "overlay": {
     "domain_title": "Eklenti Alan Adı İzin İsteği",

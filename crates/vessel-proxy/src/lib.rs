@@ -920,6 +920,7 @@ mod tests {
             headers: BTreeMap::new(),
             needs_extractor: false,
             subtitles: Vec::new(),
+            skip_segments: Vec::new(),
         }
     }
 

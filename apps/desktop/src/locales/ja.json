@@ -69,7 +69,8 @@
     "cw_progress": "視聴進捗",
     "cw_watched_min": "視聴済み (分)",
     "cw_duration_min": "合計時間 (分)",
-    "cw_mark_done": "完了にする / 次へ"
+    "cw_mark_done": "完了にする / 次へ",
+    "go_to_details": "作品詳細へ"
   },
   "search": {
     "title": "検索",
@@ -244,7 +245,13 @@
     "subtitles_delay": "字幕ディレイ",
     "subtitles_off": "オフ（字幕なし）",
     "error_unsupported": "内蔵プレーヤーではこの形式を再生できません。別のソースを選ぶか mpv を導入してください。",
-    "error_failed": "読み込みに失敗したか接続が切れました。別のソースをお試しください。"
+    "error_failed": "読み込みに失敗したか接続が切れました。別のソースをお試しください。",
+    "go_to_details": "詳細",
+    "skip_intro": "オープニングをスキップ",
+    "skip_recap": "あらすじをスキップ",
+    "skip_credits": "エンディングをスキップ",
+    "skip_preview": "次回予告をスキップ",
+    "next_episode": "次のエピソード"
   },
   "overlay": {
     "domain_title": "ドメイン許可リクエスト",

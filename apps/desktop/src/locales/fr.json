@@ -69,7 +69,8 @@
     "cw_progress": "Progression",
     "cw_watched_min": "Regardé (min)",
     "cw_duration_min": "Durée totale (min)",
-    "cw_mark_done": "Marquer terminé / Suivant"
+    "cw_mark_done": "Marquer terminé / Suivant",
+    "go_to_details": "Voir les détails"
   },
   "search": {
     "title": "Rechercher",
@@ -244,7 +245,13 @@
     "subtitles_delay": "Décalage des sous-titres",
     "subtitles_off": "Désactivé (Sans sous-titres)",
     "error_unsupported": "Ce format de flux n'est pas pris en charge par le lecteur intégré. Essayez une autre source ou installez mpv.",
-    "error_failed": "Échec du chargement ou coupure du flux. Essayez une autre source."
+    "error_failed": "Échec du chargement ou coupure du flux. Essayez une autre source.",
+    "go_to_details": "Détails",
+    "skip_intro": "Passer l'intro",
+    "skip_recap": "Passer le récapitulatif",
+    "skip_credits": "Passer le générique",
+    "skip_preview": "Passer l'aperçu",
+    "next_episode": "Épisode suivant"
   },
   "overlay": {
     "domain_title": "Demande d'autorisation de domaine",

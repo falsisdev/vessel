@@ -208,6 +208,7 @@ pub fn channel_to_stream_candidate(
         headers,
         needs_extractor: false,
         subtitles: Vec::new(),
+        skip_segments: Vec::new(),
     }
 }
 

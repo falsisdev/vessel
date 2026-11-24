@@ -69,7 +69,8 @@
     "cw_progress": "Avanzamento",
     "cw_watched_min": "Visto (min)",
     "cw_duration_min": "Durata totale (min)",
-    "cw_mark_done": "Segna completato / Prossimo"
+    "cw_mark_done": "Segna completato / Prossimo",
+    "go_to_details": "Vai ai dettagli"
   },
   "search": {
     "title": "Cerca",
@@ -244,7 +245,13 @@
     "subtitles_delay": "Ritardo sottotitoli",
     "subtitles_off": "Disattivato (Senza sottotitoli)",
     "error_unsupported": "Questo formato non è supportato dal player integrato. Prova un'altra fonte o installa mpv.",
-    "error_failed": "Impossibile caricare il flusso o buffering interrotto. Prova un'altra fonte."
+    "error_failed": "Impossibile caricare il flusso o buffering interrotto. Prova un'altra fonte.",
+    "go_to_details": "Dettagli",
+    "skip_intro": "Salta intro",
+    "skip_recap": "Salta riassunto",
+    "skip_credits": "Salta titoli",
+    "skip_preview": "Salta anteprima",
+    "next_episode": "Prossimo episodio"
   },
   "overlay": {
     "domain_title": "Richiesta permesso dominio",

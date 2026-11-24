@@ -8,6 +8,7 @@ import type {
   EngineEvent,
   EngineInfo,
   EpgNowNext,
+  ExternalIds,
   HomeShelfResult,
   IptvKind,
   LibraryItem,
@@ -18,6 +19,7 @@ import type {
   PlaybackProgress,
   PluginListEntry,
   ResolvedSource,
+  SkipSegment,
   StoredDownload,
   StoredIptvChannel,
   StoredIptvProfile,
@@ -145,6 +147,18 @@ export const vesselApi = {
     call<ContinueWatchingEntry[]>('list_continue_watching', { limit }),
   deleteWatchProgress: (pluginId: string, nativeId: string) =>
     call<void>('delete_watch_progress', { pluginId, nativeId }),
+  getSkipSegments: (payload: {
+    pluginId?: string
+    nativeId?: string
+    mediaType: MediaType
+    isAnime?: boolean
+    externalIds?: ExternalIds
+    season?: number
+    episode?: number
+    absoluteEpisode?: number
+    durationMs?: number
+    pluginSegments?: SkipSegment[]
+  }) => call<SkipSegment[]>('get_skip_segments', { payload }),
 
   listIptvProfiles: () => call<StoredIptvProfile[]>('list_iptv_profiles'),
   upsertIptvProfile: (payload: {

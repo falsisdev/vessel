@@ -69,7 +69,8 @@
     "cw_progress": "Progresso",
     "cw_watched_min": "Assistido (min)",
     "cw_duration_min": "Duração total (min)",
-    "cw_mark_done": "Marcar concluído / Próximo"
+    "cw_mark_done": "Marcar concluído / Próximo",
+    "go_to_details": "Ir para detalhes"
   },
   "search": {
     "title": "Buscar",
@@ -244,7 +245,13 @@
     "subtitles_delay": "Atraso da legenda",
     "subtitles_off": "Desativado (Sem legendas)",
     "error_unsupported": "Este formato não é compatível com o player integrado. Tente outra fonte ou instale o mpv.",
-    "error_failed": "Falha ao carregar o stream. Tente outra fonte ou tente novamente."
+    "error_failed": "Falha ao carregar o stream. Tente outra fonte ou tente novamente.",
+    "go_to_details": "Detalhes",
+    "skip_intro": "Pular abertura",
+    "skip_recap": "Pular resumo",
+    "skip_credits": "Pular créditos",
+    "skip_preview": "Pular prévia",
+    "next_episode": "Próximo episódio"
   },
   "overlay": {
     "domain_title": "Solicitação de permissão de domínio",

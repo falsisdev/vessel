@@ -7,6 +7,7 @@ export type StreamKind = 'hls' | 'dash' | 'mpeg_ts' | 'mp4' | 'mkv' | 'webm' | '
 export type StreamFlag = 'subtitled' | 'dubbed' | 'multi_audio' | 'hdr' | 'direct' | 'requires_proxy'
 export type AudioType = 'sub' | 'dub' | 'original'
 export type SubtitleFormat = 'srt' | 'ass' | 'ssa' | 'vtt'
+export type SkipSegmentType = 'intro' | 'recap' | 'credits' | 'preview'
 export type PluginCapability = 'vod' | 'search' | 'live_tv' | 'subtitles' | 'extractor'
 export type SettingFieldType = 'text' | 'secret' | 'toggle' | 'select'
 export type IptvKind = 'xtream' | 'm3u'
@@ -102,6 +103,14 @@ export interface SubtitleTrack {
   isDefault?: boolean
 }
 
+export interface SkipSegment {
+  type: SkipSegmentType
+  startMs: number
+  endMs?: number
+  source?: string
+  confidence?: number
+}
+
 export interface StreamCandidate {
   url: string
   kind: StreamKind
@@ -115,11 +124,13 @@ export interface StreamCandidate {
   headers: Record<string, string>
   needsExtractor?: boolean
   subtitles: SubtitleTrack[]
+  skipSegments?: SkipSegment[]
 }
 
 export interface StreamResult {
   streams: StreamCandidate[]
   subtitles: SubtitleTrack[]
+  skipSegments?: SkipSegment[]
 }
 
 export interface HomeSection {

@@ -31,8 +31,8 @@ pub use ports::{
     SecretStore, StoragePort, SubtitleCandidate, SubtitleProvider, SubtitleQuery,
 };
 pub use stream::{
-    AudioPriority, AudioType, StreamCandidate, StreamFlag, StreamKind, StreamResult,
-    SubtitleFormat, SubtitleSource, SubtitleTrack,
+    AudioPriority, AudioType, SkipSegment, SkipSegmentType, StreamCandidate, StreamFlag,
+    StreamKind, StreamResult, SubtitleFormat, SubtitleSource, SubtitleTrack,
 };
 pub use ui::{
     AdvancedUiPreferences, CardAspectRatio, CardPreferences, CornerStyle, DetailsPreferences,

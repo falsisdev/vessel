@@ -10,6 +10,7 @@ import {
   Check,
   ExternalLink,
   FastForward,
+  Info,
   Layers,
   ListVideo,
   Lock,
@@ -33,7 +34,7 @@ import { usePlayerSession } from '@/composables/usePlayerSession'
 import { useUiPreferences } from '@/composables/useUiPreferences'
 import { useVesselEvents } from '@/composables/useVesselEvents'
 import { parseSubtitles, type SubtitleCue } from '@/utils/subtitleParser'
-import type { Episode, StreamCandidate, SubtitleTrack } from '@/types/vessel'
+import type { Episode, SkipSegment, StreamCandidate, SubtitleTrack } from '@/types/vessel'
 
 const props = defineProps<{
   pluginId: string
@@ -106,6 +107,11 @@ const pendingSeekSeconds = ref<number | null>(null)
 const playableSrc = ref<string>('')
 const gestureLabel = ref<string>('')
 const audioTracks = ref<AudioTrackOption[]>([])
+const skipSegments = ref<SkipSegment[]>([])
+const dismissedSkipKeys = ref<Set<string>>(new Set())
+
+let skipFetchSeq = 0
+let lastFetchedSkipDurationMs = 0
 
 let hideTimer: number | null = null
 let progressTimer: number | null = null
@@ -553,6 +559,151 @@ const nextEpisode = computed(() =>
     : null,
 )
 
+function skipSegKey(seg: SkipSegment): string {
+  return `${seg.type}:${seg.startMs}:${seg.endMs ?? 'end'}`
+}
+
+async function refreshSkipSegments(knownDurationSec?: number): Promise<void> {
+  const d = detail.value
+  const ep = currentEpisode.value
+  if (!d || !ep || isLive.value) {
+    skipSegments.value = []
+    return
+  }
+  const durMs =
+    knownDurationSec && Number.isFinite(knownDurationSec) && knownDurationSec > 10
+      ? Math.floor(knownDurationSec * 1000)
+      : duration.value > 10
+        ? Math.floor(duration.value * 1000)
+        : undefined
+  const seq = ++skipFetchSeq
+  lastFetchedSkipDurationMs = durMs ?? 0
+
+  const pluginSegments: SkipSegment[] = [
+    ...(activeStream.value?.skipSegments ?? []),
+    ...(session.value?.skipSegments ?? []),
+  ]
+
+  try {
+    const resolved = await vesselApi.getSkipSegments({
+      pluginId: props.pluginId,
+      nativeId: props.nativeId,
+      mediaType: d.type,
+      isAnime: d.isAnime,
+      externalIds: d.externalIds,
+      season: ep.season,
+      episode: ep.episode,
+      absoluteEpisode: ep.absoluteEpisode,
+      durationMs: durMs,
+      pluginSegments,
+    })
+    if (seq !== skipFetchSeq) return
+    skipSegments.value = resolved
+  } catch {
+    if (seq === skipFetchSeq && pluginSegments.length) {
+      skipSegments.value = pluginSegments
+    }
+  }
+}
+
+watch(
+  [() => currentEpisode.value?.streamId, () => activeStream.value?.url],
+  () => {
+    dismissedSkipKeys.value = new Set()
+    skipSegments.value = []
+    lastFetchedSkipDurationMs = 0
+    void refreshSkipSegments()
+  },
+  { immediate: true },
+)
+
+const validSkipSegments = computed<SkipSegment[]>(() => {
+  if (isLive.value) return []
+  const durMs = duration.value > 10 ? duration.value * 1000 : 0
+  return skipSegments.value.filter((seg) => {
+    if (durMs > 0 && seg.startMs >= durMs - 1500) return false
+    const effectiveEnd = seg.endMs !== undefined ? (durMs > 0 ? Math.min(seg.endMs, durMs) : seg.endMs) : durMs
+    if (effectiveEnd > 0) {
+      const span = effectiveEnd - seg.startMs
+      if (span < 3000) return false
+      if (durMs > 0 && span > durMs * 0.85) return false
+    }
+    return true
+  })
+})
+
+const activeSkipSegment = computed<SkipSegment | null>(() => {
+  if (isLive.value || playbackError.value || !validSkipSegments.value.length) return null
+  const nowMs = currentTime.value * 1000
+  const durMs = duration.value > 10 ? duration.value * 1000 : 0
+  for (const seg of validSkipSegments.value) {
+    if (dismissedSkipKeys.value.has(skipSegKey(seg))) continue
+    const endMs = seg.endMs ?? (durMs > 0 ? durMs : Number.MAX_SAFE_INTEGER)
+    if (nowMs >= seg.startMs && nowMs < endMs - 400) {
+      return seg
+    }
+  }
+  return null
+})
+
+function skipButtonLabel(seg: SkipSegment): string {
+  const durMs = duration.value > 10 ? duration.value * 1000 : 0
+  const nearEnd =
+    seg.endMs === undefined || (durMs > 0 && seg.endMs >= durMs - 4000)
+  switch (seg.type) {
+    case 'recap':
+      return t('player.skip_recap')
+    case 'intro':
+      return t('player.skip_intro')
+    case 'credits':
+      return nextEpisode.value && nearEnd ? t('player.next_episode') : t('player.skip_credits')
+    case 'preview':
+      return nextEpisode.value ? t('player.next_episode') : t('player.skip_preview')
+  }
+}
+
+function dismissSkipSegment(seg: SkipSegment): void {
+  const next = new Set(dismissedSkipKeys.value)
+  next.add(skipSegKey(seg))
+  dismissedSkipKeys.value = next
+}
+
+function executeSkipSegment(seg: SkipSegment): void {
+  const el = videoRef.value
+  dismissSkipSegment(seg)
+  const durMs = duration.value > 10 ? duration.value * 1000 : 0
+  const nearEnd =
+    seg.endMs === undefined || (durMs > 0 && seg.endMs >= durMs - 4000)
+
+  if ((seg.type === 'credits' || seg.type === 'preview') && nearEnd && nextEpisode.value) {
+    void switchEpisode(nextEpisode.value)
+    return
+  }
+
+  if (el && !isLive.value) {
+    const targetSec =
+      seg.endMs !== undefined
+        ? Math.min(duration.value > 2 ? duration.value - 0.5 : seg.endMs / 1000, seg.endMs / 1000)
+        : Math.max(0, (duration.value || el.currentTime) - 0.5)
+    el.currentTime = targetSec
+    currentTime.value = targetSec
+    showGestureHud(skipButtonLabel(seg))
+    scheduleHideControls()
+  }
+}
+
+function timelineSegmentStyle(seg: SkipSegment): Record<string, string> {
+  if (!duration.value || duration.value <= 0) return { display: 'none' }
+  const durMs = duration.value * 1000
+  const left = Math.min(100, Math.max(0, (seg.startMs / durMs) * 100))
+  const endMs = Math.min(durMs, seg.endMs ?? durMs)
+  const width = Math.max(0.6, ((endMs - seg.startMs) / durMs) * 100)
+  return {
+    left: `${left}%`,
+    width: `${width}%`,
+  }
+}
+
 const progressPercent = computed(() => {
   if (!duration.value || duration.value <= 0) return 0
   return Math.min(100, Math.max(0, (currentTime.value / duration.value) * 100))
@@ -757,7 +908,7 @@ async function switchEpisode(ep: Episode): Promise<void> {
       return
     }
     pendingSeekSeconds.value = 0
-    updateEpisodeSession(ep, res.streams, res.subtitles, 0)
+    updateEpisodeSession(ep, res.streams, res.subtitles, 0, res.skipSegments)
     activeDrawer.value = null
   } catch (err) {
     pushToast('error', String(err))
@@ -808,11 +959,33 @@ function goBack(): void {
   }
 }
 
+function goToDetails(): void {
+  void persistWatchProgress()
+  if (document.fullscreenElement) {
+    void document.exitFullscreen().catch(() => {})
+  }
+  if (props.pluginId === 'iptv') {
+    void router.push({ name: 'iptv' })
+    return
+  }
+  void router.push({
+    name: 'details',
+    params: { pluginId: props.pluginId, nativeId: props.nativeId },
+  })
+}
+
 function onLoadedMetadata(): void {
   const el = videoRef.value
   if (!el) return
   playbackError.value = ''
   duration.value = Number.isFinite(el.duration) ? el.duration : 0
+  if (
+    el.duration > 10 &&
+    (lastFetchedSkipDurationMs === 0 ||
+      Math.abs(el.duration * 1000 - lastFetchedSkipDurationMs) > 30_000)
+  ) {
+    void refreshSkipSegments(el.duration)
+  }
   el.playbackRate = isLive.value ? 1 : playbackRate.value
   el.volume = volume.value
   el.muted = isMuted.value
@@ -1297,7 +1470,9 @@ onUnmounted(() => {
           >
             Switch Source ({{ streams.length }})
           </button>
-          <button type="button" class="v-btn v-btn-ghost" @click="goBack">Back to Details</button>
+          <button type="button" class="v-btn v-btn-ghost" @click="goToDetails">
+            {{ t('player.go_to_details') }}
+          </button>
         </div>
       </div>
     </div>
@@ -1330,7 +1505,16 @@ onUnmounted(() => {
                   <span class="cs-live-dot" />
                   LIVE
                 </span>
-                <div class="cs-show-title">{{ detail?.title ?? 'Vessel Player' }}</div>
+                <button
+                  v-if="props.pluginId !== 'iptv'"
+                  type="button"
+                  class="cs-show-title cs-title-link"
+                  :title="t('player.go_to_details')"
+                  @click="goToDetails"
+                >
+                  {{ detail?.title ?? 'Vessel Player' }}
+                </button>
+                <div v-else class="cs-show-title">{{ detail?.title ?? 'Vessel Player' }}</div>
               </div>
               <div class="cs-ep-sub">
                 <template v-if="isLive">
@@ -1354,6 +1538,16 @@ onUnmounted(() => {
           </div>
 
           <div class="cs-top-actions">
+            <button
+              v-if="props.pluginId !== 'iptv'"
+              type="button"
+              class="cs-pill-btn"
+              :title="t('player.go_to_details')"
+              @click="goToDetails"
+            >
+              <Info :size="15" aria-hidden="true" />
+              <span>{{ t('player.go_to_details') }}</span>
+            </button>
             <button type="button" class="cs-pill-btn" title="Lock screen" @click="toggleLock">
               <Lock :size="15" aria-hidden="true" />
               <span>Lock</span>
@@ -1485,6 +1679,13 @@ onUnmounted(() => {
               @mouseleave="hoverTime = null"
             >
               <div class="cs-progress-buffer" :style="{ width: `${bufferedPercent}%` }" />
+              <div
+                v-for="seg in validSkipSegments"
+                :key="`seg-${seg.type}-${seg.startMs}`"
+                class="cs-seg-marker"
+                :class="`seg-${seg.type}`"
+                :style="timelineSegmentStyle(seg)"
+              />
               <div class="cs-progress-fill" :style="{ width: `${progressPercent}%` }">
                 <span class="cs-progress-thumb" />
               </div>
@@ -1534,17 +1735,6 @@ onUnmounted(() => {
                   @input="setVolumeLevel(Number(($event.target as HTMLInputElement).value))"
                 />
               </div>
-
-              <button
-                v-if="!isLive"
-                type="button"
-                class="cs-skip-intro-btn"
-                title="Skip Intro (+85s)"
-                @click="seekBy(85)"
-              >
-                <FastForward :size="14" aria-hidden="true" />
-                <span>+85s Intro</span>
-              </button>
             </div>
 
             <div class="cs-bottom-right">
@@ -1575,6 +1765,34 @@ onUnmounted(() => {
             </div>
           </div>
         </footer>
+      </div>
+    </Transition>
+
+    <!-- Floating Verified Skip Segment Button (Recap / Intro / Credits / Preview) -->
+    <Transition name="modal-pop">
+      <div
+        v-if="activeSkipSegment && !isLocked && !activeDrawer"
+        class="cs-skip-floating"
+        :class="{ 'is-raised': controlsVisible }"
+        @click.stop
+      >
+        <button
+          type="button"
+          class="cs-skip-floating-btn"
+          @click="executeSkipSegment(activeSkipSegment)"
+        >
+          <FastForward :size="15" aria-hidden="true" />
+          <span>{{ skipButtonLabel(activeSkipSegment) }}</span>
+        </button>
+        <button
+          type="button"
+          class="cs-skip-dismiss"
+          :title="t('common.close')"
+          :aria-label="t('common.close')"
+          @click="dismissSkipSegment(activeSkipSegment)"
+        >
+          <X :size="13" aria-hidden="true" />
+        </button>
       </div>
     </Transition>
 
@@ -2164,6 +2382,7 @@ onUnmounted(() => {
 
 .cs-progress-fill {
   position: relative;
+  z-index: 2;
   height: 100%;
   border-radius: 999px;
   background: var(--vessel-accent, #a78bfa);
@@ -2244,6 +2463,105 @@ onUnmounted(() => {
 .cs-next-ep {
   background: rgba(167, 139, 250, 0.22);
   border-color: rgba(167, 139, 250, 0.45);
+}
+
+.cs-title-link {
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.cs-title-link:hover {
+  color: var(--vessel-accent, #cba6f7);
+  text-decoration: underline;
+}
+
+.cs-seg-marker {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 1;
+  border-radius: 999px;
+  pointer-events: none;
+  opacity: 0.72;
+}
+
+.cs-seg-marker.seg-intro {
+  background: #cba6f7;
+}
+
+.cs-seg-marker.seg-recap {
+  background: #f9e2af;
+}
+
+.cs-seg-marker.seg-credits {
+  background: #89b4fa;
+}
+
+.cs-seg-marker.seg-preview {
+  background: #a6e3a1;
+}
+
+.cs-skip-floating {
+  position: absolute;
+  right: 1.75rem;
+  bottom: 2rem;
+  z-index: 14;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  background: rgba(14, 15, 24, 0.9);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
+  overflow: hidden;
+  transition: bottom 0.22s ease, transform 0.2s ease, border-color 0.2s ease;
+}
+
+.cs-skip-floating.is-raised {
+  bottom: 7.4rem;
+}
+
+.cs-skip-floating:hover {
+  transform: translateY(-2px);
+  border-color: var(--vessel-accent, #cba6f7);
+}
+
+.cs-skip-floating-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.58rem 0.95rem;
+  border: none;
+  background: transparent;
+  color: #ffffff;
+  font-size: 0.88rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.cs-skip-floating-btn:hover {
+  background: rgba(203, 166, 247, 0.18);
+}
+
+.cs-skip-dismiss {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.58rem 0.65rem 0.58rem 0.45rem;
+  border: none;
+  border-left: 1px solid rgba(255, 255, 255, 0.14);
+  background: transparent;
+  color: rgba(255, 255, 255, 0.72);
+  cursor: pointer;
+}
+
+.cs-skip-dismiss:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.1);
 }
 
 /* Right Drawer */

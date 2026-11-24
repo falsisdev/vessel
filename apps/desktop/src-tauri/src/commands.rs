@@ -8,13 +8,14 @@ use serde::{Deserialize, Serialize};
 use tauri::State;
 use tokio::task::JoinSet;
 use vessel_domain::{
-    HomeSection, LibraryItem, LibraryStatus, MediaDetail, MediaRef, MediaType, PlaybackProgress,
-    PluginId, PluginManifest, RepoIndex, SecretStore, StreamCandidate, StreamResult, SubtitleTrack,
-    ThemeColors, ThemeSpec, UiPreferences, VesselPaths, VesselResult,
+    ExternalIds, HomeSection, LibraryItem, LibraryStatus, MediaDetail, MediaRef, MediaType,
+    PlaybackProgress, PluginId, PluginManifest, RepoIndex, SecretStore, SkipSegment,
+    StreamCandidate, StreamResult, SubtitleTrack, ThemeColors, ThemeSpec, UiPreferences,
+    VesselPaths, VesselResult,
 };
 use vessel_engine::{
     DownloadRequest, EpgNowNext, IptvKind, IptvProfile, LocalPlaybackBundle, PlayCandidateRequest,
-    TMDB_API_KEY_SECRET, VesselEngine,
+    SkipQuery, TMDB_API_KEY_SECRET, VesselEngine,
 };
 use vessel_plugin_rt::{ResolvedSource, SourceTrustBadge};
 use vessel_storage::{
@@ -964,6 +965,56 @@ pub async fn list_all_watch_progress(
             .list_all_watch_progress(limit.unwrap_or(200))
             .await,
     )
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GetSkipSegmentsPayload {
+    pub plugin_id: Option<String>,
+    pub native_id: Option<String>,
+    pub media_type: MediaType,
+    #[serde(default)]
+    pub is_anime: bool,
+    #[serde(default)]
+    pub external_ids: ExternalIds,
+    #[serde(default)]
+    pub season: u32,
+    #[serde(default)]
+    pub episode: u32,
+    pub absolute_episode: Option<u32>,
+    pub duration_ms: Option<u64>,
+    #[serde(default)]
+    pub plugin_segments: Vec<SkipSegment>,
+}
+
+#[tauri::command]
+pub async fn get_skip_segments(
+    state: State<'_, AppState>,
+    payload: GetSkipSegmentsPayload,
+) -> Result<Vec<SkipSegment>, String> {
+    let media = match (payload.plugin_id, payload.native_id) {
+        (Some(p), Some(n)) if !p.trim().is_empty() && !n.trim().is_empty() => Some(MediaRef {
+            plugin_id: map_err(PluginId::new(p))?,
+            native_id: n,
+        }),
+        _ => None,
+    };
+    Ok(state
+        .engine
+        .get_skip_segments(
+            media.as_ref(),
+            SkipQuery {
+                media_type: payload.media_type,
+                is_anime: payload.is_anime,
+                external_ids: payload.external_ids,
+                season: payload.season,
+                episode: payload.episode,
+                absolute_episode: payload.absolute_episode,
+                duration_ms: payload.duration_ms,
+                plugin_segments: payload.plugin_segments,
+            },
+        )
+        .await)
 }
 
 #[tauri::command]

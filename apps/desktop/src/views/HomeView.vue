@@ -61,6 +61,12 @@ const cwEditDurationMs = shallowRef(24 * 60_000)
 const cwEditDurationMin = computed(() => Math.max(1, Math.round(cwEditDurationMs.value / 60_000)))
 const cwEditPercent = shallowRef(0)
 
+const cwContextMenu = ref<{ entry: ContinueWatchingEntry; x: number; y: number } | null>(null)
+let cwLongPressTimer: number | null = null
+let cwLongPressFired = false
+let cwPressStartX = 0
+let cwPressStartY = 0
+
 let heroAutoTimer: number | null = null
 
 defineOptions({ name: 'HomeView' })
@@ -407,6 +413,7 @@ async function resumeContinueWatching(entry: ContinueWatchingEntry): Promise<voi
       episode: ep,
       streams: streamRes.streams,
       subtitles: streamRes.subtitles,
+      skipSegments: streamRes.skipSegments,
       activeStreamIndex: playableIdx,
       startPositionMs: entry.positionMs > 2000 ? entry.positionMs : undefined,
     })
@@ -572,6 +579,83 @@ async function removeCwFromEditor(): Promise<void> {
   editingCwEntry.value = null
 }
 
+function formatCwEpisodeLine(entry: ContinueWatchingEntry): string {
+  const prefix = `S${entry.season} · E${entry.episode}`
+  const rawEp = entry.episodeTitle?.trim()
+  if (!rawEp) return prefix
+  // Strip redundant show-title prefix if the plugin included it in episode title
+  const normShow = entry.title.trim().toLowerCase()
+  let cleaned = rawEp
+  if (normShow && rawEp.toLowerCase().startsWith(normShow)) {
+    cleaned = rawEp.slice(entry.title.trim().length).replace(/^[\s:\-–—·]+/, '').trim()
+  }
+  if (!cleaned || cleaned.toLowerCase() === normShow) return prefix
+  const full = `${prefix} · ${cleaned}`
+  return full.length > 38 ? `${full.slice(0, 35).trimEnd()}...` : full
+}
+
+function openCwContextMenuAt(entry: ContinueWatchingEntry, clientX: number, clientY: number): void {
+  const menuW = 210
+  const menuH = 178
+  const x = Math.max(8, Math.min(clientX, window.innerWidth - menuW - 10))
+  const y = Math.max(8, Math.min(clientY, window.innerHeight - menuH - 10))
+  cwContextMenu.value = { entry, x, y }
+}
+
+function openCwContextMenu(entry: ContinueWatchingEntry, ev: MouseEvent): void {
+  openCwContextMenuAt(entry, ev.clientX, ev.clientY)
+}
+
+function startCwPointerPress(entry: ContinueWatchingEntry, ev: PointerEvent): void {
+  if (ev.button !== 0) return
+  cancelCwLongPress()
+  cwLongPressFired = false
+  cwPressStartX = ev.clientX
+  cwPressStartY = ev.clientY
+  cwLongPressTimer = window.setTimeout(() => {
+    cwLongPressFired = true
+    openCwContextMenuAt(entry, ev.clientX, ev.clientY)
+  }, 520)
+}
+
+function moveCwPointerPress(ev: PointerEvent): void {
+  if (cwLongPressTimer === null) return
+  if (Math.abs(ev.clientX - cwPressStartX) > 10 || Math.abs(ev.clientY - cwPressStartY) > 10) {
+    cancelCwLongPress()
+  }
+}
+
+function cancelCwLongPress(): void {
+  if (cwLongPressTimer !== null) {
+    window.clearTimeout(cwLongPressTimer)
+    cwLongPressTimer = null
+  }
+}
+
+function handleCwCardClick(entry: ContinueWatchingEntry): void {
+  if (cwLongPressFired) {
+    cwLongPressFired = false
+    return
+  }
+  if (cwContextMenu.value) {
+    cwContextMenu.value = null
+    return
+  }
+  void resumeContinueWatching(entry)
+}
+
+function closeCwContextOnDoc(ev: PointerEvent | KeyboardEvent): void {
+  if (ev instanceof KeyboardEvent) {
+    if (ev.key === 'Escape') cwContextMenu.value = null
+    return
+  }
+  if (!cwContextMenu.value) return
+  const target = ev.target as HTMLElement | null
+  if (!target?.closest('.cw-context-menu')) {
+    cwContextMenu.value = null
+  }
+}
+
 async function dismissContinueWatching(entry: ContinueWatchingEntry): Promise<void> {
   try {
     await vesselApi.deleteWatchProgress(entry.media.pluginId, entry.media.nativeId)
@@ -610,6 +694,8 @@ function startHeroTimer(): void {
 onMounted(() => {
   void loadHome(false)
   startHeroTimer()
+  window.addEventListener('pointerdown', closeCwContextOnDoc)
+  window.addEventListener('keydown', closeCwContextOnDoc)
 })
 
 onActivated(() => {
@@ -618,6 +704,8 @@ onActivated(() => {
 })
 
 onDeactivated(() => {
+  cancelCwLongPress()
+  cwContextMenu.value = null
   if (heroAutoTimer !== null) {
     window.clearInterval(heroAutoTimer)
     heroAutoTimer = null
@@ -625,6 +713,9 @@ onDeactivated(() => {
 })
 
 onUnmounted(() => {
+  cancelCwLongPress()
+  window.removeEventListener('pointerdown', closeCwContextOnDoc)
+  window.removeEventListener('keydown', closeCwContextOnDoc)
   if (heroAutoTimer !== null) window.clearInterval(heroAutoTimer)
 })
 </script>
@@ -825,7 +916,13 @@ onUnmounted(() => {
             :key="`${entry.media.pluginId}:${entry.media.nativeId}`"
             class="cw-card"
             :class="{ 'is-loading': resumingKey === `${entry.media.pluginId}:${entry.media.nativeId}` }"
-            @click="resumeContinueWatching(entry)"
+            @click="handleCwCardClick(entry)"
+            @contextmenu.prevent="openCwContextMenu(entry, $event)"
+            @pointerdown="startCwPointerPress(entry, $event)"
+            @pointermove="moveCwPointerPress"
+            @pointerup="cancelCwLongPress"
+            @pointercancel="cancelCwLongPress"
+            @pointerleave="cancelCwLongPress"
           >
             <div class="cw-thumb">
               <div
@@ -871,12 +968,15 @@ onUnmounted(() => {
               </div>
             </div>
             <div class="cw-meta">
-              <div class="cw-title">{{ entry.title }}</div>
-              <div v-if="entry.mediaType !== 'movie'" class="cw-sub">
-                <span>S{{ entry.season }} · E{{ entry.episode }}</span>
-                <template v-if="entry.episodeTitle"> · {{ entry.episodeTitle }}</template>
+              <div class="cw-title" :title="entry.title">{{ entry.title }}</div>
+              <div v-if="entry.mediaType !== 'movie'" class="cw-sub" :title="entry.episodeTitle">
+                {{ formatCwEpisodeLine(entry) }}
               </div>
-              <div v-else-if="entry.episodeTitle && entry.episodeTitle !== entry.title" class="cw-sub">
+              <div
+                v-else-if="entry.episodeTitle && entry.episodeTitle !== entry.title"
+                class="cw-sub"
+                :title="entry.episodeTitle"
+              >
                 {{ entry.episodeTitle }}
               </div>
             </div>
@@ -1258,6 +1358,56 @@ onUnmounted(() => {
               </div>
             </div>
           </div>
+        </div>
+      </Transition>
+    </Teleport>
+
+    <!-- Continue Watching Context Menu (Right-click or Long-press) -->
+    <Teleport to="body">
+      <Transition name="modal-pop">
+        <div
+          v-if="cwContextMenu"
+          class="cw-context-menu"
+          role="menu"
+          :style="{ left: `${cwContextMenu.x}px`, top: `${cwContextMenu.y}px` }"
+          @click.stop
+        >
+          <button
+            type="button"
+            role="menuitem"
+            class="cw-ctx-item"
+            @click="() => { const e = cwContextMenu!.entry; cwContextMenu = null; void resumeContinueWatching(e) }"
+          >
+            <Play :size="14" aria-hidden="true" />
+            <span>{{ t('common.play') }}</span>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            class="cw-ctx-item"
+            @click="() => { const e = cwContextMenu!.entry; cwContextMenu = null; openDetails(e.media.pluginId, e.media.nativeId) }"
+          >
+            <Info :size="14" aria-hidden="true" />
+            <span>{{ t('home.go_to_details') }}</span>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            class="cw-ctx-item"
+            @click="() => { const e = cwContextMenu!.entry; cwContextMenu = null; void openCwEditor(e) }"
+          >
+            <Pencil :size="14" aria-hidden="true" />
+            <span>{{ t('home.edit_cw') }}</span>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            class="cw-ctx-item is-danger"
+            @click="() => { const e = cwContextMenu!.entry; cwContextMenu = null; void dismissContinueWatching(e) }"
+          >
+            <Trash2 :size="14" aria-hidden="true" />
+            <span>{{ t('common.remove') }}</span>
+          </button>
         </div>
       </Transition>
     </Teleport>
@@ -1755,11 +1905,14 @@ onUnmounted(() => {
 .cw-meta {
   display: flex;
   flex-direction: column;
+  width: 280px;
+  min-width: 0;
   gap: 0.15rem;
   padding: 0 0.15rem;
 }
 
 .cw-title {
+  width: 100%;
   font-size: 0.92rem;
   font-weight: 700;
   color: var(--vessel-text-primary);
@@ -1769,11 +1922,54 @@ onUnmounted(() => {
 }
 
 .cw-sub {
+  width: 100%;
   font-size: 0.78rem;
   color: var(--vessel-text-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.cw-context-menu {
+  position: fixed;
+  z-index: 120;
+  min-width: 196px;
+  padding: 0.35rem;
+  border-radius: 12px;
+  background: var(--vessel-bg-surface);
+  border: 1px solid var(--vessel-border-strong);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.55);
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.cw-ctx-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.48rem 0.65rem;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--vessel-text-primary);
+  font-size: 0.84rem;
+  font-weight: 550;
+  text-align: left;
+  cursor: pointer;
+}
+
+.cw-ctx-item:hover {
+  background: color-mix(in srgb, var(--vessel-accent) 18%, transparent);
+}
+
+.cw-ctx-item.is-danger {
+  color: var(--vessel-danger);
+  border-top: 1px solid var(--vessel-border);
+  margin-top: 0.1rem;
+  padding-top: 0.52rem;
+  border-radius: 0 0 8px 8px;
 }
 
 .empty-box {

@@ -69,7 +69,8 @@
     "cw_progress": "观看进度",
     "cw_watched_min": "已观看 (分钟)",
     "cw_duration_min": "总时长 (分钟)",
-    "cw_mark_done": "标记看完 / 下一集"
+    "cw_mark_done": "标记看完 / 下一集",
+    "go_to_details": "查看详情"
   },
   "search": {
     "title": "搜索",
@@ -244,7 +245,13 @@
     "subtitles_delay": "字幕延迟",
     "subtitles_off": "关闭（无字幕）",
     "error_unsupported": "内置播放器不支持此流媒体格式，请尝试其他源或安装 mpv。",
-    "error_failed": "流加载失败或缓冲中断，请切换其他源或重试。"
+    "error_failed": "流加载失败或缓冲中断，请切换其他源或重试。",
+    "go_to_details": "详情",
+    "skip_intro": "跳过片头",
+    "skip_recap": "跳过前情提要",
+    "skip_credits": "跳过片尾",
+    "skip_preview": "跳过预告",
+    "next_episode": "下一集"
   },
   "overlay": {
     "domain_title": "插件域名权限请求",

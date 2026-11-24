@@ -69,7 +69,8 @@
     "cw_progress": "Progreso",
     "cw_watched_min": "Visto (min)",
     "cw_duration_min": "Duración total (min)",
-    "cw_mark_done": "Marcar terminado / Siguiente"
+    "cw_mark_done": "Marcar terminado / Siguiente",
+    "go_to_details": "Ir a detalles"
   },
   "search": {
     "title": "Buscar",
@@ -244,7 +245,13 @@
     "subtitles_delay": "Retraso de subtítulos",
     "subtitles_off": "Desactivado (Sin subtítulos)",
     "error_unsupported": "Este formato no es compatible con el reproductor integrado. Prueba otra fuente o instala mpv.",
-    "error_failed": "No se pudo cargar o se cortó la transmisión. Prueba otra fuente o reintenta."
+    "error_failed": "No se pudo cargar o se cortó la transmisión. Prueba otra fuente o reintenta.",
+    "go_to_details": "Detalles",
+    "skip_intro": "Saltar intro",
+    "skip_recap": "Saltar resumen",
+    "skip_credits": "Saltar créditos",
+    "skip_preview": "Saltar avance",
+    "next_episode": "Siguiente episodio"
   },
   "overlay": {
     "domain_title": "Solicitud de permiso de dominio",

@@ -111,6 +111,7 @@ pub fn run() {
             commands::list_all_watch_progress,
             commands::list_continue_watching,
             commands::delete_watch_progress,
+            commands::get_skip_segments,
             commands::player_play,
             commands::player_pause,
             commands::player_seek,

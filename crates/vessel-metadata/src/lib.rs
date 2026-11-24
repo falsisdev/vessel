@@ -4,8 +4,9 @@
 pub mod clients;
 pub mod coordinates;
 pub mod merge;
+pub mod skip;
 
-use vessel_domain::{MediaDetail, VesselResult};
+use vessel_domain::{MediaDetail, SkipSegment, VesselResult};
 
 pub use clients::{MIN_MATCH_CONFIDENCE, MetaEndpoints, MetadataClients, title_match_confidence};
 pub use coordinates::{
@@ -15,6 +16,7 @@ pub use coordinates::{
 pub use merge::{
     CanonicalMetadata, canonical_id_from_external_ids, merge_detail, merge_detail_with_override,
 };
+pub use skip::{SkipEndpoints, SkipQuery, resolve_skip_segments};
 
 /// Outcome of running metadata enrichment on a plugin's `MediaDetail`.
 #[derive(Debug, Clone, PartialEq)]
@@ -24,9 +26,24 @@ pub struct EnrichmentOutcome {
 }
 
 /// Pure metadata enrichment facade (respects user offline/privacy opt-out toggle).
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct MetadataService {
     clients: MetadataClients,
+    skip_http: reqwest::Client,
+    skip_endpoints: SkipEndpoints,
+}
+
+impl Default for MetadataService {
+    fn default() -> Self {
+        Self {
+            clients: MetadataClients::default(),
+            skip_http: reqwest::Client::builder()
+                .connect_timeout(std::time::Duration::from_secs(4))
+                .build()
+                .unwrap_or_else(|_| reqwest::Client::new()),
+            skip_endpoints: SkipEndpoints::default(),
+        }
+    }
 }
 
 impl MetadataService {
@@ -34,12 +51,22 @@ impl MetadataService {
     pub fn new(endpoints: MetaEndpoints) -> Self {
         Self {
             clients: MetadataClients::new(endpoints),
+            ..Self::default()
         }
     }
 
     /// Borrows the underlying HTTP metadata client.
     pub fn clients(&self) -> &MetadataClients {
         &self.clients
+    }
+
+    /// Resolves verified skip segments (`intro`, `recap`, `credits`, `preview`) from plugin + external DBs.
+    pub async fn resolve_skip_segments(
+        &self,
+        query: &SkipQuery,
+        allow_external: bool,
+    ) -> Vec<SkipSegment> {
+        resolve_skip_segments(&self.skip_http, &self.skip_endpoints, query, allow_external).await
     }
 
     /// Enriches `raw_detail` if `allow_external` is enabled and a confident match exists.

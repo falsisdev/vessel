@@ -69,7 +69,8 @@
     "cw_progress": "Watch Progress",
     "cw_watched_min": "Watched (min)",
     "cw_duration_min": "Total Duration (min)",
-    "cw_mark_done": "Mark Finished / Next"
+    "cw_mark_done": "Mark Finished / Next",
+    "go_to_details": "Go to Details"
   },
   "search": {
     "title": "Search",
@@ -244,7 +245,13 @@
     "subtitles_delay": "Subtitle Delay",
     "subtitles_off": "Off (No Subtitles)",
     "error_unsupported": "This stream format is not supported by the built-in WebView player. Try another source or install mpv.",
-    "error_failed": "Stream failed to load or buffered out. Try another source or retry."
+    "error_failed": "Stream failed to load or buffered out. Try another source or retry.",
+    "go_to_details": "Details",
+    "skip_intro": "Skip Intro",
+    "skip_recap": "Skip Recap",
+    "skip_credits": "Skip Credits",
+    "skip_preview": "Skip Preview",
+    "next_episode": "Next Episode"
   },
   "overlay": {
     "domain_title": "Plugin Domain Permission Request",

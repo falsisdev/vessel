@@ -1,5 +1,5 @@
 import { ref } from 'vue'
-import type { Episode, MediaDetail, StreamCandidate, SubtitleTrack } from '@/types/vessel'
+import type { Episode, MediaDetail, SkipSegment, StreamCandidate, SubtitleTrack } from '@/types/vessel'
 
 export interface PlayerSession {
   pluginId: string
@@ -8,6 +8,7 @@ export interface PlayerSession {
   episode: Episode
   streams: StreamCandidate[]
   subtitles: SubtitleTrack[]
+  skipSegments?: SkipSegment[]
   activeStreamIndex: number
   startPositionMs?: number
   channelStreams?: Record<string, StreamCandidate>
@@ -25,6 +26,7 @@ export function usePlayerSession() {
     streams: StreamCandidate[],
     subtitles: SubtitleTrack[],
     activeStreamIndex = 0,
+    skipSegments?: SkipSegment[],
   ): void {
     if (!activeSession.value) return
     activeSession.value = {
@@ -32,6 +34,7 @@ export function usePlayerSession() {
       episode,
       streams,
       subtitles,
+      skipSegments,
       activeStreamIndex,
       startPositionMs: 0,
     }

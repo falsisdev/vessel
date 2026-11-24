@@ -15,9 +15,9 @@ use tokio_util::sync::CancellationToken;
 use vessel_domain::{
     ContentProvider, DomainGrantSource, DownloadStatus, EngineEvent, EventSink, ExternalIds,
     HomeFeed, LibraryItem, LibraryStatus, LogLevel, MediaDetail, MediaRef, MediaType,
-    PlaybackProgress, PlaybackRequest, PlayerBackend, PluginId, SecretStore, StoragePort,
-    StreamCandidate, StreamKind, StreamResult, SubtitleFormat, SubtitleSource, SubtitleTrack,
-    UiPreferences, VesselError, VesselPaths, VesselResult,
+    PlaybackProgress, PlaybackRequest, PlayerBackend, PluginId, SecretStore, SkipSegment,
+    StoragePort, StreamCandidate, StreamKind, StreamResult, SubtitleFormat, SubtitleSource,
+    SubtitleTrack, UiPreferences, VesselError, VesselPaths, VesselResult,
 };
 use vessel_iptv::{IptvClient, channel_to_stream_candidate, xtream::xtream_xmltv_url};
 use vessel_metadata::{
@@ -37,6 +37,7 @@ use vessel_storage::{
 pub use pool::{DEFAULT_IDLE_TTL, DEFAULT_MAX_WARM_PLUGINS, PluginPool};
 pub use vessel_downloader::{DownloadManager, DownloadRequest};
 pub use vessel_iptv::{EpgNowNext, EpgProgram, IptvChannel, IptvKind, IptvProfile};
+pub use vessel_metadata::SkipQuery;
 
 /// Local playback bundle resolved through the loopback file server (`http://127.0.0.1:<port>/local/<token>/...`).
 #[derive(Debug, Clone, serde::Serialize)]
@@ -1140,6 +1141,34 @@ impl VesselEngine {
             .await
     }
 
+    /// Resolves validated skip intervals (`intro`, `recap`, `credits`, `preview`) from plugin
+    /// candidates or external databases (`TheIntroDB`, `IntroDB`, `AniSkip`).
+    pub async fn get_skip_segments(
+        &self,
+        media: Option<&MediaRef>,
+        mut query: SkipQuery,
+    ) -> Vec<SkipSegment> {
+        if let Some(m) = media
+            && query.external_ids.tmdb.is_none()
+            && query.external_ids.imdb.is_none()
+            && query.external_ids.mal.is_none()
+            && query.external_ids.anilist.is_none()
+        {
+            for lang in ["en", "tr"] {
+                let key = format!("meta3:{}:{}:{lang}", m.plugin_id.as_str(), m.native_id);
+                if let Ok(Some(json_str)) = self.storage.get_metadata_cache(&key).await
+                    && let Ok(canon) = serde_json::from_str::<CanonicalMetadata>(&json_str)
+                {
+                    query.external_ids = canon.external_ids;
+                    break;
+                }
+            }
+        }
+        self.metadata
+            .resolve_skip_segments(&query, self.metadata_enabled())
+            .await
+    }
+
     /// Adds an external or inline subtitle track to the active player session.
     pub async fn add_subtitle(&self, track: SubtitleTrack) -> VesselResult<()> {
         let routed = self.route_subtitle_track(track)?;
@@ -2212,6 +2241,7 @@ mod tests {
                     headers: BTreeMap::new(),
                     needs_extractor: false,
                     subtitles: Vec::new(),
+                    skip_segments: Vec::new(),
                 },
                 extra_subtitles: Vec::new(),
                 start_position_ms: None,
