@@ -28,10 +28,12 @@ flowchart LR
 
 ---
 
-## Workspace Crates Overview (10 Members)
+## Workspace Crates Overview (11 Members)
 
 | Crate / App | Role & Responsibilities |
 | :--- | :--- |
+| **`vessel-ffi`** | `UniFFI` (`0.29`) native bridge wrapping `VesselEngine`, multi-thread Tokio runtime, and streaming `EngineEventListener` callbacks into Kotlin bindings (`apps/android`). |
+| **`apps/android`** | Kotlin **Jetpack Compose + Material 3 Adaptive (`NavigationSuiteScaffold`) + Media3 ExoPlayer** Android app (Phone, Tablet & Chromebook) sharing the exact `ThemeSpec`, 12 locales, Skip Segments, Downloads, IPTV & Extensions core. |
 | **`vessel-domain`** | Pure domain models (`MediaSummary`, `MediaDetail`, `Episode`, `StreamCandidate`, `SubtitleTrack`, `SkipSegment`, `PluginManifest`, `ThemeSpec`, `UiPreferences`), `VesselError`, `StoragePort`, `ContentProvider`, `EventSink`, `SecretStore`, `VesselPaths`. |
 | **`vessel-storage`** | Single-writer SQLite (`rusqlite` `bundled` + `WAL` + `FTS5`) actor thread preventing `SQLITE_BUSY`. Persists library watch statuses, dual-coordinate watch progress, episode snapshots (for next-episode Continue Watching), plugin domain grants, KV store, settings, metadata cache, IPTV channels + EPG, download queue rows, and `.backup.vessel` export/import (`Merge` & `Overwrite`). |
 | **`vessel-proxy`** | Ephemeral `127.0.0.1:0` `axum` + `reqwest` (`rustls`) HTTP server. Signs sub-URLs with per-session `HMAC-SHA256` keys to block open-relay abuse, rewrites `.m3u8` playlists (`#EXT-X-KEY`, `#EXT-X-MAP`, `#EXT-X-MEDIA`, `#EXT-X-STREAM-INF`), handles HTTP `206` Range requests, injects Smart Proxy headers, and serves local downloaded files (`/local/<token>/...`) with strict path-traversal guards. |

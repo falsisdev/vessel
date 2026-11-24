@@ -1,0 +1,3 @@
+-keep class com.sun.jna.** { *; }
+-keep class uniffi.** { *; }
+-keep class dev.falsis.vessel.data.** { *; }

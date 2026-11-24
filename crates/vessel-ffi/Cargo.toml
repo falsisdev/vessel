@@ -1,0 +1,28 @@
+[package]
+name = "vessel-ffi"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+name = "vessel_ffi"
+crate-type = ["cdylib", "rlib"]
+
+[[bin]]
+name = "uniffi-bindgen"
+path = "src/bin/uniffi-bindgen.rs"
+
+[dependencies]
+async-trait.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+uniffi = { version = "0.29", features = ["cli"] }
+vessel-domain = { path = "../vessel-domain" }
+vessel-engine = { path = "../vessel-engine" }
+vessel-metadata = { path = "../vessel-metadata" }
+vessel-plugin-rt = { path = "../vessel-plugin-rt" }
+vessel-storage = { path = "../vessel-storage" }
