@@ -76,8 +76,9 @@ dependencies {
     implementation("androidx.compose.material3:material3-adaptive-navigation-suite")
     implementation("androidx.compose.material:material-icons-extended")
 
-    // UniFFI JNA bridge for libvessel_ffi.so
+    // UniFFI JNA bridge + Android TLS platform verifier for Rust rustls
     implementation("net.java.dev.jna:jna:5.17.0@aar")
+    implementation("org.rustls:rustls-platform-verifier:0.2.0")
 
     // Serialization + Coroutines + Image loading
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1")

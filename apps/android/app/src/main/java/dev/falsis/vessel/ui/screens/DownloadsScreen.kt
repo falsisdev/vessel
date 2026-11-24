@@ -18,6 +18,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.CheckCircle
@@ -60,6 +61,7 @@ import kotlinx.coroutines.launch
 fun DownloadsScreen(
     repo: VesselRepository,
     onPlayOffline: (dl: StoredDownload, bundle: LocalPlaybackBundle) -> Unit,
+    onBack: (() -> Unit)? = null,
 ) {
     val palette = LocalVesselPalette.current
     val scope = rememberCoroutineScope()
@@ -110,7 +112,14 @@ fun DownloadsScreen(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                Text(VesselI18n.tr("downloads.title"), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (onBack != null) {
+                        IconButton(onClick = onBack) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = VesselI18n.tr("common.back", "Back"))
+                        }
+                    }
+                    Text(VesselI18n.tr("downloads.title"), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                }
                 IconButton(onClick = { scope.launch { reload() } }) {
                     Icon(Icons.Default.Refresh, contentDescription = VesselI18n.tr("common.refresh"))
                 }

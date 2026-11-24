@@ -14,6 +14,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
@@ -46,6 +47,7 @@ import kotlinx.coroutines.launch
 fun ExtensionsScreen(
     repo: VesselRepository,
     initialSourceInput: String? = null,
+    onBack: (() -> Unit)? = null,
 ) {
     val palette = LocalVesselPalette.current
     val scope = rememberCoroutineScope()
@@ -76,7 +78,14 @@ fun ExtensionsScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item {
-            Text(VesselI18n.tr("extensions.title"), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (onBack != null) {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = VesselI18n.tr("common.back", "Back"))
+                    }
+                }
+                Text(VesselI18n.tr("extensions.title"), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            }
         }
 
         item {

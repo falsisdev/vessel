@@ -1,16 +1,23 @@
 package dev.falsis.vessel.ui.theme
 
+import android.os.Build
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import dev.falsis.vessel.data.ThemeColors
 import dev.falsis.vessel.data.ThemeSpec
+
+const val DYNAMIC_MATERIAL_THEME_ID = "dynamic-material"
 
 @Immutable
 data class VesselPalette(
@@ -63,6 +70,21 @@ fun ThemeSpec.toPalette(): VesselPalette {
     )
 }
 
+fun ColorScheme.toVesselPalette(isDark: Boolean): VesselPalette = VesselPalette(
+    bgBase = background,
+    bgSurface = surfaceContainerLow,
+    bgElevated = surfaceContainerHigh,
+    textPrimary = onBackground,
+    textMuted = onSurfaceVariant,
+    accent = primary,
+    accentSecondary = secondary,
+    border = outlineVariant,
+    success = Color(0xFFA6E3A1),
+    warning = Color(0xFFF9E2AF),
+    danger = error,
+    isDark = isDark,
+)
+
 fun VesselPalette.toColorScheme(): ColorScheme {
     val onAccent = if (isDark) Color(0xFF11111B) else Color.White
     return if (isDark) {
@@ -103,10 +125,48 @@ fun VesselTheme(
     themeSpec: ThemeSpec = ThemeSpec(),
     content: @Composable () -> Unit,
 ) {
-    val palette = themeSpec.toPalette()
+    val context = LocalContext.current
+    val systemDark = isSystemInDarkTheme()
+
+    val (colorScheme, palette) = if (themeSpec.id == DYNAMIC_MATERIAL_THEME_ID) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val dynamicScheme = if (systemDark) {
+                dynamicDarkColorScheme(context)
+            } else {
+                dynamicLightColorScheme(context)
+            }
+            dynamicScheme to dynamicScheme.toVesselPalette(systemDark)
+        } else {
+            val fallbackSpec = if (systemDark) {
+                ThemeSpec()
+            } else {
+                ThemeSpec(
+                    id = "catppuccin-latte",
+                    name = "Catppuccin Latte",
+                    isDark = false,
+                    colors = ThemeColors(
+                        bgBase = "#eff1f5",
+                        bgSurface = "#e6e9ef",
+                        bgElevated = "#ccd0da",
+                        textPrimary = "#4c4f69",
+                        textMuted = "#6c6f85",
+                        accent = "#8839ef",
+                        accentSecondary = "#1e66f5",
+                        border = "#bcc0cc",
+                    ),
+                )
+            }
+            val p = fallbackSpec.toPalette()
+            p.toColorScheme() to p
+        }
+    } else {
+        val p = themeSpec.toPalette()
+        p.toColorScheme() to p
+    }
+
     CompositionLocalProvider(LocalVesselPalette provides palette) {
         MaterialTheme(
-            colorScheme = palette.toColorScheme(),
+            colorScheme = colorScheme,
             content = content,
         )
     }

@@ -1,19 +1,28 @@
 package dev.falsis.vessel.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -33,17 +42,23 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.falsis.vessel.data.VesselRepository
 import dev.falsis.vessel.ui.i18n.VesselI18n
+import dev.falsis.vessel.ui.theme.DYNAMIC_MATERIAL_THEME_ID
 import dev.falsis.vessel.ui.theme.LocalVesselPalette
 import kotlinx.coroutines.launch
 
 @Composable
-fun SettingsScreen(repo: VesselRepository) {
+fun SettingsScreen(
+    repo: VesselRepository,
+    onOpenDownloads: () -> Unit = {},
+    onOpenExtensions: () -> Unit = {},
+) {
     val palette = LocalVesselPalette.current
     val scope = rememberCoroutineScope()
     val themes by repo.themes.collectAsState()
     val activeTheme by repo.activeTheme.collectAsState()
     val activeLocale by repo.locale.collectAsState()
     val engineInfo by repo.engineInfo.collectAsState()
+    val plugins by repo.plugins.collectAsState()
 
     var showThemeMenu by remember { mutableStateOf(false) }
     var showLocaleMenu by remember { mutableStateOf(false) }
@@ -61,6 +76,52 @@ fun SettingsScreen(repo: VesselRepository) {
             Text(VesselI18n.tr("settings.title"), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
         }
 
+        // Quick Tools: Extensions & Downloads
+        item {
+            Surface(shape = RoundedCornerShape(14.dp), color = palette.bgSurface) {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable(onClick = onOpenExtensions)
+                            .padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Extension, contentDescription = null, tint = palette.accent, modifier = Modifier.size(22.dp))
+                            Spacer(Modifier.width(12.dp))
+                            Column {
+                                Text(VesselI18n.tr("nav.extensions"), fontWeight = FontWeight.SemiBold)
+                                Text(
+                                    "${plugins.count { it.enabled }} / ${plugins.size}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = palette.textMuted,
+                                )
+                            }
+                        }
+                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = palette.textMuted)
+                    }
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable(onClick = onOpenDownloads)
+                            .padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Download, contentDescription = null, tint = palette.accent, modifier = Modifier.size(22.dp))
+                            Spacer(Modifier.width(12.dp))
+                            Text(VesselI18n.tr("nav.downloads"), fontWeight = FontWeight.SemiBold)
+                        }
+                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = palette.textMuted)
+                    }
+                }
+            }
+        }
+
         // Theme & Language
         item {
             Surface(shape = RoundedCornerShape(14.dp), color = palette.bgSurface) {
@@ -72,7 +133,16 @@ fun SettingsScreen(repo: VesselRepository) {
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween,
                     ) {
-                        Text(VesselI18n.tr("settings.theme_label"))
+                        Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+                            Text(VesselI18n.tr("settings.theme_label"))
+                            if (activeTheme.id == DYNAMIC_MATERIAL_THEME_ID) {
+                                Text(
+                                    "Material You • Dynamic wallpaper & system theme",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = palette.textMuted,
+                                )
+                            }
+                        }
                         Box {
                             OutlinedButton(onClick = { showThemeMenu = true }) { Text(activeTheme.name) }
                             DropdownMenu(expanded = showThemeMenu, onDismissRequest = { showThemeMenu = false }) {

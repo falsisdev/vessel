@@ -3,6 +3,7 @@ package dev.falsis.vessel.data
 import android.content.Context
 import android.os.Environment
 import dev.falsis.vessel.ui.i18n.VesselI18n
+import dev.falsis.vessel.ui.theme.DYNAMIC_MATERIAL_THEME_ID
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -42,7 +43,14 @@ class VesselRepository private constructor(private val appContext: Context) {
     private val _engineInfo = MutableStateFlow<EngineInfo?>(null)
     val engineInfo: StateFlow<EngineInfo?> = _engineInfo.asStateFlow()
 
-    private val _themes = MutableStateFlow(listOf(ThemeSpec()))
+    private val dynamicMaterialTheme = ThemeSpec(
+        id = DYNAMIC_MATERIAL_THEME_ID,
+        name = "Material You (Auto)",
+        author = "Android",
+        isDark = true,
+    )
+
+    private val _themes = MutableStateFlow(listOf(dynamicMaterialTheme, ThemeSpec()))
     val themes: StateFlow<List<ThemeSpec>> = _themes.asStateFlow()
 
     private val _activeTheme = MutableStateFlow(ThemeSpec())
@@ -175,7 +183,11 @@ class VesselRepository private constructor(private val appContext: Context) {
             VesselI18n.init(appContext, _locale.value, info.localesDir)
         }
         runCatching {
-            val list = json.decodeFromString<List<ThemeSpec>>(c.listThemesJson())
+            val rawList = json.decodeFromString<List<ThemeSpec>>(c.listThemesJson())
+            val list = buildList {
+                add(dynamicMaterialTheme)
+                rawList.filterNotTo(this) { it.id == DYNAMIC_MATERIAL_THEME_ID }
+            }
             _themes.value = list
             val savedThemeId = prefsStore.getString("theme_id", "catppuccin-mocha")
             _activeTheme.value = list.firstOrNull { it.id == savedThemeId } ?: list.firstOrNull() ?: ThemeSpec()

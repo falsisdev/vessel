@@ -24,6 +24,20 @@ use vessel_storage::{BackupImportMode, DownloadKind};
 
 uniffi::setup_scaffolding!();
 
+/// Initializes `rustls-platform-verifier` on Android with the Application context before any HTTP call.
+#[cfg(target_os = "android")]
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_dev_falsis_vessel_VesselApp_nativeInitTls<'local>(
+    mut unowned_env: jni::EnvUnowned<'local>,
+    _class: jni::objects::JClass<'local>,
+    context: jni::objects::JObject<'local>,
+) {
+    use jni::errors::ThrowRuntimeExAndDefault;
+    unowned_env
+        .with_env(|env| rustls_platform_verifier::android::init_with_env(env, context))
+        .resolve::<ThrowRuntimeExAndDefault>();
+}
+
 /// Unified FFI error preserving Vessel's `[Vessel<Variant>Error]: <message>` format.
 #[derive(Debug, thiserror::Error, uniffi::Error)]
 pub enum FfiError {

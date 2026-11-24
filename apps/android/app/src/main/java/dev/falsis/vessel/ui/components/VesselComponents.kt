@@ -44,6 +44,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -63,20 +66,41 @@ import dev.falsis.vessel.ui.theme.LocalVesselPalette
 fun VesselLogoMark(modifier: Modifier = Modifier) {
     val palette = LocalVesselPalette.current
     Canvas(modifier = modifier) {
-        val w = size.width
-        val h = size.height
+        // Exact 24x24 Bow "V" Monolith cargo ship mark from desktop VesselLogo.vue
+        val s = minOf(size.width, size.height) / 24f
+        drawRoundRect(
+            color = palette.accent,
+            topLeft = Offset(8.5f * s, 3.5f * s),
+            size = Size(7f * s, 3f * s),
+            cornerRadius = CornerRadius(0.9f * s, 0.9f * s),
+        )
+        drawRoundRect(
+            color = palette.accentSecondary,
+            topLeft = Offset(6f * s, 7.5f * s),
+            size = Size(5.5f * s, 3.2f * s),
+            cornerRadius = CornerRadius(0.9f * s, 0.9f * s),
+        )
+        drawRoundRect(
+            color = palette.textPrimary.copy(alpha = 0.92f),
+            topLeft = Offset(12.5f * s, 7.5f * s),
+            size = Size(5.5f * s, 3.2f * s),
+            cornerRadius = CornerRadius(0.9f * s, 0.9f * s),
+        )
         val hull = Path().apply {
-            moveTo(w * 0.14f, h * 0.24f)
-            lineTo(w * 0.50f, h * 0.86f)
-            lineTo(w * 0.86f, h * 0.24f)
-            lineTo(w * 0.70f, h * 0.24f)
-            lineTo(w * 0.50f, h * 0.62f)
-            lineTo(w * 0.30f, h * 0.24f)
+            moveTo(3.5f * s, 12f * s)
+            lineTo(12f * s, 20.8f * s)
+            lineTo(20.5f * s, 12f * s)
+            lineTo(16.2f * s, 12f * s)
+            lineTo(12f * s, 16.4f * s)
+            lineTo(7.8f * s, 12f * s)
             close()
         }
-        drawPath(
-            path = hull,
-            brush = Brush.linearGradient(listOf(palette.accent, palette.accentSecondary)),
+        drawPath(path = hull, color = palette.textPrimary)
+        drawLine(
+            color = palette.bgBase,
+            start = Offset(12f * s, 12f * s),
+            end = Offset(12f * s, 20.5f * s),
+            strokeWidth = 1.2f * s,
         )
     }
 }

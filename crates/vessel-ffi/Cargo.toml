@@ -26,3 +26,7 @@ vessel-engine = { path = "../vessel-engine" }
 vessel-metadata = { path = "../vessel-metadata" }
 vessel-plugin-rt = { path = "../vessel-plugin-rt" }
 vessel-storage = { path = "../vessel-storage" }
+
+[target.'cfg(target_os = "android")'.dependencies]
+jni = "0.22"
+rustls-platform-verifier = "0.7"
