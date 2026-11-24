@@ -265,23 +265,31 @@ fun HomeScreen(
                                 }
                             }
 
-                            val artUrl = detail?.backdrop?.takeIf { it.isNotBlank() }
-                                ?: detail?.poster?.takeIf { it.isNotBlank() }
-                                ?: hero.summary.poster
+                            val fallbackUrl = detail?.poster?.takeIf { it.isNotBlank() } ?: hero.summary.poster
+                            val backdropUrl = detail?.backdrop?.takeIf { it.isNotBlank() && it != fallbackUrl }
 
                             Box(
                                 modifier = Modifier
                                     .fillMaxSize()
                                     .clickable { onOpenDetails(hero.pluginId, hero.summary.nativeId) },
                             ) {
-                                if (!artUrl.isNullOrBlank()) {
+                                if (!fallbackUrl.isNullOrBlank()) {
                                     AsyncImage(
-                                        model = artUrl,
+                                        model = fallbackUrl,
                                         contentDescription = hero.summary.title,
                                         contentScale = ContentScale.Crop,
                                         modifier = Modifier.fillMaxSize(),
                                     )
-                                } else {
+                                }
+                                if (!backdropUrl.isNullOrBlank()) {
+                                    AsyncImage(
+                                        model = backdropUrl,
+                                        contentDescription = hero.summary.title,
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier.fillMaxSize(),
+                                    )
+                                }
+                                if (fallbackUrl.isNullOrBlank() && backdropUrl.isNullOrBlank()) {
                                     Box(
                                         modifier = Modifier
                                             .fillMaxSize()
