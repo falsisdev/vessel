@@ -56,6 +56,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
+import dev.falsis.vessel.data.CardPreferences
 import dev.falsis.vessel.data.ContinueWatchingEntry
 import dev.falsis.vessel.data.DomainPermissionPrompt
 import dev.falsis.vessel.data.MediaSummary
@@ -110,21 +111,27 @@ fun MediaPosterCard(
     item: MediaSummary,
     onClick: () -> Unit,
     onQuickStatus: ((String) -> Unit)? = null,
+    cards: CardPreferences = CardPreferences(),
     modifier: Modifier = Modifier,
 ) {
     val palette = LocalVesselPalette.current
     var showMenu by remember { mutableStateOf(false) }
+    val posterAspect = when (cards.aspectRatio) {
+        "wide_16x9" -> 16f / 9f
+        "square" -> 1f
+        else -> 2f / 3f
+    }
 
     Column(
         modifier = modifier
-            .width(136.dp)
+            .width(if (cards.aspectRatio == "wide_16x9") 210.dp else 136.dp)
             .clip(RoundedCornerShape(14.dp))
             .clickable(onClick = onClick),
     ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .aspectRatio(2f / 3f)
+                .aspectRatio(posterAspect)
                 .clip(RoundedCornerShape(14.dp))
                 .background(palette.bgElevated)
                 .border(1.dp, palette.border.copy(alpha = 0.5f), RoundedCornerShape(14.dp)),
@@ -152,32 +159,52 @@ fun MediaPosterCard(
             )
 
             // Rating chip top-left
-            item.rating?.takeIf { it > 0f }?.let { score ->
+            if (cards.showRating) {
+                item.rating?.takeIf { it > 0f }?.let { score ->
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = Color.Black.copy(alpha = 0.68f),
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .padding(6.dp),
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Star,
+                                contentDescription = null,
+                                tint = palette.warning,
+                                modifier = Modifier.size(11.dp),
+                            )
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Text(
+                                text = String.format("%.1f", score),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color.White,
+                                fontSize = 10.sp,
+                            )
+                        }
+                    }
+                }
+            }
+
+            if (cards.showContentType) {
                 Surface(
-                    shape = RoundedCornerShape(8.dp),
+                    shape = RoundedCornerShape(6.dp),
                     color = Color.Black.copy(alpha = 0.68f),
                     modifier = Modifier
-                        .align(Alignment.TopStart)
+                        .align(Alignment.BottomStart)
                         .padding(6.dp),
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Star,
-                            contentDescription = null,
-                            tint = palette.warning,
-                            modifier = Modifier.size(11.dp),
-                        )
-                        Spacer(modifier = Modifier.width(3.dp))
-                        Text(
-                            text = String.format("%.1f", score),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color.White,
-                            fontSize = 10.sp,
-                        )
-                    }
+                    Text(
+                        text = if (item.isAnime) "ANIME" else item.type.uppercase(),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.White,
+                        fontSize = 9.sp,
+                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp),
+                    )
                 }
             }
 
@@ -231,12 +258,14 @@ fun MediaPosterCard(
             overflow = TextOverflow.Ellipsis,
             color = palette.textPrimary,
         )
-        item.year?.let { y ->
-            Text(
-                text = y.toString(),
-                style = MaterialTheme.typography.labelSmall,
-                color = palette.textMuted,
-            )
+        if (cards.showYear) {
+            item.year?.let { y ->
+                Text(
+                    text = y.toString(),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = palette.textMuted,
+                )
+            }
         }
     }
 }

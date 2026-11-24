@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.decodeFromJsonElement
@@ -170,6 +171,11 @@ class VesselRepository private constructor(private val appContext: Context) {
 
     fun notify(message: String) {
         _toasts.tryEmit(message)
+    }
+
+    fun notifyError(err: Throwable, fallback: String) {
+        if (err is kotlinx.coroutines.CancellationException) return
+        _toasts.tryEmit(err.message ?: fallback)
     }
 
     private fun requireCore(): VesselMobileCore =
@@ -382,6 +388,38 @@ class VesselRepository private constructor(private val appContext: Context) {
         requireCore().playIptvChannel(json.encodeToString(channel), userAgent)
     }
 
+    suspend fun deleteIptvProfile(profileId: String) = withContext(Dispatchers.IO) {
+        requireCore().deleteIptvProfile(profileId)
+    }
+
+    suspend fun listIptvGroups(profileId: String): List<String> = withContext(Dispatchers.IO) {
+        val c = core ?: return@withContext emptyList()
+        c.listIptvGroups(profileId)
+    }
+
+    suspend fun getEpgNowNext(profileId: String, tvgId: String): EpgNowNext = withContext(Dispatchers.IO) {
+        json.decodeFromString(requireCore().getEpgNowNextJson(profileId, tvgId, null))
+    }
+
+    suspend fun clearRuntimeCaches() = withContext(Dispatchers.IO) {
+        core?.clearRuntimeCaches()
+    }
+
+    suspend fun getPluginSettingsMap(pluginId: String): Map<String, JsonElement> = withContext(Dispatchers.IO) {
+        json.decodeFromString(requireCore().getPluginSettingsJson(pluginId))
+    }
+
+    suspend fun setPluginSettingsMap(pluginId: String, values: Map<String, JsonElement>) = withContext(Dispatchers.IO) {
+        requireCore().setPluginSettingsJson(pluginId, json.encodeToString(values))
+    }
+
+    suspend fun importThemeJson(themeJson: String): ThemeSpec = withContext(Dispatchers.IO) {
+        val spec = json.decodeFromString<ThemeSpec>(requireCore().importThemeJson(themeJson))
+        refreshCoreState()
+        selectTheme(spec.id)
+        spec
+    }
+
     suspend fun setAlwaysProxy(enabled: Boolean) = withContext(Dispatchers.IO) {
         requireCore().setAlwaysProxy(enabled)
         refreshCoreState()
@@ -401,12 +439,14 @@ class VesselRepository private constructor(private val appContext: Context) {
         _uiPreferences.value = prefs
     }
 
+    suspend fun resetUiPreferences() = saveUiPreferences(UiPreferences())
+
     suspend fun exportBackupJson(includeSecrets: Boolean): String = withContext(Dispatchers.IO) {
         requireCore().exportBackupJson(includeSecrets)
     }
 
     suspend fun importBackupJson(rawJson: String, overwrite: Boolean) = withContext(Dispatchers.IO) {
-        requireCore().importBackupJson(rawJson, if (overwrite) "overwrite" else "merge")
+        requireCore().importBackupJson(rawJson, if (overwrite) "reset_and_import" else "smart_merge")
         refreshCoreState()
     }
 

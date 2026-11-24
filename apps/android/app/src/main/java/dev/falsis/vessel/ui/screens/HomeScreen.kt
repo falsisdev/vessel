@@ -3,6 +3,7 @@ package dev.falsis.vessel.ui.screens
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,8 +21,11 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.PlayArrow
@@ -82,6 +86,44 @@ private data class SpotlightHeroItem(
     val pluginName: String,
 )
 
+private fun resolveHomeGroupName(p: dev.falsis.vessel.data.PluginListEntry): String {
+    val rid = p.repoId?.trim()
+    if (!rid.isNullOrEmpty()) return rid
+    if (
+        "raw.githubusercontent.com" in p.allowedDomains &&
+        (p.manifest.author == "falsisdev" ||
+            p.manifest.author == "metemel" ||
+            p.manifest.id.startsWith("anthology") ||
+            p.manifest.id == "m3u.anthology.addon")
+    ) {
+        return "Anthology"
+    }
+    if (p.manifest.id.startsWith("community.anthology")) return "Anthology"
+    if (p.sourceType == "dev_dir") return "Local Dev Plugins"
+    return "Standalone Plugins"
+}
+
+private fun pickDefaultStarterPlugins(enabled: List<dev.falsis.vessel.data.PluginListEntry>): List<String> {
+    // Same smart curated <= 5 VOD/anime starter selection as Desktop HomeView.vue
+    val vodEnabled = enabled.filter { p ->
+        val caps = p.manifest.capabilities
+        !(caps.contains("live_tv") && !caps.contains("vod"))
+    }
+    val preferred = listOf("anizium", "diziwatch", "yabancidizi", "animecix", "seicode")
+    val vodIds = vodEnabled.map { it.manifest.id }.toSet()
+    val picked = mutableListOf<String>()
+    for (id in preferred) {
+        if (id in vodIds && picked.size < 5) picked += id
+    }
+    for (p in vodEnabled) {
+        if (p.manifest.id !in picked && picked.size < 5) picked += p.manifest.id
+    }
+    if (picked.isEmpty()) {
+        enabled.take(5).mapTo(picked) { it.manifest.id }
+    }
+    return picked
+}
+
 @Composable
 fun HomeScreen(
     repo: VesselRepository,
@@ -102,32 +144,44 @@ fun HomeScreen(
     var showFeedsModal by remember { mutableStateOf(false) }
     val heroDetails = remember { mutableStateMapOf<String, MediaDetail>() }
 
-    val enabledPluginIds = remember(plugins) {
-        plugins.filter { it.enabled }.map { it.manifest.id }
+    val enabledPlugins = remember(plugins) { plugins.filter { it.enabled } }
+    val enabledPluginIds = remember(enabledPlugins) { enabledPlugins.map { it.manifest.id } }
+    val effectiveHomeIds = remember(enabledPlugins, prefs.home.selectedPlugins) {
+        val enabledSet = enabledPlugins.map { it.manifest.id }.toSet()
+        val explicit = prefs.home.selectedPlugins?.filter { it in enabledSet }.orEmpty()
+        if (explicit.isNotEmpty()) explicit else pickDefaultStarterPlugins(enabledPlugins)
     }
 
-    suspend fun loadHome() {
+    suspend fun loadHome(forceRefresh: Boolean = false) {
         if (initError != null) {
             loading = false
             return
         }
         loading = true
-        val effectiveSelected = prefs.home.selectedPlugins?.takeIf { sel ->
-            sel.any { it in enabledPluginIds }
+        if (forceRefresh) {
+            runCatching { repo.clearRuntimeCaches() }
         }
         runCatching { continueWatching = repo.listContinueWatching(prefs.home.continueWatchingLimit) }
             .onFailure { Log.e("VesselHome", "listContinueWatching failed", it) }
-        runCatching { shelves = repo.getHomeFeeds(effectiveSelected) }
-            .onFailure { Log.e("VesselHome", "getHomeFeeds failed", it) }
+        runCatching {
+            shelves = if (effectiveHomeIds.isEmpty()) emptyList() else repo.getHomeFeeds(effectiveHomeIds)
+        }.onFailure { Log.e("VesselHome", "getHomeFeeds failed", it) }
         loading = false
     }
 
-    LaunchedEffect(isReady, enabledPluginIds, prefs.home.selectedPlugins) {
+    LaunchedEffect(isReady, effectiveHomeIds) {
         if (isReady) loadHome()
     }
 
-    val spotlightPool: List<SpotlightHeroItem> = remember(shelves) {
-        val allCandidates = shelves.flatMap { shelf ->
+    val spotlightPool: List<SpotlightHeroItem> = remember(shelves, prefs.home.heroPlugins, enabledPluginIds) {
+        val heroFilter = prefs.home.heroPlugins?.filter { it in enabledPluginIds }?.takeIf { it.isNotEmpty() }?.toSet()
+        val filteredShelves = if (heroFilter != null) {
+            val matched = shelves.filter { it.pluginId in heroFilter }
+            if (matched.isNotEmpty()) matched else shelves
+        } else {
+            shelves
+        }
+        val allCandidates = filteredShelves.flatMap { shelf ->
             shelf.sections.flatMap { sec ->
                 sec.items.map { item ->
                     SpotlightHeroItem(
@@ -176,12 +230,13 @@ fun HomeScreen(
         }
 
         // CloudStream-style Full-Bleed Hero Stage (replaces brand header once plugins exist)
-        if (hasEnabledPlugins) {
+        if (hasEnabledPlugins && prefs.home.heroBanner != "hidden") {
+            val heroHeight = if (prefs.home.heroBanner == "compact") 300.dp else 430.dp
             item(key = "spotlight-hero") {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(430.dp)
+                        .height(heroHeight)
                         .background(palette.bgSurface),
                 ) {
                     if (spotlightPool.isNotEmpty()) {
@@ -472,10 +527,24 @@ fun HomeScreen(
                             shape = CircleShape,
                             color = Color.Black.copy(alpha = 0.45f),
                         ) {
-                            IconButton(onClick = { scope.launch { loadHome() } }) {
+                            IconButton(onClick = { scope.launch { loadHome(forceRefresh = true) } }) {
                                 Icon(Icons.Default.Refresh, contentDescription = VesselI18n.tr("common.refresh"), tint = Color.White)
                             }
                         }
+                    }
+                }
+            }
+        } else if (hasEnabledPlugins) {
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.End,
+                ) {
+                    IconButton(onClick = { showFeedsModal = true }) {
+                        Icon(Icons.Default.Tune, contentDescription = VesselI18n.tr("home.choose_feeds"))
+                    }
+                    IconButton(onClick = { scope.launch { loadHome(forceRefresh = true) } }) {
+                        Icon(Icons.Default.Refresh, contentDescription = VesselI18n.tr("common.refresh"))
                     }
                 }
             }
@@ -606,6 +675,7 @@ fun HomeScreen(
                                         val pid = item.pluginId ?: result.pluginId
                                         MediaPosterCard(
                                             item = item,
+                                            cards = prefs.cards,
                                             onClick = { onOpenDetails(pid, item.nativeId) },
                                             onQuickStatus = { status ->
                                                 scope.launch {
@@ -634,32 +704,92 @@ fun HomeScreen(
     }
 
     if (showFeedsModal) {
-        val enabled = plugins.filter { it.enabled }
-        val enabledSet = enabled.map { it.manifest.id }.toSet()
-        val currentSelection = prefs.home.selectedPlugins
-            ?.filter { it in enabledSet }
-            ?.toSet()
-            ?.takeIf { it.isNotEmpty() }
-            ?: enabledSet
-        var draftSelection by remember(showFeedsModal) { mutableStateOf(currentSelection) }
+        val grouped = remember(enabledPlugins) {
+            enabledPlugins.groupBy(::resolveHomeGroupName).toList()
+        }
+        var draftSelection by remember(showFeedsModal) { mutableStateOf(effectiveHomeIds.toSet()) }
+        var draftHeroPlugins by remember(showFeedsModal) {
+            mutableStateOf(prefs.home.heroPlugins?.filter { it in enabledPluginIds }?.toSet() ?: emptySet())
+        }
         AlertDialog(
             onDismissRequest = { showFeedsModal = false },
             title = { Text(VesselI18n.tr("home.modal_title")) },
             text = {
-                Column {
-                    enabled.forEach { entry ->
-                        val pid = entry.manifest.id
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(420.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Text(
+                        text = VesselI18n.tr("home.modal_subtitle"),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = palette.textMuted,
+                    )
+                    grouped.forEach { (groupName, groupItems) ->
+                        val groupIds = groupItems.map { it.manifest.id }.toSet()
+                        val allGroupSelected = groupIds.all { it in draftSelection }
                         Row(
                             modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Checkbox(
-                                checked = pid in draftSelection,
-                                onCheckedChange = { checked ->
-                                    draftSelection = if (checked) draftSelection + pid else draftSelection - pid
+                            Text(groupName, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge)
+                            TextButton(onClick = {
+                                draftSelection = if (allGroupSelected) draftSelection - groupIds else draftSelection + groupIds
+                            }) {
+                                Text(
+                                    if (allGroupSelected) VesselI18n.tr("common.clear", "Clear") else VesselI18n.tr("common.all", "All"),
+                                    style = MaterialTheme.typography.labelSmall,
+                                )
+                            }
+                        }
+                        groupItems.forEach { entry ->
+                            val pid = entry.manifest.id
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        draftSelection = if (pid in draftSelection) draftSelection - pid else draftSelection + pid
+                                    },
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Checkbox(
+                                    checked = pid in draftSelection,
+                                    onCheckedChange = { checked ->
+                                        draftSelection = if (checked) draftSelection + pid else draftSelection - pid
+                                    },
+                                )
+                                Text(entry.manifest.name, modifier = Modifier.weight(1f))
+                            }
+                        }
+                        HorizontalDivider(color = palette.border.copy(alpha = 0.35f))
+                    }
+
+                    Text(
+                        text = VesselI18n.tr("home.hero_source_title", "Spotlight Hero Source"),
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        androidx.compose.material3.FilterChip(
+                            selected = draftHeroPlugins.isEmpty(),
+                            onClick = { draftHeroPlugins = emptySet() },
+                            label = { Text(VesselI18n.tr("home.hero_source_auto", "Auto")) },
+                        )
+                        enabledPlugins.filter { it.manifest.id in draftSelection }.forEach { entry ->
+                            val pid = entry.manifest.id
+                            androidx.compose.material3.FilterChip(
+                                selected = pid in draftHeroPlugins,
+                                onClick = {
+                                    draftHeroPlugins = if (pid in draftHeroPlugins) draftHeroPlugins - pid else draftHeroPlugins + pid
                                 },
+                                label = { Text(entry.manifest.name) },
                             )
-                            Text(entry.manifest.name)
                         }
                     }
                 }
@@ -667,14 +797,16 @@ fun HomeScreen(
             confirmButton = {
                 Button(onClick = {
                     showFeedsModal = false
-                    val nextSelected = if (draftSelection.size == enabledSet.size) {
-                        null
-                    } else {
-                        draftSelection.toList()
-                    }
+                    val nextSelected = draftSelection.toList().takeIf { it.isNotEmpty() }
+                    val nextHero = draftHeroPlugins.toList().takeIf { it.isNotEmpty() }
                     scope.launch {
                         repo.saveUiPreferences(
-                            prefs.copy(home = prefs.home.copy(selectedPlugins = nextSelected)),
+                            prefs.copy(
+                                home = prefs.home.copy(
+                                    selectedPlugins = nextSelected,
+                                    heroPlugins = nextHero,
+                                ),
+                            ),
                         )
                     }
                 }) {

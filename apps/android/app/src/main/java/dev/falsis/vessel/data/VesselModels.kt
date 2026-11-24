@@ -174,6 +174,7 @@ data class LibraryItem(
     val isAnime: Boolean = false,
     val title: String,
     val posterUrl: String? = null,
+    val year: Int? = null,
     val status: String = "watching",
     val addedAt: String = "",
     val updatedAt: String = "",
@@ -320,7 +321,25 @@ data class HomePreferences(
     val heroBanner: String = "full",
     val showContinueWatching: Boolean = true,
     val continueWatchingLimit: Int = 12,
+    val showRecentIptv: Boolean = true,
     val selectedPlugins: List<String>? = null,
+    val heroPlugins: List<String>? = null,
+)
+
+@Serializable
+data class CardPreferences(
+    val aspectRatio: String = "poster_2x3",
+    val showPluginBadge: Boolean = true,
+    val showRating: Boolean = true,
+    val showYear: Boolean = true,
+    val showContentType: Boolean = true,
+)
+
+@Serializable
+data class DetailsPreferences(
+    val showBackdrop: Boolean = true,
+    val hideEpisodeThumbnails: Boolean = false,
+    val hideEpisodeOverviews: Boolean = false,
 )
 
 @Serializable
@@ -333,6 +352,7 @@ data class PlaybackPreferences(
 @Serializable
 data class SubtitlePreferences(
     val fontSizePx: Int = 28,
+    val fontFamily: String = "system-ui",
     val textColor: String = "#ffffff",
     val backgroundOpacity: Int = 72,
     val outlineStyle: String = "outline",
@@ -343,6 +363,8 @@ data class SubtitlePreferences(
 @Serializable
 data class UiPreferences(
     val home: HomePreferences = HomePreferences(),
+    val cards: CardPreferences = CardPreferences(),
+    val details: DetailsPreferences = DetailsPreferences(),
     val playback: PlaybackPreferences = PlaybackPreferences(),
     val subtitles: SubtitlePreferences = SubtitlePreferences(),
 )

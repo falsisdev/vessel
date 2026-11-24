@@ -57,6 +57,18 @@ import dev.falsis.vessel.ui.i18n.VesselI18n
 import dev.falsis.vessel.ui.theme.LocalVesselPalette
 import kotlinx.coroutines.launch
 
+private fun formatBytes(bytes: Long): String {
+    if (bytes <= 0L) return "0 B"
+    val units = arrayOf("B", "KB", "MB", "GB")
+    var value = bytes.toDouble()
+    var unitIdx = 0
+    while (value >= 1024.0 && unitIdx < units.lastIndex) {
+        value /= 1024.0
+        unitIdx++
+    }
+    return if (unitIdx == 0) "$bytes B" else String.format("%.1f %s", value, units[unitIdx])
+}
+
 @Composable
 fun DownloadsScreen(
     repo: VesselRepository,
@@ -143,8 +155,15 @@ fun DownloadsScreen(
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(dl.title, fontWeight = FontWeight.SemiBold)
+                                val sizeInfo = if ((dl.totalBytes ?: 0L) > 0L) {
+                                    "${formatBytes(dl.bytesDownloaded)} / ${formatBytes(dl.totalBytes!!)}"
+                                } else if (dl.segmentsTotal > 0) {
+                                    "${dl.segmentsDone}/${dl.segmentsTotal}"
+                                } else if (dl.bytesDownloaded > 0L) {
+                                    formatBytes(dl.bytesDownloaded)
+                                } else null
                                 Text(
-                                    listOfNotNull(dl.streamLabel, dl.status.uppercase()).joinToString(" · "),
+                                    listOfNotNull(dl.streamLabel, dl.status.uppercase(), sizeInfo).joinToString(" · "),
                                     style = MaterialTheme.typography.labelSmall,
                                     color = palette.textMuted,
                                 )

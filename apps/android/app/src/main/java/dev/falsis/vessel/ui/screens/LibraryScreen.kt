@@ -16,15 +16,20 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -51,7 +56,9 @@ fun LibraryScreen(
 ) {
     val palette = LocalVesselPalette.current
     val scope = rememberCoroutineScope()
+    val prefs by repo.uiPreferences.collectAsState()
     var selectedFilter by remember { mutableStateOf<String?>(null) }
+    var searchText by remember { mutableStateOf("") }
     var itemsList by remember { mutableStateOf<List<LibraryItem>>(emptyList()) }
 
     suspend fun reload() {
@@ -60,6 +67,11 @@ fun LibraryScreen(
 
     LaunchedEffect(selectedFilter) { reload() }
 
+    val filteredItems = remember(itemsList, searchText) {
+        val q = searchText.trim().lowercase()
+        if (q.isEmpty()) itemsList else itemsList.filter { it.title.lowercase().contains(q) }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -67,7 +79,21 @@ fun LibraryScreen(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text(VesselI18n.tr("library.title"), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(VesselI18n.tr("library.title"), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Surface(color = palette.bgSurface, shape = RoundedCornerShape(50)) {
+                Text(
+                    text = "${filteredItems.size}",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = palette.textMuted,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                )
+            }
+        }
 
         Row(
             modifier = Modifier
@@ -91,19 +117,30 @@ fun LibraryScreen(
             }
         }
 
-        if (itemsList.isEmpty()) {
+        if (itemsList.isNotEmpty()) {
+            OutlinedTextField(
+                value = searchText,
+                onValueChange = { searchText = it },
+                placeholder = { Text(VesselI18n.tr("common.search", "Search…")) },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+
+        if (filteredItems.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(VesselI18n.tr("common.empty"), color = palette.textMuted)
             }
         } else {
             LazyVerticalGrid(
-                columns = GridCells.Adaptive(minSize = 132.dp),
+                columns = GridCells.Adaptive(minSize = if (prefs.cards.aspectRatio == "wide_16x9") 180.dp else 124.dp),
                 contentPadding = PaddingValues(bottom = 24.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
                 modifier = Modifier.fillMaxSize(),
             ) {
-                items(itemsList, key = { "${it.media.pluginId}:${it.media.nativeId}" }) { item ->
+                items(filteredItems, key = { "${it.media.pluginId}:${it.media.nativeId}" }) { item ->
                     Box {
                         MediaPosterCard(
                             item = MediaSummary(
@@ -113,7 +150,9 @@ fun LibraryScreen(
                                 isAnime = item.isAnime,
                                 title = item.title,
                                 poster = item.posterUrl,
+                                year = item.year,
                             ),
+                            cards = prefs.cards,
                             onClick = { onOpenDetails(item.media.pluginId, item.media.nativeId) },
                             onQuickStatus = { newStatus ->
                                 scope.launch {
@@ -122,7 +161,7 @@ fun LibraryScreen(
                                 }
                             },
                         )
-                        // Top-left non-overlapping delete icon
+                        // Top-left non-overlapping delete icon matching Desktop .lib-remove-btn
                         IconButton(
                             onClick = {
                                 scope.launch {

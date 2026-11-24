@@ -206,7 +206,7 @@ fun ExtensionsScreen(
         scope.launch {
             runCatching { repo.resolveSource(raw) }
                 .onSuccess { resolved = it }
-                .onFailure { repo.notify(it.message ?: "Failed to inspect source") }
+                .onFailure { repo.notifyError(it, "Failed to inspect source") }
             resolving = false
         }
     }

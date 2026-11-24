@@ -291,6 +291,9 @@ fun VesselAndroidApp(
                                             )
                                             overlay = OverlayRoute.Player("iptv", url, liveDetail, liveEp, liveStreams, 0, 0L)
                                         },
+                                        onPlayLiveStream = { pid, detail, ep, sr ->
+                                            overlay = OverlayRoute.Player(pid, detail.nativeId, detail, ep, sr, 0, 0L)
+                                        },
                                         onOpenDetails = { pid, nid -> overlay = OverlayRoute.Details(pid, nid) },
                                     )
                                     TopTab.SETTINGS -> SettingsScreen(
