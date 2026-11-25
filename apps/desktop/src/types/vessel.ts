@@ -271,11 +271,33 @@ export interface PluginListEntry {
   manifest: PluginManifest
   repoId?: string
   sourceType: string
+  sourceUrl?: string
   localPath: string
   sha256?: string
   enabled: boolean
   allowDynamicDomains: boolean
   allowedDomains: string[]
+}
+
+export interface PluginUpdateInfo {
+  pluginId: string
+  currentVersion: string
+  latestVersion?: string
+  updateAvailable: boolean
+  sourceUrl?: string
+  error?: string
+}
+
+export interface UpdatePluginResult {
+  pluginId: string
+  badge: string
+  version: string
+}
+
+export interface BatchUpdateResult {
+  checked: number
+  updated: UpdatePluginResult[]
+  failed: Array<{ pluginId: string; error: string }>
 }
 
 export interface RepoPluginEntry {

@@ -399,6 +399,22 @@ class VesselRepository private constructor(private val appContext: Context) {
         refreshCoreState()
     }
 
+    suspend fun checkPluginUpdates(): List<PluginUpdateInfo> = withContext(Dispatchers.IO) {
+        json.decodeFromString(requireCore().checkPluginUpdatesJson())
+    }
+
+    suspend fun updatePlugin(pluginId: String): UpdatePluginResult = withContext(Dispatchers.IO) {
+        val res = json.decodeFromString<UpdatePluginResult>(requireCore().updatePluginJson(pluginId))
+        refreshCoreState()
+        res
+    }
+
+    suspend fun updateAllPlugins(): BatchUpdateResult = withContext(Dispatchers.IO) {
+        val res = json.decodeFromString<BatchUpdateResult>(requireCore().updateAllPluginsJson())
+        refreshCoreState()
+        res
+    }
+
     suspend fun grantPluginDomain(pluginId: String, domain: String, permanent: Boolean) = withContext(Dispatchers.IO) {
         requireCore().grantPluginDomain(pluginId, domain, permanent)
         refreshCoreState()

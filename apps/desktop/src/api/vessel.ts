@@ -18,6 +18,7 @@ import type {
   MediaType,
   PlaybackProgress,
   PluginListEntry,
+  PluginUpdateInfo,
   ResolvedSource,
   SkipSegment,
   StoredDownload,
@@ -29,7 +30,9 @@ import type {
   ThemeSpec,
   UiPreferences,
   UpdateDownloadProgress,
+  UpdatePluginResult,
   UpdatePreferences,
+  BatchUpdateResult,
 } from '@/types/vessel'
 
 export function isTauriRuntime(): boolean {
@@ -78,6 +81,9 @@ export const vesselApi = {
   setPluginEnabled: (pluginId: string, enabled: boolean) =>
     call<void>('set_plugin_enabled', { pluginId, enabled }),
   uninstallPlugin: (pluginId: string) => call<void>('uninstall_plugin', { pluginId }),
+  checkPluginUpdates: () => call<PluginUpdateInfo[]>('check_plugin_updates'),
+  updatePlugin: (pluginId: string) => call<UpdatePluginResult>('update_plugin', { pluginId }),
+  updateAllPlugins: () => call<BatchUpdateResult>('update_all_plugins'),
   grantPluginDomain: (pluginId: string, domain: string, permanent: boolean) =>
     call<void>('grant_plugin_domain', { pluginId, domain, permanent }),
   getPluginSettings: (pluginId: string) =>

@@ -863,6 +863,12 @@ internal open class UniffiVTableCallbackInterfaceEngineEventListener(
 
 
 
+
+
+
+
+
+
 // For large crates we prevent `MethodTooLargeException` (see #2340)
 // N.B. the name of the extension is very misleading, since it is 
 // rather `InterfaceTooLargeException`, caused by too many methods 
@@ -879,6 +885,8 @@ internal open class UniffiVTableCallbackInterfaceEngineEventListener(
 internal interface IntegrityCheckingUniffiLib : Library {
     // Integrity check functions only
     fun uniffi_vessel_ffi_checksum_method_vesselmobilecore_cancel_search(
+): Short
+fun uniffi_vessel_ffi_checksum_method_vesselmobilecore_check_plugin_updates_json(
 ): Short
 fun uniffi_vessel_ffi_checksum_method_vesselmobilecore_clear_runtime_caches(
 ): Short
@@ -1000,6 +1008,10 @@ fun uniffi_vessel_ffi_checksum_method_vesselmobilecore_sync_iptv_profile(
 ): Short
 fun uniffi_vessel_ffi_checksum_method_vesselmobilecore_uninstall_plugin(
 ): Short
+fun uniffi_vessel_ffi_checksum_method_vesselmobilecore_update_all_plugins_json(
+): Short
+fun uniffi_vessel_ffi_checksum_method_vesselmobilecore_update_plugin_json(
+): Short
 fun uniffi_vessel_ffi_checksum_method_vesselmobilecore_upsert_iptv_profile_json(
 ): Short
 fun uniffi_vessel_ffi_checksum_method_vesselmobilecore_upsert_library_json(
@@ -1066,6 +1078,8 @@ fun uniffi_vessel_ffi_fn_constructor_vesselmobilecore_open(`rootDir`: RustBuffer
 ): Pointer
 fun uniffi_vessel_ffi_fn_method_vesselmobilecore_cancel_search(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
+fun uniffi_vessel_ffi_fn_method_vesselmobilecore_check_plugin_updates_json(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
 fun uniffi_vessel_ffi_fn_method_vesselmobilecore_clear_runtime_caches(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
 fun uniffi_vessel_ffi_fn_method_vesselmobilecore_delete_download(`ptr`: Pointer,`downloadId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -1186,6 +1200,10 @@ fun uniffi_vessel_ffi_fn_method_vesselmobilecore_sync_iptv_profile(`ptr`: Pointe
 ): Int
 fun uniffi_vessel_ffi_fn_method_vesselmobilecore_uninstall_plugin(`ptr`: Pointer,`pluginId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
+fun uniffi_vessel_ffi_fn_method_vesselmobilecore_update_all_plugins_json(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_vessel_ffi_fn_method_vesselmobilecore_update_plugin_json(`ptr`: Pointer,`pluginId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
 fun uniffi_vessel_ffi_fn_method_vesselmobilecore_upsert_iptv_profile_json(`ptr`: Pointer,`payloadJson`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 fun uniffi_vessel_ffi_fn_method_vesselmobilecore_upsert_library_json(`ptr`: Pointer,`itemJson`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -1319,6 +1337,9 @@ private fun uniffiCheckContractApiVersion(lib: IntegrityCheckingUniffiLib) {
 @Suppress("UNUSED_PARAMETER")
 private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_vessel_ffi_checksum_method_vesselmobilecore_cancel_search() != 19030.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_vessel_ffi_checksum_method_vesselmobilecore_check_plugin_updates_json() != 19450.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_vessel_ffi_checksum_method_vesselmobilecore_clear_runtime_caches() != 40244.toShort()) {
@@ -1499,6 +1520,12 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_vessel_ffi_checksum_method_vesselmobilecore_uninstall_plugin() != 29110.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_vessel_ffi_checksum_method_vesselmobilecore_update_all_plugins_json() != 48325.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_vessel_ffi_checksum_method_vesselmobilecore_update_plugin_json() != 6859.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_vessel_ffi_checksum_method_vesselmobilecore_upsert_iptv_profile_json() != 30042.toShort()) {
@@ -1919,6 +1946,8 @@ public interface VesselMobileCoreInterface {
     
     fun `cancelSearch`()
     
+    fun `checkPluginUpdatesJson`(): kotlin.String
+    
     fun `clearRuntimeCaches`()
     
     fun `deleteDownload`(`downloadId`: kotlin.String)
@@ -2039,6 +2068,10 @@ public interface VesselMobileCoreInterface {
     
     fun `uninstallPlugin`(`pluginId`: kotlin.String)
     
+    fun `updateAllPluginsJson`(): kotlin.String
+    
+    fun `updatePluginJson`(`pluginId`: kotlin.String): kotlin.String
+    
     fun `upsertIptvProfileJson`(`payloadJson`: kotlin.String): kotlin.String
     
     fun `upsertLibraryJson`(`itemJson`: kotlin.String)
@@ -2140,6 +2173,19 @@ open class VesselMobileCore: Disposable, AutoCloseable, VesselMobileCoreInterfac
 }
     }
     
+    
+
+    
+    @Throws(FfiException::class)override fun `checkPluginUpdatesJson`(): kotlin.String {
+            return FfiConverterString.lift(
+    callWithPointer {
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_vessel_ffi_fn_method_vesselmobilecore_check_plugin_updates_json(
+        it, _status)
+}
+    }
+    )
+    }
     
 
     override fun `clearRuntimeCaches`()
@@ -2896,6 +2942,32 @@ open class VesselMobileCore: Disposable, AutoCloseable, VesselMobileCoreInterfac
 }
     }
     
+    
+
+    
+    @Throws(FfiException::class)override fun `updateAllPluginsJson`(): kotlin.String {
+            return FfiConverterString.lift(
+    callWithPointer {
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_vessel_ffi_fn_method_vesselmobilecore_update_all_plugins_json(
+        it, _status)
+}
+    }
+    )
+    }
+    
+
+    
+    @Throws(FfiException::class)override fun `updatePluginJson`(`pluginId`: kotlin.String): kotlin.String {
+            return FfiConverterString.lift(
+    callWithPointer {
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_vessel_ffi_fn_method_vesselmobilecore_update_plugin_json(
+        it, FfiConverterString.lower(`pluginId`),_status)
+}
+    }
+    )
+    }
     
 
     

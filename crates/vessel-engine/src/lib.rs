@@ -15,9 +15,10 @@ use tokio_util::sync::CancellationToken;
 use vessel_domain::{
     ContentProvider, DomainGrantSource, DownloadStatus, EngineEvent, EventSink, ExternalIds,
     HomeFeed, LibraryItem, LibraryStatus, LinkedMediaSource, LogLevel, MediaDetail, MediaRef,
-    MediaType, PlaybackProgress, PlaybackRequest, PlayerBackend, PluginId, SearchPage, SecretStore,
-    SkipSegment, StoragePort, StreamCandidate, StreamKind, StreamResult, SubtitleFormat,
-    SubtitleSource, SubtitleTrack, UiPreferences, VesselError, VesselPaths, VesselResult,
+    MediaType, PlaybackProgress, PlaybackRequest, PlayerBackend, PluginId, RepoPluginEntry,
+    SearchPage, SecretStore, SkipSegment, StoragePort, StreamCandidate, StreamKind, StreamResult,
+    SubtitleFormat, SubtitleSource, SubtitleTrack, UiPreferences, VesselError, VesselPaths,
+    VesselResult,
 };
 use vessel_iptv::{IptvClient, channel_to_stream_candidate, xtream::xtream_xmltv_url};
 use vessel_metadata::{
@@ -49,6 +50,44 @@ pub struct LocalPlaybackBundle {
     pub url: String,
     pub kind: StreamKind,
     pub subtitles: Vec<SubtitleTrack>,
+}
+
+/// Update availability status for an installed plugin.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PluginUpdateInfo {
+    pub plugin_id: String,
+    pub current_version: String,
+    pub latest_version: Option<String>,
+    pub update_available: bool,
+    pub source_url: Option<String>,
+    pub error: Option<String>,
+}
+
+/// Summary of one plugin updated in-place.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdatedPluginInfo {
+    pub plugin_id: String,
+    pub version: String,
+    pub badge: String,
+}
+
+/// Failure record for one plugin during batch update.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BatchUpdateFailure {
+    pub plugin_id: String,
+    pub error: String,
+}
+
+/// Result of updating all outdated plugins in-place.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BatchUpdateResult {
+    pub checked: usize,
+    pub updated: Vec<UpdatedPluginInfo>,
+    pub failed: Vec<BatchUpdateFailure>,
 }
 
 fn subtitle_ext(format: SubtitleFormat) -> &'static str {
@@ -346,16 +385,36 @@ impl VesselEngine {
         source_type: &str,
         local_path: &str,
     ) -> VesselResult<()> {
+        self.install_package_with_source(package, repo_id, source_type, None, local_path)
+            .await
+    }
+
+    /// Persists a `LoadedPackage` along with its origin `source_url`, preserving existing settings,
+    /// user-approved domains, and enabled state on in-place updates.
+    pub async fn install_package_with_source(
+        &self,
+        package: LoadedPackage,
+        repo_id: Option<String>,
+        source_type: &str,
+        source_url: Option<String>,
+        local_path: &str,
+    ) -> VesselResult<()> {
         package.manifest.validate()?;
         let plugin_id = package.manifest.id.clone();
+        let existing = self.storage.get_plugin(&plugin_id).await?;
+        let preserve_enabled = existing.as_ref().map(|p| p.enabled).unwrap_or(true);
+        if existing.is_some() {
+            self.clear_plugin_caches(&plugin_id).await;
+        }
 
         let stored = StoredPlugin {
             manifest: package.manifest.clone(),
-            repo_id,
+            repo_id: repo_id.or_else(|| existing.and_then(|p| p.repo_id)),
             source_type: source_type.to_owned(),
+            source_url,
             local_path: local_path.to_owned(),
             sha256: Some(package.sha256.clone()),
-            enabled: true,
+            enabled: preserve_enabled,
             allow_dynamic_domains: package.manifest.allow_any_https,
             installed_at: "1970-01-01T00:00:00Z".into(),
             updated_at: "1970-01-01T00:00:00Z".into(),
@@ -378,9 +437,13 @@ impl VesselEngine {
                 package.manifest,
                 Arc::new(package.bundle),
                 extra_domains,
-                true,
+                preserve_enabled,
             )
             .await?;
+
+        if let Ok(settings) = self.get_plugin_settings(&plugin_id).await {
+            let _ = self.pool.set_settings(&plugin_id, settings).await;
+        }
 
         Ok(())
     }
@@ -464,10 +527,21 @@ impl VesselEngine {
                 badge,
             } => {
                 let id = package.manifest.id.clone();
+                let origin_url = if raw_input.trim().is_empty() {
+                    resolved_url.clone()
+                } else {
+                    resolved_url.clone()
+                };
                 let dev_path = Path::new(&resolved_url);
                 if dev_path.is_dir() {
-                    self.install_package(package, inferred_repo, "dev_dir", &resolved_url)
-                        .await?;
+                    self.install_package_with_source(
+                        package,
+                        inferred_repo,
+                        "dev_dir",
+                        Some(origin_url),
+                        &resolved_url,
+                    )
+                    .await?;
                 } else {
                     std::fs::create_dir_all(plugins_dir).map_err(|err| {
                         VesselError::Storage(format!("create plugins directory: {err}"))
@@ -482,8 +556,14 @@ impl VesselEngine {
                         VesselError::Storage(format!("write plugin archive: {err}"))
                     })?;
                     let local_path = pkg_path.to_string_lossy().into_owned();
-                    self.install_package(package, inferred_repo, "package", &local_path)
-                        .await?;
+                    self.install_package_with_source(
+                        package,
+                        inferred_repo,
+                        "package",
+                        Some(origin_url),
+                        &local_path,
+                    )
+                    .await?;
                 }
                 Ok((id, badge))
             }
@@ -575,6 +655,252 @@ impl VesselEngine {
             }
         }
         self.storage.remove_plugin(plugin_id).await
+    }
+
+    async fn resolve_repo_entries_cached<'a>(
+        &self,
+        repo_key: &str,
+        cache: &'a mut HashMap<String, Result<Vec<RepoPluginEntry>, String>>,
+    ) -> Result<&'a [RepoPluginEntry], String> {
+        if !cache.contains_key(repo_key) {
+            let fetched = match self.source_resolver.resolve(repo_key).await {
+                Ok(ResolvedSource::Repository { repo, .. }) => Ok(repo.plugins),
+                Ok(ResolvedSource::Package { .. }) => {
+                    Err(format!("source '{repo_key}' resolved to a package instead of a repo"))
+                }
+                Err(err) => Err(err.to_string()),
+            };
+            cache.insert(repo_key.to_owned(), fetched);
+        }
+        match cache.get(repo_key) {
+            Some(Ok(list)) => Ok(list.as_slice()),
+            Some(Err(err)) => Err(err.clone()),
+            None => Err("missing cached repo".into()),
+        }
+    }
+
+    /// Checks all installed plugins for newer versions without modifying any settings or domain grants.
+    pub async fn check_plugin_updates(&self) -> VesselResult<Vec<PluginUpdateInfo>> {
+        let installed = self.storage.list_plugins().await?;
+        let mut repo_cache: HashMap<String, Result<Vec<RepoPluginEntry>, String>> = HashMap::new();
+        let mut out = Vec::with_capacity(installed.len());
+
+        for plugin in installed {
+            let pid = plugin.manifest.id.as_str().to_owned();
+            let current_version = plugin.manifest.version.clone();
+
+            if let Some(repo_key) = infer_repo_source_for_plugin(&plugin) {
+                match self.resolve_repo_entries_cached(&repo_key, &mut repo_cache).await {
+                    Ok(entries) => {
+                        if let Some(entry) = entries.iter().find(|e| e.id.as_str() == pid) {
+                            let source_url = entry
+                                .download_url
+                                .clone()
+                                .or_else(|| entry.source_path.clone())
+                                .or_else(|| plugin.source_url.clone());
+                            let update_available = is_newer_version(&current_version, &entry.version);
+                            out.push(PluginUpdateInfo {
+                                plugin_id: pid,
+                                current_version,
+                                latest_version: Some(entry.version.clone()),
+                                update_available,
+                                source_url,
+                                error: None,
+                            });
+                            continue;
+                        }
+                    }
+                    Err(err) => {
+                        if plugin.source_url.is_none() {
+                            out.push(PluginUpdateInfo {
+                                plugin_id: pid,
+                                current_version,
+                                latest_version: None,
+                                update_available: false,
+                                source_url: None,
+                                error: Some(err),
+                            });
+                            continue;
+                        }
+                    }
+                }
+            }
+
+            if let Some(ref src) = plugin.source_url {
+                match self.source_resolver.resolve(src).await {
+                    Ok(ResolvedSource::Package { package, .. }) => {
+                        let latest = package.manifest.version;
+                        let update_available = is_newer_version(&current_version, &latest);
+                        out.push(PluginUpdateInfo {
+                            plugin_id: pid,
+                            current_version,
+                            latest_version: Some(latest),
+                            update_available,
+                            source_url: Some(src.clone()),
+                            error: None,
+                        });
+                    }
+                    Ok(ResolvedSource::Repository { repo, .. }) => {
+                        if let Some(entry) = repo.plugins.iter().find(|e| e.id.as_str() == pid) {
+                            let target = entry
+                                .download_url
+                                .clone()
+                                .or_else(|| entry.source_path.clone())
+                                .or_else(|| Some(src.clone()));
+                            let update_available = is_newer_version(&current_version, &entry.version);
+                            out.push(PluginUpdateInfo {
+                                plugin_id: pid,
+                                current_version,
+                                latest_version: Some(entry.version.clone()),
+                                update_available,
+                                source_url: target,
+                                error: None,
+                            });
+                        } else {
+                            out.push(PluginUpdateInfo {
+                                plugin_id: pid,
+                                current_version,
+                                latest_version: None,
+                                update_available: false,
+                                source_url: Some(src.clone()),
+                                error: None,
+                            });
+                        }
+                    }
+                    Err(err) => {
+                        out.push(PluginUpdateInfo {
+                            plugin_id: pid,
+                            current_version,
+                            latest_version: None,
+                            update_available: false,
+                            source_url: Some(src.clone()),
+                            error: Some(err.to_string()),
+                        });
+                    }
+                }
+            } else {
+                out.push(PluginUpdateInfo {
+                    plugin_id: pid,
+                    current_version,
+                    latest_version: None,
+                    update_available: false,
+                    source_url: None,
+                    error: None,
+                });
+            }
+        }
+
+        Ok(out)
+    }
+
+    /// Updates a single installed plugin in-place, preserving user settings, domain grants, and enabled state.
+    pub async fn update_plugin(
+        &self,
+        plugins_dir: &Path,
+        plugin_id: &PluginId,
+    ) -> VesselResult<(PluginId, SourceTrustBadge, String)> {
+        let Some(stored) = self.storage.get_plugin(plugin_id).await? else {
+            return Err(VesselError::NotFound(format!("plugin '{}'", plugin_id.as_str())));
+        };
+
+        let mut target_source = if stored.source_type == "dev_dir" {
+            Some(stored.local_path.clone())
+        } else {
+            None
+        };
+
+        if target_source.is_none()
+            && let Some(repo_key) = infer_repo_source_for_plugin(&stored)
+        {
+            let mut cache = HashMap::new();
+            if let Ok(entries) = self.resolve_repo_entries_cached(&repo_key, &mut cache).await
+                && let Some(entry) = entries.iter().find(|e| e.id == *plugin_id)
+            {
+                target_source = entry
+                    .download_url
+                    .clone()
+                    .or_else(|| entry.source_path.clone());
+            }
+        }
+
+        if target_source.is_none() {
+            target_source = stored.source_url.clone();
+        }
+
+        let Some(raw_target) = target_source.filter(|s| !s.trim().is_empty()) else {
+            return Err(VesselError::InvalidInput(format!(
+                "plugin '{}' has no recorded update source; reinstall once from a repository or URL",
+                plugin_id.as_str()
+            )));
+        };
+
+        let (id, badge) = self
+            .install_package_persisted_with_repo(plugins_dir, &raw_target, stored.repo_id)
+            .await?;
+        let new_version = self
+            .storage
+            .get_plugin(&id)
+            .await?
+            .map(|p| p.manifest.version)
+            .unwrap_or(stored.manifest.version);
+
+        Ok((id, badge, new_version))
+    }
+
+    /// Checks and updates all outdated plugins in-place.
+    pub async fn update_all_plugins(&self, plugins_dir: &Path) -> VesselResult<BatchUpdateResult> {
+        let checks = self.check_plugin_updates().await?;
+        let checked = checks.len();
+        let mut updated = Vec::new();
+        let mut failed = Vec::new();
+
+        for item in checks {
+            if !item.update_available {
+                continue;
+            }
+            let Some(target) = item.source_url else {
+                continue;
+            };
+            let Ok(pid) = PluginId::new(&item.plugin_id) else {
+                continue;
+            };
+            let existing_repo = self
+                .storage
+                .get_plugin(&pid)
+                .await?
+                .and_then(|p| p.repo_id);
+            match self
+                .install_package_persisted_with_repo(plugins_dir, &target, existing_repo)
+                .await
+            {
+                Ok((id, badge)) => {
+                    let version = self
+                        .storage
+                        .get_plugin(&id)
+                        .await?
+                        .map(|p| p.manifest.version)
+                        .or(item.latest_version)
+                        .unwrap_or(item.current_version);
+                    updated.push(UpdatedPluginInfo {
+                        plugin_id: id.to_string(),
+                        version,
+                        badge: format!("{badge:?}").to_ascii_lowercase(),
+                    });
+                }
+                Err(err) => {
+                    failed.push(BatchUpdateFailure {
+                        plugin_id: item.plugin_id,
+                        error: err.to_string(),
+                    });
+                }
+            }
+        }
+
+        Ok(BatchUpdateResult {
+            checked,
+            updated,
+            failed,
+        })
     }
 
     /// Reads declarative modular UI preferences (`ui_preferences`) from SQLite.
@@ -2092,6 +2418,64 @@ fn infer_repo_group(raw_input: &str) -> Option<String> {
         return Some("Stremio & External".into());
     }
     None
+}
+
+fn infer_repo_source_for_plugin(stored: &StoredPlugin) -> Option<String> {
+    if let Some(ref rid) = stored.repo_id {
+        let trimmed = rid.trim();
+        let lower = trimmed.to_ascii_lowercase();
+        if lower == "anthology (vessel)" || lower == "anthology-vessel" || lower == "tr" {
+            return Some("anthology".into());
+        }
+        if lower == "anthology" {
+            return Some("nuvio".into());
+        }
+        if trimmed.contains('/') && !trimmed.contains(' ') {
+            return Some(format!("gh:{trimmed}"));
+        }
+    }
+    if let Some(ref src) = stored.source_url {
+        if src.contains("/falsisdev/anthology-vessel/") {
+            return Some("anthology".into());
+        }
+        if src.contains("/falsisdev/anthology/") {
+            return Some("nuvio".into());
+        }
+    }
+    None
+}
+
+fn parse_numeric_version(raw: &str) -> Vec<u64> {
+    let clean = raw.trim().trim_start_matches(['v', 'V']);
+    let core = clean.split(['-', '+']).next().unwrap_or(clean);
+    core.split('.')
+        .filter_map(|seg| seg.trim().parse::<u64>().ok())
+        .collect()
+}
+
+fn is_newer_version(current: &str, latest: &str) -> bool {
+    let cur_clean = current.trim().trim_start_matches(['v', 'V']);
+    let lat_clean = latest.trim().trim_start_matches(['v', 'V']);
+    if cur_clean == lat_clean || lat_clean.is_empty() {
+        return false;
+    }
+    let a = parse_numeric_version(cur_clean);
+    let b = parse_numeric_version(lat_clean);
+    if !a.is_empty() && !b.is_empty() {
+        let max_len = a.len().max(b.len());
+        for i in 0..max_len {
+            let av = *a.get(i).unwrap_or(&0);
+            let bv = *b.get(i).unwrap_or(&0);
+            if bv > av {
+                return true;
+            }
+            if bv < av {
+                return false;
+            }
+        }
+        return false;
+    }
+    lat_clean != cur_clean
 }
 
 #[cfg(test)]

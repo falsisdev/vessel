@@ -35,6 +35,8 @@ import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.SystemUpdateAlt
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -62,6 +64,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import dev.falsis.vessel.data.PluginListEntry
+import dev.falsis.vessel.data.PluginUpdateInfo
 import dev.falsis.vessel.data.ResolvedSource
 import dev.falsis.vessel.data.VesselRepository
 import dev.falsis.vessel.ui.components.VesselButton
@@ -136,6 +139,42 @@ fun ExtensionsScreen(
     var installingTarget by remember { mutableStateOf<String?>(null) }
     var batchInstalling by remember { mutableStateOf(false) }
     var batchProgress by remember { mutableStateOf<String?>(null) }
+    var updateMap by remember { mutableStateOf<Map<String, PluginUpdateInfo>>(emptyMap()) }
+    var checkingUpdates by remember { mutableStateOf(false) }
+    var updatingId by remember { mutableStateOf<String?>(null) }
+    var updatingAll by remember { mutableStateOf(false) }
+
+    val availableUpdateCount = remember(updateMap) {
+        updateMap.values.count { it.updateAvailable }
+    }
+
+    fun runCheckUpdates(silent: Boolean) {
+        if (checkingUpdates || plugins.isEmpty()) return
+        checkingUpdates = true
+        scope.launch {
+            runCatching { repo.checkPluginUpdates() }
+                .onSuccess { list ->
+                    updateMap = list.associateBy { it.pluginId }
+                    if (!silent) {
+                        val count = list.count { it.updateAvailable }
+                        repo.notify(
+                            if (count > 0) VesselI18n.trf("extensions.updates_found", "count" to count)
+                            else VesselI18n.tr("extensions.up_to_date"),
+                        )
+                    }
+                }
+                .onFailure {
+                    if (!silent) repo.notifyError(it, VesselI18n.tr("extensions.update_failed"))
+                }
+            checkingUpdates = false
+        }
+    }
+
+    LaunchedEffect(plugins.size) {
+        if (plugins.isNotEmpty() && updateMap.isEmpty()) {
+            runCheckUpdates(silent = true)
+        }
+    }
 
     val expandedGroups = remember { mutableStateMapOf<String, Boolean>() }
     var confirmRemoveGroup by remember { mutableStateOf<String?>(null) }
@@ -462,6 +501,7 @@ fun ExtensionsScreen(
                                         Text(
                                             when {
                                                 installingTarget == installTarget -> batchProgress ?: "..."
+                                                updateMap[entry.id]?.updateAvailable == true -> VesselI18n.tr("common.update")
                                                 isInstalled -> VesselI18n.tr("common.reinstall")
                                                 else -> VesselI18n.tr("extensions.install_now")
                                             },
@@ -512,37 +552,102 @@ fun ExtensionsScreen(
             }
         }
 
-        // Installed Plugins Toolbar (Search + Home count chip)
+        // Installed Plugins Toolbar (Search + Check/Update All + Home count chip)
         if (plugins.isNotEmpty()) {
             item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    VesselSearchField(
-                        value = installedFilter,
-                        onValueChange = { installedFilter = it },
-                        placeholder = VesselI18n.tr("extensions.filter_installed"),
-                        imeAction = ImeAction.Done,
-                        modifier = Modifier.weight(1f),
-                    )
-                    Surface(
-                        color = palette.accent.copy(alpha = 0.16f),
-                        shape = RoundedCornerShape(10.dp),
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        VesselSearchField(
+                            value = installedFilter,
+                            onValueChange = { installedFilter = it },
+                            placeholder = VesselI18n.tr("extensions.filter_installed"),
+                            imeAction = ImeAction.Done,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Surface(
+                            color = palette.accent.copy(alpha = 0.16f),
+                            shape = RoundedCornerShape(10.dp),
                         ) {
-                            Icon(Icons.Default.Home, contentDescription = null, tint = palette.accent, modifier = Modifier.size(15.dp))
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            ) {
+                                Icon(Icons.Default.Home, contentDescription = null, tint = palette.accent, modifier = Modifier.size(15.dp))
+                                Text(
+                                    text = "${selectedHomeSet.size}",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = palette.accent,
+                                )
+                            }
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        VesselOutlinedButton(
+                            onClick = { runCheckUpdates(silent = false) },
+                            enabled = !checkingUpdates && !updatingAll,
+                            height = 32.dp,
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                        ) {
+                            if (checkingUpdates) {
+                                CircularProgressIndicator(modifier = Modifier.size(13.dp), strokeWidth = 2.dp)
+                            } else {
+                                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(14.dp))
+                            }
+                            Spacer(Modifier.width(5.dp))
                             Text(
-                                text = "${selectedHomeSet.size}",
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = palette.accent,
+                                text = if (checkingUpdates) {
+                                    VesselI18n.tr("extensions.checking_updates")
+                                } else {
+                                    VesselI18n.tr("extensions.check_updates")
+                                },
+                                style = MaterialTheme.typography.labelSmall,
                             )
+                        }
+
+                        if (availableUpdateCount > 0) {
+                            VesselButton(
+                                onClick = {
+                                    if (!updatingAll) {
+                                        updatingAll = true
+                                        scope.launch {
+                                            runCatching { repo.updateAllPlugins() }
+                                                .onSuccess { res ->
+                                                    if (res.updated.isNotEmpty()) {
+                                                        repo.notify(VesselI18n.trf("extensions.batch_updated_msg", "count" to res.updated.size))
+                                                    }
+                                                    runCheckUpdates(silent = true)
+                                                }
+                                                .onFailure { repo.notifyError(it, VesselI18n.tr("extensions.update_failed")) }
+                                            updatingAll = false
+                                        }
+                                    }
+                                },
+                                enabled = !updatingAll && !checkingUpdates,
+                                height = 32.dp,
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                            ) {
+                                if (updatingAll) {
+                                    CircularProgressIndicator(modifier = Modifier.size(13.dp), strokeWidth = 2.dp)
+                                } else {
+                                    Icon(Icons.Default.SystemUpdateAlt, contentDescription = null, modifier = Modifier.size(14.dp))
+                                }
+                                Spacer(Modifier.width(5.dp))
+                                Text(
+                                    text = VesselI18n.trf("extensions.update_all", "count" to availableUpdateCount),
+                                    style = MaterialTheme.typography.labelSmall,
+                                )
+                            }
                         }
                     }
                 }
@@ -794,8 +899,46 @@ fun ExtensionsScreen(
                                             }
                                         }
 
-                                        // Per-plugin Home toggle + Enabled Switch + Uninstall
+                                        // Per-plugin Update + Home toggle + Enabled Switch + Uninstall
                                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                            val upd = updateMap[plugin.manifest.id]
+                                            val hasUpdate = upd?.updateAvailable == true
+                                            val isUpdating = updatingId == plugin.manifest.id
+                                            VesselCompactIconButton(
+                                                enabled = !isUpdating && !updatingAll,
+                                                size = 30.dp,
+                                                containerColor = if (hasUpdate) palette.accent.copy(alpha = 0.18f) else palette.bgSurface,
+                                                onClick = {
+                                                    updatingId = plugin.manifest.id
+                                                    scope.launch {
+                                                        runCatching { repo.updatePlugin(plugin.manifest.id) }
+                                                            .onSuccess { res ->
+                                                                updateMap = updateMap - plugin.manifest.id
+                                                                repo.notify(
+                                                                    VesselI18n.trf(
+                                                                        "extensions.updated_msg",
+                                                                        "name" to plugin.manifest.name,
+                                                                        "version" to res.version,
+                                                                    ),
+                                                                )
+                                                            }
+                                                            .onFailure { repo.notifyError(it, VesselI18n.tr("extensions.update_failed")) }
+                                                        updatingId = null
+                                                    }
+                                                },
+                                            ) {
+                                                if (isUpdating) {
+                                                    CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
+                                                } else {
+                                                    Icon(
+                                                        imageVector = if (hasUpdate) Icons.Default.SystemUpdateAlt else Icons.Default.Refresh,
+                                                        contentDescription = VesselI18n.tr("common.update"),
+                                                        tint = if (hasUpdate) palette.accent else palette.textMuted,
+                                                        modifier = Modifier.size(16.dp),
+                                                    )
+                                                }
+                                            }
+
                                             val onHome = plugin.enabled && plugin.manifest.id in selectedHomeSet
                                             VesselCompactIconButton(
                                                 enabled = plugin.enabled,

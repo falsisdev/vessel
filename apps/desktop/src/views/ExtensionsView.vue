@@ -21,7 +21,7 @@ import { useHomeCache } from '@/composables/useHomeCache'
 import { useI18n } from '@/composables/useI18n'
 import { useUiPreferences } from '@/composables/useUiPreferences'
 import { pushToast } from '@/composables/useVesselEvents'
-import type { PluginListEntry, PluginManifest, ResolvedSource } from '@/types/vessel'
+import type { PluginListEntry, PluginManifest, PluginUpdateInfo, ResolvedSource } from '@/types/vessel'
 
 defineOptions({ name: 'ExtensionsView' })
 
@@ -44,6 +44,14 @@ const activeSettingsManifest = ref<PluginManifest | null>(null)
 const confirmUninstallId = shallowRef<string>('')
 const confirmRemoveGroup = shallowRef<string>('')
 const failedImageUrls = ref<Record<string, boolean>>({})
+const updateMap = ref<Record<string, PluginUpdateInfo>>({})
+const checkingUpdates = shallowRef(false)
+const updatingId = shallowRef('')
+const updatingAll = shallowRef(false)
+
+const availableUpdates = computed(() =>
+  Object.values(updateMap.value).filter((item) => item.updateAvailable),
+)
 
 function markImageFailed(url?: string): void {
   if (!url) return
@@ -360,8 +368,76 @@ async function removePlugin(pluginId: string): Promise<void> {
   }
 }
 
+async function checkUpdates(silent = false): Promise<void> {
+  if (!isTauriRuntime() || checkingUpdates.value || !plugins.value.length) return
+  checkingUpdates.value = true
+  try {
+    const list = await vesselApi.checkPluginUpdates()
+    const next: Record<string, PluginUpdateInfo> = {}
+    for (const item of list) {
+      next[item.pluginId] = item
+    }
+    updateMap.value = next
+    if (!silent) {
+      const count = list.filter((i) => i.updateAvailable).length
+      pushToast(
+        'info',
+        count > 0
+          ? t('extensions.updates_found', { count })
+          : t('extensions.up_to_date'),
+      )
+    }
+  } catch (err) {
+    if (!silent) pushToast('error', String(err))
+  } finally {
+    checkingUpdates.value = false
+  }
+}
+
+async function updateSinglePlugin(entry: PluginListEntry): Promise<void> {
+  if (updatingId.value || updatingAll.value) return
+  updatingId.value = entry.manifest.id
+  try {
+    const res = await vesselApi.updatePlugin(entry.manifest.id)
+    invalidateHomeCache()
+    await refreshPlugins()
+    const nextMap = { ...updateMap.value }
+    delete nextMap[entry.manifest.id]
+    updateMap.value = nextMap
+    pushToast(
+      'info',
+      t('extensions.updated_msg', { name: entry.manifest.name, version: res.version }),
+    )
+  } catch (err) {
+    pushToast('error', String(err))
+  } finally {
+    updatingId.value = ''
+  }
+}
+
+async function updateAllOutdated(): Promise<void> {
+  if (updatingAll.value || !availableUpdates.value.length) return
+  updatingAll.value = true
+  try {
+    const res = await vesselApi.updateAllPlugins()
+    invalidateHomeCache()
+    await refreshPlugins()
+    await checkUpdates(true)
+    if (res.updated.length > 0) {
+      pushToast('info', t('extensions.batch_updated_msg', { count: res.updated.length }))
+    }
+    if (res.failed.length > 0) {
+      pushToast('warn', `${res.failed.length} plugin(s) failed to update`)
+    }
+  } catch (err) {
+    pushToast('error', String(err))
+  } finally {
+    updatingAll.value = false
+  }
+}
+
 onMounted(() => {
-  void refreshPlugins()
+  void refreshPlugins().then(() => checkUpdates(true))
 })
 </script>
 
@@ -374,9 +450,30 @@ onMounted(() => {
           Installed repositories and plugins. Click a plugin bundle to expand or manage individual providers.
         </p>
       </div>
-      <button class="v-btn" @click="refreshPlugins">
-        <RefreshCw :size="15" /> {{ t('common.refresh') }}
-      </button>
+      <div class="header-actions">
+        <button
+          v-if="availableUpdates.length > 0"
+          class="v-btn v-btn-primary"
+          :disabled="updatingAll || checkingUpdates"
+          @click="updateAllOutdated"
+        >
+          <Loader2 v-if="updatingAll" :size="15" class="spin" />
+          <Download v-else :size="15" />
+          {{ t('extensions.update_all', { count: availableUpdates.length }) }}
+        </button>
+        <button
+          class="v-btn"
+          :disabled="checkingUpdates || !plugins.length"
+          @click="checkUpdates(false)"
+        >
+          <Loader2 v-if="checkingUpdates" :size="15" class="spin" />
+          <RefreshCw v-else :size="15" />
+          {{ checkingUpdates ? t('extensions.checking_updates') : t('extensions.check_updates') }}
+        </button>
+        <button class="v-btn" @click="refreshPlugins">
+          <RefreshCw :size="15" /> {{ t('common.refresh') }}
+        </button>
+      </div>
     </header>
 
     <form class="source-bar" @submit.prevent="inspectSource">
@@ -512,9 +609,11 @@ onMounted(() => {
               {{
                 installingTarget === (rp.downloadUrl ?? rp.sourcePath)
                   ? t('common.loading')
-                  : installedPluginIds.has(rp.id)
-                    ? t('common.reinstall')
-                    : t('common.install')
+                  : updateMap[rp.id]?.updateAvailable
+                    ? t('common.update')
+                    : installedPluginIds.has(rp.id)
+                      ? t('common.reinstall')
+                      : t('common.install')
               }}
             </button>
           </div>
@@ -661,6 +760,26 @@ onMounted(() => {
                   <RefreshCw :size="13" /> Reload
                 </button>
                 <button
+                  v-else
+                  type="button"
+                  class="v-btn v-btn-sm"
+                  :class="{ 'v-btn-primary': updateMap[entry.manifest.id]?.updateAvailable }"
+                  :disabled="updatingId === entry.manifest.id || updatingAll"
+                  :title="
+                    updateMap[entry.manifest.id]?.updateAvailable
+                      ? `${t('common.update')} → v${updateMap[entry.manifest.id]?.latestVersion}`
+                      : t('common.update')
+                  "
+                  @click="updateSinglePlugin(entry)"
+                >
+                  <Loader2 v-if="updatingId === entry.manifest.id" :size="13" class="spin" />
+                  <Download v-else-if="updateMap[entry.manifest.id]?.updateAvailable" :size="13" />
+                  <RefreshCw v-else :size="13" />
+                  <span v-if="updateMap[entry.manifest.id]?.updateAvailable">
+                    {{ t('common.update') }} v{{ updateMap[entry.manifest.id]?.latestVersion }}
+                  </span>
+                </button>
+                <button
                   v-if="entry.manifest.settingsSchema.length"
                   class="v-btn v-btn-sm"
                   @click="activeSettingsManifest = entry.manifest"
@@ -698,6 +817,13 @@ onMounted(() => {
 .header-sub {
   margin: 0.25rem 0 0;
   font-size: 0.9rem;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
 }
 
 .source-bar,

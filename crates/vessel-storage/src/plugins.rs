@@ -11,6 +11,7 @@ pub struct StoredPlugin {
     pub manifest: PluginManifest,
     pub repo_id: Option<String>,
     pub source_type: String,
+    pub source_url: Option<String>,
     pub local_path: String,
     pub sha256: Option<String>,
     pub enabled: bool,
@@ -29,6 +30,7 @@ fn grant_source_as_str(source: DomainGrantSource) -> &'static str {
 struct RawPluginRow {
     repo_id: Option<String>,
     source_type: String,
+    source_url: Option<String>,
     local_path: String,
     sha256: Option<String>,
     enabled: i64,
@@ -43,13 +45,14 @@ impl RawPluginRow {
         Ok(Self {
             repo_id: row.get(0)?,
             source_type: row.get(1)?,
-            local_path: row.get(2)?,
-            sha256: row.get(3)?,
-            enabled: row.get(4)?,
-            allow_dynamic_domains: row.get(5)?,
-            manifest_json: row.get(6)?,
-            installed_at: row.get(7)?,
-            updated_at: row.get(8)?,
+            source_url: row.get(2)?,
+            local_path: row.get(3)?,
+            sha256: row.get(4)?,
+            enabled: row.get(5)?,
+            allow_dynamic_domains: row.get(6)?,
+            manifest_json: row.get(7)?,
+            installed_at: row.get(8)?,
+            updated_at: row.get(9)?,
         })
     }
 
@@ -60,6 +63,7 @@ impl RawPluginRow {
             manifest,
             repo_id: self.repo_id,
             source_type: self.source_type,
+            source_url: self.source_url,
             local_path: self.local_path,
             sha256: self.sha256,
             enabled: self.enabled != 0,
@@ -102,13 +106,20 @@ impl SqliteStorage {
                         .map_err(map_sql_err)?;
                 }
 
+                let normalized_source_url = plugin
+                    .source_url
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+                    .map(str::to_owned);
+
                 db.conn()
                     .execute(
                         "INSERT INTO plugins (
                              id, repo_id, name, version, capabilities_json, languages_json,
-                             source_type, local_path, sha256, enabled, allow_dynamic_domains,
+                             source_type, source_url, local_path, sha256, enabled, allow_dynamic_domains,
                              manifest_json, installed_at, updated_at
-                         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
+                         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
                          ON CONFLICT(id) DO UPDATE SET
                              repo_id = excluded.repo_id,
                              name = excluded.name,
@@ -116,6 +127,7 @@ impl SqliteStorage {
                              capabilities_json = excluded.capabilities_json,
                              languages_json = excluded.languages_json,
                              source_type = excluded.source_type,
+                             source_url = COALESCE(excluded.source_url, plugins.source_url),
                              local_path = excluded.local_path,
                              sha256 = excluded.sha256,
                              enabled = excluded.enabled,
@@ -130,6 +142,7 @@ impl SqliteStorage {
                             &capabilities_json,
                             &languages_json,
                             &plugin.source_type,
+                            &normalized_source_url,
                             &plugin.local_path,
                             &plugin.sha256,
                             i32::from(plugin.enabled),
@@ -153,7 +166,7 @@ impl SqliteStorage {
                 let row = db
                     .conn()
                     .query_row(
-                        "SELECT repo_id, source_type, local_path, sha256, enabled,
+                        "SELECT repo_id, source_type, source_url, local_path, sha256, enabled,
                                 allow_dynamic_domains, manifest_json, installed_at, updated_at
                          FROM plugins WHERE id = ?1",
                         [&id],
@@ -174,7 +187,7 @@ impl SqliteStorage {
                 let mut stmt = db
                     .conn()
                     .prepare(
-                        "SELECT id, repo_id, source_type, local_path, sha256, enabled,
+                        "SELECT id, repo_id, source_type, source_url, local_path, sha256, enabled,
                                 allow_dynamic_domains, manifest_json, installed_at, updated_at
                          FROM plugins ORDER BY name ASC",
                     )
@@ -185,13 +198,14 @@ impl SqliteStorage {
                         let raw = RawPluginRow {
                             repo_id: row.get(1)?,
                             source_type: row.get(2)?,
-                            local_path: row.get(3)?,
-                            sha256: row.get(4)?,
-                            enabled: row.get(5)?,
-                            allow_dynamic_domains: row.get(6)?,
-                            manifest_json: row.get(7)?,
-                            installed_at: row.get(8)?,
-                            updated_at: row.get(9)?,
+                            source_url: row.get(3)?,
+                            local_path: row.get(4)?,
+                            sha256: row.get(5)?,
+                            enabled: row.get(6)?,
+                            allow_dynamic_domains: row.get(7)?,
+                            manifest_json: row.get(8)?,
+                            installed_at: row.get(9)?,
+                            updated_at: row.get(10)?,
                         };
                         Ok((id, raw))
                     })
@@ -458,6 +472,7 @@ mod tests {
             },
             repo_id: None,
             source_type: "local_dev".into(),
+            source_url: None,
             local_path: "/tmp/anthology".into(),
             sha256: None,
             enabled: true,

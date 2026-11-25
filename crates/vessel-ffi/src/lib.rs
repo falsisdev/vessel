@@ -142,11 +142,20 @@ struct PluginListEntryDto {
     manifest: PluginManifest,
     repo_id: Option<String>,
     source_type: String,
+    source_url: Option<String>,
     local_path: String,
     sha256: Option<String>,
     enabled: bool,
     allow_dynamic_domains: bool,
     allowed_domains: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct UpdatePluginResultDto {
+    plugin_id: String,
+    badge: String,
+    version: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -604,6 +613,7 @@ impl VesselMobileCore {
                     manifest: item.manifest,
                     repo_id: item.repo_id,
                     source_type: item.source_type,
+                    source_url: item.source_url,
                     local_path: item.local_path,
                     sha256: item.sha256,
                     enabled: item.enabled,
@@ -675,6 +685,34 @@ impl VesselMobileCore {
         let pid = PluginId::new(plugin_id)?;
         self.runtime.block_on(self.engine.uninstall_plugin(&pid))?;
         Ok(())
+    }
+
+    pub fn check_plugin_updates_json(&self) -> Result<String, FfiError> {
+        let out = self
+            .runtime
+            .block_on(self.engine.check_plugin_updates())?;
+        to_json(&out)
+    }
+
+    pub fn update_plugin_json(&self, plugin_id: String) -> Result<String, FfiError> {
+        let pid = PluginId::new(plugin_id)?;
+        let plugins_dir = self.paths.plugins_dir();
+        let (id, badge, version) = self
+            .runtime
+            .block_on(self.engine.update_plugin(&plugins_dir, &pid))?;
+        to_json(&UpdatePluginResultDto {
+            plugin_id: id.to_string(),
+            badge: badge_label(badge).into(),
+            version,
+        })
+    }
+
+    pub fn update_all_plugins_json(&self) -> Result<String, FfiError> {
+        let plugins_dir = self.paths.plugins_dir();
+        let out = self
+            .runtime
+            .block_on(self.engine.update_all_plugins(&plugins_dir))?;
+        to_json(&out)
     }
 
     pub fn grant_plugin_domain(

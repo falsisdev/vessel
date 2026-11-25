@@ -24,6 +24,7 @@
     "all": "All",
     "install": "Install",
     "reinstall": "Reinstall",
+    "update": "Update",
     "uninstall": "Uninstall",
     "enable": "Enable",
     "disable": "Disable",
@@ -218,7 +219,15 @@
     "disabled_group": "Disabled {name}",
     "removed_group": "Removed {name}",
     "domains_count": "{count} domains",
-    "home_label": "Home"
+    "home_label": "Home",
+    "check_updates": "Check Updates",
+    "checking_updates": "Checking…",
+    "update_all": "Update All ({count})",
+    "up_to_date": "All plugins are up to date",
+    "updates_found": "{count} update(s) available",
+    "updated_msg": "{name} updated to v{version}",
+    "update_failed": "Update failed",
+    "batch_updated_msg": "Updated {count} plugin(s)"
   },
   "settings": {
     "title": "Settings",

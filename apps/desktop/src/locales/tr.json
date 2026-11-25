@@ -24,6 +24,7 @@
     "all": "Tümü",
     "install": "Kur",
     "reinstall": "Yeniden Kur",
+    "update": "Güncelle",
     "uninstall": "Kaldır",
     "enable": "Etkinleştir",
     "disable": "Devre Dışı Bırak",
@@ -218,7 +219,15 @@
     "disabled_group": "{name} devre dışı bırakıldı",
     "removed_group": "{name} kaldırıldı",
     "domains_count": "{count} alan adı",
-    "home_label": "Ana Sayfa"
+    "home_label": "Ana Sayfa",
+    "check_updates": "Güncellemeleri Denetle",
+    "checking_updates": "Denetleniyor…",
+    "update_all": "Tümünü Güncelle ({count})",
+    "up_to_date": "Tüm eklentiler güncel",
+    "updates_found": "{count} güncelleme mevcut",
+    "updated_msg": "{name} güncellendi (v{version})",
+    "update_failed": "Güncelleme başarısız",
+    "batch_updated_msg": "{count} eklenti güncellendi"
   },
   "settings": {
     "title": "Ayarlar",

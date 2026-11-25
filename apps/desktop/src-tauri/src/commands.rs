@@ -54,6 +54,7 @@ pub struct PluginListEntryDto {
     pub manifest: PluginManifest,
     pub repo_id: Option<String>,
     pub source_type: String,
+    pub source_url: Option<String>,
     pub local_path: String,
     pub sha256: Option<String>,
     pub enabled: bool,
@@ -93,6 +94,14 @@ pub struct HomeShelfResultDto {
 pub struct InstallResultDto {
     pub plugin_id: String,
     pub badge: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdatePluginResultDto {
+    pub plugin_id: String,
+    pub badge: String,
+    pub version: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -514,6 +523,7 @@ pub async fn list_plugins(state: State<'_, AppState>) -> Result<Vec<PluginListEn
             manifest: item.manifest,
             repo_id: item.repo_id,
             source_type: item.source_type,
+            source_url: item.source_url,
             local_path: item.local_path,
             sha256: item.sha256,
             enabled: item.enabled,
@@ -587,6 +597,36 @@ pub async fn set_plugin_enabled(
 pub async fn uninstall_plugin(state: State<'_, AppState>, plugin_id: String) -> Result<(), String> {
     let pid = map_err(PluginId::new(plugin_id))?;
     map_err(state.engine.uninstall_plugin(&pid).await)
+}
+
+#[tauri::command]
+pub async fn check_plugin_updates(
+    state: State<'_, AppState>,
+) -> Result<Vec<vessel_engine::PluginUpdateInfo>, String> {
+    map_err(state.engine.check_plugin_updates().await)
+}
+
+#[tauri::command]
+pub async fn update_plugin(
+    state: State<'_, AppState>,
+    plugin_id: String,
+) -> Result<UpdatePluginResultDto, String> {
+    let pid = map_err(PluginId::new(plugin_id))?;
+    let plugins_dir = state.paths.plugins_dir();
+    let (id, badge, version) = map_err(state.engine.update_plugin(&plugins_dir, &pid).await)?;
+    Ok(UpdatePluginResultDto {
+        plugin_id: id.to_string(),
+        badge: badge_label(badge).into(),
+        version,
+    })
+}
+
+#[tauri::command]
+pub async fn update_all_plugins(
+    state: State<'_, AppState>,
+) -> Result<vessel_engine::BatchUpdateResult, String> {
+    let plugins_dir = state.paths.plugins_dir();
+    map_err(state.engine.update_all_plugins(&plugins_dir).await)
 }
 
 #[tauri::command]

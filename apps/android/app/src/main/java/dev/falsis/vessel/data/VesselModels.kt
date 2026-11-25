@@ -311,11 +311,42 @@ data class PluginListEntry(
     val manifest: PluginManifest,
     val repoId: String? = null,
     val sourceType: String = "local",
+    val sourceUrl: String? = null,
     val localPath: String = "",
     val sha256: String? = null,
     val enabled: Boolean = true,
     val allowDynamicDomains: Boolean = false,
     val allowedDomains: List<String> = emptyList(),
+)
+
+@Serializable
+data class PluginUpdateInfo(
+    val pluginId: String,
+    val currentVersion: String,
+    val latestVersion: String? = null,
+    val updateAvailable: Boolean = false,
+    val sourceUrl: String? = null,
+    val error: String? = null,
+)
+
+@Serializable
+data class UpdatePluginResult(
+    val pluginId: String,
+    val badge: String,
+    val version: String,
+)
+
+@Serializable
+data class BatchUpdateFailure(
+    val pluginId: String,
+    val error: String,
+)
+
+@Serializable
+data class BatchUpdateResult(
+    val checked: Int = 0,
+    val updated: List<UpdatePluginResult> = emptyList(),
+    val failed: List<BatchUpdateFailure> = emptyList(),
 )
 
 @Serializable
