@@ -14,7 +14,7 @@
 
 ---
 
-## Fonctionnalités Principales (`v0.1.44`)
+## Fonctionnalités Principales (`v0.1.45`)
 
 - **Lecteur Plein Écran (`/watch`) :** Lecture HLS (`hls.js`), MPEG-TS (`mpegts.js`), MP4/WebM et transfert vers **`mpv`** via JSON IPC ; sélecteur de **Pistes Audio**, **Sous-titres** (`.srt/.vtt/.ass/.ssa`) avec synchronisation (`-500 ms / +500 ms`), aperçu en direct, bouton **Aller aux Détails** et saut automatique **Intro / Récap / Générique / Aperçu** (`Plugin > TheIntroDB > IntroDB > AniSkip`).
 - **Reprendre la Lecture Intelligent :** Passe automatiquement à l'épisode suivant après un épisode terminé, masque les films/fins de série achevés, propose un menu contextuel (clic droit / appui long) et un éditeur manuel.

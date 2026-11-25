@@ -1,6 +1,6 @@
 //! Source Resolver (`https://`, `gh:`, `gl:`, `registry.json` + HTTP `301/302` shortcodes, `vessel://install`, Dev Mode).
 
-use std::collections::{BTreeMap, HashSet, VecDeque};
+use std::collections::{BTreeMap, HashSet};
 use std::fs;
 use std::net::IpAddr;
 use std::path::{Path, PathBuf};
@@ -350,7 +350,7 @@ impl SourceResolver {
     /// Creates a production `SourceResolver` backed by `raw.githubusercontent.com` and `gitlab.com`.
     pub fn new() -> Self {
         let client = vessel_domain::http_client_builder()
-            .user_agent("Vessel/0.1.44 (https://github.com/falsisdev/vessel)")
+            .user_agent("Vessel/0.1.45 (https://github.com/falsisdev/vessel)")
             .redirect(Policy::none())
             .timeout(RESOLVER_TIMEOUT)
             .build()
@@ -961,38 +961,83 @@ impl SourceResolver {
         manifest.validate()?;
         let mut files: BTreeMap<String, String> = BTreeMap::new();
         let mut visited: HashSet<String> = HashSet::new();
-        let mut queue: VecDeque<String> = VecDeque::new();
+        let mut pending: Vec<String> = Vec::new();
+        let mut queued: HashSet<String> = HashSet::new();
 
-        queue.push_back(manifest.entry.trim_start_matches("./").to_owned());
+        let entry_stem = manifest.entry.trim_start_matches("./").to_owned();
+        if queued.insert(entry_stem.clone()) {
+            pending.push(entry_stem);
+        }
         for extra in &manifest.files {
-            queue.push_back(extra.trim_start_matches("./").to_owned());
+            let stem = extra.trim_start_matches("./").to_owned();
+            if queued.insert(stem.clone()) {
+                pending.push(stem);
+            }
         }
 
-        while let Some(stem) = queue.pop_front() {
-            let (resolved_rel, text) = self.fetch_module_with_extensions(base_url, &stem).await?;
-            verify_open_source_js(&text, &join_base_path(base_url, &resolved_rel))?;
-            if !visited.insert(resolved_rel.clone()) {
-                continue;
-            }
-
-            let imports = collect_relative_imports(&resolved_rel, &text)?;
-            let parent_dir = match resolved_rel.rsplit_once('/') {
-                Some((dir, _)) => dir,
-                None => "",
-            };
-            for spec in imports {
-                let normalized = normalize_rel_import(parent_dir, &spec)?;
-                if !visited.contains(&normalized) {
-                    queue.push_back(normalized);
+        // Only probe optional `icon.png` if manifest does not already specify an icon URL.
+        let icon_future = {
+            let resolver = self.clone();
+            let icon_url = join_base_path(base_url, "icon.png");
+            let needs_icon = manifest
+                .icon
+                .as_deref()
+                .is_none_or(|s| s.trim().is_empty());
+            tokio::spawn(async move {
+                if !needs_icon {
+                    return Ok(None);
                 }
+                resolver
+                    .try_fetch_bytes(&icon_url)
+                    .await
+                    .map(|opt| opt.map(|(_, bytes)| bytes))
+            })
+        };
+
+        let sem = std::sync::Arc::new(tokio::sync::Semaphore::new(8));
+        while !pending.is_empty() {
+            let wave = std::mem::take(&mut pending);
+            let mut set = tokio::task::JoinSet::new();
+            for stem in wave {
+                let resolver = self.clone();
+                let base = base_url.to_owned();
+                let sem = std::sync::Arc::clone(&sem);
+                set.spawn(async move {
+                    let _permit = sem.acquire_owned().await.map_err(|_| {
+                        VesselError::Network("module fetch semaphore closed".into())
+                    })?;
+                    let (resolved_rel, text) =
+                        resolver.fetch_module_with_extensions(&base, &stem).await?;
+                    verify_open_source_js(&text, &join_base_path(&base, &resolved_rel))?;
+                    let imports = collect_relative_imports(&resolved_rel, &text)?;
+                    Ok::<_, VesselError>((resolved_rel, text, imports))
+                });
             }
-            files.insert(resolved_rel, text);
+
+            while let Some(joined) = set.join_next().await {
+                let (resolved_rel, text, imports) = joined.map_err(|err| {
+                    VesselError::Network(format!("module fetch task failed: {err}"))
+                })??;
+                if !visited.insert(resolved_rel.clone()) {
+                    continue;
+                }
+                let parent_dir = match resolved_rel.rsplit_once('/') {
+                    Some((dir, _)) => dir,
+                    None => "",
+                };
+                for spec in imports {
+                    let normalized = normalize_rel_import(parent_dir, &spec)?;
+                    if !visited.contains(&normalized) && queued.insert(normalized.clone()) {
+                        pending.push(normalized);
+                    }
+                }
+                files.insert(resolved_rel, text);
+            }
         }
 
-        let icon_png = self
-            .try_fetch_bytes(&join_base_path(base_url, "icon.png"))
-            .await?
-            .map(|(_, bytes)| bytes);
+        let icon_png = icon_future
+            .await
+            .map_err(|err| VesselError::Network(format!("icon fetch task failed: {err}")))??;
 
         let mut hash_buf = serde_json::to_vec(&manifest).unwrap_or_default();
         for (path, text) in &files {
@@ -1046,7 +1091,7 @@ impl SourceResolver {
         }
 
         if let Some(ref source_path) = entry.source_path {
-            let target = if source_path.starts_with("gh:")
+            let mut target = if source_path.starts_with("gh:")
                 || source_path.starts_with("gl:")
                 || source_path.starts_with("https://")
                 || source_path.starts_with("http://")
@@ -1073,11 +1118,17 @@ impl SourceResolver {
                     // open dirs normally omit package zip sha256, so keep manifest hash optional unless package zip exists.
                     let _ = verify_sha256(&bytes, expected);
                 }
-                let manifest: PluginManifest = serde_json::from_slice(&bytes).map_err(|err| {
+                let mut manifest: PluginManifest = serde_json::from_slice(&bytes).map_err(|err| {
                     VesselError::InvalidInput(format!("invalid plugin manifest.json: {err}"))
                 })?;
+                if manifest.icon.as_deref().is_none_or(|s| s.trim().is_empty()) {
+                    manifest.icon = entry.icon_url.clone();
+                }
                 self.fetch_open_package(&plugin_base, manifest).await?
             };
+            if target.manifest.icon.as_deref().is_none_or(|s| s.trim().is_empty()) {
+                target.manifest.icon = entry.icon_url.clone();
+            }
             return Ok(target);
         }
 
@@ -1219,6 +1270,7 @@ mod tests {
                 "name": "Anthology Open TS",
                 "version": "0.1.0",
                 "capabilities": ["vod"],
+                "iconUrl": "https://cdn.anthology.example/logo.png",
                 "sourcePath": "open-plugin",
             }]
         });
@@ -1330,6 +1382,10 @@ mod tests {
             .await
             .expect("install open TS plugin");
         assert!(installed_open.bundle.get("src/helpers.ts").is_some());
+        assert_eq!(
+            installed_open.manifest.icon.as_deref(),
+            Some("https://cdn.anthology.example/logo.png")
+        );
 
         // 4. Shortener HTTP 302 redirect resolves directly to .plugin.vessel package.
         let via_redirect = resolver

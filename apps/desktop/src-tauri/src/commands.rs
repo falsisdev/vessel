@@ -632,8 +632,8 @@ pub async fn get_home_feeds(
     let plugins = map_err(state.engine.list_plugins().await)?;
     let filter_set: Option<std::collections::HashSet<String>> =
         plugin_ids.map(|ids| ids.into_iter().collect());
-    // Cap concurrent home scrapes to 4 so the 6-slot QuickJS LRU pool never thrashes evictions.
-    let sem = Arc::new(tokio::sync::Semaphore::new(4));
+    // Cap concurrent home scrapes to 6 across the 18-slot QuickJS LRU pool.
+    let sem = Arc::new(tokio::sync::Semaphore::new(6));
     let mut set = JoinSet::new();
 
     for stored in plugins.into_iter().filter(|p| {
@@ -673,6 +673,23 @@ pub async fn get_home_feeds(
     }
     shelves.sort_by(|a, b| a.plugin_name.cmp(&b.plugin_name));
     Ok(shelves)
+}
+
+#[tauri::command]
+pub async fn start_home_feeds(
+    state: State<'_, AppState>,
+    plugin_ids: Option<Vec<String>>,
+) -> Result<String, String> {
+    let parsed_plugins = match plugin_ids {
+        Some(ids) if !ids.is_empty() => Some(
+            ids.into_iter()
+                .map(PluginId::new)
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|e| e.to_string())?,
+        ),
+        _ => None,
+    };
+    map_err(state.engine.start_home_feeds_stream(parsed_plugins).await)
 }
 
 #[tauri::command]

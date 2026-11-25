@@ -18,7 +18,7 @@
 
 **Vessel** is a local-first, cross-platform streaming and media center built from the ground up in **Rust**, **Tauri v2**, **Vue 3 / TypeScript**, and **Kotlin Jetpack Compose (`UniFFI`)**.
 
-> **Project Status (`v0.1.44`):** Core Engine (`crates/vessel-*`), the **Desktop App (`apps/desktop`)** for macOS, Windows & Linux, and the **Android App (`apps/android` via `vessel-ffi` UniFFI)** are active and downloadable on [GitHub Releases](https://github.com/falsisdev/vessel/releases). Next major milestones include unified OAuth + OS Keyring security, Google Drive & tracker sync, independent subtitle providers, Android TV + `mpvkit` options, and iOS/iPadOS.
+> **Project Status (`v0.1.45`):** Core Engine (`crates/vessel-*`), the **Desktop App (`apps/desktop`)** for macOS, Windows & Linux, and the **Android App (`apps/android` via `vessel-ffi` UniFFI)** are active and downloadable on [GitHub Releases](https://github.com/falsisdev/vessel/releases). Next major milestones include unified OAuth + OS Keyring security, Google Drive & tracker sync, independent subtitle providers, Android TV + `mpvkit` options, and iOS/iPadOS.
 > The earlier Go + SwiftUI prototype is preserved on `archive/v1-go` (`v1-go-archive` tag) and `archive/v1-go-ui-polish` (`v1-go-ui-polish-archive` tag).
 
 ---

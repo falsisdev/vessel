@@ -3,6 +3,7 @@ import { listenVesselEvents, vesselApi } from '@/api/vessel'
 import type {
   DownloadProgressSnapshot,
   EngineEvent,
+  HomeShelfResult,
   MediaDetail,
   MediaSummary,
   PlayerStateSnapshot,
@@ -25,6 +26,9 @@ let toastSeq = 1
 const activeSearchId = shallowRef<string>('')
 const isSearching = shallowRef(false)
 const searchBuckets = ref<Record<string, MediaSummary[]>>({})
+const activeHomeRequestId = shallowRef<string>('')
+const isLoadingHome = shallowRef(false)
+const homeStreamShelves = ref<HomeShelfResult[]>([])
 const playerState = ref<PlayerStateSnapshot | null>(null)
 const pendingDomain = ref<PendingDomainPrompt | null>(null)
 const downloadProgress = ref<Record<string, DownloadProgressSnapshot>>({})
@@ -55,6 +59,26 @@ function handleEngineEvent(event: EngineEvent): void {
     case 'search_completed': {
       if (event.searchId === activeSearchId.value) {
         isSearching.value = false
+      }
+      break
+    }
+    case 'home_feed_partial_result': {
+      if (event.requestId !== activeHomeRequestId.value) return
+      const shelf: HomeShelfResult = {
+        pluginId: event.pluginId,
+        pluginName: event.pluginName,
+        sections: event.sections,
+        error: event.error,
+      }
+      homeStreamShelves.value = [
+        ...homeStreamShelves.value.filter((s) => s.pluginId !== event.pluginId),
+        shelf,
+      ]
+      break
+    }
+    case 'home_feed_completed': {
+      if (event.requestId === activeHomeRequestId.value) {
+        isLoadingHome.value = false
       }
       break
     }
@@ -130,6 +154,19 @@ export function useVesselEvents() {
     }
   }
 
+  async function startHomeFeedsStream(pluginIds?: string[] | null): Promise<string> {
+    homeStreamShelves.value = []
+    isLoadingHome.value = true
+    try {
+      const requestId = await vesselApi.startHomeFeeds(pluginIds)
+      activeHomeRequestId.value = requestId
+      return requestId
+    } catch (err) {
+      isLoadingHome.value = false
+      throw err
+    }
+  }
+
   async function resolveDomainPrompt(allow: boolean, permanent: boolean): Promise<void> {
     const prompt = pendingDomain.value
     pendingDomain.value = null
@@ -166,6 +203,9 @@ export function useVesselEvents() {
     activeSearchId,
     isSearching,
     searchBuckets,
+    activeHomeRequestId,
+    isLoadingHome,
+    homeStreamShelves,
     playerState,
     pendingDomain,
     downloadProgress,
@@ -174,6 +214,7 @@ export function useVesselEvents() {
     startListening,
     stopListening,
     startSearch,
+    startHomeFeedsStream,
     resolveDomainPrompt,
     setDownloadSnapshot,
     clearDownloadProgress,

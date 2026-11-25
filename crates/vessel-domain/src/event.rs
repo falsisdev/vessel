@@ -2,6 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::HomeSection;
 use crate::ids::PluginId;
 use crate::media::{MediaDetail, MediaSummary};
 
@@ -66,6 +67,19 @@ pub enum EngineEvent {
     #[serde(rename_all = "camelCase")]
     SearchCompleted {
         search_id: String,
+    },
+    #[serde(rename_all = "camelCase")]
+    HomeFeedPartialResult {
+        request_id: String,
+        plugin_id: PluginId,
+        plugin_name: String,
+        sections: Vec<HomeSection>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        error: Option<String>,
+    },
+    #[serde(rename_all = "camelCase")]
+    HomeFeedCompleted {
+        request_id: String,
     },
     #[serde(rename_all = "camelCase")]
     MetadataEnriched {

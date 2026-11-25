@@ -24,7 +24,7 @@ import { useI18n } from '@/composables/useI18n'
 import { useLibraryState } from '@/composables/useLibraryState'
 import { usePlayerSession } from '@/composables/usePlayerSession'
 import { useUiPreferences } from '@/composables/useUiPreferences'
-import { pushToast } from '@/composables/useVesselEvents'
+import { pushToast, useVesselEvents } from '@/composables/useVesselEvents'
 import { isLiveMediaIdentifier, isLiveTvPlugin, resolveLiveGroupName } from '@/utils/liveTv'
 import type {
   ContinueWatchingEntry,
@@ -48,6 +48,15 @@ const {
   cachedFilterKey,
   hasLoadedOnce,
 } = useHomeCache()
+const {
+  activeHomeRequestId,
+  isLoadingHome,
+  homeStreamShelves,
+  startListening,
+  startHomeFeedsStream,
+} = useVesselEvents()
+
+const pendingFilterKey = shallowRef('')
 
 const loading = shallowRef(false)
 const resumingKey = shallowRef<string | null>(null)
@@ -278,6 +287,24 @@ function stepHero(delta: -1 | 1): void {
   startHeroTimer()
 }
 
+watch(homeStreamShelves, (next) => {
+  if (!activeHomeRequestId.value) return
+  shelves.value = next
+  if (next.some((s) => s.sections.length > 0)) {
+    loading.value = false
+  }
+})
+
+watch(isLoadingHome, (busy) => {
+  if (!busy && activeHomeRequestId.value) {
+    loading.value = false
+    if (pendingFilterKey.value) {
+      cachedFilterKey.value = pendingFilterKey.value
+    }
+    hasLoadedOnce.value = true
+  }
+})
+
 async function loadHome(forceRefresh = false): Promise<void> {
   if (!isTauriRuntime()) return
   if (!preferencesLoaded.value) {
@@ -308,25 +335,29 @@ async function loadHome(forceRefresh = false): Promise<void> {
     return
   }
 
+  if (targetIds.length === 0) {
+    shelves.value = []
+    cachedFilterKey.value = targetKey
+    hasLoadedOnce.value = true
+    loading.value = false
+    await cwPromise
+    return
+  }
+
   loading.value = true
+  pendingFilterKey.value = targetKey
   if (forceRefresh) {
     shelves.value = []
   }
   try {
+    await startListening()
     if (forceRefresh) {
       await vesselApi.clearRuntimeCaches().catch(() => {})
     }
-    const [feeds] = await Promise.all([
-      targetIds.length > 0 ? vesselApi.getHomeFeeds(targetIds) : Promise.resolve([]),
-      cwPromise,
-    ])
-    shelves.value = feeds
-    cachedFilterKey.value = targetKey
-    hasLoadedOnce.value = true
+    await Promise.all([startHomeFeedsStream(targetIds), cwPromise])
     heroIndex.value = 0
   } catch (err) {
     pushToast('error', String(err))
-  } finally {
     loading.value = false
   }
 }

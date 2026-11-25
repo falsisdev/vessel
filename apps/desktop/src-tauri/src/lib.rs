@@ -100,6 +100,7 @@ pub fn run() {
             commands::get_plugin_settings,
             commands::set_plugin_settings,
             commands::get_home_feeds,
+            commands::start_home_feeds,
             commands::search_all,
             commands::cancel_search,
             commands::get_details_with_enrichment,

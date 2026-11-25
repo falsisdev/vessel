@@ -2,7 +2,7 @@
 
 pub mod pool;
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -854,16 +854,16 @@ impl VesselEngine {
             .retain(|(pid, _), _| pid != plugin_id);
     }
 
-    /// Fetches home feed shelves from a single plugin (serving fresh entries from a 3-min RAM cache).
-    pub async fn home_feed(
-        &self,
+    async fn fetch_home_feed_cached(
+        pool: &PluginPool,
+        home_feed_cache: &Mutex<HomeFeedCacheMap>,
         plugin_id: &PluginId,
         cursor: Option<&str>,
     ) -> VesselResult<HomeFeed> {
         let key = (plugin_id.clone(), cursor.map(str::to_owned));
         let now = Instant::now();
         {
-            let cache = self.home_feed_cache.lock().await;
+            let cache = home_feed_cache.lock().await;
             if let Some((cached_at, feed)) = cache.get(&key)
                 && now.saturating_duration_since(*cached_at) < HOME_FEED_CACHE_TTL
             {
@@ -871,10 +871,10 @@ impl VesselEngine {
             }
         }
 
-        let provider = self.pool.get_or_load(plugin_id).await?;
+        let provider = pool.get_or_load(plugin_id).await?;
         let feed = provider.home_feed(cursor).await?;
 
-        let mut cache = self.home_feed_cache.lock().await;
+        let mut cache = home_feed_cache.lock().await;
         if cache.len() >= MAX_HOME_FEED_CACHE_ENTRIES {
             let cutoff = Instant::now();
             cache.retain(|_, (ts, _)| cutoff.saturating_duration_since(*ts) < HOME_FEED_CACHE_TTL);
@@ -889,6 +889,112 @@ impl VesselEngine {
         }
         cache.insert(key, (Instant::now(), feed.clone()));
         Ok(feed)
+    }
+
+    /// Fetches home feed shelves from a single plugin (serving fresh entries from a 3-min RAM cache).
+    pub async fn home_feed(
+        &self,
+        plugin_id: &PluginId,
+        cursor: Option<&str>,
+    ) -> VesselResult<HomeFeed> {
+        Self::fetch_home_feed_cached(&self.pool, &self.home_feed_cache, plugin_id, cursor).await
+    }
+
+    /// Streams home feed shelves per plugin via `EngineEvent::HomeFeedPartialResult` / `HomeFeedCompleted`.
+    pub async fn start_home_feeds_stream(
+        &self,
+        target_plugins: Option<Vec<PluginId>>,
+    ) -> VesselResult<String> {
+        let request_id = next_unique_id("home");
+        let plugins = self.list_plugins().await?;
+        let filter_set: Option<HashSet<PluginId>> =
+            target_plugins.map(|ids| ids.into_iter().collect());
+
+        let targets: Vec<(PluginId, String)> = plugins
+            .into_iter()
+            .filter(|p| {
+                p.enabled
+                    && filter_set
+                        .as_ref()
+                        .is_none_or(|allowed| allowed.contains(&p.manifest.id))
+            })
+            .map(|p| (p.manifest.id, p.manifest.name))
+            .collect();
+
+        if targets.is_empty() {
+            self.event_sink.emit(EngineEvent::HomeFeedCompleted {
+                request_id: request_id.clone(),
+            });
+            return Ok(request_id);
+        }
+
+        let pool = Arc::clone(&self.pool);
+        let cache = Arc::clone(&self.home_feed_cache);
+        let sink = Arc::clone(&self.event_sink);
+        let rid = request_id.clone();
+
+        tokio::spawn(async move {
+            let sem = Arc::new(tokio::sync::Semaphore::new(6));
+            let mut set = JoinSet::new();
+
+            for (pid, pname) in targets {
+                let pool = Arc::clone(&pool);
+                let cache = Arc::clone(&cache);
+                let sink = Arc::clone(&sink);
+                let sem = Arc::clone(&sem);
+                let rid_inner = rid.clone();
+
+                set.spawn(async move {
+                    let _permit = sem.acquire_owned().await;
+                    match Self::fetch_home_feed_cached(&pool, &cache, &pid, None).await {
+                        Ok(feed) => {
+                            sink.emit(EngineEvent::HomeFeedPartialResult {
+                                request_id: rid_inner,
+                                plugin_id: pid,
+                                plugin_name: pname,
+                                sections: feed.sections,
+                                error: None,
+                            });
+                        }
+                        Err(VesselError::DomainBlocked {
+                            plugin_id: blocked_id,
+                            domain,
+                        }) => {
+                            if let Ok(parsed_id) = PluginId::new(&blocked_id) {
+                                sink.emit(EngineEvent::DomainPermissionRequested {
+                                    request_id: next_unique_id("perm"),
+                                    plugin_id: parsed_id,
+                                    domain: domain.clone(),
+                                });
+                            }
+                            sink.emit(EngineEvent::HomeFeedPartialResult {
+                                request_id: rid_inner,
+                                plugin_id: pid,
+                                plugin_name: pname,
+                                sections: Vec::new(),
+                                error: Some(format!(
+                                    "[VesselDomainBlockedError]: domain '{domain}' requires permission"
+                                )),
+                            });
+                        }
+                        Err(err) => {
+                            sink.emit(EngineEvent::HomeFeedPartialResult {
+                                request_id: rid_inner,
+                                plugin_id: pid,
+                                plugin_name: pname,
+                                sections: Vec::new(),
+                                error: Some(err.to_string()),
+                            });
+                        }
+                    }
+                });
+            }
+
+            while set.join_next().await.is_some() {}
+            sink.emit(EngineEvent::HomeFeedCompleted { request_id: rid });
+        });
+
+        Ok(request_id)
     }
 
     /// Fetches full item metadata & episode tree from `plugin_id` (with a 5-min RAM cache).
@@ -2807,6 +2913,96 @@ mod tests {
                 .iter()
                 .any(|s| s.plugin_id.as_deref() == Some("mirror-src"))
         );
+
+        engine.shutdown().await;
+    }
+
+    #[tokio::test]
+    async fn streams_home_feeds_per_plugin_and_completes() {
+        let (engine, _, recorder) = test_engine().await;
+        let alpha_ts = r#"
+            export default {
+                async getHomeFeed() {
+                    return {
+                        sections: [{
+                            id: "sec-a",
+                            title: "Alpha Section",
+                            items: [{ nativeId: "a-1", type: "series", title: "Alpha Show" }]
+                        }]
+                    };
+                }
+            };
+        "#;
+        let beta_ts = r#"
+            export default {
+                async getHomeFeed() {
+                    return {
+                        sections: [{
+                            id: "sec-b",
+                            title: "Beta Section",
+                            items: [{ nativeId: "b-1", type: "movie", title: "Beta Film" }]
+                        }]
+                    };
+                }
+            };
+        "#;
+
+        engine
+            .install_package(
+                build_plugin_package("anthology", alpha_ts),
+                None,
+                "local",
+                "/tmp/stream-a",
+            )
+            .await
+            .expect("install alpha");
+        engine
+            .install_package(
+                build_plugin_package("beta-src", beta_ts),
+                None,
+                "local",
+                "/tmp/stream-b",
+            )
+            .await
+            .expect("install beta");
+
+        let request_id = engine
+            .start_home_feeds_stream(None)
+            .await
+            .expect("start home feeds stream");
+
+        for _ in 0..80 {
+            let done = {
+                let guard = recorder.events.lock().expect("lock events");
+                guard.iter().any(|ev| {
+                    matches!(ev, EngineEvent::HomeFeedCompleted { request_id: rid } if rid == &request_id)
+                })
+            };
+            if done {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(15)).await;
+        }
+
+        let events = recorder.events.lock().expect("lock events").clone();
+        let partials: Vec<String> = events
+            .iter()
+            .filter_map(|ev| match ev {
+                EngineEvent::HomeFeedPartialResult {
+                    request_id: rid,
+                    plugin_id,
+                    sections,
+                    ..
+                } if rid == &request_id && !sections.is_empty() => Some(plugin_id.as_str().to_owned()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(partials.len(), 2);
+        assert!(partials.contains(&"anthology".to_owned()));
+        assert!(partials.contains(&"beta-src".to_owned()));
+        assert!(events.iter().any(|ev| {
+            matches!(ev, EngineEvent::HomeFeedCompleted { request_id: rid } if rid == &request_id)
+        }));
 
         engine.shutdown().await;
     }

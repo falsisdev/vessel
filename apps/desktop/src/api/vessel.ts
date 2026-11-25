@@ -89,6 +89,10 @@ export const vesselApi = {
     call<HomeShelfResult[]>('get_home_feeds', {
       pluginIds: pluginIds === null ? undefined : pluginIds,
     }),
+  startHomeFeeds: (pluginIds?: string[] | null) =>
+    call<string>('start_home_feeds', {
+      pluginIds: pluginIds === null ? undefined : pluginIds,
+    }),
   searchAll: (
     query: string,
     filters?: Record<string, string>,

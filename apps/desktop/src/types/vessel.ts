@@ -551,6 +551,15 @@ export type EngineEvent =
     }
   | { type: 'search_completed'; searchId: string }
   | {
+      type: 'home_feed_partial_result'
+      requestId: string
+      pluginId: string
+      pluginName: string
+      sections: HomeSection[]
+      error?: string
+    }
+  | { type: 'home_feed_completed'; requestId: string }
+  | {
       type: 'metadata_enriched'
       pluginId: string
       nativeId: string

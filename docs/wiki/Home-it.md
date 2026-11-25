@@ -14,7 +14,7 @@
 
 ---
 
-## Funzionalità Principali (`v0.1.44`)
+## Funzionalità Principali (`v0.1.45`)
 
 - **Player `/watch` in Stile CloudStream:** Supporto per HLS (`hls.js`), MPEG-TS (`mpegts.js`), MP4/WebM e invio a **`mpv`** esterno via JSON IPC; selettore **Tracce Audio**, **Sottotitoli** (`.srt/.vtt/.ass/.ssa`) con sync (`-500 ms / +500 ms`), anteprima dal vivo, pulsante diretto **Dettagli** e salto automatico **Intro / Riepilogo / Titoli di coda / Anteprima** (`Plugin > TheIntroDB > IntroDB > AniSkip`).
 - **Continua a Guardare Intelligente:** Avanza all'episodio successivo al completamento, nasconde film/finali terminati, offre menu contestuale (clic destro / pressione prolungata) ed editor manuale.
