@@ -73,6 +73,8 @@ import dev.falsis.vessel.ui.components.VesselFilterChip
 import dev.falsis.vessel.ui.components.VesselOutlinedButton
 import dev.falsis.vessel.ui.components.VesselSearchField
 import dev.falsis.vessel.ui.components.VesselTextButton
+import dev.falsis.vessel.ui.components.vesselDpadInputEscape
+import dev.falsis.vessel.ui.components.vesselFocusBorder
 import dev.falsis.vessel.ui.components.vesselTopSafeInset
 import dev.falsis.vessel.ui.i18n.VesselI18n
 import dev.falsis.vessel.ui.theme.LocalVesselPalette
@@ -332,7 +334,9 @@ fun ExtensionsScreen(
                         onValueChange = { sourceInput = it },
                         placeholder = { Text(VesselI18n.tr("extensions.source_placeholder")) },
                         singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .vesselDpadInputEscape(isTextEmpty = sourceInput.isEmpty(), onSubmit = { inspectSource() }),
                     )
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -676,6 +680,7 @@ fun ExtensionsScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .vesselFocusBorder(RoundedCornerShape(14.dp))
                             .clickable { expandedGroups[group.name] = !expanded }
                             .padding(horizontal = 14.dp, vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically,

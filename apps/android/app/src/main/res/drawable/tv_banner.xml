@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="320dp"
+    android:height="180dp"
+    android:viewportWidth="320"
+    android:viewportHeight="180">
+    <path
+        android:fillColor="#FF141420"
+        android:pathData="M0,0 H320 V180 H0 Z" />
+    <path
+        android:fillColor="#18CBA6F7"
+        android:pathData="M0,0 H320 V90 H0 Z" />
+    <group
+        android:scaleX="3.6"
+        android:scaleY="3.6"
+        android:translateX="116"
+        android:translateY="46">
+        <path
+            android:fillColor="#FFCBA6F7"
+            android:pathData="M9.4,3.5 H14.6 A0.9,0.9 0 0 1 15.5,4.4 V5.6 A0.9,0.9 0 0 1 14.6,6.5 H9.4 A0.9,0.9 0 0 1 8.5,5.6 V4.4 A0.9,0.9 0 0 1 9.4,3.5 Z" />
+        <path
+            android:fillColor="#FF89B4FA"
+            android:pathData="M6.9,7.5 H10.6 A0.9,0.9 0 0 1 11.5,8.4 V9.8 A0.9,0.9 0 0 1 10.6,10.7 H6.9 A0.9,0.9 0 0 1 6.0,9.8 V8.4 A0.9,0.9 0 0 1 6.9,7.5 Z" />
+        <path
+            android:fillColor="#FFF4F6FC"
+            android:pathData="M13.4,7.5 H17.1 A0.9,0.9 0 0 1 18.0,8.4 V9.8 A0.9,0.9 0 0 1 17.1,10.7 H13.4 A0.9,0.9 0 0 1 12.5,9.8 V8.4 A0.9,0.9 0 0 1 13.4,7.5 Z" />
+        <path
+            android:fillColor="#FFF4F6FC"
+            android:pathData="M3.5,12 L12,20.8 L20.5,12 H16.2 L12,16.4 L7.8,12 H3.5 Z" />
+    </group>
+</vector>

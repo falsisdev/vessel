@@ -9,6 +9,7 @@ import android.os.Build
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.FrameLayout
+import androidx.activity.compose.BackHandler
 import androidx.annotation.OptIn
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
@@ -22,6 +23,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
@@ -103,6 +105,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -110,7 +114,13 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
+import dev.falsis.vessel.ui.components.vesselFocusBorder
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -905,6 +915,45 @@ fun PlayerScreen(
         bumpControls()
     }
 
+    fun seekByMs(deltaMs: Long) {
+        if (isLive) return
+        val cap = totalDurMs.takeIf { it > 0L } ?: Long.MAX_VALUE
+        val target = (exoPlayer.currentPosition + deltaMs).coerceIn(0L, cap)
+        exoPlayer.seekTo(target)
+        currentPosMs = target
+        showHud(if (deltaMs < 0) VesselI18n.tr("player.seek_back_10") else VesselI18n.tr("player.seek_fwd_10"))
+    }
+
+    val playerRootFocusRequester = remember { FocusRequester() }
+    val playPauseFocusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(controlsVisible, isLocked, activeDrawer, playbackError) {
+        if (playbackError == null && activeDrawer == null) {
+            if (!controlsVisible || isLocked) {
+                runCatching { playerRootFocusRequester.requestFocus() }
+            } else {
+                kotlinx.coroutines.delay(50)
+                runCatching { playPauseFocusRequester.requestFocus() }
+            }
+        }
+    }
+
+    BackHandler(enabled = isLocked || activeDrawer != null || controlsVisible) {
+        when {
+            isLocked -> {
+                isLocked = false
+                bumpControls()
+            }
+            activeDrawer != null -> {
+                activeDrawer = null
+                bumpControls()
+            }
+            controlsVisible -> {
+                controlsVisible = false
+            }
+        }
+    }
+
     fun toggleOrientation() {
         isLandscape = !isLandscape
         activity?.requestedOrientation = if (isLandscape) {
@@ -939,7 +988,78 @@ fun PlayerScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black),
+            .background(Color.Black)
+            .focusRequester(playerRootFocusRequester)
+            .focusable()
+            .onPreviewKeyEvent { ev ->
+                if (ev.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                if (playbackError != null) return@onPreviewKeyEvent false
+                if (isLocked) {
+                    return@onPreviewKeyEvent when (ev.key) {
+                        Key.DirectionCenter, Key.Enter, Key.NumPadEnter, Key.Back, Key.Escape -> {
+                            isLocked = false
+                            bumpControls()
+                            true
+                        }
+                        else -> true
+                    }
+                }
+                if (activeDrawer != null) {
+                    if (ev.key == Key.Back || ev.key == Key.Escape) {
+                        activeDrawer = null
+                        bumpControls()
+                        return@onPreviewKeyEvent true
+                    }
+                    bumpControls()
+                    return@onPreviewKeyEvent false
+                }
+                if (!controlsVisible) {
+                    return@onPreviewKeyEvent when (ev.key) {
+                        Key.DirectionLeft, Key.MediaRewind -> {
+                            seekByMs(-10_000L)
+                            true
+                        }
+                        Key.DirectionRight, Key.MediaFastForward -> {
+                            seekByMs(10_000L)
+                            true
+                        }
+                        Key.Spacebar, Key.MediaPlayPause, Key.MediaPlay, Key.MediaPause -> {
+                            togglePlayPause()
+                            true
+                        }
+                        Key.DirectionCenter, Key.Enter, Key.NumPadEnter, Key.DirectionUp, Key.DirectionDown, Key.Menu -> {
+                            bumpControls()
+                            true
+                        }
+                        else -> false
+                    }
+                }
+                when (ev.key) {
+                    Key.Spacebar, Key.MediaPlayPause, Key.MediaPlay, Key.MediaPause -> {
+                        togglePlayPause()
+                        true
+                    }
+                    Key.MediaRewind -> {
+                        seekByMs(-10_000L)
+                        bumpControls()
+                        true
+                    }
+                    Key.MediaFastForward -> {
+                        seekByMs(10_000L)
+                        bumpControls()
+                        true
+                    }
+                    Key.Back, Key.Escape -> {
+                        controlsVisible = false
+                        true
+                    }
+                    Key.DirectionUp, Key.DirectionDown, Key.DirectionLeft, Key.DirectionRight -> {
+                        bumpControls()
+                        false
+                    }
+                    else -> false
+                }
+            },
     ) {
         // Video Surface + Embedded SubtitleView (for muxed HLS/MKV tracks)
         AndroidView(
@@ -949,6 +1069,9 @@ fun PlayerScreen(
                     useController = false
                     this.resizeMode = resizeMode
                     setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER)
+                    isFocusable = false
+                    isFocusableInTouchMode = false
+                    descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
                     layoutParams = FrameLayout.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT,
                         ViewGroup.LayoutParams.MATCH_PARENT,
@@ -1517,6 +1640,8 @@ fun PlayerScreen(
                             modifier = Modifier
                                 .size(54.dp)
                                 .clip(CircleShape)
+                                .focusRequester(playPauseFocusRequester)
+                                .vesselFocusBorder(CircleShape, width = 3.dp)
                                 .clickable { togglePlayPause() },
                         ) {
                             Box(contentAlignment = Alignment.Center) {
@@ -2592,6 +2717,23 @@ private fun DesktopScrubberBar(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(28.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .vesselFocusBorder(RoundedCornerShape(8.dp))
+                .focusable()
+                .onPreviewKeyEvent { ev ->
+                    if (ev.type != KeyEventType.KeyDown || safeDur <= 1L) return@onPreviewKeyEvent false
+                    when (ev.key) {
+                        Key.DirectionLeft -> {
+                            onScrubCommit((currentMs - 10_000L).coerceAtLeast(0L))
+                            true
+                        }
+                        Key.DirectionRight -> {
+                            onScrubCommit((currentMs + 10_000L).coerceAtMost(durationMs.coerceAtLeast(currentMs)))
+                            true
+                        }
+                        else -> false
+                    }
+                }
                 .pointerInput(safeDur) {
                     detectTapGestures { offset ->
                         val target = xToMs(offset.x)
@@ -2693,6 +2835,7 @@ private fun HudCircleIconButton(
         modifier = Modifier
             .size(size)
             .clip(CircleShape)
+            .vesselFocusBorder(CircleShape)
             .clickable(enabled = enabled, onClick = onClick),
     ) {
         Box(contentAlignment = Alignment.Center) {
@@ -2718,6 +2861,7 @@ private fun PlayerHudPill(
         ),
         modifier = Modifier
             .clip(RoundedCornerShape(999.dp))
+            .vesselFocusBorder(RoundedCornerShape(999.dp))
             .clickable(onClick = onClick),
     ) {
         Row(
@@ -2754,6 +2898,7 @@ private fun DrawerItemCard(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(10.dp))
+            .vesselFocusBorder(RoundedCornerShape(10.dp))
             .clickable(onClick = onClick),
     ) {
         Box(modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp)) {
@@ -2824,6 +2969,7 @@ private fun DrawerChipButton(
         ),
         modifier = Modifier
             .clip(RoundedCornerShape(999.dp))
+            .vesselFocusBorder(RoundedCornerShape(999.dp))
             .clickable(onClick = onClick),
     ) {
         Text(

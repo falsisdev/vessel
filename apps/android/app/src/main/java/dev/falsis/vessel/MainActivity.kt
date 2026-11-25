@@ -91,6 +91,7 @@ import dev.falsis.vessel.ui.components.VesselButton
 import dev.falsis.vessel.ui.components.VesselOutlinedButton
 import dev.falsis.vessel.ui.components.VesselSplashOverlay
 import dev.falsis.vessel.ui.components.VesselTextButton
+import dev.falsis.vessel.ui.components.vesselFocusBorder
 import dev.falsis.vessel.ui.i18n.VesselI18n
 import dev.falsis.vessel.ui.screens.DetailsScreen
 import dev.falsis.vessel.ui.screens.DownloadsScreen
@@ -508,6 +509,7 @@ fun VesselAndroidApp(
                                                                     .weight(1f)
                                                                     .clip(RoundedCornerShape(999.dp))
                                                                     .background(pillColor)
+                                                                    .vesselFocusBorder(RoundedCornerShape(999.dp))
                                                                     .clickable { selectedTab = idx }
                                                                     .padding(horizontal = 4.dp, vertical = 6.dp),
                                                             ) {

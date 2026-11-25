@@ -96,6 +96,8 @@ import dev.falsis.vessel.ui.components.VesselCompactIconButton
 import dev.falsis.vessel.ui.components.VesselFilterChip
 import dev.falsis.vessel.ui.components.VesselOutlinedButton
 import dev.falsis.vessel.ui.components.VesselTextButton
+import dev.falsis.vessel.ui.components.vesselDpadInputEscape
+import dev.falsis.vessel.ui.components.vesselFocusBorder
 import dev.falsis.vessel.ui.i18n.VesselI18n
 import dev.falsis.vessel.ui.isLiveMediaIdentifier
 import dev.falsis.vessel.ui.isLiveTvPlugin
@@ -381,6 +383,7 @@ fun DetailsScreen(
                                 border = BorderStroke(1.dp, palette.accent.copy(alpha = 0.45f)),
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(999.dp))
+                                    .vesselFocusBorder(RoundedCornerShape(999.dp))
                                     .clickable { showIncludeSources = true },
                             ) {
                                 Text(
@@ -661,6 +664,7 @@ fun DetailsScreen(
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 5.dp)
                     .clip(RoundedCornerShape(12.dp))
+                    .vesselFocusBorder(RoundedCornerShape(12.dp))
                     .clickable { handleEpisodePlayClick(ep) },
             ) {
                 Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -929,7 +933,9 @@ fun DetailsScreen(
                             onValueChange = { searchQuery = it },
                             placeholder = { Text(VesselI18n.tr("details.match_search_placeholder")) },
                             singleLine = true,
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier
+                                .weight(1f)
+                                .vesselDpadInputEscape(isTextEmpty = searchQuery.isEmpty(), onSubmit = { runSearch() }),
                         )
                         VesselCompactIconButton(
                             onClick = { runSearch() },
@@ -1066,7 +1072,9 @@ fun DetailsScreen(
                             placeholder = { Text(VesselI18n.tr("details.match_id_placeholder")) },
                             enabled = !disableMeta,
                             singleLine = true,
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .vesselDpadInputEscape(isTextEmpty = fixIdInput.isEmpty()),
                         )
                     }
 
@@ -1173,7 +1181,9 @@ fun DetailsScreen(
                         onValueChange = { targetQuery = it },
                         placeholder = { Text(VesselI18n.tr("details.include_search_placeholder")) },
                         singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .vesselDpadInputEscape(isTextEmpty = targetQuery.isEmpty()),
                     )
 
                     if (candidatePlugins.isEmpty()) {

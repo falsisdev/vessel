@@ -1,6 +1,10 @@
 package dev.falsis.vessel.ui.theme
 
 import android.app.Activity
+import android.app.UiModeManager
+import android.content.Context
+import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -16,6 +20,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -71,6 +76,7 @@ private val DefaultUiTokens = VesselUiTokens()
 val LocalVesselPalette = staticCompositionLocalOf { DefaultPalette }
 val LocalVesselUiTokens = staticCompositionLocalOf { DefaultUiTokens }
 val LocalVesselFloatingNavInset = staticCompositionLocalOf<Dp> { 0.dp }
+val LocalIsTvDevice = staticCompositionLocalOf { false }
 
 fun parseHexColor(raw: String, fallback: Color): Color {
     val hex = raw.trim().removePrefix("#")
@@ -160,6 +166,12 @@ fun VesselTheme(
     content: @Composable () -> Unit,
 ) {
     val context = LocalContext.current
+    val isTvDevice = remember(context) {
+        val uiModeManager = context.getSystemService(Context.UI_MODE_SERVICE) as? UiModeManager
+        uiModeManager?.currentModeType == Configuration.UI_MODE_TYPE_TELEVISION ||
+            context.packageManager.hasSystemFeature(PackageManager.FEATURE_TELEVISION) ||
+            context.packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK)
+    }
     val systemDark = isSystemInDarkTheme()
     val fontScale = (shell.fontScalePercent.coerceIn(85, 130) / 100f)
     val densityScale = when (shell.density) {
@@ -262,6 +274,7 @@ fun VesselTheme(
     CompositionLocalProvider(
         LocalVesselPalette provides palette,
         LocalVesselUiTokens provides uiTokens,
+        LocalIsTvDevice provides isTvDevice,
     ) {
         MaterialTheme(
             colorScheme = colorScheme,

@@ -103,6 +103,8 @@ import dev.falsis.vessel.ui.components.VesselFilterChip
 import dev.falsis.vessel.ui.components.VesselOutlinedButton
 import dev.falsis.vessel.ui.components.VesselSearchField
 import dev.falsis.vessel.ui.components.VesselTextButton
+import dev.falsis.vessel.ui.components.vesselDpadInputEscape
+import dev.falsis.vessel.ui.components.vesselFocusBorder
 import dev.falsis.vessel.ui.components.vesselTopSafeInset
 import dev.falsis.vessel.ui.i18n.VesselI18n
 import dev.falsis.vessel.ui.isLiveTvPlugin
@@ -511,6 +513,7 @@ fun LiveTvScreen(
                                 modifier = Modifier
                                     .width(156.dp)
                                     .clip(RoundedCornerShape(10.dp))
+                                    .vesselFocusBorder(RoundedCornerShape(10.dp))
                                     .clickable {
                                         playPluginLiveItem(
                                             MediaSummary(
@@ -579,6 +582,7 @@ fun LiveTvScreen(
                                 modifier = Modifier
                                     .width(156.dp)
                                     .clip(RoundedCornerShape(10.dp))
+                                    .vesselFocusBorder(RoundedCornerShape(10.dp))
                                     .clickable { playIptvChannel(ch, favoriteIptvChannels) },
                             ) {
                                 Row(
@@ -787,6 +791,8 @@ fun LiveTvScreen(
                                 color = palette.bgSurface,
                                 modifier = Modifier
                                     .fillMaxWidth()
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .vesselFocusBorder(RoundedCornerShape(10.dp))
                                     .clickable { playIptvChannel(ch, channels) },
                             ) {
                                 val padDp = when (livePrefs.density) {
@@ -1013,6 +1019,7 @@ fun LiveTvScreen(
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .clip(RoundedCornerShape(12.dp))
+                                            .vesselFocusBorder(RoundedCornerShape(12.dp))
                                             .clickable { playPluginLiveItem(ch, sec.title) },
                                     ) {
                                         if (livePrefs.viewMode == "compact_list") {
@@ -1165,13 +1172,13 @@ fun LiveTvScreen(
                         VesselFilterChip(selected = !isXtream, onClick = { isXtream = false }, label = "M3U+")
                         VesselFilterChip(selected = isXtream, onClick = { isXtream = true }, label = "Xtream")
                     }
-                    OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text(VesselI18n.tr("iptv.name")) }, singleLine = true)
-                    OutlinedTextField(value = serverUrl, onValueChange = { serverUrl = it }, label = { Text(VesselI18n.tr("iptv.server_url")) }, singleLine = true)
+                    OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text(VesselI18n.tr("iptv.name")) }, singleLine = true, modifier = Modifier.fillMaxWidth().vesselDpadInputEscape(isTextEmpty = name.isEmpty()))
+                    OutlinedTextField(value = serverUrl, onValueChange = { serverUrl = it }, label = { Text(VesselI18n.tr("iptv.server_url")) }, singleLine = true, modifier = Modifier.fillMaxWidth().vesselDpadInputEscape(isTextEmpty = serverUrl.isEmpty()))
                     if (isXtream) {
-                        OutlinedTextField(value = username, onValueChange = { username = it }, label = { Text(VesselI18n.tr("iptv.username")) }, singleLine = true)
-                        OutlinedTextField(value = password, onValueChange = { password = it }, label = { Text(VesselI18n.tr("iptv.password")) }, singleLine = true)
+                        OutlinedTextField(value = username, onValueChange = { username = it }, label = { Text(VesselI18n.tr("iptv.username")) }, singleLine = true, modifier = Modifier.fillMaxWidth().vesselDpadInputEscape(isTextEmpty = username.isEmpty()))
+                        OutlinedTextField(value = password, onValueChange = { password = it }, label = { Text(VesselI18n.tr("iptv.password")) }, singleLine = true, modifier = Modifier.fillMaxWidth().vesselDpadInputEscape(isTextEmpty = password.isEmpty()))
                     }
-                    OutlinedTextField(value = epgUrl, onValueChange = { epgUrl = it }, label = { Text(VesselI18n.tr("iptv.epg_url")) }, singleLine = true)
+                    OutlinedTextField(value = epgUrl, onValueChange = { epgUrl = it }, label = { Text(VesselI18n.tr("iptv.epg_url")) }, singleLine = true, modifier = Modifier.fillMaxWidth().vesselDpadInputEscape(isTextEmpty = epgUrl.isEmpty()))
                 }
             },
             confirmButton = {

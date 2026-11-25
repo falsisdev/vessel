@@ -351,7 +351,7 @@ impl SourceResolver {
     /// Creates a production `SourceResolver` backed by `raw.githubusercontent.com` and `gitlab.com`.
     pub fn new() -> Self {
         let client = vessel_domain::http_client_builder()
-            .user_agent("Vessel/0.1.47 (https://github.com/falsisdev/vessel)")
+            .user_agent("Vessel/0.1.48 (https://github.com/falsisdev/vessel)")
             .redirect(Policy::none())
             .timeout(RESOLVER_TIMEOUT)
             .build()

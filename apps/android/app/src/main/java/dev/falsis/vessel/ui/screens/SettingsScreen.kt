@@ -78,6 +78,7 @@ import dev.falsis.vessel.ui.components.VesselButton
 import dev.falsis.vessel.ui.components.VesselFilterChip
 import dev.falsis.vessel.ui.components.VesselOutlinedButton
 import dev.falsis.vessel.ui.components.VesselTextButton
+import dev.falsis.vessel.ui.components.vesselDpadInputEscape
 import dev.falsis.vessel.ui.components.vesselTopSafeInset
 import dev.falsis.vessel.ui.i18n.VesselI18n
 import dev.falsis.vessel.ui.theme.DYNAMIC_MATERIAL_THEME_ID
@@ -289,7 +290,7 @@ fun SettingsScreen(
                                 onValueChange = { themeJsonInput = it },
                                 placeholder = { Text(VesselI18n.tr("settings.theme_paste_hint")) },
                                 minLines = 3,
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier.fillMaxWidth().vesselDpadInputEscape(isTextEmpty = themeJsonInput.isEmpty()),
                             )
                             VesselButton(onClick = {
                                 if (themeJsonInput.isBlank()) return@VesselButton
@@ -800,14 +801,14 @@ fun SettingsScreen(
                             onValueChange = { tmdbKey = it },
                             label = { Text(VesselI18n.tr("settings.tmdb_key")) },
                             singleLine = true,
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier.fillMaxWidth().vesselDpadInputEscape(isTextEmpty = tmdbKey.isEmpty()),
                         )
                         OutlinedTextField(
                             value = simklClientId,
                             onValueChange = { simklClientId = it },
                             label = { Text(VesselI18n.tr("settings.simkl_client_id")) },
                             singleLine = true,
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier.fillMaxWidth().vesselDpadInputEscape(isTextEmpty = simklClientId.isEmpty()),
                         )
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             VesselButton(onClick = {
@@ -889,7 +890,7 @@ fun SettingsScreen(
                         placeholder = { Text(VesselI18n.tr("settings.backup_paste_hint")) },
                         minLines = 3,
                         maxLines = 6,
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth().vesselDpadInputEscape(isTextEmpty = backupJsonInput.isEmpty()),
                     )
 
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

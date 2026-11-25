@@ -122,6 +122,8 @@ import dev.falsis.vessel.ui.components.VesselFilterChip
 import dev.falsis.vessel.ui.components.VesselLogoMark
 import dev.falsis.vessel.ui.components.VesselOutlinedButton
 import dev.falsis.vessel.ui.components.VesselTextButton
+import dev.falsis.vessel.ui.components.vesselDpadInputEscape
+import dev.falsis.vessel.ui.components.vesselFocusBorder
 import dev.falsis.vessel.ui.i18n.VesselI18n
 import dev.falsis.vessel.ui.isLiveTvPlugin
 import dev.falsis.vessel.ui.resolveLiveGroupName
@@ -676,6 +678,7 @@ fun HomeScreen(
                                             modifier = Modifier
                                                 .height(homeTokens.compactButtonHeight)
                                                 .clip(RoundedCornerShape(homeTokens.cornerRadius))
+                                                .vesselFocusBorder(RoundedCornerShape(homeTokens.cornerRadius))
                                                 .clickable { onOpenDetails(hero.pluginId, hero.summary.nativeId) },
                                         ) {
                                             Row(
@@ -794,6 +797,7 @@ fun HomeScreen(
                             modifier = Modifier
                                 .height(heroTopTokens.smallIconButtonSize)
                                 .clip(RoundedCornerShape(999.dp))
+                                .vesselFocusBorder(RoundedCornerShape(999.dp))
                                 .clickable { showFeedsModal = true },
                         ) {
                             Row(
@@ -1688,7 +1692,7 @@ fun HomeScreen(
                                 label = { Text(VesselI18n.tr("home.cw_season")) },
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                 singleLine = true,
-                                modifier = Modifier.weight(1f),
+                                modifier = Modifier.weight(1f).vesselDpadInputEscape(isTextEmpty = seasonText.isEmpty()),
                             )
                             OutlinedTextField(
                                 value = episodeText,
@@ -1706,7 +1710,7 @@ fun HomeScreen(
                                 label = { Text(VesselI18n.tr("home.cw_ep_num")) },
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                 singleLine = true,
-                                modifier = Modifier.weight(1f),
+                                modifier = Modifier.weight(1f).vesselDpadInputEscape(isTextEmpty = episodeText.isEmpty()),
                             )
                         }
                     }
@@ -1739,7 +1743,7 @@ fun HomeScreen(
                             label = { Text(VesselI18n.tr("home.cw_watched_min")) },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             singleLine = true,
-                            modifier = Modifier.weight(1f),
+                            modifier = Modifier.weight(1f).vesselDpadInputEscape(isTextEmpty = watchedMinText.isEmpty()),
                         )
                         Column(modifier = Modifier.weight(1f)) {
                             Text(VesselI18n.tr("home.cw_duration_min"), style = MaterialTheme.typography.labelSmall, color = palette.textMuted)

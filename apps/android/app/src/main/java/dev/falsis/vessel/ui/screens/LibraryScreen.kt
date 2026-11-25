@@ -51,6 +51,7 @@ import dev.falsis.vessel.ui.components.MediaPosterCard
 import dev.falsis.vessel.ui.components.VesselFilterChip
 import dev.falsis.vessel.ui.components.VesselSearchField
 import dev.falsis.vessel.ui.components.isLandscapeCardRatio
+import dev.falsis.vessel.ui.components.vesselFocusBorder
 import dev.falsis.vessel.ui.components.vesselTopSafeInset
 import dev.falsis.vessel.ui.i18n.VesselI18n
 import dev.falsis.vessel.ui.theme.LocalVesselFloatingNavInset
@@ -179,14 +180,16 @@ fun LibraryScreen(
                                     }
                                 },
                             )
-                            // Minimal background-free remove icon at top-left (non-overlapping with bottom title)
+                            // D-Pad accessible remove icon at top-left
                             Box(
                                 contentAlignment = Alignment.Center,
                                 modifier = Modifier
                                     .align(Alignment.TopStart)
-                                    .padding(3.dp)
-                                    .size(24.dp)
+                                    .padding(4.dp)
+                                    .size(28.dp)
                                     .clip(CircleShape)
+                                    .background(Color.Black.copy(alpha = 0.45f))
+                                    .vesselFocusBorder(CircleShape)
                                     .clickable {
                                         scope.launch {
                                             repo.deleteLibraryItem(item.media.pluginId, item.media.nativeId)

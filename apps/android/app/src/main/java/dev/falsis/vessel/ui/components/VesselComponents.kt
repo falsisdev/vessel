@@ -11,6 +11,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -68,7 +69,18 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -89,9 +101,85 @@ import dev.falsis.vessel.data.ContinueWatchingEntry
 import dev.falsis.vessel.data.DomainPermissionPrompt
 import dev.falsis.vessel.data.MediaSummary
 import dev.falsis.vessel.ui.i18n.VesselI18n
+import dev.falsis.vessel.ui.theme.LocalIsTvDevice
 import dev.falsis.vessel.ui.theme.LocalVesselPalette
 import dev.falsis.vessel.ui.theme.LocalVesselUiTokens
 import java.util.Locale
+
+fun Modifier.vesselFocusBorder(
+    shape: Shape = RoundedCornerShape(12.dp),
+    width: Dp = 2.dp,
+): Modifier = composed {
+    val palette = LocalVesselPalette.current
+    var focused by remember { mutableStateOf(false) }
+    this
+        .onFocusChanged { focused = it.isFocused || it.hasFocus }
+        .then(if (focused) Modifier.border(width, palette.accent, shape) else Modifier)
+}
+
+fun Modifier.vesselDpadInputEscape(
+    isTextEmpty: Boolean = false,
+    onSubmit: (() -> Unit)? = null,
+): Modifier = composed {
+    val focusManager = LocalFocusManager.current
+    val keyboard = LocalSoftwareKeyboardController.current
+    var hasInputFocus by remember { mutableStateOf(false) }
+    this
+        .onFocusChanged { hasInputFocus = it.isFocused || it.hasFocus }
+        .onPreviewKeyEvent { ev ->
+            if (!hasInputFocus || ev.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+            when (ev.key) {
+                Key.DirectionDown -> {
+                    keyboard?.hide()
+                    if (!focusManager.moveFocus(FocusDirection.Down)) {
+                        focusManager.moveFocus(FocusDirection.Next)
+                    }
+                    true
+                }
+                Key.DirectionUp -> {
+                    keyboard?.hide()
+                    if (!focusManager.moveFocus(FocusDirection.Up)) {
+                        focusManager.moveFocus(FocusDirection.Previous)
+                    }
+                    true
+                }
+                Key.DirectionLeft -> {
+                    if (isTextEmpty) {
+                        keyboard?.hide()
+                        focusManager.moveFocus(FocusDirection.Left)
+                    } else {
+                        false
+                    }
+                }
+                Key.DirectionRight -> {
+                    if (isTextEmpty) {
+                        keyboard?.hide()
+                        focusManager.moveFocus(FocusDirection.Right)
+                    } else {
+                        false
+                    }
+                }
+                Key.Escape, Key.Back -> {
+                    keyboard?.hide()
+                    if (!focusManager.moveFocus(FocusDirection.Down)) {
+                        focusManager.clearFocus(force = true)
+                    }
+                    true
+                }
+                Key.Enter, Key.NumPadEnter -> {
+                    if (onSubmit != null) {
+                        onSubmit()
+                        keyboard?.hide()
+                        focusManager.moveFocus(FocusDirection.Down)
+                        true
+                    } else {
+                        false
+                    }
+                }
+                else -> false
+            }
+        }
+}
 
 @Composable
 fun VesselLogoMark(modifier: Modifier = Modifier) {
@@ -153,7 +241,10 @@ fun VesselButton(
             disabledContentColor = contentColor.copy(alpha = 0.55f),
         ),
         contentPadding = contentPadding,
-        modifier = modifier.height(height).defaultMinSize(minWidth = 52.dp, minHeight = height),
+        modifier = modifier
+            .height(height)
+            .defaultMinSize(minWidth = 52.dp, minHeight = height)
+            .vesselFocusBorder(RoundedCornerShape(tokens.cornerRadius)),
     ) {
         ProvideTextStyle(
             MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
@@ -185,7 +276,10 @@ fun VesselOutlinedButton(
             disabledContentColor = palette.textMuted.copy(alpha = 0.5f),
         ),
         contentPadding = contentPadding,
-        modifier = modifier.height(height).defaultMinSize(minWidth = 48.dp, minHeight = height),
+        modifier = modifier
+            .height(height)
+            .defaultMinSize(minWidth = 48.dp, minHeight = height)
+            .vesselFocusBorder(RoundedCornerShape(tokens.cornerRadius)),
     ) {
         ProvideTextStyle(
             MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Medium),
@@ -210,7 +304,10 @@ fun VesselTextButton(
         shape = RoundedCornerShape(LocalVesselUiTokens.current.cornerRadius),
         colors = ButtonDefaults.textButtonColors(contentColor = contentColor),
         contentPadding = PaddingValues(horizontal = 11.dp, vertical = 0.dp),
-        modifier = modifier.height(height).defaultMinSize(minWidth = 40.dp, minHeight = height),
+        modifier = modifier
+            .height(height)
+            .defaultMinSize(minWidth = 40.dp, minHeight = height)
+            .vesselFocusBorder(RoundedCornerShape(LocalVesselUiTokens.current.cornerRadius)),
     ) {
         ProvideTextStyle(
             MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
@@ -238,6 +335,7 @@ fun VesselCompactIconButton(
             .clip(shape)
             .then(if (containerColor != Color.Transparent) Modifier.background(containerColor) else Modifier)
             .then(if (borderColor != null) Modifier.border(1.dp, borderColor, shape) else Modifier)
+            .vesselFocusBorder(shape)
             .clickable(enabled = enabled, onClick = onClick),
     ) {
         content()
@@ -275,6 +373,7 @@ fun VesselFilterChip(
         modifier = modifier
             .height(tokens.chipHeight)
             .clip(RoundedCornerShape(999.dp))
+            .vesselFocusBorder(RoundedCornerShape(999.dp))
             .clickable(onClick = onClick),
     ) {
         Box(
@@ -304,10 +403,14 @@ fun VesselSearchField(
 ) {
     val palette = LocalVesselPalette.current
     val tokens = LocalVesselUiTokens.current
+    var isFieldFocused by remember { mutableStateOf(false) }
     Surface(
         shape = RoundedCornerShape(tokens.cornerRadius),
         color = palette.bgSurface,
-        border = BorderStroke(1.dp, palette.border.copy(alpha = 0.65f)),
+        border = BorderStroke(
+            width = if (isFieldFocused) 2.dp else 1.dp,
+            color = if (isFieldFocused) palette.accent else palette.border.copy(alpha = 0.65f),
+        ),
         modifier = modifier.height(tokens.searchFieldHeight),
     ) {
         Row(
@@ -347,7 +450,10 @@ fun VesselSearchField(
                     cursorBrush = SolidColor(palette.accent),
                     keyboardOptions = KeyboardOptions(imeAction = imeAction),
                     keyboardActions = KeyboardActions(onSearch = { onSearch?.invoke() }),
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .onFocusChanged { isFieldFocused = it.isFocused || it.hasFocus }
+                        .vesselDpadInputEscape(isTextEmpty = value.isEmpty(), onSubmit = onSearch),
                 )
             }
             if (value.isNotEmpty()) {
@@ -392,6 +498,7 @@ fun cardAspectRatioValue(aspectRatio: String): Float = when (aspectRatio) {
 fun isLandscapeCardRatio(aspectRatio: String): Boolean =
     cardAspectRatioValue(aspectRatio) >= (4f / 3f - 0.01f)
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun MediaPosterCard(
     item: MediaSummary,
@@ -403,6 +510,7 @@ fun MediaPosterCard(
     modifier: Modifier = Modifier,
 ) {
     val palette = LocalVesselPalette.current
+    val tokens = LocalVesselUiTokens.current
     var showMenu by remember { mutableStateOf(false) }
     val targetAspect = cardAspectRatioValue(cards.aspectRatio)
     val isLandscape = targetAspect >= (4f / 3f - 0.01f)
@@ -425,193 +533,210 @@ fun MediaPosterCard(
         modifier.width(if (isLandscape) rowWidth else rowWidth)
     }
 
-    // Important: never clip the outer Column, otherwise the title/metadata gets clipped or looks behind a container.
-    Column(
-        modifier = widthModifier
-            .clickable(onClick = onClick),
-    ) {
-        Box(
+    // Sibling overlay placement lets TV D-Pad move freely between card click and quick-status button.
+    Box(modifier = widthModifier) {
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .aspectRatio(posterAspect)
                 .clip(RoundedCornerShape(12.dp))
-                .background(palette.bgElevated)
-                .border(1.dp, palette.border.copy(alpha = 0.45f), RoundedCornerShape(12.dp)),
+                .vesselFocusBorder(RoundedCornerShape(12.dp))
+                .onPreviewKeyEvent { ev ->
+                    if (ev.type == KeyEventType.KeyDown && ev.key == Key.Menu && onQuickStatus != null) {
+                        showMenu = true
+                        true
+                    } else {
+                        false
+                    }
+                }
+                .combinedClickable(
+                    onClick = onClick,
+                    onLongClick = { if (onQuickStatus != null) showMenu = true },
+                ),
         ) {
-            if (!item.poster.isNullOrBlank()) {
-                AsyncImage(
-                    model = item.poster,
-                    contentDescription = item.title,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize(),
-                )
-            }
-
-            // Subtle top-right & bottom scrims for crisp overlay icons
-            if (onQuickStatus != null || (cards.showRating && (item.rating ?: 0f) > 0f)) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(34.dp)
-                        .align(Alignment.TopCenter)
-                        .background(
-                            Brush.verticalGradient(
-                                listOf(Color.Black.copy(alpha = 0.36f), Color.Transparent),
-                            ),
-                        ),
-                )
-            }
-
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(42.dp)
-                    .align(Alignment.BottomCenter)
-                    .background(
-                        Brush.verticalGradient(
-                            listOf(Color.Transparent, Color.Black.copy(alpha = 0.72f)),
-                        ),
-                    ),
-            )
+                    .aspectRatio(posterAspect)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(palette.bgElevated)
+                    .border(1.dp, palette.border.copy(alpha = 0.45f), RoundedCornerShape(12.dp)),
+            ) {
+                if (!item.poster.isNullOrBlank()) {
+                    AsyncImage(
+                        model = item.poster,
+                        contentDescription = item.title,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
 
-            // Rating chip top-left
-            val tokens = LocalVesselUiTokens.current
-            if (cards.showRating) {
-                item.rating?.takeIf { it > 0f }?.let { score ->
-                    Surface(
-                        shape = RoundedCornerShape(7.dp),
-                        color = Color.Black.copy(alpha = 0.62f),
+                // Subtle top-right & bottom scrims for crisp overlay icons
+                if (onQuickStatus != null || (cards.showRating && (item.rating ?: 0f) > 0f)) {
+                    Box(
                         modifier = Modifier
-                            .align(Alignment.TopStart)
+                            .fillMaxWidth()
+                            .height(34.dp)
+                            .align(Alignment.TopCenter)
+                            .background(
+                                Brush.verticalGradient(
+                                    listOf(Color.Black.copy(alpha = 0.36f), Color.Transparent),
+                                ),
+                            ),
+                    )
+                }
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(42.dp)
+                        .align(Alignment.BottomCenter)
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(Color.Transparent, Color.Black.copy(alpha = 0.72f)),
+                            ),
+                        ),
+                )
+
+                // Rating chip top-left
+                if (cards.showRating) {
+                    item.rating?.takeIf { it > 0f }?.let { score ->
+                        Surface(
+                            shape = RoundedCornerShape(7.dp),
+                            color = Color.Black.copy(alpha = 0.62f),
+                            modifier = Modifier
+                                .align(Alignment.TopStart)
+                                .padding(6.dp),
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(
+                                    horizontal = tokens.badgeHorizontalPadding,
+                                    vertical = tokens.badgeVerticalPadding,
+                                ),
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Star,
+                                    contentDescription = null,
+                                    tint = palette.warning,
+                                    modifier = Modifier.size(tokens.badgeIconSize),
+                                )
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Text(
+                                    text = String.format(Locale.US, "%.1f", score),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Color.White,
+                                )
+                            }
+                        }
+                    }
+                }
+
+                if (cards.showContentType) {
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = Color.Black.copy(alpha = 0.60f),
+                        modifier = Modifier
+                            .align(Alignment.BottomStart)
                             .padding(6.dp),
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
+                        Text(
+                            text = if (item.isAnime) "ANIME" else item.type.uppercase(Locale.US),
+                            style = MaterialTheme.typography.labelSmall,
+                            fontSize = (10f * tokens.scale).sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color.White,
                             modifier = Modifier.padding(
                                 horizontal = tokens.badgeHorizontalPadding,
                                 vertical = tokens.badgeVerticalPadding,
                             ),
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Star,
-                                contentDescription = null,
-                                tint = palette.warning,
-                                modifier = Modifier.size(tokens.badgeIconSize),
-                            )
-                            Spacer(modifier = Modifier.width(3.dp))
-                            Text(
-                                text = String.format(Locale.US, "%.1f", score),
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.SemiBold,
-                                color = Color.White,
-                            )
-                        }
-                    }
-                }
-            }
-
-            if (cards.showContentType) {
-                Surface(
-                    shape = RoundedCornerShape(6.dp),
-                    color = Color.Black.copy(alpha = 0.60f),
-                    modifier = Modifier
-                        .align(Alignment.BottomStart)
-                        .padding(6.dp),
-                ) {
-                    Text(
-                        text = if (item.isAnime) "ANIME" else item.type.uppercase(Locale.US),
-                        style = MaterialTheme.typography.labelSmall,
-                        fontSize = (10f * tokens.scale).sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = Color.White,
-                        modifier = Modifier.padding(
-                            horizontal = tokens.badgeHorizontalPadding,
-                            vertical = tokens.badgeVerticalPadding,
-                        ),
-                    )
-                }
-            }
-
-            // Minimal background-free quick status icon at top-right
-            if (onQuickStatus != null) {
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(4.dp),
-                ) {
-                    val iconTint = when (currentStatus) {
-                        "completed" -> palette.success
-                        "dropped" -> palette.danger
-                        null -> Color.White.copy(alpha = 0.92f)
-                        else -> palette.accent
-                    }
-                    val iconVec = when (currentStatus) {
-                        "completed" -> Icons.Default.CheckCircle
-                        null -> Icons.Outlined.BookmarkAdd
-                        else -> Icons.Default.Bookmark
-                    }
-                    Box(
-                        contentAlignment = Alignment.Center,
-                        modifier = Modifier
-                            .size(tokens.smallIconButtonSize)
-                            .clip(CircleShape)
-                            .clickable { showMenu = true },
-                    ) {
-                        Icon(
-                            imageVector = iconVec,
-                            contentDescription = VesselI18n.tr("media.quick_status"),
-                            tint = iconTint,
-                            modifier = Modifier.size((19f * tokens.scale).dp),
                         )
                     }
-                    DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
-                        listOf(
-                            "watching" to VesselI18n.tr("library.watching"),
-                            "plan_to_watch" to VesselI18n.tr("library.plan_to_watch"),
-                            "completed" to VesselI18n.tr("library.completed"),
-                            "on_hold" to VesselI18n.tr("library.on_hold"),
-                            "dropped" to VesselI18n.tr("library.dropped"),
-                        ).forEach { (statusKey, label) ->
-                            DropdownMenuItem(
-                                text = {
-                                    Text(
-                                        text = label,
-                                        fontWeight = if (currentStatus == statusKey) FontWeight.Bold else FontWeight.Normal,
-                                        color = if (currentStatus == statusKey) palette.accent else LocalContentColor.current,
-                                    )
-                                },
-                                onClick = {
-                                    showMenu = false
-                                    onQuickStatus(statusKey)
-                                },
-                            )
-                        }
-                    }
                 }
+            }
+
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = item.title,
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                color = palette.textPrimary,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 2.dp),
+            )
+            if (cards.showYear && item.year != null) {
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = item.year.toString(),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = palette.textMuted,
+                    maxLines = 1,
+                    modifier = Modifier.padding(horizontal = 2.dp),
+                )
             }
         }
 
-        Spacer(modifier = Modifier.height(6.dp))
-        Text(
-            text = item.title,
-            style = MaterialTheme.typography.bodySmall,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            color = palette.textPrimary,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 2.dp),
-        )
-        if (cards.showYear && item.year != null) {
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(
-                text = item.year.toString(),
-                style = MaterialTheme.typography.labelSmall,
-                color = palette.textMuted,
-                maxLines = 1,
-                modifier = Modifier.padding(horizontal = 2.dp),
-            )
+        // D-Pad accessible quick status icon at top-right (outside Column clickable so TV focus can target it cleanly)
+        if (onQuickStatus != null) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(4.dp),
+            ) {
+                val iconTint = when (currentStatus) {
+                    "completed" -> palette.success
+                    "dropped" -> palette.danger
+                    null -> Color.White.copy(alpha = 0.92f)
+                    else -> palette.accent
+                }
+                val iconVec = when (currentStatus) {
+                    "completed" -> Icons.Default.CheckCircle
+                    null -> Icons.Outlined.BookmarkAdd
+                    else -> Icons.Default.Bookmark
+                }
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .size(tokens.smallIconButtonSize)
+                        .clip(CircleShape)
+                        .background(Color.Black.copy(alpha = 0.42f))
+                        .vesselFocusBorder(CircleShape)
+                        .clickable { showMenu = true },
+                ) {
+                    Icon(
+                        imageVector = iconVec,
+                        contentDescription = VesselI18n.tr("media.quick_status"),
+                        tint = iconTint,
+                        modifier = Modifier.size((19f * tokens.scale).dp),
+                    )
+                }
+                DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                    listOf(
+                        "watching" to VesselI18n.tr("library.watching"),
+                        "plan_to_watch" to VesselI18n.tr("library.plan_to_watch"),
+                        "completed" to VesselI18n.tr("library.completed"),
+                        "on_hold" to VesselI18n.tr("library.on_hold"),
+                        "dropped" to VesselI18n.tr("library.dropped"),
+                    ).forEach { (statusKey, label) ->
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    text = label,
+                                    fontWeight = if (currentStatus == statusKey) FontWeight.Bold else FontWeight.Normal,
+                                    color = if (currentStatus == statusKey) palette.accent else LocalContentColor.current,
+                                )
+                            },
+                            onClick = {
+                                showMenu = false
+                                onQuickStatus(statusKey)
+                            },
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -627,6 +752,8 @@ fun ContinueWatchingCard(
     modifier: Modifier = Modifier,
 ) {
     val palette = LocalVesselPalette.current
+    val isTv = LocalIsTvDevice.current
+    val cwTokens = LocalVesselUiTokens.current
     var showMenu by remember { mutableStateOf(false) }
     val p = entry.progress
     val ratio = if (p.durationMs > 0) (p.positionMs.toFloat() / p.durationMs).coerceIn(0.04f, 0.99f) else 0.15f
@@ -639,10 +766,20 @@ fun ContinueWatchingCard(
         if (ep != null) "$prefix · $ep" else prefix
     }
 
-    Box(modifier = modifier.width(228.dp)) {
+    Box(modifier = modifier.width(if (isTv) 164.dp else 228.dp)) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .vesselFocusBorder(RoundedCornerShape(12.dp))
+                .onPreviewKeyEvent { ev ->
+                    if (ev.type == KeyEventType.KeyDown && ev.key == Key.Menu) {
+                        showMenu = true
+                        true
+                    } else {
+                        false
+                    }
+                }
                 .combinedClickable(
                     onClick = onResume,
                     onLongClick = { showMenu = true },
@@ -666,10 +803,9 @@ fun ContinueWatchingCard(
                     )
                 }
 
-                val cwTokens = LocalVesselUiTokens.current
                 Box(
                     modifier = Modifier
-                        .size((40f * cwTokens.scale).dp)
+                        .size((if (isTv) 32f else 40f * cwTokens.scale).dp)
                         .clip(CircleShape)
                         .background(Color.Black.copy(alpha = 0.56f))
                         .align(Alignment.Center),
@@ -679,25 +815,7 @@ fun ContinueWatchingCard(
                         imageVector = Icons.Default.PlayArrow,
                         contentDescription = VesselI18n.tr("details.resume"),
                         tint = Color.White,
-                        modifier = Modifier.size((21f * cwTokens.scale).dp),
-                    )
-                }
-
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(6.dp)
-                        .size(cwTokens.smallIconButtonSize)
-                        .clip(CircleShape)
-                        .background(Color.Black.copy(alpha = 0.58f))
-                        .clickable { onEdit() },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Edit,
-                        contentDescription = VesselI18n.tr("home.edit_cw"),
-                        tint = Color.White,
-                        modifier = Modifier.size((15f * cwTokens.scale).dp),
+                        modifier = Modifier.size((if (isTv) 17f else 21f * cwTokens.scale).dp),
                     )
                 }
 
@@ -707,7 +825,7 @@ fun ContinueWatchingCard(
                         shape = RoundedCornerShape(7.dp),
                         modifier = Modifier
                             .align(Alignment.BottomStart)
-                            .padding(8.dp),
+                            .padding(if (isTv) 6.dp else 8.dp),
                     ) {
                         Text(
                             text = "${remainingMin}m",
@@ -736,7 +854,7 @@ fun ContinueWatchingCard(
             Text(
                 text = p.title ?: p.media.nativeId,
                 style = MaterialTheme.typography.bodySmall,
-                fontSize = 12.5.sp,
+                fontSize = if (isTv) 12.sp else 12.5.sp,
                 fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -750,6 +868,26 @@ fun ContinueWatchingCard(
                 overflow = TextOverflow.Ellipsis,
                 color = palette.textMuted,
                 modifier = Modifier.padding(horizontal = 2.dp),
+            )
+        }
+
+        // D-Pad accessible Edit button at top-right
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(if (isTv) 4.dp else 6.dp)
+                .size(cwTokens.smallIconButtonSize)
+                .clip(CircleShape)
+                .background(Color.Black.copy(alpha = 0.58f))
+                .vesselFocusBorder(CircleShape)
+                .clickable { onEdit() },
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = Icons.Default.Edit,
+                contentDescription = VesselI18n.tr("home.edit_cw"),
+                tint = Color.White,
+                modifier = Modifier.size((15f * cwTokens.scale).dp),
             )
         }
 
