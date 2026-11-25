@@ -32,7 +32,7 @@ Merkezi sunuculara yaslanan uygulamaların aksine Vessel tüm bileşenleri doğr
 
 ---
 
-## Hızlı Özellik Özeti (`v0.1.45`)
+## Hızlı Özellik Özeti (`v0.1.46`)
 
 - **Oynatma (`/watch`):** HLS (`hls.js`), MPEG-TS (`mpegts.js`), MP4/WebM, çoklu ses parçası seçimi, `.srt/.vtt/.ass/.ssa` altyazı & `-500ms / +500ms` senkronizasyon, touchpad kaydırma + **Doğal Kaydırma (Natural Scrolling)** desteği, **İntro / Özet / Kapanış / Önizleme Atla** (`Plugin > TheIntroDB > IntroDB > AniSkip`), doğrudan **Detaylara Git** butonu ve harici `mpv` aktarımı.
 - **İzlemeye Devam Et:** Biten filmler ve sezon/dizi finalleri listeden otomatik kalkar, diziler otomatik bir sonraki bölüme ilerler; uzun bölüm başlıkları `...` ile dengelenir; kalem simgesi ile manuel bölüm ve ilerleme düzenleme (toplam süre seçilen bölümün gerçek süresinden salt okunur gelir).

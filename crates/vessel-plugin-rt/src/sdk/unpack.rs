@@ -82,16 +82,58 @@ fn parse_js_quoted_arg(input: &str) -> Result<(String, &str), String> {
     Err("unterminated string literal in packed script".into())
 }
 
+fn find_packer_header_start(input: &str) -> usize {
+    let mut search_from = 0usize;
+    while let Some(rel) = input[search_from..].find("function") {
+        let fn_start = search_from + rel;
+        let after_fn = input[fn_start + "function".len()..].trim_start();
+        if let Some(after_paren) = after_fn.strip_prefix('(') {
+            let compact: String = after_paren
+                .chars()
+                .take(32)
+                .filter(|c| !c.is_ascii_whitespace())
+                .collect();
+            if compact.starts_with("p,a,c,k") {
+                return fn_start;
+            }
+        }
+        search_from = fn_start + "function".len();
+    }
+    0
+}
+
+fn find_packer_args_start(slice: &str) -> Option<usize> {
+    if let Some(idx) = slice.find("}(") {
+        return Some(idx + 2);
+    }
+    let bytes = slice.as_bytes();
+    let mut i = 0usize;
+    while i < bytes.len() {
+        if bytes[i] == b'}' {
+            let mut j = i + 1;
+            while j < bytes.len() && bytes[j].is_ascii_whitespace() {
+                j += 1;
+            }
+            if j < bytes.len() && bytes[j] == b'(' {
+                return Some(j + 1);
+            }
+        }
+        i += 1;
+    }
+    None
+}
+
 /// Decodes a Dean Edwards `eval(function(p,a,c,k,e,d){...}(...))` packed JS string safely in Rust.
 pub fn unpack_dean_edwards(packed: &str) -> VesselResult<String> {
-    let marker = "}(";
-    let Some(start_idx) = packed.find(marker) else {
+    let header_start = find_packer_header_start(packed);
+    let tail = &packed[header_start..];
+    let Some(args_offset) = find_packer_args_start(tail) else {
         return Err(VesselError::InvalidInput(
             "input does not match Dean Edwards packed function signature".into(),
         ));
     };
 
-    let args = &packed[start_idx + marker.len()..];
+    let args = &tail[args_offset..];
     let (payload, after_payload) = parse_js_quoted_arg(args).map_err(VesselError::InvalidInput)?;
 
     let after_comma = after_payload
@@ -285,6 +327,16 @@ mod tests {
         assert_eq!(
             unpacked,
             r#"const streamUrl="https://cdn.anthology/master.m3u8";"#
+        );
+    }
+
+    #[test]
+    fn unpacks_when_preceded_by_other_iife_scripts() {
+        let html = r#"<script>!function(){return 42}()</script><script>eval(function(p,a,c,k,e,d){while(c--)if(k[c])p=p.replace(new RegExp('\\b'+c.toString(a)+'\\b','g'),k[c]);return p}('0 1="2://3.4/5.6";',7,7,'const|streamUrl|https|cdn|dizibak|master|m3u8'.split('|'),0,{}))</script>"#;
+        let unpacked = unpack_dean_edwards(html).expect("skip leading iife script");
+        assert_eq!(
+            unpacked,
+            r#"const streamUrl="https://cdn.dizibak/master.m3u8";"#
         );
     }
 }

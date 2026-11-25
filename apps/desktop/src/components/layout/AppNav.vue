@@ -146,9 +146,7 @@ const showLabels = computed(() => isTop.value || isExpanded.value)
   padding: 0.45rem 0.7rem;
   border-radius: 999px;
   border: 1px solid var(--vessel-border-strong);
-  background: color-mix(in srgb, var(--vessel-bg-surface) 82%, transparent);
-  backdrop-filter: blur(22px) saturate(1.45);
-  -webkit-backdrop-filter: blur(22px) saturate(1.45);
+  background: rgba(14, 15, 24, 0.96);
   box-shadow: 0 18px 44px rgba(0, 0, 0, 0.36);
   z-index: 45;
 }

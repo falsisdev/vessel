@@ -37,6 +37,25 @@ const lastEnrichedDetail = ref<{ pluginId: string; nativeId: string; detail: Med
 )
 const toasts = ref<ToastItem[]>([])
 let unlisten: (() => void) | null = null
+const pendingHomeShelves = new Map<string, HomeShelfResult>()
+let homeFlushTimer: ReturnType<typeof setTimeout> | null = null
+
+function flushPendingHomeShelves(): void {
+  if (homeFlushTimer !== null) {
+    clearTimeout(homeFlushTimer)
+    homeFlushTimer = null
+  }
+  if (pendingHomeShelves.size === 0) return
+  const merged = new Map<string, HomeShelfResult>()
+  for (const shelf of homeStreamShelves.value) {
+    merged.set(shelf.pluginId, shelf)
+  }
+  for (const [pid, shelf] of pendingHomeShelves) {
+    merged.set(pid, shelf)
+  }
+  pendingHomeShelves.clear()
+  homeStreamShelves.value = Array.from(merged.values())
+}
 
 export function pushToast(tone: ToastItem['tone'], message: string): void {
   const id = toastSeq++
@@ -64,20 +83,30 @@ function handleEngineEvent(event: EngineEvent): void {
     }
     case 'home_feed_partial_result': {
       if (event.requestId !== activeHomeRequestId.value) return
+      for (const sec of event.sections) {
+        for (const item of sec.items) {
+          if (!item.pluginId) {
+            item.pluginId = event.pluginId
+          }
+        }
+      }
       const shelf: HomeShelfResult = {
         pluginId: event.pluginId,
         pluginName: event.pluginName,
         sections: event.sections,
         error: event.error,
       }
-      homeStreamShelves.value = [
-        ...homeStreamShelves.value.filter((s) => s.pluginId !== event.pluginId),
-        shelf,
-      ]
+      pendingHomeShelves.set(event.pluginId, shelf)
+      if (homeStreamShelves.value.length === 0) {
+        flushPendingHomeShelves()
+      } else if (homeFlushTimer === null) {
+        homeFlushTimer = setTimeout(flushPendingHomeShelves, 50)
+      }
       break
     }
     case 'home_feed_completed': {
       if (event.requestId === activeHomeRequestId.value) {
+        flushPendingHomeShelves()
         isLoadingHome.value = false
       }
       break

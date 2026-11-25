@@ -160,7 +160,7 @@ async function clearStatus(): Promise<void> {
           :alt="item.title"
           width="300"
           height="450"
-          loading="eager"
+          loading="lazy"
           decoding="async"
           class="poster-img"
           :class="{ 'is-loaded': imgLoaded }"
@@ -283,8 +283,7 @@ async function clearStatus(): Promise<void> {
   height: 30px;
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.22);
-  background: rgba(10, 11, 16, 0.78);
-  backdrop-filter: blur(8px);
+  background: rgba(10, 11, 16, 0.9);
   color: #f8fafc;
   cursor: pointer;
   opacity: 0.84;
@@ -439,6 +438,11 @@ async function clearStatus(): Promise<void> {
   z-index: 1;
   border-radius: 0;
   border: none;
+}
+
+.poster-shimmer::after {
+  animation: none;
+  display: none;
 }
 
 .poster-img {

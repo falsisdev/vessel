@@ -247,7 +247,7 @@ impl std::fmt::Debug for HostServices {
 }
 
 impl HostServices {
-    /// Builds `HostServices` with a redirect-safe `reqwest::Client` (`Policy::none()`).
+    /// Builds `HostServices` using a process-wide shared redirect-safe `reqwest::Client` (`Policy::none()`).
     pub fn new(
         plugin_id: PluginId,
         domain_policy: Arc<DomainPolicy>,
@@ -255,10 +255,17 @@ impl HostServices {
         event_sink: Option<Arc<dyn EventSink>>,
         ts_cache: Arc<TsCompileCache>,
     ) -> VesselResult<Self> {
-        let http_client = vessel_domain::http_client_builder()
-            .redirect(reqwest::redirect::Policy::none())
-            .build()
-            .map_err(|err| VesselError::Network(format!("build plugin http client: {err}")))?;
+        static SHARED_HTTP_CLIENT: std::sync::OnceLock<Result<reqwest::Client, String>> =
+            std::sync::OnceLock::new();
+        let http_client = SHARED_HTTP_CLIENT
+            .get_or_init(|| {
+                vessel_domain::http_client_builder()
+                    .redirect(reqwest::redirect::Policy::none())
+                    .build()
+                    .map_err(|err| format!("build plugin http client: {err}"))
+            })
+            .clone()
+            .map_err(VesselError::Network)?;
         Ok(Self {
             plugin_id,
             domain_policy,

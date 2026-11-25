@@ -39,7 +39,8 @@ pub const DEFAULT_REGISTRY_URL: &str =
 /// Built-in official shortcodes kept as a zero-network fallback for `registry.json`.
 pub fn builtin_shortcode(code: &str) -> Option<&'static str> {
     match code.trim().to_ascii_lowercase().as_str() {
-        "anthology" | "tr" => Some("gh:falsisdev/anthology"),
+        "anthology" | "tr" => Some("gh:falsisdev/anthology-vessel"),
+        "nuvio" => Some("gh:falsisdev/anthology"),
         _ => None,
     }
 }
@@ -350,7 +351,7 @@ impl SourceResolver {
     /// Creates a production `SourceResolver` backed by `raw.githubusercontent.com` and `gitlab.com`.
     pub fn new() -> Self {
         let client = vessel_domain::http_client_builder()
-            .user_agent("Vessel/0.1.45 (https://github.com/falsisdev/vessel)")
+            .user_agent("Vessel/0.1.46 (https://github.com/falsisdev/vessel)")
             .redirect(Policy::none())
             .timeout(RESOLVER_TIMEOUT)
             .build()
@@ -1432,10 +1433,17 @@ mod tests {
                 .lookup_shortcode("anthology")
                 .await
                 .expect("anthology shortcode"),
-            "gh:falsisdev/anthology"
+            "gh:falsisdev/anthology-vessel"
         );
         assert_eq!(
             resolver.lookup_shortcode("tr").await.expect("tr shortcode"),
+            "gh:falsisdev/anthology-vessel"
+        );
+        assert_eq!(
+            resolver
+                .lookup_shortcode("nuvio")
+                .await
+                .expect("nuvio shortcode"),
             "gh:falsisdev/anthology"
         );
         assert!(resolver.lookup_shortcode("unknown-code").await.is_err());
@@ -1445,10 +1453,14 @@ mod tests {
             serde_json::from_str(repo_registry_raw).expect("parse root registry.json");
         assert_eq!(
             parsed.codes.get("anthology").map(String::as_str),
-            Some("gh:falsisdev/anthology")
+            Some("gh:falsisdev/anthology-vessel")
         );
         assert_eq!(
             parsed.codes.get("tr").map(String::as_str),
+            Some("gh:falsisdev/anthology-vessel")
+        );
+        assert_eq!(
+            parsed.codes.get("nuvio").map(String::as_str),
             Some("gh:falsisdev/anthology")
         );
     }

@@ -166,6 +166,11 @@ const pluginNameById = computed(() => {
   return map
 })
 
+function normalizeShelfItem(item: MediaSummary, pluginId: string): MediaSummary {
+  if (item.pluginId === pluginId) return item
+  return { ...item, pluginId }
+}
+
 const orderedShelves = computed(() => {
   const order = activeHomePluginIds.value
   const allowed = new Set(order)
@@ -176,7 +181,9 @@ const orderedShelves = computed(() => {
       sections: shelf.sections
         .map((sec) => ({
           ...sec,
-          items: sec.items.filter((it) => it.type !== 'live'),
+          items: sec.items
+            .filter((it) => it.type !== 'live')
+            .map((it) => normalizeShelfItem(it, shelf.pluginId)),
         }))
         .filter((sec) => sec.items.length > 0),
     }))
@@ -972,16 +979,16 @@ onUnmounted(() => {
             :key="`${featuredItem.resolvedPluginId}:${featuredItem.nativeId}`"
             class="hero-stage"
           >
-            <img
-              v-if="featuredDetail?.backdrop || featuredItem.poster"
-              :src="featuredDetail?.backdrop || featuredItem.poster"
-              :alt="featuredItem.title"
-              width="1440"
-              height="680"
-              fetchpriority="high"
-              decoding="async"
-              class="hero-art hero-ken-burns"
-            />
+              <img
+                v-if="featuredDetail?.backdrop || featuredItem.poster"
+                :src="featuredDetail?.backdrop || featuredItem.poster"
+                :alt="featuredItem.title"
+                width="1440"
+                height="680"
+                fetchpriority="high"
+                decoding="async"
+                class="hero-art"
+              />
             <div class="hero-vignette" aria-hidden="true" />
 
             <div class="hero-content">
@@ -1317,7 +1324,7 @@ onUnmounted(() => {
                   class="rail-card-slot"
                 >
                   <MediaCard
-                    :item="{ ...item, pluginId: item.pluginId ?? shelf.pluginId }"
+                    :item="item"
                     :cards="uiPreferences.cards"
                     @open="openDetails"
                   />
@@ -1787,11 +1794,7 @@ onUnmounted(() => {
   object-fit: cover;
   object-position: center 22%;
   opacity: 0.92;
-  filter: contrast(1.06) saturate(1.14);
   pointer-events: none;
-  transform-origin: center center;
-  transform: scale(1.01);
-  will-change: transform;
 }
 
 .hero-art.hero-ken-burns {
@@ -2016,14 +2019,14 @@ onUnmounted(() => {
   gap: 2rem;
 }
 
-/* Keep rails GPU-pinned to prevent WKWebView tile-cull flashes during vertical scroll */
+/* Skip layout/paint for off-screen horizontal rails without promoting 30+ composited layers */
 .nuvio-rail {
   display: flex;
   flex-direction: column;
   gap: 0.85rem;
-  transform: translateZ(0);
-  -webkit-backface-visibility: hidden;
-  backface-visibility: hidden;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 360px;
+  contain: layout style;
 }
 
 .rail-title-skeleton {
@@ -2344,9 +2347,7 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   padding: 1.5rem;
-  background: rgba(6, 7, 12, 0.76);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: rgba(6, 7, 12, 0.86);
 }
 
 .home-picker-modal {

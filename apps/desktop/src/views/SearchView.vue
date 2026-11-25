@@ -179,10 +179,14 @@ async function handleCardOpen(pluginId: string, nativeId: string): Promise<void>
 function cardItemFor(pluginId: string, item: MediaSummary): MediaSummary {
   const plug = pluginMap.value.get(pluginId)
   const forceLive = plug ? isLiveTvPlugin(plug) : false
+  const nextType = forceLive ? 'live' : item.type
+  if (item.pluginId === pluginId && item.type === nextType) {
+    return item
+  }
   return {
     ...item,
     pluginId: item.pluginId ?? pluginId,
-    type: forceLive ? 'live' : item.type,
+    type: nextType,
   }
 }
 </script>
@@ -280,6 +284,12 @@ function cardItemFor(pluginId: string, item: MediaSummary): MediaSummary {
   display: flex;
   flex-direction: column;
   gap: var(--vessel-gap);
+}
+
+.bucket {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 360px;
+  contain: layout style;
 }
 
 .search-bar {

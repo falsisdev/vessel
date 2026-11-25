@@ -93,6 +93,12 @@ interface PluginGroup {
 }
 
 function resolveGroupIcon(items: PluginListEntry[]): string | undefined {
+  const brandMatch = items.find((item) => {
+    const icon = item.manifest.icon?.trim()
+    return icon && (icon.includes('logo_1_transparent') || item.manifest.id === 'community.anthology.plus')
+  })
+  if (brandMatch?.manifest.icon) return brandMatch.manifest.icon.trim()
+
   const counts = new Map<string, number>()
   for (const item of items) {
     const icon = item.manifest.icon?.trim()
@@ -559,6 +565,8 @@ onMounted(() => {
                   v-if="canShowImage(group.iconUrl)"
                   :src="group.iconUrl"
                   alt=""
+                  loading="lazy"
+                  decoding="async"
                   class="group-logo-img"
                   @error="markImageFailed(group.iconUrl)"
                 />
@@ -607,6 +615,8 @@ onMounted(() => {
                     v-if="canShowImage(entry.manifest.icon)"
                     :src="entry.manifest.icon"
                     alt=""
+                    loading="lazy"
+                    decoding="async"
                     class="plugin-mini-logo"
                     @error="markImageFailed(entry.manifest.icon)"
                   />

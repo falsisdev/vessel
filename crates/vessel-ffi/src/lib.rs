@@ -715,7 +715,7 @@ impl VesselMobileCore {
             let plugins = self.engine.list_plugins().await?;
             let filter_set: Option<HashSet<String>> =
                 plugin_ids.map(|ids| ids.into_iter().collect());
-            let sem = Arc::new(tokio::sync::Semaphore::new(4));
+            let sem = Arc::new(tokio::sync::Semaphore::new(8));
             let mut set = JoinSet::new();
 
             for stored in plugins.into_iter().filter(|p| {

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onActivated, onMounted, shallowRef } from 'vue'
+import { computed, onActivated, onMounted, shallowRef } from 'vue'
 import { useRouter } from 'vue-router'
 import { X } from 'lucide-vue-next'
 import { isTauriRuntime, vesselApi } from '@/api/vessel'
@@ -8,7 +8,7 @@ import { useI18n } from '@/composables/useI18n'
 import { useLibraryState } from '@/composables/useLibraryState'
 import { useUiPreferences } from '@/composables/useUiPreferences'
 import { pushToast } from '@/composables/useVesselEvents'
-import type { LibraryItem, LibraryStatus } from '@/types/vessel'
+import type { LibraryItem, LibraryStatus, MediaSummary } from '@/types/vessel'
 
 const router = useRouter()
 const { t } = useI18n()
@@ -18,6 +18,21 @@ const { refreshLibraryState } = useLibraryState()
 const activeFilter = shallowRef<LibraryStatus | 'all'>('all')
 const items = shallowRef<LibraryItem[]>([])
 const loading = shallowRef(isTauriRuntime())
+
+const mappedEntries = computed<Array<{ entry: LibraryItem; card: MediaSummary }>>(() =>
+  items.value.map((entry) => ({
+    entry,
+    card: {
+      pluginId: entry.media.pluginId,
+      nativeId: entry.media.nativeId,
+      type: entry.mediaType,
+      isAnime: entry.isAnime,
+      title: entry.title,
+      poster: entry.posterUrl,
+      year: entry.year,
+    },
+  })),
+)
 
 defineOptions({ name: 'LibraryView' })
 
@@ -103,20 +118,12 @@ onActivated(() => {
 
     <div v-else class="v-grid">
       <div
-        v-for="entry in items"
+        v-for="{ entry, card } in mappedEntries"
         :key="`${entry.media.pluginId}:${entry.media.nativeId}`"
         class="lib-card-wrap"
       >
         <MediaCard
-          :item="{
-            pluginId: entry.media.pluginId,
-            nativeId: entry.media.nativeId,
-            type: entry.mediaType,
-            isAnime: entry.isAnime,
-            title: entry.title,
-            poster: entry.posterUrl,
-            year: entry.year,
-          }"
+          :item="card"
           :cards="uiPreferences.cards"
           @open="openDetails"
         />

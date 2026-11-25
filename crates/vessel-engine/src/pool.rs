@@ -11,7 +11,7 @@ use vessel_plugin_rt::{
 };
 
 /// Default number of warm isolated QuickJS runtimes kept in RAM simultaneously.
-pub const DEFAULT_MAX_WARM_PLUGINS: usize = 18;
+pub const DEFAULT_MAX_WARM_PLUGINS: usize = 40;
 
 /// Default inactivity window after which a warm QuickJS runtime is evicted (`5 min`).
 pub const DEFAULT_IDLE_TTL: Duration = Duration::from_secs(300);
