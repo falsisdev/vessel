@@ -244,7 +244,7 @@ fun VesselAndroidApp(
 
     val dir = if (VesselI18n.isRtl(locale)) LayoutDirection.Rtl else LayoutDirection.Ltr
 
-    VesselTheme(themeSpec = theme) {
+    VesselTheme(themeSpec = theme, shell = prefs.shell) {
         CompositionLocalProvider(LocalLayoutDirection provides dir) {
             Box(modifier = Modifier.fillMaxSize()) {
                 Scaffold(

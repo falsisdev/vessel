@@ -77,6 +77,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
 import dev.falsis.vessel.data.PlaybackProgress
 import dev.falsis.vessel.ui.theme.LocalVesselFloatingNavInset
+import dev.falsis.vessel.ui.theme.LocalVesselUiTokens
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -641,50 +642,51 @@ fun HomeScreen(
                                     }
 
                                     val isHeroLaunching = launchingHeroKey == detailKey
+                                    val homeTokens = LocalVesselUiTokens.current
                                     Row(
-                                        modifier = Modifier.padding(top = 2.dp),
-                                        horizontalArrangement = Arrangement.spacedBy(7.dp),
+                                        modifier = Modifier.padding(top = 4.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                                     ) {
                                         VesselButton(
                                             onClick = { watchHeroNow(hero.pluginId, hero.summary.nativeId) },
                                             enabled = launchingHeroKey == null,
-                                            height = 28.dp,
-                                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                                            height = homeTokens.compactButtonHeight,
+                                            contentPadding = PaddingValues(horizontal = 13.dp, vertical = 0.dp),
                                         ) {
                                             if (isHeroLaunching) {
                                                 CircularProgressIndicator(
-                                                    modifier = Modifier.size(12.dp),
+                                                    modifier = Modifier.size(14.dp),
                                                     strokeWidth = 2.dp,
                                                     color = Color(0xFF11111B),
                                                 )
                                             } else {
-                                                Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(14.dp))
+                                                Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
                                             }
-                                            Spacer(Modifier.width(4.dp))
+                                            Spacer(Modifier.width(5.dp))
                                             Text(
                                                 text = VesselI18n.tr("home.watch_now"),
-                                                style = MaterialTheme.typography.labelSmall,
+                                                style = MaterialTheme.typography.labelMedium,
                                                 fontWeight = FontWeight.Bold,
                                             )
                                         }
                                         Surface(
-                                            shape = RoundedCornerShape(8.dp),
-                                            color = Color.Black.copy(alpha = 0.42f),
+                                            shape = RoundedCornerShape(homeTokens.cornerRadius),
+                                            color = Color.Black.copy(alpha = 0.44f),
                                             border = BorderStroke(1.dp, Color.White.copy(alpha = 0.30f)),
                                             modifier = Modifier
-                                                .height(28.dp)
-                                                .clip(RoundedCornerShape(8.dp))
+                                                .height(homeTokens.compactButtonHeight)
+                                                .clip(RoundedCornerShape(homeTokens.cornerRadius))
                                                 .clickable { onOpenDetails(hero.pluginId, hero.summary.nativeId) },
                                         ) {
                                             Row(
                                                 verticalAlignment = Alignment.CenterVertically,
-                                                modifier = Modifier.padding(horizontal = 10.dp),
+                                                modifier = Modifier.padding(horizontal = 12.dp),
                                             ) {
-                                                Icon(Icons.Default.Info, contentDescription = null, tint = Color.White, modifier = Modifier.size(13.dp))
-                                                Spacer(Modifier.width(4.dp))
+                                                Icon(Icons.Default.Info, contentDescription = null, tint = Color.White, modifier = Modifier.size(15.dp))
+                                                Spacer(Modifier.width(5.dp))
                                                 Text(
                                                     text = VesselI18n.tr("home.more_info"),
-                                                    style = MaterialTheme.typography.labelSmall,
+                                                    style = MaterialTheme.typography.labelMedium,
                                                     color = Color.White,
                                                 )
                                             }
@@ -776,48 +778,49 @@ fun HomeScreen(
                     }
 
                     // Floating compact Source & Refresh controls over top-right of Hero with safe top cutout inset
+                    val heroTopTokens = LocalVesselUiTokens.current
                     Row(
                         modifier = Modifier
                             .align(Alignment.TopEnd)
                             .windowInsetsPadding(WindowInsets.statusBarsIgnoringVisibility.union(WindowInsets.displayCutout))
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Surface(
                             shape = RoundedCornerShape(999.dp),
-                            color = Color.Black.copy(alpha = 0.46f),
-                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.16f)),
+                            color = Color.Black.copy(alpha = 0.48f),
+                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.18f)),
                             modifier = Modifier
-                                .height(26.dp)
+                                .height(heroTopTokens.smallIconButtonSize)
                                 .clip(RoundedCornerShape(999.dp))
                                 .clickable { showFeedsModal = true },
                         ) {
                             Row(
-                                modifier = Modifier.padding(horizontal = 9.dp),
+                                modifier = Modifier.padding(horizontal = 11.dp),
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                horizontalArrangement = Arrangement.spacedBy(5.dp),
                             ) {
-                                Icon(Icons.Default.Tune, contentDescription = VesselI18n.tr("home.choose_feeds"), tint = Color.White, modifier = Modifier.size(13.dp))
+                                Icon(Icons.Default.Tune, contentDescription = VesselI18n.tr("home.choose_feeds"), tint = Color.White, modifier = Modifier.size(15.dp))
                                 Text(
                                     text = "${VesselI18n.tr("home.feeds")} (${effectiveHomeIds.size})",
                                     color = Color.White,
-                                    style = MaterialTheme.typography.labelSmall,
+                                    style = MaterialTheme.typography.labelMedium,
                                     fontWeight = FontWeight.SemiBold,
                                 )
                             }
                         }
                         VesselCompactIconButton(
                             onClick = { scope.launch { loadHome(forceRefresh = true) } },
-                            size = 26.dp,
-                            containerColor = Color.Black.copy(alpha = 0.46f),
-                            borderColor = Color.White.copy(alpha = 0.16f),
+                            size = heroTopTokens.smallIconButtonSize,
+                            containerColor = Color.Black.copy(alpha = 0.48f),
+                            borderColor = Color.White.copy(alpha = 0.18f),
                         ) {
                             Icon(
                                 Icons.Default.Refresh,
                                 contentDescription = VesselI18n.tr("common.refresh"),
                                 tint = Color.White,
-                                modifier = Modifier.size(14.dp),
+                                modifier = Modifier.size(16.dp),
                             )
                         }
                     }
@@ -825,30 +828,31 @@ fun HomeScreen(
             }
         } else if (hasEnabledPlugins) {
             item {
+                val topTokens = LocalVesselUiTokens.current
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .windowInsetsPadding(WindowInsets.statusBarsIgnoringVisibility.union(WindowInsets.displayCutout))
                         .padding(start = 16.dp, top = 12.dp, end = 16.dp, bottom = 6.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.End),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     VesselOutlinedButton(
                         onClick = { showFeedsModal = true },
-                        height = 28.dp,
-                        contentPadding = PaddingValues(horizontal = 9.dp, vertical = 0.dp),
+                        height = topTokens.smallIconButtonSize,
+                        contentPadding = PaddingValues(horizontal = 11.dp, vertical = 0.dp),
                     ) {
-                        Icon(Icons.Default.Tune, contentDescription = null, modifier = Modifier.size(13.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text("${VesselI18n.tr("home.feeds")} (${effectiveHomeIds.size})", style = MaterialTheme.typography.labelSmall)
+                        Icon(Icons.Default.Tune, contentDescription = null, modifier = Modifier.size(15.dp))
+                        Spacer(Modifier.width(5.dp))
+                        Text("${VesselI18n.tr("home.feeds")} (${effectiveHomeIds.size})", style = MaterialTheme.typography.labelMedium)
                     }
                     VesselCompactIconButton(
                         onClick = { scope.launch { loadHome(forceRefresh = true) } },
-                        size = 28.dp,
+                        size = topTokens.smallIconButtonSize,
                         containerColor = palette.bgSurface,
                         borderColor = palette.border.copy(alpha = 0.65f),
                     ) {
-                        Icon(Icons.Default.Refresh, contentDescription = VesselI18n.tr("common.refresh"), modifier = Modifier.size(14.dp))
+                        Icon(Icons.Default.Refresh, contentDescription = VesselI18n.tr("common.refresh"), modifier = Modifier.size(16.dp))
                     }
                 }
             }

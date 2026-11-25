@@ -324,7 +324,8 @@
     "install_permission_needed": "Ayarlar'dan Vessel için bilinmeyen uygulama yükleme iznini açın ve tekrar Kur'a dokunun.",
     "simkl_client_id": "Kişisel Simkl Client ID (İsteğe Bağlı)",
     "hero_banner_desc": "Tam boyutlu vitrin bannerı, kompakt görünüm veya gizli arasında seçin",
-    "nav_standard": "Standart Alt Çubuk"
+    "nav_standard": "Standart Alt Çubuk",
+    "ui_scale": "Arayüz ve Metin Ölçeği"
   },
   "subtitles": {
     "preview_title": "Altyazı Önizleme",

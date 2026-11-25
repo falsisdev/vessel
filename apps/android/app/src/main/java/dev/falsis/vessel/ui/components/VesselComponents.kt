@@ -90,6 +90,7 @@ import dev.falsis.vessel.data.DomainPermissionPrompt
 import dev.falsis.vessel.data.MediaSummary
 import dev.falsis.vessel.ui.i18n.VesselI18n
 import dev.falsis.vessel.ui.theme.LocalVesselPalette
+import dev.falsis.vessel.ui.theme.LocalVesselUiTokens
 import java.util.Locale
 
 @Composable
@@ -134,16 +135,17 @@ fun VesselButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
-    height: Dp = 36.dp,
+    height: Dp = LocalVesselUiTokens.current.buttonHeight,
     containerColor: Color = LocalVesselPalette.current.accent,
     contentColor: Color = if (LocalVesselPalette.current.isDark) Color(0xFF11111B) else Color.White,
-    contentPadding: PaddingValues = PaddingValues(horizontal = 13.dp, vertical = 0.dp),
+    contentPadding: PaddingValues = PaddingValues(horizontal = 14.dp, vertical = 0.dp),
     content: @Composable RowScope.() -> Unit,
 ) {
+    val tokens = LocalVesselUiTokens.current
     Button(
         onClick = onClick,
         enabled = enabled,
-        shape = RoundedCornerShape(10.dp),
+        shape = RoundedCornerShape(tokens.cornerRadius),
         colors = ButtonDefaults.buttonColors(
             containerColor = containerColor,
             contentColor = contentColor,
@@ -151,7 +153,7 @@ fun VesselButton(
             disabledContentColor = contentColor.copy(alpha = 0.55f),
         ),
         contentPadding = contentPadding,
-        modifier = modifier.height(height).defaultMinSize(minWidth = 48.dp, minHeight = height),
+        modifier = modifier.height(height).defaultMinSize(minWidth = 52.dp, minHeight = height),
     ) {
         ProvideTextStyle(
             MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
@@ -166,15 +168,16 @@ fun VesselOutlinedButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
-    height: Dp = 36.dp,
-    contentPadding: PaddingValues = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+    height: Dp = LocalVesselUiTokens.current.buttonHeight,
+    contentPadding: PaddingValues = PaddingValues(horizontal = 13.dp, vertical = 0.dp),
     content: @Composable RowScope.() -> Unit,
 ) {
     val palette = LocalVesselPalette.current
+    val tokens = LocalVesselUiTokens.current
     OutlinedButton(
         onClick = onClick,
         enabled = enabled,
-        shape = RoundedCornerShape(10.dp),
+        shape = RoundedCornerShape(tokens.cornerRadius),
         border = BorderStroke(1.dp, palette.border.copy(alpha = if (enabled) 0.85f else 0.35f)),
         colors = ButtonDefaults.outlinedButtonColors(
             containerColor = palette.bgSurface.copy(alpha = 0.72f),
@@ -182,7 +185,7 @@ fun VesselOutlinedButton(
             disabledContentColor = palette.textMuted.copy(alpha = 0.5f),
         ),
         contentPadding = contentPadding,
-        modifier = modifier.height(height).defaultMinSize(minWidth = 44.dp, minHeight = height),
+        modifier = modifier.height(height).defaultMinSize(minWidth = 48.dp, minHeight = height),
     ) {
         ProvideTextStyle(
             MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Medium),
@@ -197,20 +200,20 @@ fun VesselTextButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
-    height: Dp = 32.dp,
+    height: Dp = LocalVesselUiTokens.current.textButtonHeight,
     contentColor: Color = LocalVesselPalette.current.accent,
     content: @Composable RowScope.() -> Unit,
 ) {
     TextButton(
         onClick = onClick,
         enabled = enabled,
-        shape = RoundedCornerShape(9.dp),
+        shape = RoundedCornerShape(LocalVesselUiTokens.current.cornerRadius),
         colors = ButtonDefaults.textButtonColors(contentColor = contentColor),
-        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
-        modifier = modifier.height(height).defaultMinSize(minWidth = 36.dp, minHeight = height),
+        contentPadding = PaddingValues(horizontal = 11.dp, vertical = 0.dp),
+        modifier = modifier.height(height).defaultMinSize(minWidth = 40.dp, minHeight = height),
     ) {
         ProvideTextStyle(
-            MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+            MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
         ) {
             content()
         }
@@ -222,7 +225,7 @@ fun VesselCompactIconButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
-    size: Dp = 34.dp,
+    size: Dp = LocalVesselUiTokens.current.iconButtonSize,
     containerColor: Color = Color.Transparent,
     borderColor: Color? = null,
     content: @Composable () -> Unit,
@@ -249,6 +252,7 @@ fun VesselFilterChip(
     modifier: Modifier = Modifier,
 ) {
     val palette = LocalVesselPalette.current
+    val tokens = LocalVesselUiTokens.current
     val bg by animateColorAsState(
         targetValue = if (selected) palette.accent.copy(alpha = 0.18f) else palette.bgSurface,
         animationSpec = tween(180),
@@ -269,13 +273,13 @@ fun VesselFilterChip(
         color = bg,
         border = BorderStroke(1.dp, border),
         modifier = modifier
-            .height(30.dp)
+            .height(tokens.chipHeight)
             .clip(RoundedCornerShape(999.dp))
             .clickable(onClick = onClick),
     ) {
         Box(
             contentAlignment = Alignment.Center,
-            modifier = Modifier.padding(horizontal = 12.dp),
+            modifier = Modifier.padding(horizontal = (13f * tokens.scale).dp),
         ) {
             Text(
                 text = label,
@@ -299,24 +303,25 @@ fun VesselSearchField(
     onClear: (() -> Unit)? = null,
 ) {
     val palette = LocalVesselPalette.current
+    val tokens = LocalVesselUiTokens.current
     Surface(
-        shape = RoundedCornerShape(11.dp),
+        shape = RoundedCornerShape(tokens.cornerRadius),
         color = palette.bgSurface,
         border = BorderStroke(1.dp, palette.border.copy(alpha = 0.65f)),
-        modifier = modifier.height(42.dp),
+        modifier = modifier.height(tokens.searchFieldHeight),
     ) {
         Row(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 12.dp),
+                .padding(horizontal = 13.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(9.dp),
         ) {
             Icon(
                 imageVector = Icons.Default.Search,
                 contentDescription = null,
                 tint = palette.textMuted,
-                modifier = Modifier.size(17.dp),
+                modifier = Modifier.size((18f * tokens.scale).dp),
             )
             Box(
                 modifier = Modifier.weight(1f),
@@ -470,31 +475,35 @@ fun MediaPosterCard(
             )
 
             // Rating chip top-left
+            val tokens = LocalVesselUiTokens.current
             if (cards.showRating) {
                 item.rating?.takeIf { it > 0f }?.let { score ->
                     Surface(
                         shape = RoundedCornerShape(7.dp),
-                        color = Color.Black.copy(alpha = 0.58f),
+                        color = Color.Black.copy(alpha = 0.62f),
                         modifier = Modifier
                             .align(Alignment.TopStart)
-                            .padding(5.dp),
+                            .padding(6.dp),
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp),
+                            modifier = Modifier.padding(
+                                horizontal = tokens.badgeHorizontalPadding,
+                                vertical = tokens.badgeVerticalPadding,
+                            ),
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Star,
                                 contentDescription = null,
                                 tint = palette.warning,
-                                modifier = Modifier.size(10.dp),
+                                modifier = Modifier.size(tokens.badgeIconSize),
                             )
-                            Spacer(modifier = Modifier.width(2.dp))
+                            Spacer(modifier = Modifier.width(3.dp))
                             Text(
                                 text = String.format(Locale.US, "%.1f", score),
                                 style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.SemiBold,
                                 color = Color.White,
-                                fontSize = 9.5.sp,
                             )
                         }
                     }
@@ -503,18 +512,22 @@ fun MediaPosterCard(
 
             if (cards.showContentType) {
                 Surface(
-                    shape = RoundedCornerShape(5.dp),
-                    color = Color.Black.copy(alpha = 0.56f),
+                    shape = RoundedCornerShape(6.dp),
+                    color = Color.Black.copy(alpha = 0.60f),
                     modifier = Modifier
                         .align(Alignment.BottomStart)
-                        .padding(5.dp),
+                        .padding(6.dp),
                 ) {
                     Text(
                         text = if (item.isAnime) "ANIME" else item.type.uppercase(Locale.US),
                         style = MaterialTheme.typography.labelSmall,
+                        fontSize = (10f * tokens.scale).sp,
+                        fontWeight = FontWeight.SemiBold,
                         color = Color.White,
-                        fontSize = 8.5.sp,
-                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.5.dp),
+                        modifier = Modifier.padding(
+                            horizontal = tokens.badgeHorizontalPadding,
+                            vertical = tokens.badgeVerticalPadding,
+                        ),
                     )
                 }
             }
@@ -524,7 +537,7 @@ fun MediaPosterCard(
                 Box(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
-                        .padding(3.dp),
+                        .padding(4.dp),
                 ) {
                     val iconTint = when (currentStatus) {
                         "completed" -> palette.success
@@ -540,7 +553,7 @@ fun MediaPosterCard(
                     Box(
                         contentAlignment = Alignment.Center,
                         modifier = Modifier
-                            .size(26.dp)
+                            .size(tokens.smallIconButtonSize)
                             .clip(CircleShape)
                             .clickable { showMenu = true },
                     ) {
@@ -548,7 +561,7 @@ fun MediaPosterCard(
                             imageVector = iconVec,
                             contentDescription = VesselI18n.tr("media.quick_status"),
                             tint = iconTint,
-                            modifier = Modifier.size(17.dp),
+                            modifier = Modifier.size((19f * tokens.scale).dp),
                         )
                     }
                     DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
@@ -582,8 +595,6 @@ fun MediaPosterCard(
         Text(
             text = item.title,
             style = MaterialTheme.typography.bodySmall,
-            fontSize = 12.5.sp,
-            lineHeight = 15.5.sp,
             fontWeight = FontWeight.SemiBold,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
@@ -597,7 +608,6 @@ fun MediaPosterCard(
             Text(
                 text = item.year.toString(),
                 style = MaterialTheme.typography.labelSmall,
-                fontSize = 10.5.sp,
                 color = palette.textMuted,
                 maxLines = 1,
                 modifier = Modifier.padding(horizontal = 2.dp),
@@ -656,9 +666,10 @@ fun ContinueWatchingCard(
                     )
                 }
 
+                val cwTokens = LocalVesselUiTokens.current
                 Box(
                     modifier = Modifier
-                        .size(38.dp)
+                        .size((40f * cwTokens.scale).dp)
                         .clip(CircleShape)
                         .background(Color.Black.copy(alpha = 0.56f))
                         .align(Alignment.Center),
@@ -668,7 +679,7 @@ fun ContinueWatchingCard(
                         imageVector = Icons.Default.PlayArrow,
                         contentDescription = VesselI18n.tr("details.resume"),
                         tint = Color.White,
-                        modifier = Modifier.size(20.dp),
+                        modifier = Modifier.size((21f * cwTokens.scale).dp),
                     )
                 }
 
@@ -676,7 +687,7 @@ fun ContinueWatchingCard(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
                         .padding(6.dp)
-                        .size(26.dp)
+                        .size(cwTokens.smallIconButtonSize)
                         .clip(CircleShape)
                         .background(Color.Black.copy(alpha = 0.58f))
                         .clickable { onEdit() },
@@ -686,7 +697,7 @@ fun ContinueWatchingCard(
                         imageVector = Icons.Default.Edit,
                         contentDescription = VesselI18n.tr("home.edit_cw"),
                         tint = Color.White,
-                        modifier = Modifier.size(14.dp),
+                        modifier = Modifier.size((15f * cwTokens.scale).dp),
                     )
                 }
 
@@ -702,7 +713,10 @@ fun ContinueWatchingCard(
                             text = "${remainingMin}m",
                             style = MaterialTheme.typography.labelSmall,
                             color = Color.White,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            modifier = Modifier.padding(
+                                horizontal = cwTokens.badgeHorizontalPadding,
+                                vertical = cwTokens.badgeVerticalPadding,
+                            ),
                         )
                     }
                 }

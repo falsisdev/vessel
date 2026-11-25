@@ -12,6 +12,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -73,16 +75,19 @@ import androidx.compose.ui.unit.sp
 import dev.falsis.vessel.BuildConfig
 import dev.falsis.vessel.data.VesselRepository
 import dev.falsis.vessel.ui.components.VesselButton
+import dev.falsis.vessel.ui.components.VesselFilterChip
 import dev.falsis.vessel.ui.components.VesselOutlinedButton
 import dev.falsis.vessel.ui.components.VesselTextButton
 import dev.falsis.vessel.ui.components.vesselTopSafeInset
 import dev.falsis.vessel.ui.i18n.VesselI18n
 import dev.falsis.vessel.ui.theme.DYNAMIC_MATERIAL_THEME_ID
 import dev.falsis.vessel.ui.theme.LocalVesselPalette
+import dev.falsis.vessel.ui.theme.LocalVesselUiTokens
 import dev.falsis.vessel.ui.theme.parseHexColor
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SettingsScreen(
     repo: VesselRepository,
@@ -90,6 +95,7 @@ fun SettingsScreen(
     onOpenExtensions: () -> Unit = {},
 ) {
     val palette = LocalVesselPalette.current
+    val tokens = LocalVesselUiTokens.current
     val scope = rememberCoroutineScope()
     val clipboard = LocalClipboardManager.current
     val uriHandler = LocalUriHandler.current
@@ -145,7 +151,7 @@ fun SettingsScreen(
             ) {
                 Text(VesselI18n.tr("settings.title"), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                 VesselOutlinedButton(
-                    height = 32.dp,
+                    height = tokens.compactButtonHeight,
                     contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
                     onClick = {
                         scope.launch {
@@ -234,7 +240,7 @@ fun SettingsScreen(
                             }
                         }
                         Box {
-                            VesselOutlinedButton(onClick = { showThemeMenu = true }, height = 32.dp) {
+                            VesselOutlinedButton(onClick = { showThemeMenu = true }, height = tokens.compactButtonHeight) {
                                 Text(activeTheme.name, style = MaterialTheme.typography.labelMedium)
                             }
                             DropdownMenu(expanded = showThemeMenu, onDismissRequest = { showThemeMenu = false }) {
@@ -255,7 +261,7 @@ fun SettingsScreen(
                     ) {
                         Text(VesselI18n.tr("settings.locale_label"))
                         Box {
-                            VesselOutlinedButton(onClick = { showLocaleMenu = true }, height = 32.dp) {
+                            VesselOutlinedButton(onClick = { showLocaleMenu = true }, height = tokens.compactButtonHeight) {
                                 Text(VesselI18n.tr("languages.$activeLocale", activeLocale), style = MaterialTheme.typography.labelMedium)
                             }
                             DropdownMenu(expanded = showLocaleMenu, onDismissRequest = { showLocaleMenu = false }) {
@@ -326,7 +332,7 @@ fun SettingsScreen(
                             } else {
                                 VesselI18n.tr("settings.nav_standard")
                             }
-                            VesselOutlinedButton(onClick = { showNavLayoutMenu = true }, height = 32.dp) {
+                            VesselOutlinedButton(onClick = { showNavLayoutMenu = true }, height = tokens.compactButtonHeight) {
                                 Text(navLabel, style = MaterialTheme.typography.labelMedium)
                             }
                             DropdownMenu(expanded = showNavLayoutMenu, onDismissRequest = { showNavLayoutMenu = false }) {
@@ -350,6 +356,91 @@ fun SettingsScreen(
                         }
                     }
 
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(VesselI18n.tr("settings.density"))
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            listOf("compact", "comfortable", "spacious").forEach { densityKey ->
+                                VesselFilterChip(
+                                    selected = prefs.shell.density == densityKey,
+                                    onClick = {
+                                        scope.launch {
+                                            repo.saveUiPreferences(
+                                                prefs.copy(shell = prefs.shell.copy(density = densityKey)),
+                                            )
+                                        }
+                                    },
+                                    label = VesselI18n.tr("settings.density_$densityKey"),
+                                )
+                            }
+                        }
+                    }
+
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Text(
+                                "${VesselI18n.tr("settings.ui_scale")}: ${prefs.shell.fontScalePercent}%",
+                                modifier = Modifier.weight(1f),
+                            )
+                            if (prefs.shell.fontScalePercent != 100) {
+                                VesselTextButton(
+                                    onClick = {
+                                        scope.launch {
+                                            repo.saveUiPreferences(
+                                                prefs.copy(shell = prefs.shell.copy(fontScalePercent = 100)),
+                                            )
+                                        }
+                                    },
+                                ) {
+                                    Text("100%")
+                                }
+                            }
+                        }
+                        Slider(
+                            value = prefs.shell.fontScalePercent.coerceIn(85, 130).toFloat(),
+                            onValueChange = { raw ->
+                                val snapped = ((raw / 5f).toInt() * 5).coerceIn(85, 130)
+                                if (snapped != prefs.shell.fontScalePercent) {
+                                    scope.launch {
+                                        repo.saveUiPreferences(
+                                            prefs.copy(shell = prefs.shell.copy(fontScalePercent = snapped)),
+                                        )
+                                    }
+                                }
+                            },
+                            valueRange = 85f..130f,
+                            steps = 8,
+                        )
+                    }
+
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(VesselI18n.tr("settings.corner_style"))
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            listOf("sharp", "rounded", "pill").forEach { cKey ->
+                                VesselFilterChip(
+                                    selected = prefs.shell.cornerStyle == cKey,
+                                    onClick = {
+                                        scope.launch {
+                                            repo.saveUiPreferences(
+                                                prefs.copy(shell = prefs.shell.copy(cornerStyle = cKey)),
+                                            )
+                                        }
+                                    },
+                                    label = VesselI18n.tr("settings.corner_$cKey"),
+                                )
+                            }
+                        }
+                    }
+
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
@@ -362,7 +453,7 @@ fun SettingsScreen(
                                 "hidden" -> VesselI18n.tr("settings.hero_hidden")
                                 else -> VesselI18n.tr("settings.hero_full")
                             }
-                            VesselOutlinedButton(onClick = { showHeroModeMenu = true }, height = 32.dp) {
+                            VesselOutlinedButton(onClick = { showHeroModeMenu = true }, height = tokens.compactButtonHeight) {
                                 Text(heroModeLabel, style = MaterialTheme.typography.labelMedium)
                             }
                             DropdownMenu(expanded = showHeroModeMenu, onDismissRequest = { showHeroModeMenu = false }) {
@@ -395,7 +486,7 @@ fun SettingsScreen(
                             } else {
                                 VesselI18n.tr("settings.play_quick")
                             }
-                            VesselOutlinedButton(onClick = { showPlayClickMenu = true }, height = 32.dp) {
+                            VesselOutlinedButton(onClick = { showPlayClickMenu = true }, height = tokens.compactButtonHeight) {
                                 Text(label, style = MaterialTheme.typography.labelMedium)
                             }
                             DropdownMenu(expanded = showPlayClickMenu, onDismissRequest = { showPlayClickMenu = false }) {
@@ -484,7 +575,7 @@ fun SettingsScreen(
                             }
                             val label = ratioOptions.firstOrNull { it.first == activeAspectKey }?.second
                                 ?: VesselI18n.tr("settings.ratio_2x3")
-                            VesselOutlinedButton(onClick = { showAspectMenu = true }, height = 32.dp) {
+                            VesselOutlinedButton(onClick = { showAspectMenu = true }, height = tokens.compactButtonHeight) {
                                 Text(label, style = MaterialTheme.typography.labelMedium)
                             }
                             DropdownMenu(expanded = showAspectMenu, onDismissRequest = { showAspectMenu = false }) {
@@ -569,7 +660,7 @@ fun SettingsScreen(
                                 "none" -> VesselI18n.tr("subtitles.style_none")
                                 else -> VesselI18n.tr("subtitles.style_outline")
                             }
-                            VesselOutlinedButton(onClick = { showSubOutlineMenu = true }, height = 32.dp) {
+                            VesselOutlinedButton(onClick = { showSubOutlineMenu = true }, height = tokens.compactButtonHeight) {
                                 Text(styleLabel, style = MaterialTheme.typography.labelMedium)
                             }
                             DropdownMenu(expanded = showSubOutlineMenu, onDismissRequest = { showSubOutlineMenu = false }) {
@@ -604,7 +695,7 @@ fun SettingsScreen(
                                 "monospace" -> VesselI18n.tr("subtitles.font_mono")
                                 else -> VesselI18n.tr("subtitles.font_sans")
                             }
-                            VesselOutlinedButton(onClick = { showSubFontMenu = true }, height = 32.dp) {
+                            VesselOutlinedButton(onClick = { showSubFontMenu = true }, height = tokens.compactButtonHeight) {
                                 Text(fontLabel, style = MaterialTheme.typography.labelMedium)
                             }
                             DropdownMenu(expanded = showSubFontMenu, onDismissRequest = { showSubFontMenu = false }) {
@@ -979,7 +1070,7 @@ fun SettingsScreen(
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     if (info.updateAvailable && info.downloadUrl != null) {
                                         VesselButton(
-                                            height = 32.dp,
+                                            height = tokens.compactButtonHeight,
                                             enabled = !downloadingUpdate,
                                             onClick = { scope.launch { repo.downloadAndInstallUpdate(info) } },
                                         ) {
@@ -996,7 +1087,7 @@ fun SettingsScreen(
                                         }
                                     }
                                     VesselOutlinedButton(
-                                        height = 32.dp,
+                                        height = tokens.compactButtonHeight,
                                         onClick = { runCatching { uriHandler.openUri(info.htmlUrl) } },
                                     ) {
                                         Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(14.dp))

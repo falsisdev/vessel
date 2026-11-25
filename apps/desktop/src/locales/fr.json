@@ -324,7 +324,8 @@
     "install_permission_needed": "Autorisez l'installation d'applications inconnues pour Vessel dans les paramètres Android, puis appuyez de nouveau sur Installer.",
     "simkl_client_id": "Client ID Simkl personnel (optionnel)",
     "hero_banner_desc": "Choisissez la bannière complète, un format compact ou masquez-la totalement",
-    "nav_standard": "Barre standard"
+    "nav_standard": "Barre standard",
+    "ui_scale": "Échelle de l'interface"
   },
   "subtitles": {
     "preview_title": "Aperçu des sous-titres",

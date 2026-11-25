@@ -67,7 +67,7 @@ const showLabels = computed(() => isTop.value || isExpanded.value)
   >
     <div v-if="!isFloatingBottom" class="brand" translate="no">
       <div class="brand-mark" aria-hidden="true">
-        <VesselLogo :size="24" />
+        <VesselLogo :size="30" />
       </div>
       <span v-if="showLabels" class="brand-name">{{ t('app.name') }}</span>
     </div>

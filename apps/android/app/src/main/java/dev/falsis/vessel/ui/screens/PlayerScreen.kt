@@ -2769,16 +2769,15 @@ private fun DrawerTagBadge(
     accentColor: Color,
 ) {
     Surface(
-        shape = RoundedCornerShape(5.dp),
+        shape = RoundedCornerShape(6.dp),
         color = if (accent) accentColor.copy(alpha = 0.26f) else Color.White.copy(alpha = 0.10f),
     ) {
         Text(
             text = text,
             color = if (accent) accentColor.copy(alpha = 0.95f) else Color.White.copy(alpha = 0.85f),
             style = MaterialTheme.typography.labelSmall,
-            fontSize = 9.5.sp,
             fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.5.dp),
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.5.dp),
         )
     }
 }
@@ -2830,10 +2829,9 @@ private fun DrawerChipButton(
         Text(
             text = label,
             color = if (active) Color(0xFF0B0B12) else Color.White,
-            style = MaterialTheme.typography.labelSmall,
-            fontSize = 11.sp,
+            style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
+            modifier = Modifier.padding(horizontal = 11.dp, vertical = 5.5.dp),
         )
     }
 }

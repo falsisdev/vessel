@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
+import dev.falsis.vessel.data.ShellPreferences
 import dev.falsis.vessel.data.ThemeColors
 import dev.falsis.vessel.data.ThemeSpec
 
@@ -47,9 +48,28 @@ data class VesselPalette(
     val isDark: Boolean,
 )
 
+@Immutable
+data class VesselUiTokens(
+    val scale: Float = 1f,
+    val densityKey: String = "comfortable",
+    val cornerRadius: Dp = 11.dp,
+    val buttonHeight: Dp = 40.dp,
+    val compactButtonHeight: Dp = 35.dp,
+    val textButtonHeight: Dp = 34.dp,
+    val iconButtonSize: Dp = 38.dp,
+    val smallIconButtonSize: Dp = 32.dp,
+    val chipHeight: Dp = 33.dp,
+    val searchFieldHeight: Dp = 44.dp,
+    val badgeHorizontalPadding: Dp = 7.dp,
+    val badgeVerticalPadding: Dp = 2.5.dp,
+    val badgeIconSize: Dp = 12.dp,
+)
+
 private val DefaultPalette = ThemeSpec().toPalette()
+private val DefaultUiTokens = VesselUiTokens()
 
 val LocalVesselPalette = staticCompositionLocalOf { DefaultPalette }
+val LocalVesselUiTokens = staticCompositionLocalOf { DefaultUiTokens }
 val LocalVesselFloatingNavInset = staticCompositionLocalOf<Dp> { 0.dp }
 
 fun parseHexColor(raw: String, fallback: Color): Color {
@@ -136,10 +156,38 @@ fun VesselPalette.toColorScheme(): ColorScheme {
 @Composable
 fun VesselTheme(
     themeSpec: ThemeSpec = ThemeSpec(),
+    shell: ShellPreferences = ShellPreferences(),
     content: @Composable () -> Unit,
 ) {
     val context = LocalContext.current
     val systemDark = isSystemInDarkTheme()
+    val fontScale = (shell.fontScalePercent.coerceIn(85, 130) / 100f)
+    val densityScale = when (shell.density) {
+        "compact" -> 0.90f
+        "spacious" -> 1.12f
+        else -> 1.00f
+    }
+    val sizeFactor = (fontScale * densityScale).coerceIn(0.82f, 1.38f)
+    val baseCorner = when (shell.cornerStyle) {
+        "sharp" -> 4.dp
+        "pill" -> 18.dp
+        else -> 11.dp
+    }
+    val uiTokens = VesselUiTokens(
+        scale = sizeFactor,
+        densityKey = shell.density,
+        cornerRadius = baseCorner,
+        buttonHeight = (40f * sizeFactor).dp,
+        compactButtonHeight = (35f * sizeFactor).dp,
+        textButtonHeight = (34f * sizeFactor).dp,
+        iconButtonSize = (38f * sizeFactor).dp,
+        smallIconButtonSize = (32f * sizeFactor).dp,
+        chipHeight = (33f * sizeFactor).dp,
+        searchFieldHeight = (44f * sizeFactor).dp,
+        badgeHorizontalPadding = (7f * sizeFactor).dp,
+        badgeVerticalPadding = (2.5f * sizeFactor).dp,
+        badgeIconSize = (12f * sizeFactor).dp,
+    )
 
     val (colorScheme, palette) = if (themeSpec.id == DYNAMIC_MATERIAL_THEME_ID) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -190,28 +238,31 @@ fun VesselTheme(
     }
 
     val VesselCompactTypography = Typography(
-        headlineMedium = TextStyle(fontSize = 23.sp, lineHeight = 28.sp, fontWeight = FontWeight.ExtraBold),
-        headlineSmall = TextStyle(fontSize = 19.sp, lineHeight = 24.sp, fontWeight = FontWeight.Bold),
-        titleLarge = TextStyle(fontSize = 17.sp, lineHeight = 22.sp, fontWeight = FontWeight.Bold),
-        titleMedium = TextStyle(fontSize = 15.sp, lineHeight = 20.sp, fontWeight = FontWeight.SemiBold),
-        titleSmall = TextStyle(fontSize = 13.5.sp, lineHeight = 18.sp, fontWeight = FontWeight.SemiBold),
-        bodyLarge = TextStyle(fontSize = 14.sp, lineHeight = 20.sp),
-        bodyMedium = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
-        bodySmall = TextStyle(fontSize = 11.5.sp, lineHeight = 16.sp),
-        labelLarge = TextStyle(fontSize = 12.5.sp, lineHeight = 16.sp, fontWeight = FontWeight.SemiBold),
-        labelMedium = TextStyle(fontSize = 11.5.sp, lineHeight = 15.sp, fontWeight = FontWeight.Medium),
-        labelSmall = TextStyle(fontSize = 10.5.sp, lineHeight = 14.sp, fontWeight = FontWeight.Medium),
+        headlineMedium = TextStyle(fontSize = (24f * fontScale).sp, lineHeight = (29f * fontScale).sp, fontWeight = FontWeight.ExtraBold),
+        headlineSmall = TextStyle(fontSize = (20f * fontScale).sp, lineHeight = (25f * fontScale).sp, fontWeight = FontWeight.Bold),
+        titleLarge = TextStyle(fontSize = (18f * fontScale).sp, lineHeight = (23f * fontScale).sp, fontWeight = FontWeight.Bold),
+        titleMedium = TextStyle(fontSize = (15.5f * fontScale).sp, lineHeight = (21f * fontScale).sp, fontWeight = FontWeight.SemiBold),
+        titleSmall = TextStyle(fontSize = (14f * fontScale).sp, lineHeight = (19f * fontScale).sp, fontWeight = FontWeight.SemiBold),
+        bodyLarge = TextStyle(fontSize = (15f * fontScale).sp, lineHeight = (21f * fontScale).sp),
+        bodyMedium = TextStyle(fontSize = (14f * fontScale).sp, lineHeight = (19.5f * fontScale).sp),
+        bodySmall = TextStyle(fontSize = (12.5f * fontScale).sp, lineHeight = (17f * fontScale).sp),
+        labelLarge = TextStyle(fontSize = (13.5f * fontScale).sp, lineHeight = (17.5f * fontScale).sp, fontWeight = FontWeight.SemiBold),
+        labelMedium = TextStyle(fontSize = (12f * fontScale).sp, lineHeight = (16f * fontScale).sp, fontWeight = FontWeight.Medium),
+        labelSmall = TextStyle(fontSize = (11f * fontScale).sp, lineHeight = (14.5f * fontScale).sp, fontWeight = FontWeight.Medium),
     )
 
     val VesselShapes = Shapes(
-        extraSmall = RoundedCornerShape(6.dp),
-        small = RoundedCornerShape(9.dp),
-        medium = RoundedCornerShape(12.dp),
-        large = RoundedCornerShape(16.dp),
-        extraLarge = RoundedCornerShape(22.dp),
+        extraSmall = RoundedCornerShape(if (shell.cornerStyle == "sharp") 3.dp else 6.dp),
+        small = RoundedCornerShape(if (shell.cornerStyle == "sharp") 4.dp else 9.dp),
+        medium = RoundedCornerShape(baseCorner),
+        large = RoundedCornerShape(if (shell.cornerStyle == "sharp") 6.dp else if (shell.cornerStyle == "pill") 22.dp else 16.dp),
+        extraLarge = RoundedCornerShape(if (shell.cornerStyle == "sharp") 8.dp else 24.dp),
     )
 
-    CompositionLocalProvider(LocalVesselPalette provides palette) {
+    CompositionLocalProvider(
+        LocalVesselPalette provides palette,
+        LocalVesselUiTokens provides uiTokens,
+    ) {
         MaterialTheme(
             colorScheme = colorScheme,
             typography = VesselCompactTypography,

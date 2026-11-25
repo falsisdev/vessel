@@ -64,6 +64,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import dev.falsis.vessel.ui.theme.LocalVesselFloatingNavInset
+import dev.falsis.vessel.ui.theme.LocalVesselUiTokens
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -647,10 +648,10 @@ fun LiveTvScreen(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    VesselButton(onClick = { showAddProfile = true }, height = 30.dp, contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp)) {
-                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(14.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text(VesselI18n.tr("iptv.add_profile"), style = MaterialTheme.typography.labelSmall)
+                    VesselButton(onClick = { showAddProfile = true }, height = LocalVesselUiTokens.current.compactButtonHeight, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)) {
+                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(15.dp))
+                        Spacer(Modifier.width(5.dp))
+                        Text(VesselI18n.tr("iptv.add_profile"), style = MaterialTheme.typography.labelMedium)
                     }
                     profiles.forEach { profile ->
                         VesselFilterChip(
@@ -679,8 +680,8 @@ fun LiveTvScreen(
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             VesselOutlinedButton(
                                 enabled = syncingProfileId != pid,
-                                height = 30.dp,
-                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                                height = LocalVesselUiTokens.current.compactButtonHeight,
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
                                 onClick = {
                                     scope.launch {
                                         syncingProfileId = pid
@@ -1276,7 +1277,7 @@ fun LiveTvScreen(
                 }
             },
             confirmButton = {
-                VesselButton(onClick = { showViewDialog = false }, height = 32.dp) {
+                VesselButton(onClick = { showViewDialog = false }, height = LocalVesselUiTokens.current.compactButtonHeight) {
                     Text(VesselI18n.tr("common.close"), style = MaterialTheme.typography.labelMedium)
                 }
             },
@@ -1547,7 +1548,7 @@ fun LiveTvScreen(
                 }
             },
             confirmButton = {
-                VesselButton(onClick = { showReorderDialog = false }, height = 32.dp) {
+                VesselButton(onClick = { showReorderDialog = false }, height = LocalVesselUiTokens.current.compactButtonHeight) {
                     Text(VesselI18n.tr("common.close"), style = MaterialTheme.typography.labelMedium)
                 }
             },

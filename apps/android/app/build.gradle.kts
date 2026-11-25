@@ -13,8 +13,8 @@ android {
         applicationId = "dev.falsis.vessel"
         minSdk = 26
         targetSdk = 36
-        versionCode = 9
-        versionName = "0.1.4"
+        versionCode = 10
+        versionName = "0.1.44"
 
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")

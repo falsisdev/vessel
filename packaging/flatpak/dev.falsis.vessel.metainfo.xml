@@ -26,6 +26,11 @@
   </categories>
   <content_rating type="oars-1.1" />
   <releases>
+    <release version="0.1.44" date="2026-11-25">
+      <description>
+        <p>Standardized Android button/badge sizing with UI density, text scale, and corner style personalization, larger plain Desktop sidebar logo, and removed Desktop route transition progress bar.</p>
+      </description>
+    </release>
     <release version="0.1.4" date="2026-11-25">
       <description>
         <p>Universal third-party Nuvio/Stremio/ESM/TS plugin runtime compatibility fixes (axios.create, FormData, default User-Agent, sanitized headers, Cinemeta episode fallback), true edge-to-edge Android Floating Bottom Navbar, and clean Desktop logo presentation.</p>

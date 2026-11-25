@@ -14,7 +14,7 @@
 
 ---
 
-## Características Principales (`v0.1.4`)
+## Características Principales (`v0.1.44`)
 
 - **Reproductor `/watch` estilo CloudStream:** Soporte nativo para HLS (`hls.js`), MPEG-TS (`mpegts.js`), MP4/WebM y envío externo a **`mpv`** vía JSON IPC; cambio de pista de **Audio**, **Subtítulos** (`.srt/.vtt/.ass/.ssa`) con sincronización (`-500ms / +500ms`), estilo personalizable con vista previa, botón directo **Ir a Detalles** y salto automático de **Intro / Resumen / Créditos / Avance** (`Plugin > TheIntroDB > IntroDB > AniSkip`).
 - **Seguir Viendo Inteligente:** Avanza automáticamente al siguiente episodio tras terminar uno, oculta películas/finales completados, incluye menú contextual (clic derecho / pulsación larga) y un editor manual con duración real de episodios.
