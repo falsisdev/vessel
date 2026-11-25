@@ -5,11 +5,15 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -28,6 +32,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -59,10 +64,12 @@ import dev.falsis.vessel.data.MediaSummary
 import dev.falsis.vessel.data.StreamResult
 import dev.falsis.vessel.data.VesselRepository
 import dev.falsis.vessel.ui.components.MediaPosterCard
+import dev.falsis.vessel.ui.components.VesselCompactIconButton
 import dev.falsis.vessel.ui.components.VesselFilterChip
 import dev.falsis.vessel.ui.components.VesselOutlinedButton
 import dev.falsis.vessel.ui.components.VesselSearchField
 import dev.falsis.vessel.ui.components.VesselTextButton
+import dev.falsis.vessel.ui.components.vesselFocusBorder
 import dev.falsis.vessel.ui.theme.LocalVesselFloatingNavInset
 import dev.falsis.vessel.ui.components.isLandscapeCardRatio
 import dev.falsis.vessel.ui.components.vesselTopSafeInset
@@ -72,6 +79,9 @@ import dev.falsis.vessel.ui.isLiveTvPlugin
 import dev.falsis.vessel.ui.theme.LocalVesselPalette
 import kotlinx.coroutines.launch
 
+private const val MAX_SEARCH_HISTORY = 10
+
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SearchScreen(
     repo: VesselRepository,
@@ -115,9 +125,34 @@ fun SearchScreen(
         }
     }
 
-    fun triggerSearch() {
-        val q = query.trim()
+    fun recordSearchHistory(term: String) {
+        val clean = term.trim()
+        if (clean.isEmpty()) return
+        val next = (listOf(clean) + prefs.searchHistory.filterNot { it.equals(clean, ignoreCase = true) })
+            .take(MAX_SEARCH_HISTORY)
+        scope.launch {
+            runCatching { repo.saveUiPreferences(prefs.copy(searchHistory = next)) }
+        }
+    }
+
+    fun removeHistoryItem(term: String) {
+        val next = prefs.searchHistory.filterNot { it == term }
+        scope.launch {
+            runCatching { repo.saveUiPreferences(prefs.copy(searchHistory = next)) }
+        }
+    }
+
+    fun clearSearchHistory() {
+        scope.launch {
+            runCatching { repo.saveUiPreferences(prefs.copy(searchHistory = emptyList())) }
+        }
+    }
+
+    fun triggerSearch(overrideQuery: String? = null) {
+        val q = (overrideQuery ?: query).trim()
         if (q.isEmpty()) return
+        if (overrideQuery != null) query = q
+        recordSearchHistory(q)
         results = emptyList()
         searching = true
         scope.launch {
@@ -280,8 +315,82 @@ fun SearchScreen(
             modifier = Modifier.fillMaxSize(),
         ) { showEmpty ->
             if (showEmpty) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(VesselI18n.tr("search.empty"), color = palette.textMuted)
+                val history = prefs.searchHistory.take(MAX_SEARCH_HISTORY)
+                if (history.isNotEmpty()) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(top = 6.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            ) {
+                                Icon(Icons.Default.History, contentDescription = null, tint = palette.accent, modifier = Modifier.size(16.dp))
+                                Text(
+                                    text = VesselI18n.tr("search.recent_searches"),
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                            }
+                            VesselTextButton(onClick = { clearSearchHistory() }, height = 30.dp) {
+                                Text(VesselI18n.tr("search.clear_history"))
+                            }
+                        }
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            history.forEach { term ->
+                                Surface(
+                                    shape = RoundedCornerShape(999.dp),
+                                    color = palette.bgSurface,
+                                    border = BorderStroke(1.dp, palette.border.copy(alpha = 0.65f)),
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.padding(start = 2.dp, end = 4.dp),
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(999.dp))
+                                                .vesselFocusBorder(RoundedCornerShape(999.dp))
+                                                .clickable { triggerSearch(term) }
+                                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                                        ) {
+                                            Text(
+                                                text = term,
+                                                style = MaterialTheme.typography.labelMedium,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                            )
+                                        }
+                                        VesselCompactIconButton(
+                                            onClick = { removeHistoryItem(term) },
+                                            size = 24.dp,
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Close,
+                                                contentDescription = VesselI18n.tr("common.remove"),
+                                                tint = palette.textMuted,
+                                                modifier = Modifier.size(13.dp),
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text(VesselI18n.tr("search.empty"), color = palette.textMuted)
+                    }
                 }
             } else {
                 LazyVerticalGrid(

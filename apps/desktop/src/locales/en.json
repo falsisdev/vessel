@@ -90,7 +90,9 @@
     "filter_movies": "Movies",
     "filter_series": "Series",
     "filter_anime": "Anime",
-    "all_plugins": "All Plugins"
+    "all_plugins": "All Plugins",
+    "recent_searches": "Recent Searches",
+    "clear_history": "Clear History"
   },
   "details": {
     "episodes": "Episodes",

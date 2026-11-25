@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onActivated, onMounted, ref, shallowRef } from 'vue'
 import { useRouter } from 'vue-router'
-import { Loader2, Search as SearchIcon, X } from 'lucide-vue-next'
+import { History, Loader2, Search as SearchIcon, Trash2, X } from 'lucide-vue-next'
 import { isTauriRuntime, vesselApi } from '@/api/vessel'
 import MediaCard from '@/components/media/MediaCard.vue'
 import { useI18n } from '@/composables/useI18n'
@@ -16,16 +16,47 @@ defineOptions({ name: 'SearchView' })
 
 const router = useRouter()
 const { t } = useI18n()
-const { uiPreferences } = useUiPreferences()
+const { uiPreferences, savePreferences } = useUiPreferences()
 const { refreshLibraryState } = useLibraryState()
 const { setSession } = usePlayerSession()
 const { isSearching, searchBuckets, startSearch } = useVesselEvents()
 
+const MAX_SEARCH_HISTORY = 10
 const query = shallowRef('')
 const mediaTypeFilter = shallowRef('')
 const selectedPluginId = shallowRef('')
 const plugins = ref<PluginListEntry[]>([])
 const launchingLiveKey = shallowRef('')
+
+const searchHistory = computed(() => (uiPreferences.value.searchHistory ?? []).slice(0, MAX_SEARCH_HISTORY))
+
+function recordSearchHistory(term: string): void {
+  const clean = term.trim()
+  if (!clean) return
+  const prev = uiPreferences.value.searchHistory ?? []
+  const next = [clean, ...prev.filter((item) => item.toLowerCase() !== clean.toLowerCase())].slice(
+    0,
+    MAX_SEARCH_HISTORY,
+  )
+  uiPreferences.value = { ...uiPreferences.value, searchHistory: next }
+  void savePreferences(uiPreferences.value)
+}
+
+function removeHistoryItem(term: string): void {
+  const next = (uiPreferences.value.searchHistory ?? []).filter((item) => item !== term)
+  uiPreferences.value = { ...uiPreferences.value, searchHistory: next }
+  void savePreferences(uiPreferences.value)
+}
+
+function clearSearchHistory(): void {
+  uiPreferences.value = { ...uiPreferences.value, searchHistory: [] }
+  void savePreferences(uiPreferences.value)
+}
+
+function applyHistorySearch(term: string): void {
+  query.value = term
+  void runSearch()
+}
 
 const enabledPlugins = computed(() => plugins.value.filter((p) => p.enabled))
 const pluginMap = computed(() => {
@@ -94,6 +125,7 @@ function onPluginFilterChange(): void {
 async function runSearch(): Promise<void> {
   const trimmed = query.value.trim()
   if (!trimmed) return
+  recordSearchHistory(trimmed)
   try {
     const filters = mediaTypeFilter.value ? { mediaType: mediaTypeFilter.value } : undefined
     const targetPlugins = selectedPluginId.value ? [selectedPluginId.value] : undefined
@@ -248,6 +280,33 @@ function cardItemFor(pluginId: string, item: MediaSummary): MediaSummary {
       </button>
     </div>
 
+    <div v-if="searchHistory.length && !bucketEntries.length && !isSearching" class="v-card history-card">
+      <div class="history-head">
+        <span class="history-title">
+          <History :size="15" aria-hidden="true" />
+          {{ t('search.recent_searches') }}
+        </span>
+        <button type="button" class="v-btn v-btn-sm" @click="clearSearchHistory">
+          <Trash2 :size="13" aria-hidden="true" /> {{ t('search.clear_history') }}
+        </button>
+      </div>
+      <div class="history-chips">
+        <div v-for="term in searchHistory" :key="term" class="history-chip">
+          <button type="button" class="history-chip-trigger" @click="applyHistorySearch(term)">
+            {{ term }}
+          </button>
+          <button
+            type="button"
+            class="history-chip-remove"
+            :aria-label="t('common.remove')"
+            @click="removeHistoryItem(term)"
+          >
+            <X :size="12" aria-hidden="true" />
+          </button>
+        </div>
+      </div>
+    </div>
+
     <div v-if="isSearching && !bucketEntries.length" class="v-grid">
       <div v-for="n in 8" :key="n" class="search-skeleton-card">
         <div class="v-skeleton search-skeleton" />
@@ -385,5 +444,69 @@ function cardItemFor(pluginId: string, item: MediaSummary): MediaSummary {
 .bucket-title {
   margin: 0;
   font-size: 1.1rem;
+}
+
+.history-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+.history-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.history-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-weight: 600;
+  font-size: 0.92rem;
+}
+
+.history-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.history-chip {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--vessel-border);
+  background: var(--vessel-bg-elevated, var(--vessel-surface-input));
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.history-chip-trigger {
+  border: 0;
+  background: transparent;
+  color: var(--vessel-text);
+  padding: 0.32rem 0.55rem 0.32rem 0.75rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.history-chip-trigger:hover {
+  color: var(--vessel-accent);
+}
+
+.history-chip-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: transparent;
+  color: var(--vessel-text-muted);
+  padding: 0.32rem 0.55rem 0.32rem 0.25rem;
+  cursor: pointer;
+}
+
+.history-chip-remove:hover {
+  color: var(--vessel-danger);
 }
 </style>

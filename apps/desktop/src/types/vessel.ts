@@ -519,6 +519,7 @@ export interface UiPreferences {
     showLogos: boolean
     showCategories: boolean
   }
+  searchHistory?: string[]
 }
 
 export type LiveTvViewMode = 'grid' | 'compact_list' | 'showcase_tiles'

@@ -90,7 +90,9 @@
     "filter_movies": "Filmler",
     "filter_series": "Diziler",
     "filter_anime": "Anime",
-    "all_plugins": "Tüm Eklentiler"
+    "all_plugins": "Tüm Eklentiler",
+    "recent_searches": "Son Aramalar",
+    "clear_history": "Geçmişi Temizle"
   },
   "details": {
     "episodes": "Bölümler",

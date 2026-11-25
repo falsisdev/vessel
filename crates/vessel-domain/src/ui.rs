@@ -455,6 +455,7 @@ pub struct UiPreferences {
     pub subtitles: SubtitlePreferences,
     pub advanced: AdvancedUiPreferences,
     pub live_tv: LiveTvPreferences,
+    pub search_history: Vec<String>,
 }
 
 #[cfg(test)]

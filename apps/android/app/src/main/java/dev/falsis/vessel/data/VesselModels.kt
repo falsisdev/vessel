@@ -499,6 +499,7 @@ data class UiPreferences(
     val playback: PlaybackPreferences = PlaybackPreferences(),
     val subtitles: SubtitlePreferences = SubtitlePreferences(),
     val liveTv: LiveTvPreferences = LiveTvPreferences(),
+    val searchHistory: List<String> = emptyList(),
 )
 
 @Serializable
