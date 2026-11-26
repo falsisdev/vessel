@@ -309,7 +309,7 @@ class VesselRepository private constructor(private val appContext: Context) {
                 preparePlaybackUrl(
                     StreamCandidate(
                         url = url,
-                        kind = "direct",
+                        kind = "auto",
                         label = "Subtitle",
                         headers = headers,
                         flags = listOf("requires_proxy"),

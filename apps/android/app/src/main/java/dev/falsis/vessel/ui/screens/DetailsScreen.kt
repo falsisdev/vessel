@@ -808,7 +808,7 @@ fun DetailsScreen(
                                                                 season = if (d.type == "movie") null else epSheet.season,
                                                                 episode = if (d.type == "movie") null else epSheet.episode,
                                                                 streamLabel = candidate.label,
-                                                                kind = if (candidate.kind == "hls" || candidate.url.contains(".m3u8")) "hls" else "direct",
+                                                                kind = if (candidate.kind == "hls" || candidate.url.contains(".m3u8")) "hls" else candidate.kind.ifBlank { "auto" },
                                                                 sourceUrl = candidate.url,
                                                                 headers = candidate.headers,
                                                                 subtitles = candidate.subtitles + sr.subtitles,
