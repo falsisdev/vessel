@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use std::fmt::Write as _;
 use std::path::Path;
-use std::sync::RwLock;
+use std::sync::{Mutex, RwLock};
 
 use oxc::allocator::Allocator;
 use oxc::codegen::Codegen;
@@ -116,6 +116,7 @@ pub fn strip_typescript(
 #[derive(Debug, Default)]
 pub struct TsCompileCache {
     entries: RwLock<HashMap<String, String>>,
+    pending_writes: Mutex<Vec<(String, String)>>,
 }
 
 impl TsCompileCache {
@@ -128,6 +129,15 @@ impl TsCompileCache {
     pub fn with_entries(entries: impl IntoIterator<Item = (String, String)>) -> Self {
         Self {
             entries: RwLock::new(entries.into_iter().collect()),
+            pending_writes: Mutex::new(Vec::new()),
+        }
+    }
+
+    /// Drains newly compiled `(source_hash, compiled_js)` entries awaiting disk persistence.
+    pub fn take_pending_writes(&self) -> Vec<(String, String)> {
+        match self.pending_writes.lock() {
+            Ok(mut guard) => std::mem::take(&mut *guard),
+            Err(_) => Vec::new(),
         }
     }
 
@@ -191,6 +201,9 @@ impl TsCompileCache {
 
         let code = compiler(plugin_id, filename, source)?;
         self.insert(source_hash.clone(), code.clone())?;
+        if let Ok(mut pending) = self.pending_writes.lock() {
+            pending.push((source_hash.clone(), code.clone()));
+        }
         Ok(CompiledScript {
             source_hash,
             code,

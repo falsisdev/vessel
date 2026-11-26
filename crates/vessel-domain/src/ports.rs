@@ -208,6 +208,15 @@ pub trait StoragePort: Send + Sync {
     async fn list_library(&self, status: Option<LibraryStatus>) -> VesselResult<Vec<LibraryItem>>;
     async fn upsert_library_item(&self, item: &LibraryItem) -> VesselResult<()>;
     async fn remove_library_item(&self, media: &MediaRef) -> VesselResult<()>;
+
+    /// Optionally persists a freshly compiled TS->JS artifact in `ts_compile_cache`.
+    async fn upsert_ts_compile_cache(
+        &self,
+        _source_hash: &str,
+        _compiled_js: &str,
+    ) -> VesselResult<()> {
+        Ok(())
+    }
 }
 
 /// Sensitive credentials store (`SqliteSecretStore` in v0.1, `OsKeyringSecretStore` in v1.0).

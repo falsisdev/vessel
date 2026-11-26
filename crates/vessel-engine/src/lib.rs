@@ -1097,11 +1097,11 @@ impl VesselEngine {
     }
 
     /// Cancels any currently running multi-plugin search.
+    /// Cancels any currently running streaming search so newly typed queries start cleanly.
     pub async fn cancel_active_search(&self) {
         let prev = { self.active_search.lock().await.take() };
         if let Some((_, token)) = prev {
             token.cancel();
-            self.pool.cancel_inflight().await;
         }
     }
 
@@ -1126,7 +1126,6 @@ impl VesselEngine {
         target_plugins: Option<Vec<PluginId>>,
     ) -> SearchHandle {
         self.cancel_active_search().await;
-        self.pool.reset_cancellations().await;
 
         let search_id = next_unique_id("search");
         let token = CancellationToken::new();
@@ -1192,18 +1191,20 @@ impl VesselEngine {
                     };
 
                     if token.is_cancelled() {
-                        provider.sandbox().cancel();
                         return;
                     }
 
+                    let call_cancel = provider.sandbox().new_call_cancellation();
                     let watcher_token = token.clone();
-                    let watcher_provider = Arc::clone(&provider);
+                    let watcher_cancel = call_cancel.clone();
                     let cancel_watcher = tokio::spawn(async move {
                         watcher_token.cancelled().await;
-                        watcher_provider.sandbox().cancel();
+                        watcher_cancel.cancel();
                     });
 
-                    let outcome = provider.search(&q, &f, page).await;
+                    let outcome = provider
+                        .search_cancellable(&q, &f, page, &call_cancel)
+                        .await;
                     cancel_watcher.abort();
 
                     if token.is_cancelled() {
@@ -1931,6 +1932,9 @@ impl VesselEngine {
         target_plugins: Option<Vec<PluginId>>,
     ) -> VesselResult<SubtitleSearchOutcome> {
         let available = self.pool.enabled_subtitle_plugins().await;
+        let explicit_targets = target_plugins
+            .as_ref()
+            .is_some_and(|list| !list.is_empty());
         let filter_set: Option<HashSet<PluginId>> = target_plugins
             .filter(|list| !list.is_empty())
             .map(|list| list.into_iter().collect());
@@ -1963,9 +1967,15 @@ impl VesselEngine {
                 let provider = match pool.get_or_load(&pid).await {
                     Ok(p) => p,
                     Err(err) => {
-                        return (pid, pname, Err(err));
+                        return Some((pid, pname, Err(err)));
                     }
                 };
+                if !provider.supports_subtitle_search() {
+                    pool.set_subtitle_search_supported(&pid, false).await;
+                    if !explicit_targets {
+                        return None;
+                    }
+                }
                 let res = SubtitleProvider::search_subtitles(provider.as_ref(), &q).await;
                 if let Err(VesselError::DomainBlocked {
                     plugin_id: ref blocked_id,
@@ -1979,13 +1989,13 @@ impl VesselEngine {
                         domain: domain.clone(),
                     });
                 }
-                (pid, pname, res)
+                Some((pid, pname, res))
             });
         }
 
         let mut outcome = SubtitleSearchOutcome::default();
         while let Some(joined) = set.join_next().await {
-            let Ok((pid, pname, res)) = joined else {
+            let Ok(Some((pid, pname, res))) = joined else {
                 continue;
             };
             match res {
@@ -3097,6 +3107,79 @@ mod tests {
                 .to_string()
                 .contains("[VesselTimeoutError]")
         );
+    }
+
+    #[tokio::test]
+    async fn cancel_active_search_does_not_poison_subsequent_details_or_subtitle_search() {
+        let (engine, _player, _recorder) = test_engine().await;
+        let plugin_ts = r#"
+            export default {
+                async search(query: string) {
+                    const start = Date.now();
+                    while (Date.now() - start < 250) {}
+                    return { items: [{ pluginId: "anthology", nativeId: "n1", type: "movie", title: query }], hasMore: false };
+                },
+                async getDetails(nativeId: string) {
+                    return {
+                        pluginId: "anthology",
+                        nativeId,
+                        type: "movie",
+                        title: "Recovered After Search Cancel",
+                        episodes: [{ streamId: "s1", season: 1, episode: 1 }]
+                    };
+                }
+            };
+        "#;
+        let mut pkg = build_plugin_package("anthology", plugin_ts);
+        pkg.manifest.capabilities = vec![
+            vessel_domain::PluginCapability::Vod,
+            vessel_domain::PluginCapability::Search,
+            vessel_domain::PluginCapability::Subtitles,
+        ];
+        engine
+            .install_package(pkg, None, "test", "https://anthology.example/pkg.vessel")
+            .await
+            .expect("install anthology plugin");
+
+        // Warm plugin and cancel an active search mid-flight.
+        let handle = engine
+            .search_all("matrix", std::collections::BTreeMap::new(), 1)
+            .await;
+        tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+        engine.cancel_active_search().await;
+        let _ = handle.done.await;
+
+        // Subsequent details() on the exact same plugin must succeed without VesselCancelledError.
+        let detail = engine
+            .details(&PluginId::new("anthology").expect("id"), "n1")
+            .await
+            .expect("details after search cancel");
+        assert_eq!(detail.title, "Recovered After Search Cancel");
+
+        // Subtitle search skips VOD plugins without searchSubtitles() instead of returning errors.
+        let outcome = engine
+            .search_subtitles(
+                SubtitleQuery {
+                    title: "Matrix".into(),
+                    original_title: None,
+                    year: Some(1999),
+                    media_type: MediaType::Movie,
+                    season: None,
+                    episode: None,
+                    external_ids: ExternalIds::default(),
+                    preferred_languages: vec!["tr".into()],
+                },
+                None,
+            )
+            .await
+            .expect("subtitle search");
+        assert!(
+            outcome.errors.is_empty(),
+            "unexpected subtitle errors: {:?}",
+            outcome.errors
+        );
+
+        engine.shutdown().await;
     }
 
     #[tokio::test]

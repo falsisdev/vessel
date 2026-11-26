@@ -249,7 +249,21 @@ async fn execute_http_request(
         let mut resp_headers = BTreeMap::new();
         for (k, v) in resp.headers() {
             if let Ok(text) = v.to_str() {
-                resp_headers.insert(k.as_str().to_ascii_lowercase(), text.to_owned());
+                let key = k.as_str().to_ascii_lowercase();
+                let is_set_cookie = key == "set-cookie";
+                resp_headers
+                    .entry(key)
+                    .and_modify(|existing: &mut String| {
+                        if !existing.is_empty() {
+                            if is_set_cookie {
+                                existing.push('\n');
+                            } else {
+                                existing.push_str(", ");
+                            }
+                        }
+                        existing.push_str(text);
+                    })
+                    .or_insert_with(|| text.to_owned());
             }
         }
         let bytes = resp

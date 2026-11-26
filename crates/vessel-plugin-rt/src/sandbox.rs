@@ -6,6 +6,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use rquickjs::{AsyncContext, AsyncRuntime, CatchResultExt, FromJs};
+use tokio::sync::{Mutex as AsyncMutex, watch};
 use vessel_domain::{PluginId, VesselError, VesselResult};
 
 /// Default per-plugin QuickJS heap ceiling (32 MiB).
@@ -47,6 +48,9 @@ struct InterruptState {
     epoch: Instant,
     /// Relative nanosecond deadline from `epoch`; `0` means no active execution deadline.
     deadline_ns: AtomicU64,
+    next_op_id: AtomicU64,
+    active_op_id: AtomicU64,
+    cancelled_op_id: AtomicU64,
     timed_out: AtomicBool,
     cancelled: AtomicBool,
 }
@@ -56,13 +60,17 @@ impl InterruptState {
         Self {
             epoch: Instant::now(),
             deadline_ns: AtomicU64::new(0),
+            next_op_id: AtomicU64::new(1),
+            active_op_id: AtomicU64::new(0),
+            cancelled_op_id: AtomicU64::new(0),
             timed_out: AtomicBool::new(false),
             cancelled: AtomicBool::new(false),
         }
     }
 
-    fn arm_timeout(&self, timeout: Duration) {
+    fn arm(&self, timeout: Duration, op_id: u64) {
         self.timed_out.store(false, Ordering::Release);
+        self.active_op_id.store(op_id, Ordering::Release);
         let now_ns = u64::try_from(self.epoch.elapsed().as_nanos()).unwrap_or(u64::MAX);
         let timeout_ns = u64::try_from(timeout.as_nanos()).unwrap_or(u64::MAX);
         // Reserve `0` as the disarmed sentinel so even `Duration::ZERO` triggers immediately.
@@ -72,10 +80,15 @@ impl InterruptState {
 
     fn disarm(&self) {
         self.deadline_ns.store(0, Ordering::Release);
+        self.active_op_id.store(0, Ordering::Release);
     }
 
     fn should_interrupt(&self) -> bool {
         if self.cancelled.load(Ordering::Acquire) {
+            return true;
+        }
+        let active = self.active_op_id.load(Ordering::Acquire);
+        if active != 0 && self.cancelled_op_id.load(Ordering::Acquire) == active {
             return true;
         }
         let deadline = self.deadline_ns.load(Ordering::Acquire);
@@ -87,6 +100,36 @@ impl InterruptState {
             }
         }
         false
+    }
+}
+
+/// Per-call cancellation handle for aborting an in-flight sandbox call without poisoning others.
+#[derive(Clone)]
+pub struct CallCancellation {
+    op_id: u64,
+    cancel_tx: Arc<watch::Sender<bool>>,
+    interrupt: Arc<InterruptState>,
+}
+
+impl CallCancellation {
+    /// Signals this specific invocation to abort cleanly.
+    pub fn cancel(&self) {
+        let _ = self.cancel_tx.send(true);
+        if self.interrupt.active_op_id.load(Ordering::Acquire) == self.op_id {
+            self.interrupt
+                .cancelled_op_id
+                .store(self.op_id, Ordering::Release);
+        }
+    }
+
+    /// Returns `true` if this call handle was already cancelled.
+    pub fn is_cancelled(&self) -> bool {
+        *self.cancel_tx.borrow()
+    }
+
+    async fn cancelled(&self) {
+        let mut rx = self.cancel_tx.subscribe();
+        let _ = rx.wait_for(|cancelled| *cancelled).await;
     }
 }
 
@@ -115,6 +158,7 @@ pub struct PluginSandbox {
     context: AsyncContext,
     runtime: AsyncRuntime,
     interrupt: Arc<InterruptState>,
+    exec_lock: AsyncMutex<()>,
 }
 
 impl fmt::Debug for PluginSandbox {
@@ -151,7 +195,19 @@ impl PluginSandbox {
             context,
             runtime,
             interrupt,
+            exec_lock: AsyncMutex::new(()),
         })
+    }
+
+    /// Creates a scoped per-call cancellation handle that does not poison subsequent sandbox calls.
+    pub fn new_call_cancellation(&self) -> CallCancellation {
+        let op_id = self.interrupt.next_op_id.fetch_add(1, Ordering::Relaxed);
+        let (cancel_tx, _) = watch::channel(false);
+        CallCancellation {
+            op_id,
+            cancel_tx: Arc::new(cancel_tx),
+            interrupt: Arc::clone(&self.interrupt),
+        }
     }
 
     /// Provisions a new sandbox using Vessel's default 32 MiB / 15s limits.
@@ -232,22 +288,81 @@ impl PluginSandbox {
         F: for<'js> AsyncFnOnce(rquickjs::Ctx<'js>) -> Result<R, String> + Send,
         R: Send + 'static,
     {
-        if self.interrupt.cancelled.load(Ordering::Acquire) {
+        self.run_in_context_cancellable(timeout, None, f).await
+    }
+
+    /// Runs an async closure against `Ctx` with an optional per-call `CallCancellation`.
+    pub(crate) async fn run_in_context_cancellable<F, R>(
+        &self,
+        timeout: Duration,
+        cancel: Option<&CallCancellation>,
+        f: F,
+    ) -> VesselResult<R>
+    where
+        F: for<'js> AsyncFnOnce(rquickjs::Ctx<'js>) -> Result<R, String> + Send,
+        R: Send + 'static,
+    {
+        if self.interrupt.cancelled.load(Ordering::Acquire)
+            || cancel.is_some_and(CallCancellation::is_cancelled)
+        {
             return Err(VesselError::Cancelled);
         }
 
-        self.interrupt.arm_timeout(timeout);
+        let _exec_guard = match cancel {
+            Some(c) => {
+                tokio::select! {
+                    biased;
+                    () = c.cancelled() => return Err(VesselError::Cancelled),
+                    res = tokio::time::timeout(timeout, self.exec_lock.lock()) => match res {
+                        Ok(guard) => guard,
+                        Err(_) => return Err(VesselError::Timeout),
+                    }
+                }
+            }
+            None => tokio::time::timeout(timeout, self.exec_lock.lock())
+                .await
+                .map_err(|_| VesselError::Timeout)?,
+        };
+
+        if self.interrupt.cancelled.load(Ordering::Acquire)
+            || cancel.is_some_and(CallCancellation::is_cancelled)
+        {
+            return Err(VesselError::Cancelled);
+        }
+
+        let op_id = cancel.map_or(0, |c| c.op_id);
+        self.interrupt.arm(timeout, op_id);
         let _guard = ExecutionGuard(&self.interrupt);
 
+        if cancel.is_some_and(CallCancellation::is_cancelled) {
+            return Err(VesselError::Cancelled);
+        }
+
         let eval_future = self.context.async_with(f);
-        let outcome = tokio::time::timeout(timeout, eval_future).await;
+        let outcome = match cancel {
+            Some(c) => {
+                tokio::select! {
+                    biased;
+                    () = c.cancelled() => {
+                        self.interrupt.cancelled_op_id.store(c.op_id, Ordering::Release);
+                        return Err(VesselError::Cancelled);
+                    }
+                    res = tokio::time::timeout(timeout, eval_future) => res,
+                }
+            }
+            None => tokio::time::timeout(timeout, eval_future).await,
+        };
         match outcome {
             Err(_) => Err(VesselError::Timeout),
             Ok(Ok(value)) => Ok(value),
             Ok(Err(message)) => {
                 if self.interrupt.timed_out.load(Ordering::Acquire) {
                     Err(VesselError::Timeout)
-                } else if self.interrupt.cancelled.load(Ordering::Acquire) {
+                } else if self.interrupt.cancelled.load(Ordering::Acquire)
+                    || (op_id != 0
+                        && self.interrupt.cancelled_op_id.load(Ordering::Acquire) == op_id)
+                    || cancel.is_some_and(CallCancellation::is_cancelled)
+                {
                     Err(VesselError::Cancelled)
                 } else if let Some(domain_err) =
                     crate::security::parse_domain_blocked_message(&message)
@@ -415,6 +530,37 @@ mod tests {
             .await
             .expect("eval after reset_cancel");
         assert_eq!(value, "anthology-ok");
+
+        sandbox.shutdown().await;
+    }
+
+    #[tokio::test]
+    async fn call_cancellation_aborts_single_call_without_poisoning_subsequent_calls() {
+        let sandbox = PluginSandbox::with_defaults(anthology_id())
+            .await
+            .expect("create sandbox");
+
+        let cancel = sandbox.new_call_cancellation();
+        let trigger = cancel.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_millis(25));
+            trigger.cancel();
+        });
+
+        let err = sandbox
+            .run_in_context_cancellable(Duration::from_secs(5), Some(&cancel), async |ctx| {
+                ctx.eval::<(), _>("while (true) {}")
+                    .map_err(|err| err.to_string())
+            })
+            .await
+            .expect_err("abort infinite loop via scoped call cancel");
+        assert_eq!(err, VesselError::Cancelled);
+
+        let recovered: i32 = sandbox
+            .eval("21 + 21")
+            .await
+            .expect("subsequent call on same sandbox must succeed");
+        assert_eq!(recovered, 42);
 
         sandbox.shutdown().await;
     }

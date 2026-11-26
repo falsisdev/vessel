@@ -18,8 +18,8 @@ pub use package::{
 };
 pub use provider::QuickJsContentProvider;
 pub use sandbox::{
-    DEFAULT_EXECUTION_TIMEOUT, DEFAULT_MAX_STACK_SIZE_BYTES, DEFAULT_MEMORY_LIMIT_BYTES,
-    PluginSandbox, SandboxLimits, SandboxMemoryStats,
+    CallCancellation, DEFAULT_EXECUTION_TIMEOUT, DEFAULT_MAX_STACK_SIZE_BYTES,
+    DEFAULT_MEMORY_LIMIT_BYTES, PluginSandbox, SandboxLimits, SandboxMemoryStats,
 };
 pub use sdk::HostServices;
 pub use sdk::unpack::unpack_dean_edwards;

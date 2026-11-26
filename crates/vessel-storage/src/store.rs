@@ -222,6 +222,14 @@ impl StoragePort for SqliteStorage {
     async fn remove_library_item(&self, media: &MediaRef) -> VesselResult<()> {
         self.delete_library_item(media).await
     }
+
+    async fn upsert_ts_compile_cache(
+        &self,
+        source_hash: &str,
+        compiled_js: &str,
+    ) -> VesselResult<()> {
+        SqliteStorage::upsert_ts_compile_cache(self, source_hash, compiled_js).await
+    }
 }
 
 #[cfg(test)]

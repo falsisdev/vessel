@@ -13,7 +13,12 @@ use vessel_plugin_rt::{
 };
 
 /// Default number of warm isolated QuickJS runtimes kept in RAM simultaneously.
-pub const DEFAULT_MAX_WARM_PLUGINS: usize = 40;
+#[cfg(target_os = "android")]
+pub const DEFAULT_MAX_WARM_PLUGINS: usize = 8;
+
+/// Default number of warm isolated QuickJS runtimes kept in RAM simultaneously.
+#[cfg(not(target_os = "android"))]
+pub const DEFAULT_MAX_WARM_PLUGINS: usize = 20;
 
 /// Default inactivity window after which a warm QuickJS runtime is evicted (`5 min`).
 pub const DEFAULT_IDLE_TTL: Duration = Duration::from_secs(300);
@@ -24,6 +29,14 @@ struct RegisteredPlugin {
     domain_policy: Arc<DomainPolicy>,
     host: Arc<HostServices>,
     enabled: bool,
+    subtitle_search_supported: Option<bool>,
+}
+
+fn bundle_might_implement_subtitle_search(bundle: &PluginBundle) -> bool {
+    bundle
+        .files()
+        .values()
+        .any(|src| src.contains("searchSubtitles"))
 }
 
 struct WarmPlugin {
@@ -123,6 +136,19 @@ impl PluginPool {
             Arc::clone(&self.ts_cache),
         )?);
 
+        let subtitle_search_supported = if manifest
+            .capabilities
+            .contains(&PluginCapability::Subtitles)
+        {
+            if bundle_might_implement_subtitle_search(&bundle) {
+                None
+            } else {
+                Some(false)
+            }
+        } else {
+            Some(false)
+        };
+
         let old_warm = {
             let mut guard = self.inner.lock().await;
             guard.registered.insert(
@@ -133,6 +159,7 @@ impl PluginPool {
                     domain_policy,
                     host,
                     enabled,
+                    subtitle_search_supported,
                 },
             );
             guard.warm.remove(&plugin_id)
@@ -235,9 +262,27 @@ impl PluginPool {
                         .manifest
                         .capabilities
                         .contains(&PluginCapability::Subtitles)
+                    && reg.subtitle_search_supported != Some(false)
             })
             .map(|(id, reg)| (id.clone(), reg.manifest.name.clone()))
             .collect()
+    }
+
+    /// Returns whether `plugin_id` is known to implement `searchSubtitles()`.
+    pub async fn supports_subtitle_search(&self, plugin_id: &PluginId) -> Option<bool> {
+        let guard = self.inner.lock().await;
+        guard
+            .registered
+            .get(plugin_id)
+            .and_then(|reg| reg.subtitle_search_supported)
+    }
+
+    /// Records runtime confirmation of whether `plugin_id` implements `searchSubtitles()`.
+    pub async fn set_subtitle_search_supported(&self, plugin_id: &PluginId, supported: bool) {
+        let mut guard = self.inner.lock().await;
+        if let Some(reg) = guard.registered.get_mut(plugin_id) {
+            reg.subtitle_search_supported = Some(supported);
+        }
     }
 
     /// Number of currently warm QuickJS plugin runtimes held in memory.
@@ -331,6 +376,10 @@ impl PluginPool {
                     }
                     None => break,
                 }
+            }
+
+            if let Some(reg) = guard.registered.get_mut(plugin_id) {
+                reg.subtitle_search_supported = Some(provider.supports_subtitle_search());
             }
 
             guard.warm.insert(

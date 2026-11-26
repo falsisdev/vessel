@@ -656,6 +656,7 @@ impl ProxyServer {
         let router = Router::new()
             .route("/health", get(health_handler))
             .route("/s/{token}/master", get(master_stream_handler).options(options_cors_handler))
+            .route("/s/{token}/master.m3u8", get(master_stream_handler).options(options_cors_handler))
             .route("/s/{token}/seg", get(seg_stream_handler).options(options_cors_handler))
             .route("/local/{token}/{*path}", get(local_file_handler).options(options_cors_handler))
             .with_state(state)
@@ -713,7 +714,14 @@ impl ProxyServer {
         }
 
         if should_proxy_stream(candidate, always_proxy) {
-            self.register_stream(candidate.url.clone(), candidate.headers.clone())
+            let token = self
+                .sessions
+                .register(candidate.url.clone(), candidate.headers.clone())?;
+            if candidate.kind == StreamKind::Hls {
+                Ok(format!("{}/s/{token}/master.m3u8", self.base_url()))
+            } else {
+                Ok(format!("{}/s/{token}/master", self.base_url()))
+            }
         } else {
             Ok(candidate.url.clone())
         }

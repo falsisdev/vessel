@@ -15,7 +15,7 @@ use vessel_domain::{
 };
 
 use crate::module_loader::{PluginBundle, PluginLoader, PluginResolver};
-use crate::sandbox::{PluginSandbox, SandboxLimits};
+use crate::sandbox::{CallCancellation, PluginSandbox, SandboxLimits};
 use crate::sdk::{HostServices, install_sdk};
 
 const STREAM_EXECUTION_TIMEOUT: Duration = Duration::from_secs(25);
@@ -37,6 +37,7 @@ pub struct QuickJsContentProvider {
     manifest: PluginManifest,
     sandbox: PluginSandbox,
     host: Arc<HostServices>,
+    supports_subtitle_search: bool,
 }
 
 impl std::fmt::Debug for QuickJsContentProvider {
@@ -73,7 +74,7 @@ impl QuickJsContentProvider {
             )
             .await;
 
-        sandbox
+        let supports_subtitle_search = sandbox
             .run_in_context(limits.execution_timeout, async |ctx| {
                 install_sdk(&ctx, Arc::clone(&host))
                     .catch(&ctx)
@@ -109,15 +110,31 @@ impl QuickJsContentProvider {
                     .catch(&ctx)
                     .map_err(|err| err.to_string())?;
 
-                Ok(())
+                let has_search_subtitles: bool = ctx
+                    .eval("typeof globalThis.__vessel_provider?.searchSubtitles === 'function'")
+                    .catch(&ctx)
+                    .map_err(|err| err.to_string())?;
+
+                Ok(has_search_subtitles)
             })
             .await?;
+
+        let pending_ts = host.ts_cache.take_pending_writes();
+        if !pending_ts.is_empty() {
+            let storage = Arc::clone(&host.storage);
+            tokio::spawn(async move {
+                for (hash, js) in pending_ts {
+                    let _ = storage.upsert_ts_compile_cache(&hash, &js).await;
+                }
+            });
+        }
 
         Ok(Self {
             plugin_id,
             manifest,
             sandbox,
             host,
+            supports_subtitle_search,
         })
     }
 
@@ -131,12 +148,44 @@ impl QuickJsContentProvider {
         &self.sandbox
     }
 
+    /// Returns `true` when the loaded module exports a callable `searchSubtitles` method.
+    pub fn supports_subtitle_search(&self) -> bool {
+        self.supports_subtitle_search
+    }
+
     /// Gracefully shuts down the underlying QuickJS runtime.
     pub async fn shutdown(self) {
         self.sandbox.shutdown().await;
     }
 
+    /// Invokes `search()` with a scoped per-call cancellation handle.
+    pub async fn search_cancellable(
+        &self,
+        query: &str,
+        filters: &BTreeMap<String, String>,
+        page: u32,
+        cancel: &CallCancellation,
+    ) -> VesselResult<SearchPage> {
+        let timeout = self.sandbox.limits().execution_timeout;
+        self.call_json_cancellable("search", &(query, filters, page), timeout, Some(cancel))
+            .await
+    }
+
     async fn call_json<A, R>(&self, method: &str, args: &A, timeout: Duration) -> VesselResult<R>
+    where
+        A: Serialize + Sync,
+        R: DeserializeOwned,
+    {
+        self.call_json_cancellable(method, args, timeout, None).await
+    }
+
+    async fn call_json_cancellable<A, R>(
+        &self,
+        method: &str,
+        args: &A,
+        timeout: Duration,
+        cancel: Option<&CallCancellation>,
+    ) -> VesselResult<R>
     where
         A: Serialize + Sync,
         R: DeserializeOwned,
@@ -148,7 +197,7 @@ impl QuickJsContentProvider {
 
         let raw_json = self
             .sandbox
-            .run_in_context(timeout, async |ctx| {
+            .run_in_context_cancellable(timeout, cancel, async |ctx| {
                 let args_val = ctx
                     .json_parse(args_json)
                     .catch(&ctx)
