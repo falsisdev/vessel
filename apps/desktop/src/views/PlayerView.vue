@@ -14,6 +14,7 @@ import {
   Info,
   Layers,
   ListVideo,
+  Loader2,
   Lock,
   Maximize,
   Minimize,
@@ -21,6 +22,7 @@ import {
   Play,
   RotateCcw,
   RotateCw,
+  Search,
   Settings,
   SkipBack,
   SkipForward,
@@ -43,6 +45,8 @@ import type {
   PluginListEntry,
   SkipSegment,
   StreamCandidate,
+  SubtitleProviderError,
+  SubtitleSearchHit,
   SubtitleTrack,
 } from '@/types/vessel'
 
@@ -53,7 +57,7 @@ const props = defineProps<{
 
 const route = useRoute()
 const router = useRouter()
-const { t } = useI18n()
+const { t, currentLang } = useI18n()
 const { pushToast } = useVesselEvents()
 const { uiPreferences, savePreferences } = useUiPreferences()
 const { activeSession, setSession, updateEpisodeSession, setActiveStreamIndex } = usePlayerSession()
@@ -123,6 +127,16 @@ const transcriptListRef = ref<HTMLElement | null>(null)
 const activeCues = shallowRef<SubtitleCue[]>([])
 const loadingSubtitle = shallowRef(false)
 const subtitleError = shallowRef('')
+const extraExternalSubtitles = ref<SubtitleTrack[]>([])
+const extSubOpen = ref(false)
+const extSubQueryText = ref('')
+const extSubLangMode = ref<'preferred' | 'tr' | 'en' | 'all'>('preferred')
+const extSubSourceFilter = ref<string>('all')
+const extSubSearching = ref(false)
+const extSubResolvingKey = ref('')
+const extSubHits = ref<SubtitleSearchHit[]>([])
+const extSubErrors = ref<SubtitleProviderError[]>([])
+const extSubSearchedOnce = ref(false)
 const pendingSeekSeconds = ref<number | null>(null)
 const playableSrc = ref<string>('')
 const gestureLabel = ref<string>('')
@@ -658,8 +672,129 @@ function closeDrawerOrTranscript(): void {
 const availableSubtitles = computed<SubtitleTrack[]>(() => {
   const fromStream = activeStream.value?.subtitles ?? []
   const fromEpisode = session.value?.subtitles ?? []
-  return [...fromStream, ...fromEpisode]
+  return [...fromStream, ...fromEpisode, ...extraExternalSubtitles.value]
 })
+
+const defaultPreferredSubLangs = computed<string[]>(() => {
+  const appLang = (currentLang.value || 'en').toLowerCase().split('-')[0]
+  return appLang === 'en' ? ['en'] : [appLang, 'en']
+})
+
+const extSubSources = computed<string[]>(() => {
+  const set = new Set<string>()
+  for (const hit of extSubHits.value) {
+    set.add(hit.candidate.sourceName || hit.pluginName)
+  }
+  return Array.from(set)
+})
+
+const filteredExtSubHits = computed<SubtitleSearchHit[]>(() => {
+  if (extSubSourceFilter.value === 'all') return extSubHits.value
+  return extSubHits.value.filter(
+    (h) => (h.candidate.sourceName || h.pluginName) === extSubSourceFilter.value,
+  )
+})
+
+watch(
+  () => currentEpisode.value?.streamId,
+  () => {
+    extraExternalSubtitles.value = []
+    extSubHits.value = []
+    extSubErrors.value = []
+    extSubSearchedOnce.value = false
+    extSubOpen.value = false
+    extSubQueryText.value = ''
+    extSubSourceFilter.value = 'all'
+  },
+)
+
+function buildExtSubLanguages(): string[] {
+  if (extSubLangMode.value === 'all') return []
+  if (extSubLangMode.value === 'tr') return ['tr']
+  if (extSubLangMode.value === 'en') return ['en']
+  return defaultPreferredSubLangs.value
+}
+
+async function runExternalSubtitleSearch(): Promise<void> {
+  const d = detail.value
+  if (!d || extSubSearching.value) return
+  const rawInput = extSubQueryText.value.trim()
+  const imdbMatch = /^tt\d+$/i.test(rawInput) ? rawInput.toLowerCase() : null
+  const searchTitle = imdbMatch
+    ? d.originalTitle || d.title
+    : rawInput || d.originalTitle || d.title
+
+  extSubSearching.value = true
+  extSubSearchedOnce.value = true
+  extSubErrors.value = []
+  extSubSourceFilter.value = 'all'
+  try {
+    const res = await vesselApi.searchSubtitles({
+      title: searchTitle,
+      originalTitle: imdbMatch ? d.originalTitle : rawInput || d.originalTitle,
+      year: d.year,
+      mediaType: d.type,
+      season: d.type === 'series' ? currentEpisode.value?.season : undefined,
+      episode: d.type === 'series' ? currentEpisode.value?.episode : undefined,
+      externalIds: imdbMatch ? { ...d.externalIds, imdb: imdbMatch } : d.externalIds,
+      preferredLanguages: buildExtSubLanguages(),
+    })
+    extSubHits.value = res.hits
+    extSubErrors.value = res.errors
+  } catch (err) {
+    extSubHits.value = []
+    extSubErrors.value = [{ pluginId: 'subtitles', pluginName: 'Subtitles', error: String(err) }]
+  } finally {
+    extSubSearching.value = false
+  }
+}
+
+function toggleExternalSubtitleSearch(): void {
+  extSubOpen.value = !extSubOpen.value
+  if (extSubOpen.value) {
+    if (!extSubQueryText.value.trim()) {
+      extSubQueryText.value = detail.value?.originalTitle || detail.value?.title || ''
+    }
+    if (!extSubSearchedOnce.value && !extSubSearching.value) {
+      void runExternalSubtitleSearch()
+    }
+  }
+}
+
+async function selectExternalSubtitleHit(hit: SubtitleSearchHit): Promise<void> {
+  const key = `${hit.pluginId}:${hit.candidate.id}`
+  if (extSubResolvingKey.value) return
+  extSubResolvingKey.value = key
+  try {
+    const srcTag = hit.candidate.sourceName || hit.pluginName
+    const finalLabel = hit.candidate.label.includes(srcTag)
+      ? hit.candidate.label
+      : `[${srcTag}] ${hit.candidate.label}`
+    const track = await vesselApi.resolveSubtitle(
+      hit.pluginId,
+      hit.candidate.id,
+      hit.candidate.lang,
+      finalLabel,
+    )
+    const existingIdx = extraExternalSubtitles.value.findIndex((t) => t.id === track.id)
+    if (existingIdx >= 0) {
+      extraExternalSubtitles.value.splice(existingIdx, 1, track)
+    } else {
+      extraExternalSubtitles.value = [...extraExternalSubtitles.value, track]
+    }
+    await nextTick()
+    const fullIdx = availableSubtitles.value.findIndex((t) => t.id === track.id)
+    if (fullIdx >= 0) {
+      selectEmbeddedSubtitle(null)
+      activeSubtitleIndex.value = fullIdx
+    }
+    showGestureHud(t('player.ext_sub_loaded'))
+  } catch (err) {
+    pushToast('error', String(err))
+  } finally {
+    extSubResolvingKey.value = ''
+  }
+}
 
 const activeSubtitleLines = computed<string[]>(() => {
   if (isLive.value || activeSubtitleIndex.value < 0 || !activeCues.value.length) return []
@@ -2639,6 +2774,126 @@ onUnmounted(() => {
           <p v-if="!availableSubtitles.length && !embeddedSubtitleTracks.length" class="cs-empty-note">
             No subtitle tracks were provided by this source.
           </p>
+
+          <div class="cs-setting-block cs-ext-sub-block">
+            <button
+              type="button"
+              class="cs-drawer-item cs-ext-sub-trigger"
+              :class="{ active: extSubOpen }"
+              @click="toggleExternalSubtitleSearch"
+            >
+              <div class="cs-drawer-item-row">
+                <Search :size="15" aria-hidden="true" />
+                <span class="cs-item-title">{{ t('player.ext_sub_search') }}</span>
+              </div>
+              <Loader2 v-if="extSubSearching" :size="15" class="spin" />
+            </button>
+
+            <div v-if="extSubOpen" class="cs-ext-sub-panel">
+              <form class="cs-ext-sub-form" @submit.prevent="void runExternalSubtitleSearch()">
+                <input
+                  v-model="extSubQueryText"
+                  type="text"
+                  class="cs-transcript-search"
+                  :placeholder="t('player.ext_sub_placeholder')"
+                />
+                <button
+                  type="submit"
+                  class="cs-mini-pill cs-ext-sub-btn"
+                  :disabled="extSubSearching"
+                >
+                  <Loader2 v-if="extSubSearching" :size="13" class="spin" />
+                  <Search v-else :size="13" />
+                </button>
+              </form>
+
+              <div class="cs-chip-grid">
+                <button
+                  v-for="opt in ([
+                    {
+                      id: 'preferred',
+                      label: t('player.ext_sub_lang_pref', {
+                        langs: defaultPreferredSubLangs.map((l) => l.toUpperCase()).join(', '),
+                      }),
+                    },
+                    { id: 'tr', label: 'TR' },
+                    { id: 'en', label: 'EN' },
+                    { id: 'all', label: t('player.ext_sub_lang_all') },
+                  ] as const)"
+                  :key="opt.id"
+                  type="button"
+                  class="cs-chip-btn"
+                  :class="{ active: extSubLangMode === opt.id }"
+                  @click="extSubLangMode = opt.id; void runExternalSubtitleSearch()"
+                >
+                  {{ opt.label }}
+                </button>
+              </div>
+
+              <div v-if="extSubSources.length > 1" class="cs-chip-grid">
+                <button
+                  type="button"
+                  class="cs-chip-btn"
+                  :class="{ active: extSubSourceFilter === 'all' }"
+                  @click="extSubSourceFilter = 'all'"
+                >
+                  All ({{ extSubHits.length }})
+                </button>
+                <button
+                  v-for="src in extSubSources"
+                  :key="src"
+                  type="button"
+                  class="cs-chip-btn"
+                  :class="{ active: extSubSourceFilter === src }"
+                  @click="extSubSourceFilter = src"
+                >
+                  {{ src }}
+                </button>
+              </div>
+
+              <p v-if="extSubErrors.length" class="cs-empty-note cs-sub-error">
+                {{ extSubErrors.map((e) => `${e.pluginName}: ${e.error}`).join(' · ') }}
+              </p>
+
+              <p v-if="extSubSearching" class="cs-empty-note">{{ t('player.ext_sub_searching') }}</p>
+              <p v-else-if="extSubSearchedOnce && !filteredExtSubHits.length" class="cs-empty-note">
+                {{ t('player.ext_sub_empty') }}
+              </p>
+
+              <div v-if="filteredExtSubHits.length" class="cs-ext-sub-list">
+                <button
+                  v-for="hit in filteredExtSubHits"
+                  :key="`${hit.pluginId}:${hit.candidate.id}`"
+                  type="button"
+                  class="cs-drawer-item"
+                  :disabled="extSubResolvingKey.length > 0"
+                  @click="void selectExternalSubtitleHit(hit)"
+                >
+                  <div class="cs-item-main">
+                    <span class="cs-item-title">{{ hit.candidate.label }}</span>
+                    <span class="cs-item-sub">
+                      {{
+                        [
+                          hit.candidate.sourceName || hit.pluginName,
+                          hit.candidate.lang.toUpperCase(),
+                          hit.candidate.format.toUpperCase(),
+                          hit.candidate.hearingImpaired ? 'HI' : null,
+                          hit.candidate.downloads ? `${hit.candidate.downloads} dl` : null,
+                        ]
+                          .filter(Boolean)
+                          .join(' · ')
+                      }}
+                    </span>
+                  </div>
+                  <Loader2
+                    v-if="extSubResolvingKey === `${hit.pluginId}:${hit.candidate.id}`"
+                    :size="15"
+                    class="spin"
+                  />
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- SETTINGS (Speed, Aspect Ratio & Playback Engine) -->
@@ -3689,5 +3944,45 @@ onUnmounted(() => {
   line-height: 1.35;
   color: #f4f4f8;
   text-align: left;
+}
+
+.cs-ext-sub-block {
+  margin-top: 0.35rem;
+  padding-top: 0.65rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.cs-ext-sub-trigger {
+  justify-content: space-between;
+}
+
+.cs-ext-sub-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  margin-top: 0.35rem;
+}
+
+.cs-ext-sub-form {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.cs-ext-sub-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 32px;
+  min-width: 34px;
+}
+
+.cs-ext-sub-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  max-height: 260px;
+  overflow-y: auto;
 }
 </style>

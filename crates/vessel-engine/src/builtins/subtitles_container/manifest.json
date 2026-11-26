@@ -1,0 +1,114 @@
+{
+  "schemaVersion": 1,
+  "id": "subtitles-container",
+  "name": "Subtitles Container",
+  "version": "1.0.0",
+  "author": "Vessel",
+  "description": "Built-in multi-language subtitle container supporting OpenSubtitles, SubDL, SubSource, TurkceAltyazi.org, YIFY Subtitles, Addic7ed, TVSubtitles.net, and Kitsunekko.",
+  "entry": "index.ts",
+  "capabilities": ["subtitles"],
+  "contentTypes": ["movie", "series", "anime"],
+  "languages": ["all"],
+  "domains": [
+    "api.opensubtitles.com",
+    "*.opensubtitles.com",
+    "opensubtitles-v3.strem.io",
+    "*.strem.io",
+    "api.subdl.com",
+    "dl.subdl.com",
+    "*.subdl.com",
+    "api.subsource.net",
+    "*.subsource.net",
+    "turkcealtyazi.org",
+    "www.turkcealtyazi.org",
+    "yifysubtitles.ch",
+    "yts-subs.com",
+    "subtitles.yts-subs.com",
+    "www.addic7ed.com",
+    "addic7ed.com",
+    "www.tvsubtitles.net",
+    "tvsubtitles.net",
+    "kitsunekko.net"
+  ],
+  "allowAnyHttps": false,
+  "settingsSchema": [
+    {
+      "key": "enableOpenSubtitles",
+      "label": "OpenSubtitles",
+      "type": "toggle",
+      "default": true
+    },
+    {
+      "key": "openSubtitlesApiKey",
+      "label": "OpenSubtitles API Key (optional, uses Stremio v3 fallback if empty)",
+      "type": "secret",
+      "placeholder": "Your api.opensubtitles.com Consumer Api-Key"
+    },
+    {
+      "key": "openSubtitlesUsername",
+      "label": "OpenSubtitles Username (optional)",
+      "type": "text",
+      "placeholder": "Username for higher download quota"
+    },
+    {
+      "key": "openSubtitlesPassword",
+      "label": "OpenSubtitles Password (optional)",
+      "type": "secret",
+      "placeholder": "Password"
+    },
+    {
+      "key": "enableSubdl",
+      "label": "SubDL",
+      "type": "toggle",
+      "default": true
+    },
+    {
+      "key": "subdlApiKey",
+      "label": "SubDL API Key",
+      "type": "secret",
+      "placeholder": "Required when SubDL is enabled (subdl.com)"
+    },
+    {
+      "key": "enableSubsource",
+      "label": "SubSource",
+      "type": "toggle",
+      "default": true
+    },
+    {
+      "key": "subsourceApiKey",
+      "label": "SubSource API Key",
+      "type": "secret",
+      "placeholder": "Required when SubSource is enabled (subsource.net)"
+    },
+    {
+      "key": "enableTurkceAltyazi",
+      "label": "TurkceAltyazi.org",
+      "type": "toggle",
+      "default": true
+    },
+    {
+      "key": "enableYify",
+      "label": "YIFY Subtitles (Movies)",
+      "type": "toggle",
+      "default": true
+    },
+    {
+      "key": "enableAddic7ed",
+      "label": "Addic7ed (TV Series)",
+      "type": "toggle",
+      "default": true
+    },
+    {
+      "key": "enableTvSubtitles",
+      "label": "TVSubtitles.net (TV Series)",
+      "type": "toggle",
+      "default": true
+    },
+    {
+      "key": "enableKitsunekko",
+      "label": "Kitsunekko (Anime)",
+      "type": "toggle",
+      "default": true
+    }
+  ]
+}

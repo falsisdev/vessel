@@ -175,6 +175,27 @@ pub fn load_plugin_package(
     build_package_from_raw(raw_entries, sha256)
 }
 
+/// Builds a validated `LoadedPackage` from in-memory built-in manifest and module sources.
+pub fn load_builtin_package(
+    manifest_json: &str,
+    files: BTreeMap<String, String>,
+) -> VesselResult<LoadedPackage> {
+    let mut raw_entries = BTreeMap::new();
+    raw_entries.insert(
+        "manifest.json".to_owned(),
+        manifest_json.as_bytes().to_vec(),
+    );
+    let mut hasher_input = String::from(manifest_json);
+    for (path, content) in files {
+        let clean = path.trim_start_matches("./").to_owned();
+        hasher_input.push_str(&clean);
+        hasher_input.push_str(&content);
+        raw_entries.insert(clean, content.into_bytes());
+    }
+    let sha256 = sha256_hex(hasher_input.as_bytes());
+    build_package_from_raw(raw_entries, sha256)
+}
+
 /// Packs a validated `PluginManifest`, source files, and optional icon into `.plugin.vessel` ZIP bytes.
 pub fn pack_plugin_package(
     manifest: &PluginManifest,

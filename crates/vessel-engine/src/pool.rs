@@ -5,7 +5,9 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use tokio::sync::Mutex;
-use vessel_domain::{EventSink, PluginId, PluginManifest, StoragePort, VesselError, VesselResult};
+use vessel_domain::{
+    EventSink, PluginCapability, PluginId, PluginManifest, StoragePort, VesselError, VesselResult,
+};
 use vessel_plugin_rt::{
     DomainPolicy, HostServices, PluginBundle, QuickJsContentProvider, SandboxLimits, TsCompileCache,
 };
@@ -200,6 +202,41 @@ impl PluginPool {
             .iter()
             .filter(|&(_, reg)| reg.enabled)
             .map(|(id, _)| id.clone())
+            .collect()
+    }
+
+    /// Lists enabled registered plugin IDs supporting at least one capability in `caps`.
+    pub async fn enabled_plugin_ids_with_any(&self, caps: &[PluginCapability]) -> Vec<PluginId> {
+        let guard = self.inner.lock().await;
+        guard
+            .registered
+            .iter()
+            .filter(|&(_, reg)| {
+                reg.enabled
+                    && reg
+                        .manifest
+                        .capabilities
+                        .iter()
+                        .any(|cap| caps.contains(cap))
+            })
+            .map(|(id, _)| id.clone())
+            .collect()
+    }
+
+    /// Lists enabled subtitle-capable plugins as `(PluginId, display_name)` pairs.
+    pub async fn enabled_subtitle_plugins(&self) -> Vec<(PluginId, String)> {
+        let guard = self.inner.lock().await;
+        guard
+            .registered
+            .iter()
+            .filter(|&(_, reg)| {
+                reg.enabled
+                    && reg
+                        .manifest
+                        .capabilities
+                        .contains(&PluginCapability::Subtitles)
+            })
+            .map(|(id, reg)| (id.clone(), reg.manifest.name.clone()))
             .collect()
     }
 

@@ -23,8 +23,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
@@ -36,7 +38,9 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SystemUpdateAlt
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -64,9 +68,16 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import dev.falsis.vessel.data.PluginListEntry
+import dev.falsis.vessel.data.PluginManifest
 import dev.falsis.vessel.data.PluginUpdateInfo
 import dev.falsis.vessel.data.ResolvedSource
 import dev.falsis.vessel.data.VesselRepository
+import dev.falsis.vessel.ui.isSubtitleOnlyPlugin
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonPrimitive
 import dev.falsis.vessel.ui.components.VesselButton
 import dev.falsis.vessel.ui.components.VesselCompactIconButton
 import dev.falsis.vessel.ui.components.VesselFilterChip
@@ -91,6 +102,7 @@ private data class PluginGroupUi(
 )
 
 private fun resolveGroupName(entry: PluginListEntry): String {
+    if (entry.sourceType == "builtin") return "Built-in"
     val rid = entry.repoId?.trim()
     if (!rid.isNullOrEmpty()) return rid
     val domains = entry.allowedDomains
@@ -182,6 +194,7 @@ fun ExtensionsScreen(
     val expandedGroups = remember { mutableStateMapOf<String, Boolean>() }
     var confirmRemoveGroup by remember { mutableStateOf<String?>(null) }
     var confirmUninstallId by remember { mutableStateOf<String?>(null) }
+    var settingsManifest by remember { mutableStateOf<PluginManifest?>(null) }
 
     LaunchedEffect(confirmRemoveGroup) {
         val target = confirmRemoveGroup ?: return@LaunchedEffect
@@ -727,6 +740,8 @@ fun ExtensionsScreen(
                     }
 
                     // Clean Group Actions Bar (Pin/Clear Home · Enable/Disable All · Remove Group)
+                    val isBuiltinGroup = group.items.any { it.sourceType == "builtin" }
+                    val hasHomeEligible = group.items.any { !isSubtitleOnlyPlugin(it) }
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -734,35 +749,37 @@ fun ExtensionsScreen(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        VesselOutlinedButton(
-                            onClick = {
-                                val next = selectedHomeSet.toMutableSet()
-                                val showAll = group.homeCount == 0
-                                for (item in group.items) {
-                                    if (showAll && item.enabled) next.add(item.manifest.id)
-                                    else next.remove(item.manifest.id)
-                                }
-                                scope.launch {
-                                    saveHomeSelection(next)
-                                    repo.notify(
-                                        if (showAll) VesselI18n.trf("extensions.pinned_home", "name" to group.name)
-                                        else VesselI18n.trf("extensions.cleared_home", "name" to group.name),
-                                    )
-                                }
-                            },
-                            height = 30.dp,
-                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
-                        ) {
-                            Icon(Icons.Default.Home, contentDescription = null, modifier = Modifier.size(13.dp))
-                            Spacer(Modifier.width(4.dp))
-                            Text(
-                                text = if (group.homeCount == 0) {
-                                    VesselI18n.tr("extensions.pin_home")
-                                } else {
-                                    VesselI18n.tr("extensions.clear_home")
+                        if (!isBuiltinGroup && hasHomeEligible) {
+                            VesselOutlinedButton(
+                                onClick = {
+                                    val next = selectedHomeSet.toMutableSet()
+                                    val showAll = group.homeCount == 0
+                                    for (item in group.items) {
+                                        if (showAll && item.enabled) next.add(item.manifest.id)
+                                        else next.remove(item.manifest.id)
+                                    }
+                                    scope.launch {
+                                        saveHomeSelection(next)
+                                        repo.notify(
+                                            if (showAll) VesselI18n.trf("extensions.pinned_home", "name" to group.name)
+                                            else VesselI18n.trf("extensions.cleared_home", "name" to group.name),
+                                        )
+                                    }
                                 },
-                                style = MaterialTheme.typography.labelSmall,
-                            )
+                                height = 30.dp,
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                            ) {
+                                Icon(Icons.Default.Home, contentDescription = null, modifier = Modifier.size(13.dp))
+                                Spacer(Modifier.width(4.dp))
+                                Text(
+                                    text = if (group.homeCount == 0) {
+                                        VesselI18n.tr("extensions.pin_home")
+                                    } else {
+                                        VesselI18n.tr("extensions.clear_home")
+                                    },
+                                    style = MaterialTheme.typography.labelSmall,
+                                )
+                            }
                         }
 
                         val enableTarget = group.enabledCount < group.items.size
@@ -795,35 +812,37 @@ fun ExtensionsScreen(
 
                         Spacer(Modifier.weight(1f))
 
-                        val confirmingGroup = confirmRemoveGroup == group.name
-                        VesselTextButton(
-                            onClick = {
-                                if (!confirmingGroup) {
-                                    confirmRemoveGroup = group.name
-                                } else {
-                                    confirmRemoveGroup = null
-                                    val ids = group.items.map { it.manifest.id }.toSet()
-                                    scope.launch {
-                                        for (id in ids) {
-                                            repo.uninstallPlugin(id)
+                        if (!isBuiltinGroup) {
+                            val confirmingGroup = confirmRemoveGroup == group.name
+                            VesselTextButton(
+                                onClick = {
+                                    if (!confirmingGroup) {
+                                        confirmRemoveGroup = group.name
+                                    } else {
+                                        confirmRemoveGroup = null
+                                        val ids = group.items.map { it.manifest.id }.toSet()
+                                        scope.launch {
+                                            for (id in ids) {
+                                                repo.uninstallPlugin(id)
+                                            }
+                                            if (prefs.home.selectedPlugins != null) {
+                                                saveHomeSelection(selectedHomeSet - ids)
+                                            }
+                                            repo.notify(VesselI18n.trf("extensions.removed_group", "name" to group.name))
                                         }
-                                        if (prefs.home.selectedPlugins != null) {
-                                            saveHomeSelection(selectedHomeSet - ids)
-                                        }
-                                        repo.notify(VesselI18n.trf("extensions.removed_group", "name" to group.name))
                                     }
-                                }
-                            },
-                            height = 30.dp,
-                            contentColor = palette.danger,
-                        ) {
-                            Icon(Icons.Default.Delete, contentDescription = null, tint = palette.danger, modifier = Modifier.size(14.dp))
-                            Spacer(Modifier.width(3.dp))
-                            Text(
-                                text = if (confirmingGroup) VesselI18n.tr("common.confirm") else VesselI18n.tr("common.remove"),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = palette.danger,
-                            )
+                                },
+                                height = 30.dp,
+                                contentColor = palette.danger,
+                            ) {
+                                Icon(Icons.Default.Delete, contentDescription = null, tint = palette.danger, modifier = Modifier.size(14.dp))
+                                Spacer(Modifier.width(3.dp))
+                                Text(
+                                    text = if (confirmingGroup) VesselI18n.tr("common.confirm") else VesselI18n.tr("common.remove"),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = palette.danger,
+                                )
+                            }
                         }
                     }
 
@@ -905,63 +924,82 @@ fun ExtensionsScreen(
                                             }
                                         }
 
-                                        // Per-plugin Update + Home toggle + Enabled Switch + Uninstall
+                                        // Per-plugin Settings + Update + Home toggle + Enabled Switch + Uninstall
                                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                            val upd = updateMap[plugin.manifest.id]
-                                            val hasUpdate = upd?.updateAvailable == true
-                                            val isUpdating = updatingId == plugin.manifest.id
-                                            VesselCompactIconButton(
-                                                enabled = !isUpdating && !updatingAll,
-                                                size = 30.dp,
-                                                containerColor = if (hasUpdate) palette.accent.copy(alpha = 0.18f) else palette.bgSurface,
-                                                onClick = {
-                                                    updatingId = plugin.manifest.id
-                                                    scope.launch {
-                                                        runCatching { repo.updatePlugin(plugin.manifest.id) }
-                                                            .onSuccess { res ->
-                                                                updateMap = updateMap - plugin.manifest.id
-                                                                repo.notify(
-                                                                    VesselI18n.trf(
-                                                                        "extensions.updated_msg",
-                                                                        "name" to plugin.manifest.name,
-                                                                        "version" to res.version,
-                                                                    ),
-                                                                )
-                                                            }
-                                                            .onFailure { repo.notifyError(it, VesselI18n.tr("extensions.update_failed")) }
-                                                        updatingId = null
-                                                    }
-                                                },
-                                            ) {
-                                                if (isUpdating) {
-                                                    CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
-                                                } else {
+                                            val isBuiltin = plugin.sourceType == "builtin"
+                                            if (plugin.manifest.settingsSchema.isNotEmpty()) {
+                                                VesselCompactIconButton(
+                                                    size = 30.dp,
+                                                    containerColor = palette.bgSurface,
+                                                    onClick = { settingsManifest = plugin.manifest },
+                                                ) {
                                                     Icon(
-                                                        imageVector = if (hasUpdate) Icons.Default.SystemUpdateAlt else Icons.Default.Refresh,
-                                                        contentDescription = VesselI18n.tr("common.update"),
-                                                        tint = if (hasUpdate) palette.accent else palette.textMuted,
+                                                        imageVector = Icons.Default.Settings,
+                                                        contentDescription = VesselI18n.tr("extensions.settings"),
+                                                        tint = palette.textMuted,
                                                         modifier = Modifier.size(16.dp),
                                                     )
                                                 }
                                             }
+                                            if (!isBuiltin) {
+                                                val upd = updateMap[plugin.manifest.id]
+                                                val hasUpdate = upd?.updateAvailable == true
+                                                val isUpdating = updatingId == plugin.manifest.id
+                                                VesselCompactIconButton(
+                                                    enabled = !isUpdating && !updatingAll,
+                                                    size = 30.dp,
+                                                    containerColor = if (hasUpdate) palette.accent.copy(alpha = 0.18f) else palette.bgSurface,
+                                                    onClick = {
+                                                        updatingId = plugin.manifest.id
+                                                        scope.launch {
+                                                            runCatching { repo.updatePlugin(plugin.manifest.id) }
+                                                                .onSuccess { res ->
+                                                                    updateMap = updateMap - plugin.manifest.id
+                                                                    repo.notify(
+                                                                        VesselI18n.trf(
+                                                                            "extensions.updated_msg",
+                                                                            "name" to plugin.manifest.name,
+                                                                            "version" to res.version,
+                                                                        ),
+                                                                    )
+                                                                }
+                                                                .onFailure { repo.notifyError(it, VesselI18n.tr("extensions.update_failed")) }
+                                                            updatingId = null
+                                                        }
+                                                    },
+                                                ) {
+                                                    if (isUpdating) {
+                                                        CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
+                                                    } else {
+                                                        Icon(
+                                                            imageVector = if (hasUpdate) Icons.Default.SystemUpdateAlt else Icons.Default.Refresh,
+                                                            contentDescription = VesselI18n.tr("common.update"),
+                                                            tint = if (hasUpdate) palette.accent else palette.textMuted,
+                                                            modifier = Modifier.size(16.dp),
+                                                        )
+                                                    }
+                                                }
+                                            }
 
-                                            val onHome = plugin.enabled && plugin.manifest.id in selectedHomeSet
-                                            VesselCompactIconButton(
-                                                enabled = plugin.enabled,
-                                                size = 30.dp,
-                                                onClick = {
-                                                    val next = selectedHomeSet.toMutableSet()
-                                                    if (onHome) next.remove(plugin.manifest.id)
-                                                    else next.add(plugin.manifest.id)
-                                                    scope.launch { saveHomeSelection(next) }
-                                                },
-                                            ) {
-                                                Icon(
-                                                    imageVector = Icons.Default.Home,
-                                                    contentDescription = VesselI18n.tr("extensions.home_label"),
-                                                    tint = if (onHome) palette.accent else palette.textMuted.copy(alpha = 0.45f),
-                                                    modifier = Modifier.size(16.dp),
-                                                )
+                                            if (!isSubtitleOnlyPlugin(plugin)) {
+                                                val onHome = plugin.enabled && plugin.manifest.id in selectedHomeSet
+                                                VesselCompactIconButton(
+                                                    enabled = plugin.enabled,
+                                                    size = 30.dp,
+                                                    onClick = {
+                                                        val next = selectedHomeSet.toMutableSet()
+                                                        if (onHome) next.remove(plugin.manifest.id)
+                                                        else next.add(plugin.manifest.id)
+                                                        scope.launch { saveHomeSelection(next) }
+                                                    },
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.Home,
+                                                        contentDescription = VesselI18n.tr("extensions.home_label"),
+                                                        tint = if (onHome) palette.accent else palette.textMuted.copy(alpha = 0.45f),
+                                                        modifier = Modifier.size(16.dp),
+                                                    )
+                                                }
                                             }
 
                                             Switch(
@@ -971,24 +1009,26 @@ fun ExtensionsScreen(
                                                 },
                                             )
 
-                                            val confirming = confirmUninstallId == plugin.manifest.id
-                                            VesselCompactIconButton(
-                                                size = 30.dp,
-                                                onClick = {
-                                                    if (!confirming) {
-                                                        confirmUninstallId = plugin.manifest.id
-                                                    } else {
-                                                        confirmUninstallId = null
-                                                        scope.launch { repo.uninstallPlugin(plugin.manifest.id) }
-                                                    }
-                                                },
-                                            ) {
-                                                Icon(
-                                                    imageVector = Icons.Default.Delete,
-                                                    contentDescription = VesselI18n.tr("common.uninstall"),
-                                                    tint = if (confirming) palette.warning else palette.danger,
-                                                    modifier = Modifier.size(16.dp),
-                                                )
+                                            if (!isBuiltin) {
+                                                val confirming = confirmUninstallId == plugin.manifest.id
+                                                VesselCompactIconButton(
+                                                    size = 30.dp,
+                                                    onClick = {
+                                                        if (!confirming) {
+                                                            confirmUninstallId = plugin.manifest.id
+                                                        } else {
+                                                            confirmUninstallId = null
+                                                            scope.launch { repo.uninstallPlugin(plugin.manifest.id) }
+                                                        }
+                                                    },
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.Delete,
+                                                        contentDescription = VesselI18n.tr("common.uninstall"),
+                                                        tint = if (confirming) palette.warning else palette.danger,
+                                                        modifier = Modifier.size(16.dp),
+                                                    )
+                                                }
                                             }
                                         }
                                     }
@@ -1010,4 +1050,125 @@ fun ExtensionsScreen(
             }
         }
     }
+
+    settingsManifest?.let { manifest ->
+        PluginSettingsDialog(
+            manifest = manifest,
+            repo = repo,
+            onDismiss = { settingsManifest = null },
+        )
+    }
+}
+
+@Composable
+private fun PluginSettingsDialog(
+    manifest: PluginManifest,
+    repo: VesselRepository,
+    onDismiss: () -> Unit,
+) {
+    val palette = LocalVesselPalette.current
+    val scope = rememberCoroutineScope()
+    var loading by remember(manifest.id) { mutableStateOf(true) }
+    var saving by remember(manifest.id) { mutableStateOf(false) }
+    val values = remember(manifest.id) { mutableStateMapOf<String, JsonElement>() }
+
+    LaunchedEffect(manifest.id) {
+        loading = true
+        runCatching { repo.getPluginSettingsMap(manifest.id) }
+            .onSuccess { loaded ->
+                values.clear()
+                values.putAll(loaded)
+                for (field in manifest.settingsSchema) {
+                    if (field.key !in values && field.default != null) {
+                        values[field.key] = field.default
+                    }
+                }
+            }
+        loading = false
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = palette.bgElevated,
+        titleContentColor = palette.textPrimary,
+        textContentColor = palette.textPrimary,
+        title = {
+            Text("${manifest.name} — ${VesselI18n.tr("extensions.settings")}")
+        },
+        text = {
+            if (loading) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                    Text(VesselI18n.tr("common.loading"))
+                }
+            } else {
+                Column(
+                    modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    for (field in manifest.settingsSchema) {
+                        val curVal = values[field.key]
+                        if (field.type == "toggle") {
+                            val checked = curVal?.jsonPrimitive?.booleanOrNull ?: false
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                            ) {
+                                Text(
+                                    text = field.label,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    modifier = Modifier.weight(1f).padding(end = 8.dp),
+                                )
+                                Switch(
+                                    checked = checked,
+                                    onCheckedChange = { values[field.key] = JsonPrimitive(it) },
+                                )
+                            }
+                        } else {
+                            val strVal = curVal?.jsonPrimitive?.contentOrNull.orEmpty()
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text(
+                                    text = field.label,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = palette.textMuted,
+                                )
+                                VesselOutlinedTextField(
+                                    value = strVal,
+                                    onValueChange = { values[field.key] = JsonPrimitive(it) },
+                                    placeholder = field.placeholder?.takeIf { it.isNotBlank() }?.let { ph -> { Text(ph) } },
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            VesselButton(
+                enabled = !loading && !saving,
+                onClick = {
+                    saving = true
+                    scope.launch {
+                        runCatching { repo.setPluginSettingsMap(manifest.id, values.toMap()) }
+                            .onSuccess {
+                                repo.notify(VesselI18n.tr("common.save"))
+                                onDismiss()
+                            }
+                            .onFailure { repo.notifyError(it, VesselI18n.tr("common.error")) }
+                        saving = false
+                    }
+                },
+            ) {
+                Text(VesselI18n.tr("common.save"))
+            }
+        },
+        dismissButton = {
+            VesselTextButton(onClick = onDismiss) {
+                Text(VesselI18n.tr("common.cancel"))
+            }
+        },
+    )
 }

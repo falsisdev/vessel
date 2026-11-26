@@ -394,7 +394,14 @@
     "subtitles_sync": "Subtitles & Sync",
     "next_ep_short": "Next E{ep}",
     "seek_back_10": "-10s",
-    "seek_fwd_10": "+10s"
+    "seek_fwd_10": "+10s",
+    "ext_sub_search": "Search External Subtitles",
+    "ext_sub_placeholder": "Title or IMDb ID (tt…)…",
+    "ext_sub_searching": "Searching subtitle sources…",
+    "ext_sub_empty": "No matching external subtitles found.",
+    "ext_sub_lang_pref": "Preferred ({langs})",
+    "ext_sub_lang_all": "All Languages",
+    "ext_sub_loaded": "Loaded external subtitle"
   },
   "overlay": {
     "domain_title": "Plugin Domain Permission Request",

@@ -13,8 +13,8 @@ pub mod ts_strip;
 pub use module_loader::{PluginBundle, VESSEL_SDK_MODULE_ID};
 pub use package::{
     LoadedPackage, MAX_PACKAGE_ENTRY_BYTES, MAX_PACKAGE_UNCOMPRESSED_BYTES,
-    collect_relative_imports, load_plugin_dir, load_plugin_package, pack_plugin_package,
-    verify_sha256,
+    collect_relative_imports, load_builtin_package, load_plugin_dir, load_plugin_package,
+    pack_plugin_package, verify_sha256,
 };
 pub use provider::QuickJsContentProvider;
 pub use sandbox::{

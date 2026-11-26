@@ -5919,8 +5919,10 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
 name = "vessel-desktop"
-version = "0.1.50"
+version = "0.2.0"
 dependencies = [
+ "gtk",
+ "objc2",
  "reqwest",
  "serde",
  "serde_json",
@@ -5933,11 +5935,13 @@ dependencies = [
  "vessel-player-mpv",
  "vessel-plugin-rt",
  "vessel-storage",
+ "webkit2gtk",
+ "windows",
 ]
 
 [[package]]
 name = "vessel-domain"
-version = "0.1.50"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "reqwest",
@@ -5950,7 +5954,7 @@ dependencies = [
 
 [[package]]
 name = "vessel-downloader"
-version = "0.1.50"
+version = "0.2.0"
 dependencies = [
  "aes",
  "axum",
@@ -5968,7 +5972,7 @@ dependencies = [
 
 [[package]]
 name = "vessel-engine"
-version = "0.1.50"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "axum",
@@ -5989,7 +5993,7 @@ dependencies = [
 
 [[package]]
 name = "vessel-ffi"
-version = "0.1.50"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "jni 0.22.4",
@@ -6008,7 +6012,7 @@ dependencies = [
 
 [[package]]
 name = "vessel-iptv"
-version = "0.1.50"
+version = "0.2.0"
 dependencies = [
  "axum",
  "quick-xml",
@@ -6022,7 +6026,7 @@ dependencies = [
 
 [[package]]
 name = "vessel-metadata"
-version = "0.1.50"
+version = "0.2.0"
 dependencies = [
  "axum",
  "reqwest",
@@ -6034,9 +6038,10 @@ dependencies = [
 
 [[package]]
 name = "vessel-player-mpv"
-version = "0.1.50"
+version = "0.2.0"
 dependencies = [
  "async-trait",
+ "libloading 0.8.9",
  "serde",
  "serde_json",
  "tokio",
@@ -6045,7 +6050,7 @@ dependencies = [
 
 [[package]]
 name = "vessel-plugin-rt"
-version = "0.1.50"
+version = "0.2.0"
 dependencies = [
  "aes",
  "aes-gcm",
@@ -6056,6 +6061,8 @@ dependencies = [
  "cipher",
  "ecb",
  "ego-tree",
+ "encoding_rs",
+ "flate2",
  "hmac",
  "md-5",
  "oxc",
@@ -6074,7 +6081,7 @@ dependencies = [
 
 [[package]]
 name = "vessel-proxy"
-version = "0.1.50"
+version = "0.2.0"
 dependencies = [
  "axum",
  "base64 0.23.1",
@@ -6091,7 +6098,7 @@ dependencies = [
 
 [[package]]
 name = "vessel-storage"
-version = "0.1.50"
+version = "0.2.0"
 dependencies = [
  "async-trait",
  "rusqlite",

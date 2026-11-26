@@ -77,6 +77,7 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Replay10
 import androidx.compose.material.icons.filled.ScreenRotation
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
@@ -171,6 +172,9 @@ import dev.falsis.vessel.data.PlaybackProgress
 import dev.falsis.vessel.data.SkipSegment
 import dev.falsis.vessel.data.StreamCandidate
 import dev.falsis.vessel.data.StreamResult
+import dev.falsis.vessel.data.SubtitleProviderError
+import dev.falsis.vessel.data.SubtitleQueryPayload
+import dev.falsis.vessel.data.SubtitleSearchHit
 import dev.falsis.vessel.data.SubtitleTrack
 import dev.falsis.vessel.data.UiPreferences
 import dev.falsis.vessel.data.VesselRepository
@@ -233,6 +237,7 @@ fun PlayerScreen(
     val palette = LocalVesselPalette.current
     val scope = rememberCoroutineScope()
     val prefs by repo.uiPreferences.collectAsState()
+    val appLocale by repo.locale.collectAsState()
     val plugins by repo.plugins.collectAsState()
     val audioManager = remember(context) {
         context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
@@ -293,6 +298,16 @@ fun PlayerScreen(
     var externalCues by remember { mutableStateOf<List<SubtitleCue>>(emptyList()) }
     var loadingSubtitle by remember { mutableStateOf(false) }
     var subtitleError by remember { mutableStateOf<String?>(null) }
+    var extraFetchedSubs by remember(currentEpisode) { mutableStateOf<List<SubtitleTrack>>(emptyList()) }
+    var extSubOpen by remember(currentEpisode) { mutableStateOf(false) }
+    var extSubQueryText by remember(currentEpisode) { mutableStateOf("") }
+    var extSubLangMode by remember(currentEpisode) { mutableStateOf("preferred") }
+    var extSubSourceFilter by remember(currentEpisode) { mutableStateOf("all") }
+    var extSubSearching by remember { mutableStateOf(false) }
+    var extSubResolvingKey by remember { mutableStateOf<String?>(null) }
+    var extSubHits by remember(currentEpisode) { mutableStateOf<List<SubtitleSearchHit>>(emptyList()) }
+    var extSubErrors by remember(currentEpisode) { mutableStateOf<List<SubtitleProviderError>>(emptyList()) }
+    var extSubSearchedOnce by remember(currentEpisode) { mutableStateOf(false) }
 
     var skipSegments by remember(currentEpisode) { mutableStateOf<List<SkipSegment>>(emptyList()) }
     var skipFetchSeq by remember(currentEpisode) { mutableIntStateOf(0) }
@@ -312,8 +327,64 @@ fun PlayerScreen(
     val activeCandidate =
         activeStreamResult.streams.getOrNull(selectedIndex) ?: activeStreamResult.streams.firstOrNull()
 
-    val availableExternalSubs = remember(activeCandidate, activeStreamResult) {
-        (activeCandidate?.subtitles ?: emptyList()) + activeStreamResult.subtitles
+    val availableExternalSubs = remember(activeCandidate, activeStreamResult, extraFetchedSubs) {
+        (activeCandidate?.subtitles ?: emptyList()) + activeStreamResult.subtitles + extraFetchedSubs
+    }
+
+    val defaultPreferredSubLangs = remember(appLocale) {
+        val base = appLocale.lowercase(Locale.US).substringBefore('-')
+        if (base.isBlank() || base == "en") listOf("en") else listOf(base, "en")
+    }
+
+    fun runExternalSubSearch() {
+        if (extSubSearching) return
+        val rawInput = extSubQueryText.trim()
+        val imdbMatch = Regex("^tt\\d+$", RegexOption.IGNORE_CASE).matches(rawInput)
+        val searchTitle = if (imdbMatch) {
+            activeDetail.originalTitle?.takeIf { it.isNotBlank() } ?: activeDetail.title
+        } else {
+            rawInput.ifBlank { activeDetail.originalTitle?.takeIf { it.isNotBlank() } ?: activeDetail.title }
+        }
+        val langs = when (extSubLangMode) {
+            "all" -> emptyList()
+            "tr" -> listOf("tr")
+            "en" -> listOf("en")
+            else -> defaultPreferredSubLangs
+        }
+        val ids = if (imdbMatch) {
+            activeDetail.externalIds.copy(imdb = rawInput.lowercase(Locale.US))
+        } else {
+            activeDetail.externalIds
+        }
+        extSubSearching = true
+        extSubSearchedOnce = true
+        extSubErrors = emptyList()
+        extSubSourceFilter = "all"
+        scope.launch {
+            runCatching {
+                repo.searchSubtitles(
+                    SubtitleQueryPayload(
+                        title = searchTitle,
+                        originalTitle = if (imdbMatch) activeDetail.originalTitle else rawInput.ifBlank { activeDetail.originalTitle },
+                        year = activeDetail.year,
+                        mediaType = activeDetail.type,
+                        season = if (activeDetail.type == "series") currentEpisode.season else null,
+                        episode = if (activeDetail.type == "series") currentEpisode.episode else null,
+                        externalIds = ids,
+                        preferredLanguages = langs,
+                    ),
+                )
+            }.onSuccess { outcome ->
+                extSubHits = outcome.hits
+                extSubErrors = outcome.errors
+            }.onFailure { err ->
+                extSubHits = emptyList()
+                extSubErrors = listOf(
+                    SubtitleProviderError("subtitles", "Subtitles", err.message ?: "Subtitle search failed"),
+                )
+            }
+            extSubSearching = false
+        }
     }
 
     val episodes = activeDetail.episodes
@@ -2746,6 +2817,210 @@ fun PlayerScreen(
                                             color = Color.White.copy(alpha = 0.65f),
                                             modifier = Modifier.padding(4.dp),
                                         )
+                                    }
+
+                                    HorizontalDivider(color = Color.White.copy(alpha = 0.12f), modifier = Modifier.padding(vertical = 4.dp))
+
+                                    DrawerItemCard(
+                                        active = extSubOpen,
+                                        accentColor = palette.accent,
+                                        onClick = {
+                                            extSubOpen = !extSubOpen
+                                            if (extSubOpen) {
+                                                if (extSubQueryText.isBlank()) {
+                                                    extSubQueryText = activeDetail.originalTitle?.takeIf { it.isNotBlank() } ?: activeDetail.title
+                                                }
+                                                if (!extSubSearchedOnce && !extSubSearching) {
+                                                    runExternalSubSearch()
+                                                }
+                                            }
+                                        },
+                                    ) {
+                                        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(Icons.Default.Search, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                                            Spacer(Modifier.width(8.dp))
+                                            Text(
+                                                text = VesselI18n.tr("player.ext_sub_search"),
+                                                color = Color.White,
+                                                fontWeight = FontWeight.SemiBold,
+                                                modifier = Modifier.weight(1f),
+                                            )
+                                            if (extSubSearching) {
+                                                CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp, color = palette.accent)
+                                            }
+                                        }
+                                    }
+
+                                    if (extSubOpen) {
+                                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                            ) {
+                                                VesselOutlinedTextField(
+                                                    value = extSubQueryText,
+                                                    onValueChange = { extSubQueryText = it },
+                                                    placeholder = { Text(VesselI18n.tr("player.ext_sub_placeholder")) },
+                                                    singleLine = true,
+                                                    modifier = Modifier.weight(1f),
+                                                )
+                                                DrawerChipButton(
+                                                    label = VesselI18n.tr("common.search"),
+                                                    active = false,
+                                                    accentColor = palette.accent,
+                                                    onClick = { runExternalSubSearch() },
+                                                )
+                                            }
+
+                                            FlowRow(
+                                                horizontalArrangement = Arrangement.spacedBy(5.dp),
+                                                verticalArrangement = Arrangement.spacedBy(5.dp),
+                                            ) {
+                                                val prefLabel = VesselI18n.trf(
+                                                    "player.ext_sub_lang_pref",
+                                                    "langs" to defaultPreferredSubLangs.joinToString(", ") { it.uppercase(Locale.US) },
+                                                )
+                                                listOf(
+                                                    "preferred" to prefLabel,
+                                                    "tr" to "TR",
+                                                    "en" to "EN",
+                                                    "all" to VesselI18n.tr("player.ext_sub_lang_all"),
+                                                ).forEach { (id, label) ->
+                                                    DrawerChipButton(
+                                                        label = label,
+                                                        active = extSubLangMode == id,
+                                                        accentColor = palette.accent,
+                                                        onClick = {
+                                                            extSubLangMode = id
+                                                            runExternalSubSearch()
+                                                        },
+                                                    )
+                                                }
+                                            }
+
+                                            val extSources = extSubHits.map { it.candidate.sourceName ?: it.pluginName }.distinct()
+                                            if (extSources.size > 1) {
+                                                FlowRow(
+                                                    horizontalArrangement = Arrangement.spacedBy(5.dp),
+                                                    verticalArrangement = Arrangement.spacedBy(5.dp),
+                                                ) {
+                                                    DrawerChipButton(
+                                                        label = "All (${extSubHits.size})",
+                                                        active = extSubSourceFilter == "all",
+                                                        accentColor = palette.accent,
+                                                        onClick = { extSubSourceFilter = "all" },
+                                                    )
+                                                    extSources.forEach { src ->
+                                                        DrawerChipButton(
+                                                            label = src,
+                                                            active = extSubSourceFilter == src,
+                                                            accentColor = palette.accent,
+                                                            onClick = { extSubSourceFilter = src },
+                                                        )
+                                                    }
+                                                }
+                                            }
+
+                                            if (extSubErrors.isNotEmpty()) {
+                                                Text(
+                                                    text = extSubErrors.joinToString(" · ") { "${it.pluginName}: ${it.error}" },
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = Color(0xFFFDA4AF),
+                                                    modifier = Modifier.padding(4.dp),
+                                                )
+                                            }
+
+                                            val shownHits = if (extSubSourceFilter == "all") {
+                                                extSubHits
+                                            } else {
+                                                extSubHits.filter { (it.candidate.sourceName ?: it.pluginName) == extSubSourceFilter }
+                                            }
+
+                                            if (extSubSearching) {
+                                                Text(
+                                                    text = VesselI18n.tr("player.ext_sub_searching"),
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = Color.White.copy(alpha = 0.7f),
+                                                    modifier = Modifier.padding(4.dp),
+                                                )
+                                            } else if (extSubSearchedOnce && shownHits.isEmpty()) {
+                                                Text(
+                                                    text = VesselI18n.tr("player.ext_sub_empty"),
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = Color.White.copy(alpha = 0.65f),
+                                                    modifier = Modifier.padding(4.dp),
+                                                )
+                                            }
+
+                                            shownHits.forEach { hit ->
+                                                val hitKey = "${hit.pluginId}:${hit.candidate.id}"
+                                                val isResolving = extSubResolvingKey == hitKey
+                                                DrawerItemCard(
+                                                    active = false,
+                                                    accentColor = palette.accent,
+                                                    onClick = {
+                                                        if (extSubResolvingKey != null) return@DrawerItemCard
+                                                        extSubResolvingKey = hitKey
+                                                        scope.launch {
+                                                            val srcTag = hit.candidate.sourceName ?: hit.pluginName
+                                                            val finalLabel = if (srcTag in hit.candidate.label) {
+                                                                hit.candidate.label
+                                                            } else {
+                                                                "[$srcTag] ${hit.candidate.label}"
+                                                            }
+                                                            runCatching {
+                                                                repo.resolveSubtitle(
+                                                                    hit.pluginId,
+                                                                    hit.candidate.id,
+                                                                    hit.candidate.lang,
+                                                                    finalLabel,
+                                                                )
+                                                            }.onSuccess { track ->
+                                                                val updated = extraFetchedSubs.toMutableList()
+                                                                val idxExisting = updated.indexOfFirst { it.id == track.id }
+                                                                if (idxExisting >= 0) updated[idxExisting] = track else updated.add(track)
+                                                                extraFetchedSubs = updated
+                                                                val fullList = (activeCandidate?.subtitles ?: emptyList()) + activeStreamResult.subtitles + updated
+                                                                val targetIdx = fullList.indexOfFirst { it.id == track.id }
+                                                                if (targetIdx >= 0) activeExternalSubIndex = targetIdx
+                                                                showHud(VesselI18n.tr("player.ext_sub_loaded"))
+                                                            }.onFailure { err ->
+                                                                repo.notifyError(err, "Failed to load subtitle")
+                                                            }
+                                                            extSubResolvingKey = null
+                                                        }
+                                                    },
+                                                ) {
+                                                    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                                        Column(modifier = Modifier.weight(1f)) {
+                                                            Text(
+                                                                text = hit.candidate.label,
+                                                                color = Color.White,
+                                                                fontWeight = FontWeight.SemiBold,
+                                                                maxLines = 2,
+                                                                overflow = TextOverflow.Ellipsis,
+                                                            )
+                                                            val meta = buildList {
+                                                                add(hit.candidate.sourceName ?: hit.pluginName)
+                                                                add(hit.candidate.lang.uppercase(Locale.US))
+                                                                add(hit.candidate.format.uppercase(Locale.US))
+                                                                if (hit.candidate.hearingImpaired == true) add("HI")
+                                                                hit.candidate.downloads?.let { add("$it dl") }
+                                                            }.joinToString(" · ")
+                                                            Text(
+                                                                text = meta,
+                                                                style = MaterialTheme.typography.labelSmall,
+                                                                color = Color.White.copy(alpha = 0.65f),
+                                                            )
+                                                        }
+                                                        if (isResolving) {
+                                                            CircularProgressIndicator(modifier = Modifier.size(15.dp), strokeWidth = 2.dp, color = palette.accent)
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                             }

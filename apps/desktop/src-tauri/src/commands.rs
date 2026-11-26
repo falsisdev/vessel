@@ -13,13 +13,13 @@ use crate::embedded_player::EmbeddedPlayerHost;
 use vessel_domain::{
     ExternalIds, HomeSection, LibraryItem, LibraryStatus, LinkedMediaSource, MediaDetail, MediaRef,
     MediaType, PlaybackProgress, PluginId, PluginManifest, RepoIndex, SearchPage, SecretStore,
-    SkipSegment, StreamCandidate, StreamResult, SubtitleTrack, ThemeColors, ThemeSpec,
-    UiPreferences, VesselPaths, VesselResult,
+    SkipSegment, StreamCandidate, StreamResult, SubtitleQuery, SubtitleTrack, ThemeColors,
+    ThemeSpec, UiPreferences, VesselPaths, VesselResult,
 };
 use vessel_engine::{
     DownloadRequest, EpgNowNext, IptvKind, IptvProfile, LocalPlaybackBundle,
     MetadataProviderFilter, MetadataSearchResponse, PlayCandidateRequest, SIMKL_CLIENT_ID_SECRET,
-    SkipQuery, TMDB_API_KEY_SECRET, VesselEngine,
+    SkipQuery, SubtitlePluginInfo, SubtitleSearchOutcome, TMDB_API_KEY_SECRET, VesselEngine,
 };
 use vessel_plugin_rt::{ResolvedSource, SourceTrustBadge};
 use vessel_storage::{
@@ -1227,6 +1227,48 @@ pub async fn set_subtitle_delay(state: State<'_, AppState>, delay_ms: i64) -> Re
 }
 
 #[tauri::command]
+pub async fn list_subtitle_plugins(
+    state: State<'_, AppState>,
+) -> Result<Vec<SubtitlePluginInfo>, String> {
+    Ok(state.engine.list_subtitle_plugins().await)
+}
+
+#[tauri::command]
+pub async fn search_subtitles(
+    state: State<'_, AppState>,
+    query: SubtitleQuery,
+    target_plugins: Option<Vec<String>>,
+) -> Result<SubtitleSearchOutcome, String> {
+    let parsed_targets = match target_plugins {
+        Some(list) => Some(
+            list.into_iter()
+                .map(PluginId::new)
+                .collect::<VesselResult<Vec<_>>>()
+                .map_err(|err| err.to_string())?,
+        ),
+        None => None,
+    };
+    map_err(state.engine.search_subtitles(query, parsed_targets).await)
+}
+
+#[tauri::command]
+pub async fn resolve_subtitle(
+    state: State<'_, AppState>,
+    plugin_id: String,
+    subtitle_id: String,
+    lang: String,
+    label: String,
+) -> Result<SubtitleTrack, String> {
+    let pid = PluginId::new(plugin_id).map_err(|err| err.to_string())?;
+    map_err(
+        state
+            .engine
+            .resolve_subtitle(&pid, &subtitle_id, &lang, &label)
+            .await,
+    )
+}
+
+#[tauri::command]
 pub async fn list_iptv_profiles(
     state: State<'_, AppState>,
 ) -> Result<Vec<StoredIptvProfile>, String> {
@@ -1530,15 +1572,15 @@ pub async fn embedded_mpv_pause(state: State<'_, AppState>) -> Result<(), String
 }
 
 #[tauri::command]
-pub async fn embedded_mpv_seek(
-    state: State<'_, AppState>,
-    position_ms: u64,
-) -> Result<(), String> {
+pub async fn embedded_mpv_seek(state: State<'_, AppState>, position_ms: u64) -> Result<(), String> {
     map_err(state.embedded_host.player.seek(position_ms))
 }
 
 #[tauri::command]
-pub async fn embedded_mpv_set_volume(state: State<'_, AppState>, volume: f64) -> Result<(), String> {
+pub async fn embedded_mpv_set_volume(
+    state: State<'_, AppState>,
+    volume: f64,
+) -> Result<(), String> {
     map_err(state.embedded_host.player.set_volume(volume))
 }
 

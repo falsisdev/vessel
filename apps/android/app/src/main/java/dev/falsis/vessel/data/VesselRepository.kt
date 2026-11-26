@@ -570,6 +570,30 @@ class VesselRepository private constructor(private val appContext: Context) {
         json.decodeFromString(requireCore().searchMetadataJson(query, provider, preferredLang))
     }
 
+    suspend fun listSubtitlePlugins(): List<SubtitlePluginInfo> = withContext(Dispatchers.IO) {
+        json.decodeFromString(requireCore().listSubtitlePluginsJson())
+    }
+
+    suspend fun searchSubtitles(
+        query: SubtitleQueryPayload,
+        targetPlugins: List<String>? = null,
+    ): SubtitleSearchOutcome = withContext(Dispatchers.IO) {
+        json.decodeFromString(
+            requireCore().searchSubtitlesJson(json.encodeToString(query), targetPlugins),
+        )
+    }
+
+    suspend fun resolveSubtitle(
+        pluginId: String,
+        subtitleId: String,
+        lang: String,
+        label: String,
+    ): SubtitleTrack = withContext(Dispatchers.IO) {
+        json.decodeFromString(
+            requireCore().resolveSubtitleJson(pluginId, subtitleId, lang, label),
+        )
+    }
+
     suspend fun getLinkedSources(pluginId: String, nativeId: String): List<LinkedMediaSource> =
         withContext(Dispatchers.IO) {
             val c = core ?: return@withContext emptyList()

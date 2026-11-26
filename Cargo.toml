@@ -3,7 +3,7 @@ resolver = "2"
 members = ["apps/desktop/src-tauri", "crates/vessel-domain", "crates/vessel-downloader", "crates/vessel-engine", "crates/vessel-ffi", "crates/vessel-iptv", "crates/vessel-metadata", "crates/vessel-player-mpv", "crates/vessel-plugin-rt", "crates/vessel-proxy", "crates/vessel-storage"]
 
 [workspace.package]
-version = "0.1.7"
+version = "0.2.0"
 edition = "2024"
 rust-version = "1.89"
 license = "GPL-3.0-or-later"
@@ -19,6 +19,8 @@ cbc = { version = "0.2", features = ["alloc"] }
 cipher = "0.5"
 ecb = { version = "0.2", features = ["alloc"] }
 ego-tree = "0.11"
+encoding_rs = "0.8"
+flate2 = "1"
 getrandom = { version = "0.4", features = ["std"] }
 hmac = "0.13"
 md-5 = "0.11"

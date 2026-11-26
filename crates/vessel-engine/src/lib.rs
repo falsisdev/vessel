@@ -1,5 +1,6 @@
 //! Pure-Rust core orchestrator (`VesselEngine`) binding plugins, storage, proxy, and playback.
 
+pub mod builtins;
 pub mod pool;
 
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -15,10 +16,10 @@ use tokio_util::sync::CancellationToken;
 use vessel_domain::{
     ContentProvider, DomainGrantSource, DownloadStatus, EngineEvent, EventSink, ExternalIds,
     HomeFeed, LibraryItem, LibraryStatus, LinkedMediaSource, LogLevel, MediaDetail, MediaRef,
-    MediaType, PlaybackProgress, PlaybackRequest, PlayerBackend, PluginId, RepoPluginEntry,
-    SearchPage, SecretStore, SkipSegment, StoragePort, StreamCandidate, StreamKind, StreamResult,
-    SubtitleFormat, SubtitleSource, SubtitleTrack, UiPreferences, VesselError, VesselPaths,
-    VesselResult,
+    MediaType, PlaybackProgress, PlaybackRequest, PlayerBackend, PluginCapability, PluginId,
+    RepoPluginEntry, SearchPage, SecretStore, SkipSegment, StoragePort, StreamCandidate,
+    StreamKind, StreamResult, SubtitleCandidate, SubtitleFormat, SubtitleProvider, SubtitleQuery,
+    SubtitleSource, SubtitleTrack, UiPreferences, VesselError, VesselPaths, VesselResult,
 };
 use vessel_iptv::{IptvClient, channel_to_stream_candidate, xtream::xtream_xmltv_url};
 use vessel_metadata::{
@@ -79,6 +80,40 @@ pub struct UpdatedPluginInfo {
 pub struct BatchUpdateFailure {
     pub plugin_id: String,
     pub error: String,
+}
+
+/// Single subtitle candidate matched with the plugin that provided it.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SubtitleSearchHit {
+    pub plugin_id: String,
+    pub plugin_name: String,
+    pub candidate: SubtitleCandidate,
+}
+
+/// Non-fatal per-plugin error collected during parallel external subtitle search.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SubtitleProviderError {
+    pub plugin_id: String,
+    pub plugin_name: String,
+    pub error: String,
+}
+
+/// Combined response returned by `VesselEngine::search_subtitles`.
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SubtitleSearchOutcome {
+    pub hits: Vec<SubtitleSearchHit>,
+    pub errors: Vec<SubtitleProviderError>,
+}
+
+/// Summary of an enabled subtitle-capable plugin.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SubtitlePluginInfo {
+    pub plugin_id: String,
+    pub name: String,
 }
 
 /// Result of updating all outdated plugins in-place.
@@ -584,11 +619,35 @@ impl VesselEngine {
             .await
     }
 
+    /// Ensures built-in first-party plugins are persisted in SQLite and registered in the pool,
+    /// preserving the user's enabled toggle, settings, and granted domains across app updates.
+    pub async fn ensure_builtin_plugins(&self) -> VesselResult<usize> {
+        let packages = builtins::builtin_packages()?;
+        let mut count = 0usize;
+        for pkg in packages {
+            let plugin_id = pkg.manifest.id.clone();
+            let local_path = format!("builtin://{}", plugin_id.as_str());
+            self.install_package_with_source(
+                pkg,
+                Some("builtin".to_owned()),
+                builtins::BUILTIN_SOURCE_TYPE,
+                None,
+                &local_path,
+            )
+            .await?;
+            count += 1;
+        }
+        Ok(count)
+    }
+
     /// Reloads all persisted plugins from SQLite and their local files/directories into the pool.
     pub async fn bootstrap_plugins(&self) -> VesselResult<usize> {
+        let mut loaded_count = self.ensure_builtin_plugins().await?;
         let plugins = self.storage.list_plugins().await?;
-        let mut loaded_count = 0usize;
         for stored in plugins {
+            if stored.source_type == builtins::BUILTIN_SOURCE_TYPE {
+                continue;
+            }
             let path = PathBuf::from(&stored.local_path);
             let pkg_res = if stored.source_type == "dev_dir" || path.is_dir() {
                 load_plugin_dir(&path)
@@ -643,8 +702,17 @@ impl VesselEngine {
 
     /// Uninstalls `plugin_id`, removing packaged archives (never deleting Dev Mode folders) and DB rows.
     pub async fn uninstall_plugin(&self, plugin_id: &PluginId) -> VesselResult<()> {
-        self.clear_plugin_caches(plugin_id).await;
         let existing = self.storage.get_plugin(plugin_id).await?;
+        if existing
+            .as_ref()
+            .is_some_and(|p| p.source_type == builtins::BUILTIN_SOURCE_TYPE)
+        {
+            return Err(VesselError::InvalidInput(format!(
+                "built-in plugin '{}' cannot be uninstalled; disable it instead",
+                plugin_id.as_str()
+            )));
+        }
+        self.clear_plugin_caches(plugin_id).await;
         self.pool.unregister(plugin_id).await;
         if let Some(stored) = existing
             && stored.source_type != "dev_dir"
@@ -665,9 +733,9 @@ impl VesselEngine {
         if !cache.contains_key(repo_key) {
             let fetched = match self.source_resolver.resolve(repo_key).await {
                 Ok(ResolvedSource::Repository { repo, .. }) => Ok(repo.plugins),
-                Ok(ResolvedSource::Package { .. }) => {
-                    Err(format!("source '{repo_key}' resolved to a package instead of a repo"))
-                }
+                Ok(ResolvedSource::Package { .. }) => Err(format!(
+                    "source '{repo_key}' resolved to a package instead of a repo"
+                )),
                 Err(err) => Err(err.to_string()),
             };
             cache.insert(repo_key.to_owned(), fetched);
@@ -689,8 +757,23 @@ impl VesselEngine {
             let pid = plugin.manifest.id.as_str().to_owned();
             let current_version = plugin.manifest.version.clone();
 
+            if plugin.source_type == builtins::BUILTIN_SOURCE_TYPE {
+                out.push(PluginUpdateInfo {
+                    plugin_id: pid,
+                    current_version: current_version.clone(),
+                    latest_version: Some(current_version),
+                    update_available: false,
+                    source_url: None,
+                    error: None,
+                });
+                continue;
+            }
+
             if let Some(repo_key) = infer_repo_source_for_plugin(&plugin) {
-                match self.resolve_repo_entries_cached(&repo_key, &mut repo_cache).await {
+                match self
+                    .resolve_repo_entries_cached(&repo_key, &mut repo_cache)
+                    .await
+                {
                     Ok(entries) => {
                         if let Some(entry) = entries.iter().find(|e| e.id.as_str() == pid) {
                             let source_url = entry
@@ -698,7 +781,8 @@ impl VesselEngine {
                                 .clone()
                                 .or_else(|| entry.source_path.clone())
                                 .or_else(|| plugin.source_url.clone());
-                            let update_available = is_newer_version(&current_version, &entry.version);
+                            let update_available =
+                                is_newer_version(&current_version, &entry.version);
                             out.push(PluginUpdateInfo {
                                 plugin_id: pid,
                                 current_version,
@@ -747,7 +831,8 @@ impl VesselEngine {
                                 .clone()
                                 .or_else(|| entry.source_path.clone())
                                 .or_else(|| Some(src.clone()));
-                            let update_available = is_newer_version(&current_version, &entry.version);
+                            let update_available =
+                                is_newer_version(&current_version, &entry.version);
                             out.push(PluginUpdateInfo {
                                 plugin_id: pid,
                                 current_version,
@@ -800,8 +885,18 @@ impl VesselEngine {
         plugin_id: &PluginId,
     ) -> VesselResult<(PluginId, SourceTrustBadge, String)> {
         let Some(stored) = self.storage.get_plugin(plugin_id).await? else {
-            return Err(VesselError::NotFound(format!("plugin '{}'", plugin_id.as_str())));
+            return Err(VesselError::NotFound(format!(
+                "plugin '{}'",
+                plugin_id.as_str()
+            )));
         };
+
+        if stored.source_type == builtins::BUILTIN_SOURCE_TYPE {
+            return Err(VesselError::InvalidInput(format!(
+                "built-in plugin '{}' updates automatically with Vessel",
+                plugin_id.as_str()
+            )));
+        }
 
         let mut target_source = if stored.source_type == "dev_dir" {
             Some(stored.local_path.clone())
@@ -813,7 +908,9 @@ impl VesselEngine {
             && let Some(repo_key) = infer_repo_source_for_plugin(&stored)
         {
             let mut cache = HashMap::new();
-            if let Ok(entries) = self.resolve_repo_entries_cached(&repo_key, &mut cache).await
+            if let Ok(entries) = self
+                .resolve_repo_entries_cached(&repo_key, &mut cache)
+                .await
                 && let Some(entry) = entries.iter().find(|e| e.id == *plugin_id)
             {
                 target_source = entry
@@ -864,11 +961,7 @@ impl VesselEngine {
             let Ok(pid) = PluginId::new(&item.plugin_id) else {
                 continue;
             };
-            let existing_repo = self
-                .storage
-                .get_plugin(&pid)
-                .await?
-                .and_then(|p| p.repo_id);
+            let existing_repo = self.storage.get_plugin(&pid).await?.and_then(|p| p.repo_id);
             match self
                 .install_package_persisted_with_repo(plugins_dir, &target, existing_repo)
                 .await
@@ -1042,7 +1135,10 @@ impl VesselEngine {
             *active = Some((search_id.clone(), token.clone()));
         }
 
-        let enabled = self.pool.enabled_plugin_ids().await;
+        let enabled = self
+            .pool
+            .enabled_plugin_ids_with_any(&[PluginCapability::Search, PluginCapability::Vod])
+            .await;
         let plugin_ids: Vec<PluginId> = match target_plugins {
             Some(requested) if !requested.is_empty() => enabled
                 .into_iter()
@@ -1240,6 +1336,10 @@ impl VesselEngine {
             .into_iter()
             .filter(|p| {
                 p.enabled
+                    && p.manifest
+                        .capabilities
+                        .iter()
+                        .any(|cap| matches!(cap, PluginCapability::Vod | PluginCapability::LiveTv))
                     && filter_set
                         .as_ref()
                         .is_none_or(|allowed| allowed.contains(&p.manifest.id))
@@ -1809,6 +1909,148 @@ impl VesselEngine {
         self.metadata
             .resolve_skip_segments(&query, self.metadata_enabled())
             .await
+    }
+
+    /// Lists all enabled subtitle-capable plugins registered in the pool.
+    pub async fn list_subtitle_plugins(&self) -> Vec<SubtitlePluginInfo> {
+        self.pool
+            .enabled_subtitle_plugins()
+            .await
+            .into_iter()
+            .map(|(id, name)| SubtitlePluginInfo {
+                plugin_id: id.to_string(),
+                name,
+            })
+            .collect()
+    }
+
+    /// Searches enabled subtitle-capable plugins in parallel for external subtitles matching `query`.
+    pub async fn search_subtitles(
+        &self,
+        query: SubtitleQuery,
+        target_plugins: Option<Vec<PluginId>>,
+    ) -> VesselResult<SubtitleSearchOutcome> {
+        let available = self.pool.enabled_subtitle_plugins().await;
+        let filter_set: Option<HashSet<PluginId>> = target_plugins
+            .filter(|list| !list.is_empty())
+            .map(|list| list.into_iter().collect());
+
+        let targets: Vec<(PluginId, String)> = available
+            .into_iter()
+            .filter(|(id, _)| {
+                filter_set
+                    .as_ref()
+                    .is_none_or(|allowed| allowed.contains(id))
+            })
+            .collect();
+
+        if targets.is_empty() {
+            return Ok(SubtitleSearchOutcome::default());
+        }
+
+        let pool = Arc::clone(&self.pool);
+        let sink = Arc::clone(&self.event_sink);
+        let sem = Arc::new(tokio::sync::Semaphore::new(4));
+        let mut set = JoinSet::new();
+
+        for (pid, pname) in targets {
+            let pool = Arc::clone(&pool);
+            let sink = Arc::clone(&sink);
+            let sem = Arc::clone(&sem);
+            let q = query.clone();
+            set.spawn(async move {
+                let _permit = sem.acquire_owned().await;
+                let provider = match pool.get_or_load(&pid).await {
+                    Ok(p) => p,
+                    Err(err) => {
+                        return (pid, pname, Err(err));
+                    }
+                };
+                let res = SubtitleProvider::search_subtitles(provider.as_ref(), &q).await;
+                if let Err(VesselError::DomainBlocked {
+                    plugin_id: ref blocked_id,
+                    ref domain,
+                }) = res
+                    && let Ok(parsed_id) = PluginId::new(blocked_id)
+                {
+                    sink.emit(EngineEvent::DomainPermissionRequested {
+                        request_id: next_unique_id("perm"),
+                        plugin_id: parsed_id,
+                        domain: domain.clone(),
+                    });
+                }
+                (pid, pname, res)
+            });
+        }
+
+        let mut outcome = SubtitleSearchOutcome::default();
+        while let Some(joined) = set.join_next().await {
+            let Ok((pid, pname, res)) = joined else {
+                continue;
+            };
+            match res {
+                Ok(candidates) => {
+                    for candidate in candidates {
+                        outcome.hits.push(SubtitleSearchHit {
+                            plugin_id: pid.as_str().to_owned(),
+                            plugin_name: pname.clone(),
+                            candidate,
+                        });
+                    }
+                }
+                Err(err) => {
+                    outcome.errors.push(SubtitleProviderError {
+                        plugin_id: pid.as_str().to_owned(),
+                        plugin_name: pname,
+                        error: err.to_string(),
+                    });
+                }
+            }
+        }
+
+        Ok(outcome)
+    }
+
+    /// Resolves an external subtitle candidate from `plugin_id` into a playback-ready `SubtitleTrack`.
+    pub async fn resolve_subtitle(
+        &self,
+        plugin_id: &PluginId,
+        subtitle_id: &str,
+        lang: &str,
+        label: &str,
+    ) -> VesselResult<SubtitleTrack> {
+        let provider = self.pool.get_or_load(plugin_id).await?;
+        let resolved =
+            match SubtitleProvider::resolve_subtitle(provider.as_ref(), subtitle_id).await {
+                Ok(r) => r,
+                Err(VesselError::DomainBlocked {
+                    plugin_id: ref blocked_id,
+                    ref domain,
+                }) => {
+                    if let Ok(parsed_id) = PluginId::new(blocked_id) {
+                        self.event_sink
+                            .emit(EngineEvent::DomainPermissionRequested {
+                                request_id: next_unique_id("perm"),
+                                plugin_id: parsed_id,
+                                domain: domain.clone(),
+                            });
+                    }
+                    return Err(VesselError::DomainBlocked {
+                        plugin_id: blocked_id.clone(),
+                        domain: domain.clone(),
+                    });
+                }
+                Err(err) => return Err(err),
+            };
+        let track = SubtitleTrack {
+            id: Some(format!("{}:{subtitle_id}", plugin_id.as_str())),
+            source: resolved.source,
+            lang: lang.to_owned(),
+            label: label.to_owned(),
+            format: resolved.format,
+            is_default: false,
+        };
+        self.route_subtitle_track(track)
     }
 
     /// Adds an external or inline subtitle track to the active player session.
@@ -2490,15 +2732,15 @@ mod tests {
     use axum::routing::get;
     use tokio::net::TcpListener;
     use vessel_domain::{
-        EngineEvent, EventSink, LinkedMediaSource, MediaRef, MediaType, PlaybackProgress,
-        PlaybackRequest, PlayerBackend, PluginId, PluginManifest, StreamFlag, StreamKind,
-        SubtitleTrack, VesselError, VesselResult,
+        EngineEvent, EventSink, ExternalIds, LinkedMediaSource, MediaRef, MediaType,
+        PlaybackProgress, PlaybackRequest, PlayerBackend, PluginId, PluginManifest, StreamFlag,
+        StreamKind, SubtitleQuery, SubtitleSource, SubtitleTrack, VesselError, VesselResult,
     };
     use vessel_plugin_rt::{LoadedPackage, PluginBundle, SourceResolver, sha256_hex};
     use vessel_proxy::ProxyServer;
     use vessel_storage::{SqliteSecretStore, SqliteStorage, StorageActor};
 
-    use super::{PlayCandidateRequest, VesselEngine};
+    use super::{PlayCandidateRequest, VesselEngine, builtins};
 
     #[derive(Default)]
     struct MockPlayer {
@@ -3377,7 +3619,9 @@ mod tests {
                     plugin_id,
                     sections,
                     ..
-                } if rid == &request_id && !sections.is_empty() => Some(plugin_id.as_str().to_owned()),
+                } if rid == &request_id && !sections.is_empty() => {
+                    Some(plugin_id.as_str().to_owned())
+                }
                 _ => None,
             })
             .collect();
@@ -3387,6 +3631,186 @@ mod tests {
         assert!(events.iter().any(|ev| {
             matches!(ev, EngineEvent::HomeFeedCompleted { request_id: rid } if rid == &request_id)
         }));
+
+        engine.shutdown().await;
+    }
+
+    #[tokio::test]
+    async fn builtin_subtitles_container_bootstraps_persists_and_blocks_uninstall() {
+        let (engine, _, recorder) = test_engine().await;
+        let loaded = engine
+            .bootstrap_plugins()
+            .await
+            .expect("bootstrap plugins including builtins");
+        assert!(loaded >= 1);
+
+        let list = engine.list_plugins().await.expect("list plugins");
+        let container = list
+            .iter()
+            .find(|p| p.manifest.id.as_str() == builtins::SUBTITLES_CONTAINER_ID)
+            .expect("subtitles-container present");
+        assert_eq!(container.source_type, builtins::BUILTIN_SOURCE_TYPE);
+        assert!(container.enabled);
+
+        let container_id = PluginId::new(builtins::SUBTITLES_CONTAINER_ID).expect("valid id");
+        let err = engine
+            .uninstall_plugin(&container_id)
+            .await
+            .expect_err("refuse uninstalling built-in plugin");
+        assert!(matches!(err, VesselError::InvalidInput(_)));
+
+        assert_eq!(engine.list_subtitle_plugins().await.len(), 1);
+
+        // User can disable and re-enable built-in plugin cleanly.
+        engine
+            .set_plugin_enabled(&container_id, false)
+            .await
+            .expect("disable subtitles-container");
+        assert!(engine.list_subtitle_plugins().await.is_empty());
+
+        engine
+            .set_plugin_enabled(&container_id, true)
+            .await
+            .expect("re-enable subtitles-container");
+        assert_eq!(engine.list_subtitle_plugins().await.len(), 1);
+
+        // Home feed stream ignores subtitle-only plugins without throwing getHomeFeed error.
+        let req_id = engine
+            .start_home_feeds_stream(None)
+            .await
+            .expect("start home feed stream");
+        for _ in 0..40 {
+            let done = {
+                let guard = recorder.events.lock().expect("lock events");
+                guard.iter().any(|ev| {
+                    matches!(ev, EngineEvent::HomeFeedCompleted { request_id } if request_id == &req_id)
+                })
+            };
+            if done {
+                break;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+        let has_sub_err = recorder
+            .events
+            .lock()
+            .expect("lock events")
+            .iter()
+            .any(|ev| {
+                matches!(
+                    ev,
+                    EngineEvent::HomeFeedPartialResult { plugin_id, error: Some(_), .. }
+                        if plugin_id.as_str() == builtins::SUBTITLES_CONTAINER_ID
+                )
+            });
+        assert!(
+            !has_sub_err,
+            "subtitle-only plugin must not run getHomeFeed"
+        );
+
+        engine.shutdown().await;
+    }
+
+    #[tokio::test]
+    #[ignore = "Live network subtitle container smoke test"]
+    async fn live_smoke_builtin_subtitles_container() {
+        let (engine, _, _) = test_engine().await;
+        engine.bootstrap_plugins().await.expect("bootstrap");
+
+        // 1. Movie search (The Matrix tt0133093 -> OpenSubtitles v3 + TurkceAltyazi + YIFY)
+        let movie_outcome = engine
+            .search_subtitles(
+                SubtitleQuery {
+                    title: "The Matrix".into(),
+                    original_title: Some("The Matrix".into()),
+                    year: Some(1999),
+                    media_type: MediaType::Movie,
+                    season: None,
+                    episode: None,
+                    external_ids: ExternalIds {
+                        imdb: Some("tt0133093".into()),
+                        ..Default::default()
+                    },
+                    preferred_languages: vec!["tr".into(), "en".into()],
+                },
+                None,
+            )
+            .await
+            .expect("movie search");
+        eprintln!(
+            "MOVIE HITS={} ERRORS={:?} SOURCES={:?}",
+            movie_outcome.hits.len(),
+            movie_outcome.errors,
+            movie_outcome
+                .hits
+                .iter()
+                .map(|h| h.candidate.source_name.as_deref().unwrap_or("?"))
+                .collect::<Vec<_>>()
+        );
+        assert!(
+            !movie_outcome.hits.is_empty(),
+            "expected hits for The Matrix; errors={:?}",
+            movie_outcome.errors
+        );
+
+        let container_id = PluginId::new(builtins::SUBTITLES_CONTAINER_ID).expect("valid id");
+        if let Some(ta_hit) = movie_outcome
+            .hits
+            .iter()
+            .find(|h| h.candidate.source_name.as_deref() == Some("TurkceAltyazi"))
+        {
+            let resolved = engine
+                .resolve_subtitle(
+                    &container_id,
+                    &ta_hit.candidate.id,
+                    &ta_hit.candidate.lang,
+                    &ta_hit.candidate.label,
+                )
+                .await
+                .expect("resolve TurkceAltyazi subtitle");
+            match resolved.source {
+                SubtitleSource::InlineContent { content } => {
+                    assert!(content.contains("-->"), "expected valid SRT cues");
+                }
+                other => panic!("expected inline_content for TA, got {other:?}"),
+            }
+        }
+
+        // 2. Series search (Breaking Bad S01E01 tt0903747 -> Addic7ed + TVSubtitles + OpenSubtitles v3)
+        let series_outcome = engine
+            .search_subtitles(
+                SubtitleQuery {
+                    title: "Breaking Bad".into(),
+                    original_title: Some("Breaking Bad".into()),
+                    year: Some(2008),
+                    media_type: MediaType::Series,
+                    season: Some(1),
+                    episode: Some(1),
+                    external_ids: ExternalIds {
+                        imdb: Some("tt0903747".into()),
+                        ..Default::default()
+                    },
+                    preferred_languages: vec!["en".into(), "tr".into()],
+                },
+                None,
+            )
+            .await
+            .expect("series search");
+        eprintln!(
+            "SERIES HITS={} ERRORS={:?} SOURCES={:?}",
+            series_outcome.hits.len(),
+            series_outcome.errors,
+            series_outcome
+                .hits
+                .iter()
+                .map(|h| h.candidate.source_name.as_deref().unwrap_or("?"))
+                .collect::<Vec<_>>()
+        );
+        assert!(
+            !series_outcome.hits.is_empty(),
+            "expected hits for Breaking Bad; errors={:?}",
+            series_outcome.errors
+        );
 
         engine.shutdown().await;
     }

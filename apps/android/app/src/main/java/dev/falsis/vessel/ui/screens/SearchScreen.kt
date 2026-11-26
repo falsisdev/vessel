@@ -92,7 +92,9 @@ fun SearchScreen(
     val scope = rememberCoroutineScope()
     val plugins by repo.plugins.collectAsState()
     val prefs by repo.uiPreferences.collectAsState()
-    val enabledPlugins = remember(plugins) { plugins.filter { it.enabled } }
+    val enabledPlugins = remember(plugins) {
+        plugins.filter { it.enabled && !dev.falsis.vessel.ui.isSubtitleOnlyPlugin(it) }
+    }
     val pluginMap = remember(plugins) { plugins.associateBy { it.manifest.id } }
     val pluginNameMap = remember(plugins) { plugins.associate { it.manifest.id to it.manifest.name } }
     var launchingLiveKey by remember { mutableStateOf<String?>(null) }

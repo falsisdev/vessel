@@ -111,6 +111,50 @@ export interface SubtitleTrack {
   isDefault?: boolean
 }
 
+export interface SubtitleQuery {
+  title: string
+  originalTitle?: string
+  year?: number
+  mediaType: MediaType
+  season?: number
+  episode?: number
+  externalIds?: ExternalIds
+  preferredLanguages?: string[]
+}
+
+export interface SubtitleCandidate {
+  id: string
+  lang: string
+  label: string
+  format: SubtitleFormat
+  releaseName?: string
+  sourceName?: string
+  downloads?: number
+  hearingImpaired?: boolean
+}
+
+export interface SubtitleSearchHit {
+  pluginId: string
+  pluginName: string
+  candidate: SubtitleCandidate
+}
+
+export interface SubtitleProviderError {
+  pluginId: string
+  pluginName: string
+  error: string
+}
+
+export interface SubtitleSearchOutcome {
+  hits: SubtitleSearchHit[]
+  errors: SubtitleProviderError[]
+}
+
+export interface SubtitlePluginInfo {
+  pluginId: string
+  name: string
+}
+
 export interface SkipSegment {
   type: SkipSegmentType
   startMs: number

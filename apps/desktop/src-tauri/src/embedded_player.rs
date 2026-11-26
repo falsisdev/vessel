@@ -159,7 +159,8 @@ fn macos_set_surface_visible(window: &WebviewWindow, visible: bool) -> VesselRes
         }
         if let Some(player) = SHARED_PLAYER.get() {
             unsafe {
-                let _ = player.ensure_opengl_render_context(gl_get_proc_address, std::ptr::null_mut());
+                let _ =
+                    player.ensure_opengl_render_context(gl_get_proc_address, std::ptr::null_mut());
             }
             let view_addr = this as usize;
             player.set_render_update_callback(Arc::new(move || unsafe {
@@ -196,7 +197,11 @@ fn macos_set_surface_visible(window: &WebviewWindow, visible: bool) -> VesselRes
         Bool::YES
     }
 
-    unsafe extern "C" fn hit_test(_this: *mut AnyObject, _sel: Sel, _pt: CGPoint) -> *mut AnyObject {
+    unsafe extern "C" fn hit_test(
+        _this: *mut AnyObject,
+        _sel: Sel,
+        _pt: CGPoint,
+    ) -> *mut AnyObject {
         std::ptr::null_mut()
     }
 
@@ -224,7 +229,8 @@ fn macos_set_surface_visible(window: &WebviewWindow, visible: bool) -> VesselRes
                 );
                 builder.add_method(
                     sel!(hitTest:),
-                    hit_test as unsafe extern "C" fn(*mut AnyObject, Sel, CGPoint) -> *mut AnyObject,
+                    hit_test
+                        as unsafe extern "C" fn(*mut AnyObject, Sel, CGPoint) -> *mut AnyObject,
                 );
             }
             builder.register()
@@ -274,7 +280,8 @@ fn macos_set_surface_visible(window: &WebviewWindow, visible: bool) -> VesselRes
                             view_ptr,
                             setAutoresizingMask: NS_VIEW_WIDTH_SIZABLE | NS_VIEW_HEIGHT_SIZABLE
                         ];
-                        let _: () = msg_send![view_ptr, setWantsBestResolutionOpenGLSurface: Bool::YES];
+                        let _: () =
+                            msg_send![view_ptr, setWantsBestResolutionOpenGLSurface: Bool::YES];
                         let _: () = msg_send![
                             superview,
                             addSubview: view_ptr,
@@ -401,10 +408,8 @@ fn linux_set_surface_visible(
                     return;
                 }
                 unsafe {
-                    let _ = p_realize.ensure_opengl_render_context(
-                        linux_get_proc_address,
-                        std::ptr::null_mut(),
-                    );
+                    let _ = p_realize
+                        .ensure_opengl_render_context(linux_get_proc_address, std::ptr::null_mut());
                 }
                 let weak_cb = gl_weak.clone();
                 p_realize.set_render_update_callback(Arc::new(move || {
@@ -446,8 +451,8 @@ fn windows_set_surface_visible(
     use windows::Win32::Foundation::{COLORREF, HWND, RECT};
     use windows::Win32::Graphics::Gdi::CreateSolidBrush;
     use windows::Win32::UI::WindowsAndMessaging::{
-        CreateWindowExW, GetClientRect, HWND_BOTTOM, SW_HIDE, SW_SHOW, SWP_NOACTIVATE, SetWindowPos,
-        ShowWindow, WS_CHILD, WS_CLIPSIBLINGS, WS_VISIBLE,
+        CreateWindowExW, GetClientRect, HWND_BOTTOM, SW_HIDE, SW_SHOW, SWP_NOACTIVATE,
+        SetWindowPos, ShowWindow, WS_CHILD, WS_CLIPSIBLINGS, WS_VISIBLE,
     };
 
     let player_ref = Arc::clone(player);
@@ -485,7 +490,15 @@ fn windows_set_surface_visible(
                 if let Ok(hwnd) = child {
                     unsafe {
                         let _ = CreateSolidBrush(COLORREF(0));
-                        let _ = SetWindowPos(hwnd, Some(HWND_BOTTOM), 0, 0, width, height, SWP_NOACTIVATE);
+                        let _ = SetWindowPos(
+                            hwnd,
+                            Some(HWND_BOTTOM),
+                            0,
+                            0,
+                            width,
+                            height,
+                            SWP_NOACTIVATE,
+                        );
                         let _ = ShowWindow(hwnd, SW_SHOW);
                     }
                     player_ref.set_wid_target(Some(hwnd.0 as isize as i64));

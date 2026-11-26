@@ -20,7 +20,13 @@ export function isLiveTvPlugin(p: PluginListEntry): boolean {
   )
 }
 
+export function isSubtitleOnlyPlugin(p: PluginListEntry): boolean {
+  const caps = p.manifest.capabilities ?? []
+  return caps.includes('subtitles') && !caps.includes('vod') && !caps.includes('live_tv') && !caps.includes('search')
+}
+
 export function resolveLiveGroupName(entry: PluginListEntry): string {
+  if (entry.sourceType === 'builtin') return 'Built-in'
   if (entry.repoId?.trim()) return entry.repoId.trim()
   const domains = entry.allowedDomains ?? []
   if (

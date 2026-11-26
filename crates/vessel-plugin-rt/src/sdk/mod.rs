@@ -1,5 +1,6 @@
 //! Host SDK bridge (`vessel.*`), Web standard polyfills, and sandboxed logging.
 
+pub mod archive;
 pub mod compat_js;
 pub mod crypto;
 pub mod html;
@@ -73,10 +74,12 @@ pub(crate) const POLYFILLS_JS: &str = r##"
     }
     if (typeof globalThis.TextDecoder !== "function") {
         globalThis.TextDecoder = class TextDecoder {
+            constructor(label = "utf-8") {
+                this.encoding = String(label || "utf-8").toLowerCase();
+            }
             decode(bytes = new Uint8Array()) {
                 const u8 = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
-                const b64 = globalThis.vessel.crypto.base64Encode(u8);
-                return globalThis.vessel.crypto.base64Decode(b64);
+                return globalThis.vessel.archive.decodeText(u8, this.encoding);
             }
         };
     }
@@ -340,6 +343,7 @@ pub(crate) fn install_sdk<'js>(ctx: &Ctx<'js>, host: Arc<HostServices>) -> QjsRe
     http::attach_http(ctx, Arc::clone(&host), &vessel_obj)?;
     html::attach_html(ctx, &vessel_obj)?;
     crypto::attach_crypto(ctx, &vessel_obj)?;
+    archive::attach_archive(ctx, &vessel_obj)?;
     storage::attach_storage(ctx, Arc::clone(&host), &vessel_obj)?;
     unpack::attach_unpack_and_env(ctx, &host.plugin_id, &vessel_obj)?;
 

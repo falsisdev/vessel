@@ -394,7 +394,14 @@
     "subtitles_sync": "Altyazılar ve Senkron",
     "next_ep_short": "Sonraki B{ep}",
     "seek_back_10": "-10sn",
-    "seek_fwd_10": "+10sn"
+    "seek_fwd_10": "+10sn",
+    "ext_sub_search": "Harici Altyazı Ara",
+    "ext_sub_placeholder": "Film / dizi adı veya IMDb ID (tt…)…",
+    "ext_sub_searching": "Altyazı kaynakları taranıyor…",
+    "ext_sub_empty": "Eşleşen harici altyazı bulunamadı.",
+    "ext_sub_lang_pref": "Tercih Edilen ({langs})",
+    "ext_sub_lang_all": "Tüm Diller",
+    "ext_sub_loaded": "Harici altyazı yüklendi"
   },
   "overlay": {
     "domain_title": "Eklenti Alan Adı İzin İsteği",

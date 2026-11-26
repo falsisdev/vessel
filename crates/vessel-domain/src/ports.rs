@@ -82,6 +82,12 @@ pub struct SubtitleCandidate {
     pub format: SubtitleFormat,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub release_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub downloads: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hearing_impaired: Option<bool>,
 }
 
 /// Resolved subtitle payload returned by `SubtitleProvider::resolve_subtitle`.

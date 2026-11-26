@@ -9,7 +9,7 @@ import { useLibraryState } from '@/composables/useLibraryState'
 import { usePlayerSession } from '@/composables/usePlayerSession'
 import { useUiPreferences } from '@/composables/useUiPreferences'
 import { pushToast, useVesselEvents } from '@/composables/useVesselEvents'
-import { isLiveMediaSummary, isLiveTvPlugin } from '@/utils/liveTv'
+import { isLiveMediaSummary, isLiveTvPlugin, isSubtitleOnlyPlugin } from '@/utils/liveTv'
 import type { MediaSummary, PluginListEntry } from '@/types/vessel'
 
 defineOptions({ name: 'SearchView' })
@@ -58,7 +58,9 @@ function applyHistorySearch(term: string): void {
   void runSearch()
 }
 
-const enabledPlugins = computed(() => plugins.value.filter((p) => p.enabled))
+const enabledPlugins = computed(() =>
+  plugins.value.filter((p) => p.enabled && !isSubtitleOnlyPlugin(p)),
+)
 const pluginMap = computed(() => {
   const m = new Map<string, PluginListEntry>()
   for (const p of plugins.value) {

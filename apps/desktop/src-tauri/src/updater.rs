@@ -374,15 +374,10 @@ pub async fn check_app_update(state: State<'_, AppState>) -> Result<AppUpdateInf
         .await
         .map_err(|err| format!("[VesselParseError]: decode GitHub releases: {err}"))?;
 
-    let pick_highest = |candidates: Vec<GithubRelease>| -> Option<GithubRelease> {
-        candidates.into_iter().max_by(|a, b| {
-            match (parse_semver(&a.tag_name), parse_semver(&b.tag_name)) {
-                (Some(sa), Some(sb)) => compare_semver(&sa, &sb),
-                (Some(_), None) => std::cmp::Ordering::Greater,
-                (None, Some(_)) => std::cmp::Ordering::Less,
-                (None, None) => a.published_at.cmp(&b.published_at),
-            }
-        })
+    let pick_latest = |candidates: Vec<GithubRelease>| -> Option<GithubRelease> {
+        candidates
+            .into_iter()
+            .max_by(|a, b| a.published_at.cmp(&b.published_at))
     };
 
     let stable_candidates: Vec<GithubRelease> = releases
@@ -411,11 +406,11 @@ pub async fn check_app_update(state: State<'_, AppState>) -> Result<AppUpdateInf
     let all_candidates: Vec<GithubRelease> = releases.into_iter().filter(|r| !r.draft).collect();
 
     let release: Option<GithubRelease> = if cur_is_prerelease {
-        pick_highest(all_candidates)
+        pick_latest(all_candidates)
     } else if !stable_candidates.is_empty() {
-        pick_highest(stable_candidates)
+        pick_latest(stable_candidates)
     } else {
-        pick_highest(all_candidates)
+        pick_latest(all_candidates)
     };
 
     let Some(rel) = release else {

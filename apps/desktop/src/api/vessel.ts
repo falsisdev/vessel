@@ -27,6 +27,9 @@ import type {
   StoredIptvProfile,
   StreamCandidate,
   StreamResult,
+  SubtitlePluginInfo,
+  SubtitleQuery,
+  SubtitleSearchOutcome,
   SubtitleTrack,
   ThemeSpec,
   UiPreferences,
@@ -202,6 +205,11 @@ export const vesselApi = {
   embeddedMpvStop: (destroy = false) => call<void>('embedded_mpv_stop', { destroy }),
   addSubtitle: (track: SubtitleTrack) => call<void>('add_subtitle', { track }),
   setSubtitleDelay: (delayMs: number) => call<void>('set_subtitle_delay', { delayMs }),
+  listSubtitlePlugins: () => call<SubtitlePluginInfo[]>('list_subtitle_plugins'),
+  searchSubtitles: (query: SubtitleQuery, targetPlugins?: string[]) =>
+    call<SubtitleSearchOutcome>('search_subtitles', { query, targetPlugins: targetPlugins ?? null }),
+  resolveSubtitle: (pluginId: string, subtitleId: string, lang: string, label: string) =>
+    call<SubtitleTrack>('resolve_subtitle', { pluginId, subtitleId, lang, label }),
 
   recordProgress: (progress: PlaybackProgress) => call<void>('record_progress', { progress }),
   getWatchProgress: (pluginId: string, nativeId: string, season: number, episode: number) =>

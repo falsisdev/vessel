@@ -21,6 +21,7 @@ import { useHomeCache } from '@/composables/useHomeCache'
 import { useI18n } from '@/composables/useI18n'
 import { useUiPreferences } from '@/composables/useUiPreferences'
 import { pushToast } from '@/composables/useVesselEvents'
+import { isSubtitleOnlyPlugin } from '@/utils/liveTv'
 import type { PluginListEntry, PluginManifest, PluginUpdateInfo, ResolvedSource } from '@/types/vessel'
 
 defineOptions({ name: 'ExtensionsView' })
@@ -71,6 +72,7 @@ const selectedHomeSet = computed<Set<string>>(() => {
 })
 
 function resolveGroupName(entry: PluginListEntry): string {
+  if (entry.sourceType === 'builtin') return 'Built-in'
   if (entry.repoId?.trim()) return entry.repoId.trim()
   // Backwards-compatible grouping for plugins installed before repoId persistence
   const domains = entry.allowedDomains ?? []
@@ -167,6 +169,10 @@ const filteredRepoPlugins = computed(() => {
       (p.description ?? '').toLowerCase().includes(q),
   )
 })
+
+function isBuiltinGroup(group: PluginGroup): boolean {
+  return group.items.some((item) => item.sourceType === 'builtin')
+}
 
 function isGroupExpanded(group: PluginGroup): boolean {
   if (installedFilter.value.trim().length > 0) return true
@@ -681,6 +687,7 @@ onMounted(() => {
 
             <div class="repo-group-actions" @click.stop>
               <button
+                v-if="!isBuiltinGroup(group) && group.items.some((i) => !isSubtitleOnlyPlugin(i))"
                 type="button"
                 class="v-btn v-btn-sm"
                 @click="toggleGroupHome(group, group.homeCount === 0)"
@@ -696,6 +703,7 @@ onMounted(() => {
                 {{ group.enabledCount < group.items.length ? t('extensions.enable_all') : t('extensions.disable_all') }}
               </button>
               <button
+                v-if="!isBuiltinGroup(group)"
                 type="button"
                 class="v-btn v-btn-sm v-btn-danger"
                 @click="removeGroup(group)"
@@ -740,7 +748,11 @@ onMounted(() => {
               </div>
 
               <div class="plugin-actions">
-                <label class="v-switch" :title="`Show ${entry.manifest.name} on Home screen`">
+                <label
+                  v-if="!isSubtitleOnlyPlugin(entry)"
+                  class="v-switch"
+                  :title="`Show ${entry.manifest.name} on Home screen`"
+                >
                   <input
                     type="checkbox"
                     class="v-switch-input"
@@ -752,8 +764,11 @@ onMounted(() => {
                   <span class="home-toggle-label">Home</span>
                 </label>
 
+                <span v-if="entry.sourceType === 'builtin'" class="domain-chip v-muted">
+                  Built-in
+                </span>
                 <button
-                  v-if="entry.sourceType === 'dev_dir'"
+                  v-else-if="entry.sourceType === 'dev_dir'"
                   class="v-btn v-btn-sm"
                   @click="installSourceTarget(entry.localPath, false)"
                 >
@@ -790,6 +805,7 @@ onMounted(() => {
                   {{ entry.enabled ? t('common.disable') : t('common.enable') }}
                 </button>
                 <button
+                  v-if="entry.sourceType !== 'builtin'"
                   type="button"
                   class="v-btn v-btn-icon v-btn-danger"
                   :title="confirmUninstallId === entry.manifest.id ? 'Confirm uninstall' : t('common.uninstall')"

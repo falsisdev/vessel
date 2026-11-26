@@ -660,3 +660,53 @@ data class AppUpdateInfo(
     val assetSizeBytes: Long? = null,
     val downloadUrl: String? = null,
 )
+
+@Serializable
+data class SubtitleQueryPayload(
+    val title: String,
+    val originalTitle: String? = null,
+    val year: Int? = null,
+    val mediaType: String = "movie",
+    val season: Int? = null,
+    val episode: Int? = null,
+    val externalIds: ExternalIds = ExternalIds(),
+    val preferredLanguages: List<String> = emptyList(),
+)
+
+@Serializable
+data class SubtitleCandidate(
+    val id: String,
+    val lang: String,
+    val label: String,
+    val format: String = "srt",
+    val releaseName: String? = null,
+    val sourceName: String? = null,
+    val downloads: Long? = null,
+    val hearingImpaired: Boolean? = null,
+)
+
+@Serializable
+data class SubtitleSearchHit(
+    val pluginId: String,
+    val pluginName: String,
+    val candidate: SubtitleCandidate,
+)
+
+@Serializable
+data class SubtitleProviderError(
+    val pluginId: String,
+    val pluginName: String,
+    val error: String,
+)
+
+@Serializable
+data class SubtitleSearchOutcome(
+    val hits: List<SubtitleSearchHit> = emptyList(),
+    val errors: List<SubtitleProviderError> = emptyList(),
+)
+
+@Serializable
+data class SubtitlePluginInfo(
+    val pluginId: String,
+    val name: String,
+)

@@ -12,8 +12,8 @@ use tokio::task::JoinSet;
 use vessel_domain::{
     EngineEvent, EventSink, ExternalIds, HomeSection, LibraryItem, LibraryStatus,
     LinkedMediaSource, PlaybackProgress, PlaybackRequest, PlayerBackend, PluginId, PluginManifest,
-    RepoIndex, SecretStore, SkipSegment, StreamCandidate, SubtitleTrack, ThemeColors, ThemeSpec,
-    UiPreferences, VesselError, VesselPaths, VesselResult,
+    RepoIndex, SecretStore, SkipSegment, StreamCandidate, SubtitleQuery, SubtitleTrack,
+    ThemeColors, ThemeSpec, UiPreferences, VesselError, VesselPaths, VesselResult,
 };
 use vessel_engine::{
     DownloadRequest, IptvKind, IptvProfile, MetadataProviderFilter, PlayCandidateRequest,
@@ -688,9 +688,7 @@ impl VesselMobileCore {
     }
 
     pub fn check_plugin_updates_json(&self) -> Result<String, FfiError> {
-        let out = self
-            .runtime
-            .block_on(self.engine.check_plugin_updates())?;
+        let out = self.runtime.block_on(self.engine.check_plugin_updates())?;
         to_json(&out)
     }
 
@@ -988,6 +986,48 @@ impl VesselMobileCore {
     pub fn prepare_playback_url(&self, candidate_json: String) -> Result<String, FfiError> {
         let candidate: StreamCandidate = from_json(&candidate_json, "StreamCandidate")?;
         Ok(self.engine.prepare_playback_url(&candidate)?)
+    }
+
+    pub fn list_subtitle_plugins_json(&self) -> Result<String, FfiError> {
+        let list = self.runtime.block_on(self.engine.list_subtitle_plugins());
+        to_json(&list)
+    }
+
+    pub fn search_subtitles_json(
+        &self,
+        query_json: String,
+        target_plugins: Option<Vec<String>>,
+    ) -> Result<String, FfiError> {
+        let query: SubtitleQuery = from_json(&query_json, "SubtitleQuery")?;
+        let parsed_targets = match target_plugins {
+            Some(list) => Some(
+                list.into_iter()
+                    .map(PluginId::new)
+                    .collect::<VesselResult<Vec<_>>>()?,
+            ),
+            None => None,
+        };
+        let outcome = self
+            .runtime
+            .block_on(self.engine.search_subtitles(query, parsed_targets))?;
+        to_json(&outcome)
+    }
+
+    pub fn resolve_subtitle_json(
+        &self,
+        plugin_id: String,
+        subtitle_id: String,
+        lang: String,
+        label: String,
+    ) -> Result<String, FfiError> {
+        let pid = PluginId::new(plugin_id)?;
+        let track = self.runtime.block_on(self.engine.resolve_subtitle(
+            &pid,
+            &subtitle_id,
+            &lang,
+            &label,
+        ))?;
+        to_json(&track)
     }
 
     pub fn play_candidate(&self, payload_json: String) -> Result<String, FfiError> {

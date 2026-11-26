@@ -9,8 +9,9 @@ use rquickjs::{CatchResultExt, Function, Module, Object, Promise, Value};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use vessel_domain::{
-    ContentProvider, Episode, HomeFeed, MediaDetail, PluginId, PluginManifest, SearchPage,
-    StreamResult, VesselError, VesselResult,
+    ContentProvider, Episode, HomeFeed, MediaDetail, PluginId, PluginManifest, ResolvedSubtitle,
+    SearchPage, StreamResult, SubtitleCandidate, SubtitleProvider, SubtitleQuery, VesselError,
+    VesselResult,
 };
 
 use crate::module_loader::{PluginBundle, PluginLoader, PluginResolver};
@@ -229,6 +230,35 @@ impl ContentProvider for QuickJsContentProvider {
             .execution_timeout
             .max(STREAM_EXECUTION_TIMEOUT);
         self.call_json("getStreams", &(stream_id,), timeout).await
+    }
+}
+
+#[async_trait]
+impl SubtitleProvider for QuickJsContentProvider {
+    fn manifest(&self) -> &PluginManifest {
+        &self.manifest
+    }
+
+    async fn search_subtitles(
+        &self,
+        query: &SubtitleQuery,
+    ) -> VesselResult<Vec<SubtitleCandidate>> {
+        let timeout = self
+            .sandbox
+            .limits()
+            .execution_timeout
+            .max(STREAM_EXECUTION_TIMEOUT);
+        self.call_json("searchSubtitles", &(query,), timeout).await
+    }
+
+    async fn resolve_subtitle(&self, subtitle_id: &str) -> VesselResult<ResolvedSubtitle> {
+        let timeout = self
+            .sandbox
+            .limits()
+            .execution_timeout
+            .max(STREAM_EXECUTION_TIMEOUT);
+        self.call_json("resolveSubtitle", &(subtitle_id,), timeout)
+            .await
     }
 }
 
@@ -592,6 +622,142 @@ mod tests {
         {
             let logs = sink.events.lock().expect("lock log events");
             assert!(!logs.is_empty());
+        }
+
+        provider.shutdown().await;
+    }
+
+    #[tokio::test]
+    async fn supports_subtitle_provider_zip_and_cp1254_decoding() {
+        use std::io::Write as _;
+        use vessel_domain::{
+            ExternalIds, SubtitleFormat, SubtitleProvider, SubtitleQuery, SubtitleSource,
+        };
+        use zip::write::SimpleFileOptions;
+
+        let turkish_srt = "1\n00:00:01,000 --> 00:00:03,000\nGüneş doğdu, yağmur yağdı, ışık.\n";
+        let (encoded, _, _) = encoding_rs::WINDOWS_1254.encode(turkish_srt);
+        let mut cursor = std::io::Cursor::new(Vec::new());
+        {
+            let mut writer = zip::ZipWriter::new(&mut cursor);
+            writer
+                .start_file("Show.S01E02.srt", SimpleFileOptions::default())
+                .expect("start zip entry");
+            writer.write_all(&encoded).expect("write cp1254 bytes");
+            writer.finish().expect("finish zip");
+        }
+        let zip_bytes = Arc::new(cursor.into_inner());
+        let zip_for_route = Arc::clone(&zip_bytes);
+
+        let app = Router::new().route(
+            "/subs/pack.zip",
+            get(move || {
+                let payload = zip_for_route.as_ref().clone();
+                async move { (StatusCode::OK, payload) }
+            }),
+        );
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind subtitle mock server");
+        let addr = listener.local_addr().expect("mock addr");
+        tokio::spawn(async move {
+            axum::serve(listener, app)
+                .await
+                .expect("serve subtitle mock");
+        });
+
+        let plugin_id = PluginId::new("subs-test").expect("valid id");
+        let manifest: PluginManifest = serde_json::from_value(serde_json::json!({
+            "schemaVersion": 1,
+            "id": "subs-test",
+            "name": "Subs Test",
+            "version": "1.0.0",
+            "entry": "index.ts",
+            "capabilities": ["subtitles"],
+            "domains": ["127.0.0.1"]
+        }))
+        .expect("parse subtitle manifest");
+
+        let bundle = Arc::new(
+            PluginBundle::new(BTreeMap::from([(
+                "index.ts".to_owned(),
+                format!(
+                    r#"
+                    export default vessel.definePlugin({{
+                        async searchSubtitles(query) {{
+                            return [{{
+                                id: "zip-1:" + (query.season ?? 0) + ":" + (query.episode ?? 0),
+                                lang: "tr",
+                                label: "Türkçe · " + query.title,
+                                format: "srt",
+                                sourceName: "MockSub",
+                            }}];
+                        }},
+                        async resolveSubtitle(id) {{
+                            const resp = await vessel.http.get("http://{addr}/subs/pack.zip");
+                            const entries = vessel.archive.unzipEntries(resp.bytes());
+                            return {{
+                                format: "srt",
+                                source: {{ kind: "inline_content", content: entries[0].text("auto") }}
+                            }};
+                        }}
+                    }});
+                    "#
+                ),
+            )]))
+            .expect("build subtitle bundle"),
+        );
+
+        let policy = Arc::new(
+            DomainPolicy::new(plugin_id.clone(), vec!["127.0.0.1".into()], false)
+                .with_loopback_for_tests(),
+        );
+        let host = Arc::new(
+            HostServices::new(
+                plugin_id,
+                policy,
+                Arc::new(InMemoryTestStorage::default()),
+                None,
+                Arc::new(TsCompileCache::new()),
+            )
+            .expect("host services"),
+        );
+
+        let provider =
+            QuickJsContentProvider::load(manifest, bundle, host, SandboxLimits::default())
+                .await
+                .expect("load subtitle provider");
+
+        let hits = SubtitleProvider::search_subtitles(
+            &provider,
+            &SubtitleQuery {
+                title: "Deneme".into(),
+                original_title: None,
+                year: Some(2024),
+                media_type: MediaType::Series,
+                season: Some(1),
+                episode: Some(2),
+                external_ids: ExternalIds::default(),
+                preferred_languages: vec!["tr".into()],
+            },
+        )
+        .await
+        .expect("search subtitles");
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].source_name.as_deref(), Some("MockSub"));
+
+        let resolved = SubtitleProvider::resolve_subtitle(&provider, &hits[0].id)
+            .await
+            .expect("resolve subtitle zip");
+        assert_eq!(resolved.format, SubtitleFormat::Srt);
+        match resolved.source {
+            SubtitleSource::InlineContent { content } => {
+                assert!(
+                    content.contains("Güneş doğdu, yağmur yağdı, ışık."),
+                    "decoded={content}"
+                );
+            }
+            other => panic!("expected inline_content, got {other:?}"),
         }
 
         provider.shutdown().await;

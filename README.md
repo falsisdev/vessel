@@ -1,8 +1,6 @@
 <p align="center">
-  <img src="assets/vessel-logo.png" alt="Vessel Logo" width="144" height="144" />
+  <img src="assets/banners/vessel-banner-12-cargo-manifest.png" alt="Vessel — Local-First Streaming & Media Center" width="100%" />
 </p>
-
-<h1 align="center">Vessel</h1>
 
 <p align="center">
   <em>Most <strong>ships</strong> dread <strong>Rust</strong>. This <strong>cargo vessel</strong> runs on it — <strong>shipped</strong> with <strong>Cargo</strong>, engineered not to <strong>rust</strong>, <strong>docking</strong> plugins by <strong>manifest</strong> at local <strong>ports</strong>.</em>
@@ -17,9 +15,6 @@
 </p>
 
 **Vessel** is a local-first, cross-platform streaming and media center built from the ground up in **Rust**, **Tauri v2**, **Vue 3 / TypeScript**, and **Kotlin Jetpack Compose (`UniFFI`)**.
-
-> **Project Status (`v0.1.46`):** Core Engine (`crates/vessel-*`), the **Desktop App (`apps/desktop`)** for macOS, Windows & Linux, and the **Android App (`apps/android` via `vessel-ffi` UniFFI)** are active and downloadable on [GitHub Releases](https://github.com/falsisdev/vessel/releases). Next major milestones include unified OAuth + OS Keyring security, Google Drive & tracker sync, independent subtitle providers, Android TV + `mpvkit` options, and iOS/iPadOS.
-> The earlier Go + SwiftUI prototype is preserved on `archive/v1-go` (`v1-go-archive` tag) and `archive/v1-go-ui-polish` (`v1-go-ui-polish-archive` tag).
 
 ---
 
@@ -36,7 +31,8 @@
 
 ### Core Engine & Runtime (Rust)
 - **Isolated JS/TS Plugin Runtime (`vessel-plugin-rt`):** Powered by `rquickjs` + `oxc` TypeScript stripping with SQLite compile caching, ES6 module loading (local Dev Mode directories & `.plugin.vessel` zip packages), per-sandbox resource limits (`32 MiB` heap ceiling, `512 KiB` stack, `15s` execution watchdog), an LRU warm plugin pool (`18` plugins, `5-minute` idle TTL), Nuvio scraper compatibility shims (`cheerio`, `axios`, `CryptoJS`, `fetch`), and parallel streaming search with cancellation.
-- **Built-in Plugin SDK (`vessel.*`):** `vessel.http` (with DNS-resolved SSRF protection and per-domain user permission prompts), `vessel.html.parse` (`scraper` CSS selectors), `vessel.crypto` (AES-CBC/GCM/CTR/ECB, HMAC-SHA256, MD5/SHA1/SHA256, RC4, Hex/Base64), `vessel.storage` (isolated KV + `settingsSchema` values), `vessel.unpack` (Dean Edwards P.A.C.K.E.R), and `vessel.evalWithEnv`.
+- **Built-in Plugin SDK (`vessel.*`):** `vessel.http` (with DNS-resolved SSRF protection and per-domain user permission prompts), `vessel.html.parse` (`scraper` CSS selectors), `vessel.crypto` (AES-CBC/GCM/CTR/ECB, HMAC-SHA256, MD5/SHA1/SHA256, RC4, Hex/Base64), `vessel.archive` (`unzipEntries`, `gunzip`, and `decodeText` with UTF-8 / `windows-1254` / `iso-8859-9` detection), `vessel.storage` (isolated KV + `settingsSchema` values), `vessel.unpack` (Dean Edwards P.A.C.K.E.R), and `vessel.evalWithEnv`.
+- **Built-in Subtitles Container (`subtitles-container`):** Ships pre-installed out of the box (can be disabled, never uninstalled) with multi-language external subtitle search directly inside the Desktop and Android players across **OpenSubtitles** (REST API v1 + key-free Stremio v3 fallback), **SubDL**, **SubSource**, **TurkceAltyazi.org**, **YIFY Subtitles**, **Addic7ed**, **TVSubtitles.net**, and **Kitsunekko**.
 - **Local HTTP / HLS Proxy (`vessel-proxy`):** Binds `127.0.0.1:0` using `axum` + `reqwest` (`rustls`), ephemeral stream tokens, `HMAC-SHA256` signed sub-URLs (open-relay protected), HTTP `206` Range pass-through, `.m3u8` playlist rewriting (`#EXT-X-KEY`, `#EXT-X-MAP`, `#EXT-X-MEDIA`), offline loopback file serving with path-traversal guards, and Smart Proxy header injection.
 - **Metadata & Skip-Segment Engine (`vessel-metadata`):** Zero-key **AniList**, **Cinemeta (IMDb)**, **MyAnimeList (Jikan)**, **Kitsu**, and **AniZip** enrichment plus optional **TMDB** API key & **Simkl** Client ID support, interactive 6-provider **Fix Match** title search & manual ID overrides, `(season, episode) ↔ absolute_episode` coordinate translation, and multi-source skip segments (**`Plugin > TheIntroDB > IntroDB > AniSkip`**) supporting **Intro**, **Recap**, **Credits**, and **Preview** with duration, season, confidence, and negative-flag guards.
 - **Persistence & Backups (`vessel-storage`):** `rusqlite` (`bundled` + `WAL` + `FTS5`) single-writer actor managing library watch statuses, dual-coordinate watch progress, episode snapshots for automatic next-episode advancement, settings, domain grants, metadata cache, IPTV channels, and `.backup.vessel` JSON export/import (`Merge` & `Overwrite`).
@@ -167,6 +163,7 @@ A plugin exports an object (default export or `vessel.definePlugin(...)`):
 - `getDetails(nativeId)` — returns `MediaDetail`, optional `seasons`, and `episodes`
 - `getSeasonEpisodes(nativeId, seasonId)` — optional lazy season loader
 - `getStreams(streamId)` — returns playable `StreamCandidate[]`, `SubtitleTrack[]`, and optional `SkipSegment[]`
+- `searchSubtitles(query)` & `resolveSubtitle(subtitleId)` — optional `SubtitleProvider` contract for external subtitle plugins (`capabilities: ["subtitles"]`)
 
 See the full [Plugin Development SDK](https://github.com/falsisdev/vessel/wiki/Plugin-Development-SDK) guide ([offline copy](docs/wiki/Plugin-Development-SDK.md)) for TypeScript types, `manifest.json` schemas, `vessel.*` APIs, and packaging instructions.
 
@@ -175,7 +172,7 @@ See the full [Plugin Development SDK](https://github.com/falsisdev/vessel/wiki/P
 ## Roadmap
 
 1. **Unified OAuth & Secure Token Storage:** Shared OAuth flows (Desktop loopback, Android deep link, TV Device Code / QR) backed by `OsKeyringSecretStore` (OS Keychain / Android Keystore) and token refresh handling.
-2. **Cloud & Tracker Sync + Independent Subtitles:** Incremental SQLite sync with deletion tombstones via **Google Drive**, bidirectional scrobbling & library sync with **Simkl**, **Trakt**, **AniList**, **MyAnimeList**, and **Kitsu**, plus external subtitle providers (**OpenSubtitles**, **SubDL**, community Turkish subtitle sources).
+2. **Cloud & Tracker Sync:** Incremental SQLite sync with deletion tombstones via **Google Drive** and bidirectional scrobbling & library sync with **Simkl**, **Trakt**, **AniList**, **MyAnimeList**, and **Kitsu**.
 3. **Performance, Player Upgrades & Android TV:** Dynamic `PluginPool` memory tuning, cache/TTL caps, ABI split + Android background download `ForegroundService`, **Android TV** (`Compose for TV` D-pad UX), optional Android `mpvkit` (`libass`) / `ExoPlayer` auto-switching, and optional Desktop embedded `libmpv` HUD.
 4. **iOS / iPadOS & Long-Term Media:** Native SwiftUI + `MPVKit` shell powered by `vessel-ffi` `.xcframework`, plus Torrent / Debrid / Magnet integration and optional Desktop `ffmpeg -c copy` single-`.mp4` export.
 

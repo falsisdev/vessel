@@ -869,6 +869,12 @@ internal open class UniffiVTableCallbackInterfaceEngineEventListener(
 
 
 
+
+
+
+
+
+
 // For large crates we prevent `MethodTooLargeException` (see #2340)
 // N.B. the name of the extension is very misleading, since it is 
 // rather `InterfaceTooLargeException`, caused by too many methods 
@@ -948,6 +954,8 @@ fun uniffi_vessel_ffi_checksum_method_vesselmobilecore_list_media_watch_progress
 ): Short
 fun uniffi_vessel_ffi_checksum_method_vesselmobilecore_list_plugins_json(
 ): Short
+fun uniffi_vessel_ffi_checksum_method_vesselmobilecore_list_subtitle_plugins_json(
+): Short
 fun uniffi_vessel_ffi_checksum_method_vesselmobilecore_list_themes_json(
 ): Short
 fun uniffi_vessel_ffi_checksum_method_vesselmobilecore_pause_download(
@@ -968,6 +976,8 @@ fun uniffi_vessel_ffi_checksum_method_vesselmobilecore_reorder_downloads(
 ): Short
 fun uniffi_vessel_ffi_checksum_method_vesselmobilecore_resolve_source_json(
 ): Short
+fun uniffi_vessel_ffi_checksum_method_vesselmobilecore_resolve_subtitle_json(
+): Short
 fun uniffi_vessel_ffi_checksum_method_vesselmobilecore_resume_download_json(
 ): Short
 fun uniffi_vessel_ffi_checksum_method_vesselmobilecore_search_iptv_channels_json(
@@ -977,6 +987,8 @@ fun uniffi_vessel_ffi_checksum_method_vesselmobilecore_search_metadata_json(
 fun uniffi_vessel_ffi_checksum_method_vesselmobilecore_search_plugin_sync_json(
 ): Short
 fun uniffi_vessel_ffi_checksum_method_vesselmobilecore_search_streams(
+): Short
+fun uniffi_vessel_ffi_checksum_method_vesselmobilecore_search_subtitles_json(
 ): Short
 fun uniffi_vessel_ffi_checksum_method_vesselmobilecore_set_always_proxy(
 ): Short
@@ -1140,6 +1152,8 @@ fun uniffi_vessel_ffi_fn_method_vesselmobilecore_list_media_watch_progress_json(
 ): RustBuffer.ByValue
 fun uniffi_vessel_ffi_fn_method_vesselmobilecore_list_plugins_json(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
+fun uniffi_vessel_ffi_fn_method_vesselmobilecore_list_subtitle_plugins_json(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
 fun uniffi_vessel_ffi_fn_method_vesselmobilecore_list_themes_json(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 fun uniffi_vessel_ffi_fn_method_vesselmobilecore_pause_download(`ptr`: Pointer,`downloadId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -1160,6 +1174,8 @@ fun uniffi_vessel_ffi_fn_method_vesselmobilecore_reorder_downloads(`ptr`: Pointe
 ): Unit
 fun uniffi_vessel_ffi_fn_method_vesselmobilecore_resolve_source_json(`ptr`: Pointer,`rawInput`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
+fun uniffi_vessel_ffi_fn_method_vesselmobilecore_resolve_subtitle_json(`ptr`: Pointer,`pluginId`: RustBuffer.ByValue,`subtitleId`: RustBuffer.ByValue,`lang`: RustBuffer.ByValue,`label`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
 fun uniffi_vessel_ffi_fn_method_vesselmobilecore_resume_download_json(`ptr`: Pointer,`downloadId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 fun uniffi_vessel_ffi_fn_method_vesselmobilecore_search_iptv_channels_json(`ptr`: Pointer,`profileId`: RustBuffer.ByValue,`query`: RustBuffer.ByValue,`groupTitle`: RustBuffer.ByValue,`favoritesOnly`: Byte,`limit`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -1169,6 +1185,8 @@ fun uniffi_vessel_ffi_fn_method_vesselmobilecore_search_metadata_json(`ptr`: Poi
 fun uniffi_vessel_ffi_fn_method_vesselmobilecore_search_plugin_sync_json(`ptr`: Pointer,`pluginId`: RustBuffer.ByValue,`query`: RustBuffer.ByValue,`page`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 fun uniffi_vessel_ffi_fn_method_vesselmobilecore_search_streams(`ptr`: Pointer,`query`: RustBuffer.ByValue,`filtersJson`: RustBuffer.ByValue,`page`: RustBuffer.ByValue,`pluginIds`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_vessel_ffi_fn_method_vesselmobilecore_search_subtitles_json(`ptr`: Pointer,`queryJson`: RustBuffer.ByValue,`targetPlugins`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 fun uniffi_vessel_ffi_fn_method_vesselmobilecore_set_always_proxy(`ptr`: Pointer,`enabled`: Byte,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
@@ -1432,6 +1450,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_vessel_ffi_checksum_method_vesselmobilecore_list_plugins_json() != 47611.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_vessel_ffi_checksum_method_vesselmobilecore_list_subtitle_plugins_json() != 47655.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_vessel_ffi_checksum_method_vesselmobilecore_list_themes_json() != 7578.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -1462,6 +1483,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_vessel_ffi_checksum_method_vesselmobilecore_resolve_source_json() != 22648.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_vessel_ffi_checksum_method_vesselmobilecore_resolve_subtitle_json() != 30154.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_vessel_ffi_checksum_method_vesselmobilecore_resume_download_json() != 14564.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -1475,6 +1499,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_vessel_ffi_checksum_method_vesselmobilecore_search_streams() != 23064.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_vessel_ffi_checksum_method_vesselmobilecore_search_subtitles_json() != 59437.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_vessel_ffi_checksum_method_vesselmobilecore_set_always_proxy() != 13079.toShort()) {
@@ -2008,6 +2035,8 @@ public interface VesselMobileCoreInterface {
     
     fun `listPluginsJson`(): kotlin.String
     
+    fun `listSubtitlePluginsJson`(): kotlin.String
+    
     fun `listThemesJson`(): kotlin.String
     
     fun `pauseDownload`(`downloadId`: kotlin.String)
@@ -2028,6 +2057,8 @@ public interface VesselMobileCoreInterface {
     
     fun `resolveSourceJson`(`rawInput`: kotlin.String): kotlin.String
     
+    fun `resolveSubtitleJson`(`pluginId`: kotlin.String, `subtitleId`: kotlin.String, `lang`: kotlin.String, `label`: kotlin.String): kotlin.String
+    
     fun `resumeDownloadJson`(`downloadId`: kotlin.String): kotlin.String
     
     fun `searchIptvChannelsJson`(`profileId`: kotlin.String?, `query`: kotlin.String?, `groupTitle`: kotlin.String?, `favoritesOnly`: kotlin.Boolean, `limit`: kotlin.UInt?): kotlin.String
@@ -2037,6 +2068,8 @@ public interface VesselMobileCoreInterface {
     fun `searchPluginSyncJson`(`pluginId`: kotlin.String, `query`: kotlin.String, `page`: kotlin.UInt?): kotlin.String
     
     fun `searchStreams`(`query`: kotlin.String, `filtersJson`: kotlin.String?, `page`: kotlin.UInt?, `pluginIds`: List<kotlin.String>?): kotlin.String
+    
+    fun `searchSubtitlesJson`(`queryJson`: kotlin.String, `targetPlugins`: List<kotlin.String>?): kotlin.String
     
     fun `setAlwaysProxy`(`enabled`: kotlin.Boolean)
     
@@ -2571,6 +2604,19 @@ open class VesselMobileCore: Disposable, AutoCloseable, VesselMobileCoreInterfac
     
 
     
+    @Throws(FfiException::class)override fun `listSubtitlePluginsJson`(): kotlin.String {
+            return FfiConverterString.lift(
+    callWithPointer {
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_vessel_ffi_fn_method_vesselmobilecore_list_subtitle_plugins_json(
+        it, _status)
+}
+    }
+    )
+    }
+    
+
+    
     @Throws(FfiException::class)override fun `listThemesJson`(): kotlin.String {
             return FfiConverterString.lift(
     callWithPointer {
@@ -2697,6 +2743,19 @@ open class VesselMobileCore: Disposable, AutoCloseable, VesselMobileCoreInterfac
     
 
     
+    @Throws(FfiException::class)override fun `resolveSubtitleJson`(`pluginId`: kotlin.String, `subtitleId`: kotlin.String, `lang`: kotlin.String, `label`: kotlin.String): kotlin.String {
+            return FfiConverterString.lift(
+    callWithPointer {
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_vessel_ffi_fn_method_vesselmobilecore_resolve_subtitle_json(
+        it, FfiConverterString.lower(`pluginId`),FfiConverterString.lower(`subtitleId`),FfiConverterString.lower(`lang`),FfiConverterString.lower(`label`),_status)
+}
+    }
+    )
+    }
+    
+
+    
     @Throws(FfiException::class)override fun `resumeDownloadJson`(`downloadId`: kotlin.String): kotlin.String {
             return FfiConverterString.lift(
     callWithPointer {
@@ -2755,6 +2814,19 @@ open class VesselMobileCore: Disposable, AutoCloseable, VesselMobileCoreInterfac
     uniffiRustCallWithError(FfiException) { _status ->
     UniffiLib.INSTANCE.uniffi_vessel_ffi_fn_method_vesselmobilecore_search_streams(
         it, FfiConverterString.lower(`query`),FfiConverterOptionalString.lower(`filtersJson`),FfiConverterOptionalUInt.lower(`page`),FfiConverterOptionalSequenceString.lower(`pluginIds`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    @Throws(FfiException::class)override fun `searchSubtitlesJson`(`queryJson`: kotlin.String, `targetPlugins`: List<kotlin.String>?): kotlin.String {
+            return FfiConverterString.lift(
+    callWithPointer {
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_vessel_ffi_fn_method_vesselmobilecore_search_subtitles_json(
+        it, FfiConverterString.lower(`queryJson`),FfiConverterOptionalSequenceString.lower(`targetPlugins`),_status)
 }
     }
     )

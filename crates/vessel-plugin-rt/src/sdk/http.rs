@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use reqwest::Method;
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue, LOCATION, USER_AGENT};
-use rquickjs::function::{IntoJsFunc, ParamRequirement, Params};
+use rquickjs::function::{IntoJsFunc, Opt, ParamRequirement, Params};
 use rquickjs::prelude::Async;
 use rquickjs::{
     CatchResultExt, Ctx, Function, IntoJs, Object, Result as QjsResult, TypedArray, Value,
@@ -79,11 +79,29 @@ fn parse_json_str<'js>(ctx: Ctx<'js>, raw: String) -> QjsResult<Value<'js>> {
     ctx.json_parse(raw)
 }
 
+fn extract_charset(content_type: Option<&str>) -> Option<String> {
+    let ct = content_type?;
+    for part in ct.split(';').skip(1) {
+        let trimmed = part.trim();
+        if let Some((k, v)) = trimmed.split_once('=')
+            && k.trim().eq_ignore_ascii_case("charset")
+        {
+            let clean = v.trim().trim_matches('"').trim_matches('\'');
+            if !clean.is_empty() {
+                return Some(clean.to_owned());
+            }
+        }
+    }
+    None
+}
+
 impl<'js> IntoJs<'js> for ExecutedResponse {
     fn into_js(self, ctx: &Ctx<'js>) -> QjsResult<Value<'js>> {
         let obj = Object::new(ctx.clone())?;
         obj.set("status", self.status)?;
         obj.set("url", self.final_url)?;
+
+        let header_charset = extract_charset(self.headers.get("content-type").map(String::as_str));
 
         let headers_obj = Object::new(ctx.clone())?;
         for (k, v) in self.headers {
@@ -96,8 +114,9 @@ impl<'js> IntoJs<'js> for ExecutedResponse {
             let body = Arc::clone(&body);
             obj.set(
                 "text",
-                Function::new(ctx.clone(), move || -> String {
-                    String::from_utf8_lossy(&body).into_owned()
+                Function::new(ctx.clone(), move |encoding: Opt<String>| -> String {
+                    let hint = encoding.0.as_deref().or(header_charset.as_deref());
+                    super::archive::decode_text_bytes(&body, hint)
                 })?,
             )?;
         }
