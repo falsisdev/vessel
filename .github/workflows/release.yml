@@ -136,12 +136,12 @@ jobs:
           name: flatpak-bin-x64
           path: flatpak-staging
 
-      - name: Install Flatpak & GNOME 47 runtime
+      - name: Install Flatpak & GNOME 51 runtime
         run: |
           sudo apt-get update
           sudo apt-get install -y flatpak flatpak-builder
           flatpak remote-add --if-not-exists --user flathub https://dl.flathub.org/repo/flathub.flatpakrepo
-          flatpak install --user -y flathub org.gnome.Platform//47 org.gnome.Sdk//47
+          flatpak install --user -y flathub org.gnome.Platform//51 org.gnome.Sdk//51
 
       - name: Build single-file .flatpak bundle
         run: |

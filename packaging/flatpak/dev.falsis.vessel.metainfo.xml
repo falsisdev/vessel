@@ -26,6 +26,11 @@
   </categories>
   <content_rating type="oars-1.1" />
   <releases>
+    <release version="0.1.50" date="2026-11-26">
+      <description>
+        <p>Updated Flatpak runtime and SDK from EOL GNOME 47 to GNOME 51.</p>
+      </description>
+    </release>
     <release version="0.1.46" date="2026-11-25">
       <description>
         <p>Optimized Desktop UI scroll and rendering performance (lazy images, content-visibility rails, micro-batched home feed events), shared process-wide HTTP pool across plugins, raised warm runtime pool cap to 40, fixed Dean Edwards unpacker with leading IIFE scripts, and updated tr/anthology/nuvio repository shortcodes.</p>
