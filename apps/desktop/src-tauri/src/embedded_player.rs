@@ -320,7 +320,7 @@ fn linux_set_surface_visible(
     use webkit2gtk::WebViewExt;
 
     unsafe extern "C" {
-        fn eglGetProcAddress(procname: *const c_char) -> *mut c_void;
+        fn dlsym(handle: *mut c_void, symbol: *const c_char) -> *mut c_void;
     }
 
     unsafe extern "C" fn linux_get_proc_address(
@@ -330,7 +330,26 @@ fn linux_set_surface_visible(
         if name.is_null() {
             return std::ptr::null_mut();
         }
-        unsafe { eglGetProcAddress(name) }
+        let rtld_default: *mut c_void = std::ptr::null_mut();
+        let egl_sym = unsafe { dlsym(rtld_default, c"eglGetProcAddress".as_ptr()) };
+        if !egl_sym.is_null() {
+            let egl_get_proc: unsafe extern "C" fn(*const c_char) -> *mut c_void =
+                unsafe { std::mem::transmute(egl_sym) };
+            let ptr = unsafe { egl_get_proc(name) };
+            if !ptr.is_null() {
+                return ptr;
+            }
+        }
+        let glx_sym = unsafe { dlsym(rtld_default, c"glXGetProcAddressARB".as_ptr()) };
+        if !glx_sym.is_null() {
+            let glx_get_proc: unsafe extern "C" fn(*const c_char) -> *mut c_void =
+                unsafe { std::mem::transmute(glx_sym) };
+            let ptr = unsafe { glx_get_proc(name) };
+            if !ptr.is_null() {
+                return ptr;
+            }
+        }
+        unsafe { dlsym(rtld_default, name) }
     }
 
     let player_ref = Arc::clone(player);
