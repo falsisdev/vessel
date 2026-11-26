@@ -80,6 +80,15 @@ body,
   -webkit-font-smoothing: antialiased;
 }
 
+html.embedded-mpv-active,
+html.embedded-mpv-active body,
+html.embedded-mpv-active #app,
+html.embedded-mpv-active .vessel-shell,
+html.embedded-mpv-active .shell-main {
+  background: transparent !important;
+  background-image: none !important;
+}
+
 .density-compact {
   --vessel-gap: 0.75rem;
 }

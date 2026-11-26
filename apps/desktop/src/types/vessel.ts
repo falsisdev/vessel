@@ -625,6 +625,37 @@ export interface AppUpdateInfo {
   skippedVersion?: string
 }
 
+export interface EmbeddedCapabilities {
+  available: boolean
+  libraryPath?: string
+}
+
+export interface EmbeddedTrackInfo {
+  id: number
+  trackType: string
+  title?: string
+  lang?: string
+  codec?: string
+  channels?: string
+  selected: boolean
+  external: boolean
+}
+
+export interface EmbeddedPlayerState {
+  active: boolean
+  isPlaying: boolean
+  isPaused: boolean
+  isBuffering: boolean
+  positionMs: number
+  durationMs: number
+  volume: number
+  speed: number
+  eofReached: boolean
+  audioTracks: EmbeddedTrackInfo[]
+  subtitleTracks: EmbeddedTrackInfo[]
+  error?: string
+}
+
 export interface UpdatePreferences {
   autoCheckEnabled: boolean
   skippedVersion?: string

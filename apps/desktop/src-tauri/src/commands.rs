@@ -5,8 +5,11 @@ use std::fs;
 use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
-use tauri::State;
+use tauri::{AppHandle, State};
 use tokio::task::JoinSet;
+use vessel_player_mpv::embedded::{EmbeddedFitMode, MpvEmbeddedPlayer};
+
+use crate::embedded_player::EmbeddedPlayerHost;
 use vessel_domain::{
     ExternalIds, HomeSection, LibraryItem, LibraryStatus, LinkedMediaSource, MediaDetail, MediaRef,
     MediaType, PlaybackProgress, PluginId, PluginManifest, RepoIndex, SearchPage, SecretStore,
@@ -28,6 +31,7 @@ use vessel_storage::{
 pub struct AppState {
     pub engine: Arc<VesselEngine>,
     pub paths: VesselPaths,
+    pub embedded_host: Arc<EmbeddedPlayerHost>,
 }
 
 fn map_err<T>(res: VesselResult<T>) -> Result<T, String> {
@@ -1457,5 +1461,127 @@ pub async fn open_external_url(url: String) -> Result<(), String> {
     let status = std::process::Command::new("xdg-open").arg(trimmed).spawn();
 
     status.map_err(|err| format!("[VesselSystemError]: failed to open external URL: {err}"))?;
+    Ok(())
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EmbeddedCapabilitiesDto {
+    pub available: bool,
+    pub library_path: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EmbeddedMpvLoadPayload {
+    pub candidate: StreamCandidate,
+    pub start_position_ms: Option<u64>,
+}
+
+#[tauri::command]
+pub async fn embedded_mpv_capabilities() -> Result<EmbeddedCapabilitiesDto, String> {
+    let library_path = MpvEmbeddedPlayer::probe_availability();
+    Ok(EmbeddedCapabilitiesDto {
+        available: library_path.is_some(),
+        library_path,
+    })
+}
+
+#[tauri::command]
+pub async fn embedded_mpv_load(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    payload: EmbeddedMpvLoadPayload,
+) -> Result<String, String> {
+    let is_local = payload.candidate.url.starts_with("http://127.0.0.1:")
+        && payload.candidate.url.contains("/local/");
+    let resolved_url = if is_local {
+        payload.candidate.url.clone()
+    } else {
+        map_err(state.engine.prepare_playback_url(&payload.candidate))?
+    };
+    let proxied = resolved_url != payload.candidate.url;
+    let headers = if proxied {
+        BTreeMap::new()
+    } else {
+        payload.candidate.headers.clone()
+    };
+
+    map_err(state.embedded_host.set_surface_visible(&app, true))?;
+    if let Err(err) = state.embedded_host.player.load(
+        &resolved_url,
+        &headers,
+        payload.start_position_ms.unwrap_or(0),
+    ) {
+        let _ = state.embedded_host.set_surface_visible(&app, false);
+        return Err(err.to_string());
+    }
+    Ok(resolved_url)
+}
+
+#[tauri::command]
+pub async fn embedded_mpv_play(state: State<'_, AppState>) -> Result<(), String> {
+    map_err(state.embedded_host.player.play())
+}
+
+#[tauri::command]
+pub async fn embedded_mpv_pause(state: State<'_, AppState>) -> Result<(), String> {
+    map_err(state.embedded_host.player.pause())
+}
+
+#[tauri::command]
+pub async fn embedded_mpv_seek(
+    state: State<'_, AppState>,
+    position_ms: u64,
+) -> Result<(), String> {
+    map_err(state.embedded_host.player.seek(position_ms))
+}
+
+#[tauri::command]
+pub async fn embedded_mpv_set_volume(state: State<'_, AppState>, volume: f64) -> Result<(), String> {
+    map_err(state.embedded_host.player.set_volume(volume))
+}
+
+#[tauri::command]
+pub async fn embedded_mpv_set_speed(state: State<'_, AppState>, speed: f64) -> Result<(), String> {
+    map_err(state.embedded_host.player.set_speed(speed))
+}
+
+#[tauri::command]
+pub async fn embedded_mpv_set_fit_mode(
+    state: State<'_, AppState>,
+    mode: EmbeddedFitMode,
+) -> Result<(), String> {
+    map_err(state.embedded_host.player.set_fit_mode(mode))
+}
+
+#[tauri::command]
+pub async fn embedded_mpv_select_audio_track(
+    state: State<'_, AppState>,
+    track_id: i64,
+) -> Result<(), String> {
+    map_err(state.embedded_host.player.select_audio_track(track_id))
+}
+
+#[tauri::command]
+pub async fn embedded_mpv_select_subtitle_track(
+    state: State<'_, AppState>,
+    track_id: Option<i64>,
+) -> Result<(), String> {
+    map_err(state.embedded_host.player.select_subtitle_track(track_id))
+}
+
+#[tauri::command]
+pub async fn embedded_mpv_stop(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    destroy: Option<bool>,
+) -> Result<(), String> {
+    let _ = state.embedded_host.set_surface_visible(&app, false);
+    if destroy.unwrap_or(false) {
+        state.embedded_host.player.destroy();
+        return Ok(());
+    }
+    let _ = state.embedded_host.player.stop();
     Ok(())
 }

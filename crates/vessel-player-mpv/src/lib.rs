@@ -1,6 +1,9 @@
-//! Desktop `mpv` window backend implementing `vessel_domain::PlayerBackend` via JSON IPC.
+//! Desktop `mpv` window backend implementing `vessel_domain::PlayerBackend` via JSON IPC,
+//! plus lazy dynamically-loaded `libmpv` (`embedded`) playback.
 
+pub mod embedded;
 pub mod ipc;
+pub mod libmpv_ffi;
 
 use std::fs;
 use std::path::{Path, PathBuf};

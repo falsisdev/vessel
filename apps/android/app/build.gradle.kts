@@ -86,13 +86,14 @@ dependencies {
     implementation("io.coil-kt.coil3:coil-compose:3.1.0")
     implementation("io.coil-kt.coil3:coil-network-okhttp:3.1.0")
 
-    // Media3 ExoPlayer (Phone / Tablet / Chromebook playback)
+    // Media3 ExoPlayer + FFmpeg Audio Extension (AC3 / EAC3 / DDP / DTS / TrueHD)
     val media3Version = "1.6.1"
     implementation("androidx.media3:media3-exoplayer:$media3Version")
     implementation("androidx.media3:media3-exoplayer-hls:$media3Version")
     implementation("androidx.media3:media3-exoplayer-dash:$media3Version")
     implementation("androidx.media3:media3-ui:$media3Version")
     implementation("androidx.media3:media3-session:$media3Version")
+    implementation("org.jellyfin.media3:media3-ffmpeg-decoder:1.6.1+1")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 }

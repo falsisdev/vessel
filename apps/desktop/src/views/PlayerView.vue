@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import Hls from 'hls.js'
 import mpegts from 'mpegts.js'
 import {
@@ -35,7 +36,15 @@ import { useUiPreferences } from '@/composables/useUiPreferences'
 import { useVesselEvents } from '@/composables/useVesselEvents'
 import { parseSubtitles, type SubtitleCue } from '@/utils/subtitleParser'
 import { isLiveMediaIdentifier } from '@/utils/liveTv'
-import type { Episode, PluginListEntry, SkipSegment, StreamCandidate, SubtitleTrack } from '@/types/vessel'
+import type {
+  EmbeddedPlayerState,
+  EmbeddedTrackInfo,
+  Episode,
+  PluginListEntry,
+  SkipSegment,
+  StreamCandidate,
+  SubtitleTrack,
+} from '@/types/vessel'
 
 const props = defineProps<{
   pluginId: string
@@ -58,7 +67,7 @@ interface AudioTrackOption {
   lang?: string
   meta?: string
   active: boolean
-  source: 'hls' | 'native'
+  source: 'hls' | 'native' | 'embedded'
 }
 
 interface NativeAudioTrack {
@@ -82,6 +91,12 @@ const loadingInitial = ref(false)
 const switchingEpisode = ref(false)
 const playbackError = ref('')
 const externalPlayerActive = ref(false)
+const embeddedMpvCapable = ref(false)
+const isEmbeddedMpv = ref(false)
+const playerEngineMode = ref<'auto' | 'embedded_mpv' | 'html5'>('auto')
+const embeddedAudioTracks = ref<EmbeddedTrackInfo[]>([])
+const embeddedSubtitleTracks = ref<EmbeddedTrackInfo[]>([])
+const activeEmbeddedSubId = ref<number | null>(null)
 
 const isPlaying = ref(false)
 const isBuffering = ref(false)
@@ -134,7 +149,65 @@ let isResettingMedia = false
 let userExplicitPause = false
 let triedAutoMpv = false
 let loadWatchdogTimer: number | null = null
+let unlistenEmbedded: UnlistenFn | null = null
 let boundAudioTrackList: NativeAudioTrackList | null = null
+
+function setEmbeddedSurfaceClass(active: boolean): void {
+  document.documentElement.classList.toggle('embedded-mpv-active', active)
+}
+
+async function stopEmbeddedMpv(destroy = false): Promise<void> {
+  const wasActive = isEmbeddedMpv.value
+  isEmbeddedMpv.value = false
+  setEmbeddedSurfaceClass(false)
+  embeddedAudioTracks.value = []
+  embeddedSubtitleTracks.value = []
+  activeEmbeddedSubId.value = null
+  if (wasActive || destroy) {
+    await vesselApi.embeddedMpvStop(destroy).catch(() => {})
+  }
+}
+
+let embeddedCapsPromise: Promise<boolean> | null = null
+
+async function ensureEmbeddedCapabilities(): Promise<boolean> {
+  if (embeddedMpvCapable.value) return true
+  if (!embeddedCapsPromise) {
+    embeddedCapsPromise = vesselApi
+      .embeddedMpvCapabilities()
+      .then((caps) => {
+        embeddedMpvCapable.value = caps.available
+        return caps.available
+      })
+      .catch(() => false)
+  }
+  return embeddedCapsPromise
+}
+
+async function launchEmbeddedMpv(stream: StreamCandidate, startSec = 0): Promise<boolean> {
+  const capable = await ensureEmbeddedCapabilities()
+  if (!capable) return false
+  destroyMediaEngines()
+  playbackError.value = ''
+  externalPlayerActive.value = false
+  isBuffering.value = true
+  isEmbeddedMpv.value = true
+  setEmbeddedSurfaceClass(true)
+  try {
+    await vesselApi.embeddedMpvLoad({
+      candidate: stream,
+      startPositionMs: isLive.value ? 0 : Math.floor(Math.max(0, startSec) * 1000),
+    })
+    void vesselApi.embeddedMpvSetVolume(isMuted.value ? 0 : volume.value).catch(() => {})
+    void vesselApi.embeddedMpvSetSpeed(isLive.value ? 1 : playbackRate.value).catch(() => {})
+    void vesselApi.embeddedMpvSetFitMode(fitMode.value).catch(() => {})
+    return true
+  } catch {
+    isEmbeddedMpv.value = false
+    setEmbeddedSurfaceClass(false)
+    return false
+  }
+}
 
 function clearLoadWatchdog(): void {
   if (loadWatchdogTimer !== null) {
@@ -195,6 +268,24 @@ function bindNativeAudioListeners(el: HTMLVideoElement): void {
 }
 
 function syncAudioTracks(): void {
+  if (isEmbeddedMpv.value) {
+    audioTracks.value = embeddedAudioTracks.value.map((trk, idx) => {
+      const lang = trk.lang?.trim() || undefined
+      const metaParts = [lang?.toUpperCase(), trk.channels, trk.codec?.toUpperCase()].filter(
+        (v): v is string => Boolean(v),
+      )
+      return {
+        id: trk.id,
+        label: trk.title?.trim() || lang?.toUpperCase() || `Track ${idx + 1}`,
+        lang,
+        meta: metaParts.join(' · ') || undefined,
+        active: trk.selected,
+        source: 'embedded',
+      }
+    })
+    return
+  }
+
   if (hlsInstance) {
     const raw = hlsInstance.audioTracks ?? []
     const currentId = hlsInstance.audioTrack
@@ -246,6 +337,18 @@ function syncAudioTracks(): void {
 }
 
 function switchAudioTrack(option: AudioTrackOption): void {
+  if (option.source === 'embedded') {
+    void vesselApi.embeddedMpvSelectAudioTrack(option.id).catch(() => {})
+    embeddedAudioTracks.value = embeddedAudioTracks.value.map((t) => ({
+      ...t,
+      selected: t.id === option.id,
+    }))
+    syncAudioTracks()
+    showGestureHud(`${t('player.audio')}: ${option.label}`)
+    scheduleHideControls()
+    return
+  }
+
   if (option.source === 'hls' && hlsInstance) {
     hlsInstance.audioTrack = option.id
     syncAudioTracks()
@@ -352,9 +455,17 @@ async function persistWatchProgress(forceCompleted = false): Promise<void> {
   const ep = currentEpisode.value
   const d = detail.value
   const el = videoRef.value
-  if (!ep || !d || !el) return
-  const posSec = Number.isFinite(el.currentTime) ? el.currentTime : currentTime.value
-  const durSec = Number.isFinite(el.duration) ? el.duration : duration.value
+  if (!ep || !d || (!el && !isEmbeddedMpv.value)) return
+  const posSec = isEmbeddedMpv.value
+    ? currentTime.value
+    : el && Number.isFinite(el.currentTime)
+      ? el.currentTime
+      : currentTime.value
+  const durSec = isEmbeddedMpv.value
+    ? duration.value
+    : el && Number.isFinite(el.duration)
+      ? el.duration
+      : duration.value
   if (!forceCompleted && posSec < 2) return
   const positionMs = Math.max(0, Math.floor(posSec * 1000))
   const durationMs = Math.max(0, Math.floor((durSec || 0) * 1000))
@@ -779,12 +890,16 @@ function executeSkipSegment(seg: SkipSegment): void {
     return
   }
 
-  if (el && !isLive.value) {
+  if ((el || isEmbeddedMpv.value) && !isLive.value) {
     const targetSec =
       seg.endMs !== undefined
         ? Math.min(duration.value > 2 ? duration.value - 0.5 : seg.endMs / 1000, seg.endMs / 1000)
-        : Math.max(0, (duration.value || el.currentTime) - 0.5)
-    el.currentTime = targetSec
+        : Math.max(0, (duration.value || currentTime.value) - 0.5)
+    if (isEmbeddedMpv.value) {
+      void vesselApi.embeddedMpvSeek(Math.floor(targetSec * 1000)).catch(() => {})
+    } else if (el) {
+      el.currentTime = targetSec
+    }
     currentTime.value = targetSec
     showGestureHud(skipButtonLabel(seg))
     scheduleHideControls()
@@ -849,8 +964,22 @@ function handleStagePointerMove(): void {
 }
 
 function togglePlay(): void {
+  if (isLocked.value) return
+  if (isEmbeddedMpv.value) {
+    if (isPlaying.value) {
+      userExplicitPause = true
+      isPlaying.value = false
+      void vesselApi.embeddedMpvPause().catch(() => {})
+    } else {
+      userExplicitPause = false
+      isPlaying.value = true
+      void vesselApi.embeddedMpvPlay().catch(() => {})
+    }
+    scheduleHideControls()
+    return
+  }
   const el = videoRef.value
-  if (!el || isLocked.value) return
+  if (!el) return
   if (el.paused) {
     userExplicitPause = false
     void el.play().catch((err) => {
@@ -864,8 +993,17 @@ function togglePlay(): void {
 }
 
 function seekBy(deltaSec: number): void {
+  if (isLocked.value || isLive.value) return
+  if (isEmbeddedMpv.value) {
+    const maxSec = duration.value > 0 ? duration.value : Infinity
+    const target = Math.max(0, Math.min(maxSec, currentTime.value + deltaSec))
+    currentTime.value = target
+    void vesselApi.embeddedMpvSeek(Math.floor(target * 1000)).catch(() => {})
+    scheduleHideControls()
+    return
+  }
   const el = videoRef.value
-  if (!el || isLocked.value || isLive.value) return
+  if (!el) return
   const target = Math.max(0, Math.min(el.duration || Infinity, el.currentTime + deltaSec))
   el.currentTime = target
   currentTime.value = target
@@ -875,11 +1013,15 @@ function seekBy(deltaSec: number): void {
 function seekFromBar(ev: MouseEvent): void {
   const bar = progressBarRef.value
   const el = videoRef.value
-  if (!bar || !el || !duration.value || isLocked.value) return
+  if (!bar || (!el && !isEmbeddedMpv.value) || !duration.value || isLocked.value) return
   const rect = bar.getBoundingClientRect()
   const ratio = Math.min(1, Math.max(0, (ev.clientX - rect.left) / rect.width))
   const target = ratio * duration.value
-  el.currentTime = target
+  if (isEmbeddedMpv.value) {
+    void vesselApi.embeddedMpvSeek(Math.floor(target * 1000)).catch(() => {})
+  } else if (el) {
+    el.currentTime = target
+  }
   currentTime.value = target
   scheduleHideControls()
 }
@@ -897,6 +1039,12 @@ function updateHoverTime(ev: MouseEvent): void {
 }
 
 function toggleMute(): void {
+  if (isEmbeddedMpv.value) {
+    isMuted.value = !isMuted.value
+    void vesselApi.embeddedMpvSetVolume(isMuted.value ? 0 : volume.value).catch(() => {})
+    scheduleHideControls()
+    return
+  }
   const el = videoRef.value
   if (!el) return
   el.muted = !el.muted
@@ -905,20 +1053,29 @@ function toggleMute(): void {
 }
 
 function setVolumeLevel(val: number): void {
-  const el = videoRef.value
-  if (!el) return
   const clamped = Math.min(1, Math.max(0, val))
-  el.volume = clamped
-  el.muted = clamped === 0
   volume.value = clamped
   isMuted.value = clamped === 0
+  if (isEmbeddedMpv.value) {
+    void vesselApi.embeddedMpvSetVolume(clamped).catch(() => {})
+    scheduleHideControls()
+    return
+  }
+  const el = videoRef.value
+  if (!el) return
+  el.volume = clamped
+  el.muted = clamped === 0
   scheduleHideControls()
 }
 
 function setSpeed(rate: number): void {
   const el = videoRef.value
   playbackRate.value = rate
-  if (el) el.playbackRate = rate
+  if (isEmbeddedMpv.value) {
+    void vesselApi.embeddedMpvSetSpeed(rate).catch(() => {})
+  } else if (el) {
+    el.playbackRate = rate
+  }
   scheduleHideControls()
 }
 
@@ -926,7 +1083,26 @@ function cycleFitMode(): void {
   const order: FitMode[] = ['contain', 'cover', 'fill']
   const idx = order.indexOf(fitMode.value)
   fitMode.value = order[(idx + 1) % order.length]
+  if (isEmbeddedMpv.value) {
+    void vesselApi.embeddedMpvSetFitMode(fitMode.value).catch(() => {})
+  }
   scheduleHideControls()
+}
+
+function applyFitMode(mode: FitMode): void {
+  fitMode.value = mode
+  if (isEmbeddedMpv.value) {
+    void vesselApi.embeddedMpvSetFitMode(mode).catch(() => {})
+  }
+  scheduleHideControls()
+}
+
+function selectEmbeddedSubtitle(trackId: number | null): void {
+  if (trackId !== null) {
+    activeSubtitleIndex.value = -1
+  }
+  activeEmbeddedSubId.value = trackId
+  void vesselApi.embeddedMpvSelectSubtitleTrack(trackId).catch(() => {})
 }
 
 function toggleDrawer(tab: DrawerTab): void {
@@ -1202,6 +1378,21 @@ function onVideoError(): void {
     isBuffering.value = false
     isPlaying.value = false
     controlsVisible.value = true
+    if (stream && embeddedMpvCapable.value && playerEngineMode.value !== 'html5') {
+      void launchEmbeddedMpv(stream, lastTargetStartSec).then((launched) => {
+        if (launched) return
+        void openInExternalMpv(true).then((ext) => {
+          if (ext) return
+          const curIdx = session.value?.activeStreamIndex ?? 0
+          if (curIdx + 1 < streams.value.length) {
+            switchSource(curIdx + 1)
+            return
+          }
+          playbackError.value = t('player.error_unsupported')
+        })
+      })
+      return
+    }
     void openInExternalMpv(true).then((launched) => {
       if (launched) return
       const curIdx = session.value?.activeStreamIndex ?? 0
@@ -1235,6 +1426,18 @@ function retryStream(forceInApp = false): void {
   externalPlayerActive.value = false
   isBuffering.value = true
   void attachMediaSource(src, stream, forceNativeHlsNextTry, lastTargetStartSec, forceInApp)
+}
+
+function switchEngineMode(mode: 'auto' | 'embedded_mpv' | 'html5'): void {
+  const resumePos = currentTime.value > 2 ? currentTime.value : lastTargetStartSec
+  playerEngineMode.value = mode
+  const stream = activeStream.value
+  const src = playableSrc.value
+  if (!stream || !src) return
+  playbackError.value = ''
+  externalPlayerActive.value = false
+  isBuffering.value = true
+  void attachMediaSource(src, stream, false, resumePos, mode === 'html5')
 }
 
 function handleKeydown(ev: KeyboardEvent): void {
@@ -1364,14 +1567,22 @@ async function attachMediaSource(
   if (
     !preferNativeFallback &&
     !skipExternalAuto &&
-    !looksHls &&
-    !looksMpegTs &&
-    isLikelyUnsupportedInWebView(el, stream, stream.url)
+    playerEngineMode.value !== 'html5' &&
+    (playerEngineMode.value === 'embedded_mpv' ||
+      (!looksHls && !looksMpegTs && isLikelyUnsupportedInWebView(el, stream, stream.url)))
   ) {
-    triedAutoMpv = true
-    const launched = await openInExternalMpv(true)
-    if (launched) return
+    if (await ensureEmbeddedCapabilities()) {
+      triedAutoMpv = true
+      const launched = await launchEmbeddedMpv(stream, startSec)
+      if (launched) return
+    }
+    if (playerEngineMode.value === 'auto') {
+      triedAutoMpv = true
+      const launched = await openInExternalMpv(true)
+      if (launched) return
+    }
   }
+  await stopEmbeddedMpv(false)
 
   if (looksMpegTs && mpegts.isSupported()) {
     try {
@@ -1478,6 +1689,19 @@ async function attachMediaSource(
     if (!isBuffering.value || el.readyState >= 2) return
     if (!triedAutoMpv) {
       triedAutoMpv = true
+      if (embeddedMpvCapable.value && playerEngineMode.value !== 'html5') {
+        void launchEmbeddedMpv(stream, startSec).then((launched) => {
+          if (launched || watchdogSeq !== attachSeq) return
+          void openInExternalMpv(true).then((ext) => {
+            if (ext || watchdogSeq !== attachSeq) return
+            isBuffering.value = false
+            isPlaying.value = false
+            controlsVisible.value = true
+            playbackError.value = t('player.error_failed')
+          })
+        })
+        return
+      }
       void openInExternalMpv(true).then((launched) => {
         if (launched || watchdogSeq !== attachSeq) return
         isBuffering.value = false
@@ -1528,6 +1752,42 @@ watch(
 onMounted(async () => {
   window.addEventListener('keydown', handleKeydown)
   document.addEventListener('fullscreenchange', onFullscreenChange)
+  void vesselApi
+    .embeddedMpvCapabilities()
+    .then((caps) => {
+      embeddedMpvCapable.value = caps.available
+    })
+    .catch(() => {})
+  try {
+    unlistenEmbedded = await listen<EmbeddedPlayerState>('vessel://embedded-player-state', (ev) => {
+      if (!isEmbeddedMpv.value) return
+      const st = ev.payload
+      isBuffering.value = st.isBuffering
+      isPlaying.value = st.isPlaying
+      if (st.durationMs > 0) {
+        duration.value = st.durationMs / 1000
+      }
+      if (st.positionMs >= 0) {
+        currentTime.value = st.positionMs / 1000
+      }
+      embeddedAudioTracks.value = st.audioTracks
+      embeddedSubtitleTracks.value = st.subtitleTracks
+      const activeSub = st.subtitleTracks.find((t) => t.selected)
+      activeEmbeddedSubId.value = activeSub ? activeSub.id : null
+      syncAudioTracks()
+      if (st.error) {
+        playbackError.value = st.error
+        isBuffering.value = false
+        isPlaying.value = false
+        controlsVisible.value = true
+      } else if (st.eofReached && !isLive.value) {
+        isPlaying.value = false
+        void persistWatchProgress(true)
+      }
+    })
+  } catch {
+    // Non-Tauri browser preview fallback
+  }
   void vesselApi.listPlugins().then((list) => {
     loadedPlugins.value = list
   }).catch(() => {})
@@ -1542,6 +1802,9 @@ onMounted(async () => {
 
 onUnmounted(() => {
   void persistWatchProgress()
+  unlistenEmbedded?.()
+  unlistenEmbedded = null
+  void stopEmbeddedMpv(true)
   destroyMediaEngines()
   window.removeEventListener('keydown', handleKeydown)
   document.removeEventListener('fullscreenchange', onFullscreenChange)
@@ -1560,14 +1823,25 @@ onUnmounted(() => {
   <div
     ref="playerStageRef"
     class="cs-player"
-    :class="{ 'hud-hidden': !controlsVisible && isPlaying && !activeDrawer && !isLocked }"
+    :class="{
+      'embedded-active': isEmbeddedMpv,
+      'hud-hidden': !controlsVisible && isPlaying && !activeDrawer && !isLocked,
+    }"
     @mousemove="handleStagePointerMove"
     @mousedown="scheduleHideControls"
     @wheel="handleTouchpadWheel"
   >
+    <!-- Embedded libmpv Hit-Test Surface (transparent over native GL/DX layer) -->
+    <div
+      v-if="isEmbeddedMpv"
+      class="cs-embedded-stage-hit"
+      @click="togglePlay"
+      @dblclick="toggleFullscreen"
+    />
+
     <!-- Video Surface -->
     <video
-      v-show="playableSrc"
+      v-show="playableSrc && !isEmbeddedMpv"
       ref="videoRef"
       class="cs-video"
       :class="`fit-${fitMode}`"
@@ -2310,11 +2584,15 @@ onUnmounted(() => {
           <button
             type="button"
             class="cs-drawer-item"
-            :class="{ active: activeSubtitleIndex === -1 }"
-            @click="activeSubtitleIndex = -1"
+            :class="{ active: activeSubtitleIndex === -1 && activeEmbeddedSubId === null }"
+            @click="activeSubtitleIndex = -1; selectEmbeddedSubtitle(null)"
           >
             <span class="cs-item-title">{{ t('player.subtitles_off') }}</span>
-            <Check v-if="activeSubtitleIndex === -1" :size="16" class="cs-active-check" />
+            <Check
+              v-if="activeSubtitleIndex === -1 && activeEmbeddedSubId === null"
+              :size="16"
+              class="cs-active-check"
+            />
           </button>
 
           <button
@@ -2323,7 +2601,7 @@ onUnmounted(() => {
             type="button"
             class="cs-drawer-item"
             :class="{ active: activeSubtitleIndex === idx }"
-            @click="activeSubtitleIndex = idx"
+            @click="selectEmbeddedSubtitle(null); activeSubtitleIndex = idx"
           >
             <div class="cs-item-main">
               <span class="cs-item-title">{{ sub.label }}</span>
@@ -2332,18 +2610,59 @@ onUnmounted(() => {
             <Check v-if="activeSubtitleIndex === idx" :size="16" class="cs-active-check" />
           </button>
 
+          <button
+            v-for="etrk in embeddedSubtitleTracks"
+            :key="`emb-sub-${etrk.id}`"
+            type="button"
+            class="cs-drawer-item"
+            :class="{ active: activeSubtitleIndex === -1 && activeEmbeddedSubId === etrk.id }"
+            @click="selectEmbeddedSubtitle(etrk.id)"
+          >
+            <div class="cs-item-main">
+              <span class="cs-item-title">{{ etrk.title || etrk.lang?.toUpperCase() || `Embedded #${etrk.id}` }}</span>
+              <span class="cs-item-sub">
+                {{ [etrk.lang?.toUpperCase(), etrk.codec?.toUpperCase(), 'Embedded'].filter(Boolean).join(' · ') }}
+              </span>
+            </div>
+            <Check
+              v-if="activeSubtitleIndex === -1 && activeEmbeddedSubId === etrk.id"
+              :size="16"
+              class="cs-active-check"
+            />
+          </button>
+
           <p v-if="loadingSubtitle" class="cs-empty-note">Loading subtitle track…</p>
           <p v-else-if="subtitleError" class="cs-empty-note cs-sub-error">{{ subtitleError }}</p>
           <p v-else-if="activeSubtitleIndex >= 0 && activeCues.length" class="cs-empty-note">
             Loaded {{ activeCues.length }} subtitle cues.
           </p>
-          <p v-if="!availableSubtitles.length" class="cs-empty-note">
+          <p v-if="!availableSubtitles.length && !embeddedSubtitleTracks.length" class="cs-empty-note">
             No subtitle tracks were provided by this source.
           </p>
         </div>
 
-        <!-- SETTINGS (Speed & Aspect Ratio) -->
+        <!-- SETTINGS (Speed, Aspect Ratio & Playback Engine) -->
         <div v-else-if="activeDrawer === 'settings'" class="cs-drawer-body">
+          <div v-if="embeddedMpvCapable" class="cs-setting-block">
+            <span class="cs-setting-label">Playback Engine</span>
+            <div class="cs-chip-grid">
+              <button
+                v-for="eng in ([
+                  { id: 'auto', label: 'Auto' },
+                  { id: 'embedded_mpv', label: 'Embedded MPV' },
+                  { id: 'html5', label: 'WebView' },
+                ] as const)"
+                :key="eng.id"
+                type="button"
+                class="cs-chip-btn"
+                :class="{ active: playerEngineMode === eng.id }"
+                @click="switchEngineMode(eng.id)"
+              >
+                {{ eng.label }}
+              </button>
+            </div>
+          </div>
+
           <div v-if="!isLive" class="cs-setting-block">
             <span class="cs-setting-label">Playback Speed</span>
             <div class="cs-chip-grid">
@@ -2373,7 +2692,7 @@ onUnmounted(() => {
                 type="button"
                 class="cs-chip-btn"
                 :class="{ active: fitMode === mode.id }"
-                @click="fitMode = mode.id"
+                @click="applyFitMode(mode.id)"
               >
                 {{ mode.label }}
               </button>
@@ -2394,6 +2713,16 @@ onUnmounted(() => {
   color: #f4f4f8;
   overflow: hidden;
   user-select: none;
+}
+
+.cs-player.embedded-active {
+  background: transparent !important;
+}
+
+.cs-embedded-stage-hit {
+  position: absolute;
+  inset: 0;
+  background: transparent;
 }
 
 .cs-player.hud-hidden {

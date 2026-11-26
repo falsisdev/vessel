@@ -153,6 +153,7 @@ import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.UnrecognizedInputFormatException
@@ -341,7 +342,9 @@ fun PlayerScreen(
                     DefaultTsPayloadReaderFactory.FLAG_DETECT_ACCESS_UNITS,
             )
             .setTsExtractorTimestampSearchBytes(4000 * 188)
-        ExoPlayer.Builder(context)
+        val renderersFactory = DefaultRenderersFactory(context)
+            .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
+        ExoPlayer.Builder(context, renderersFactory)
             .setMediaSourceFactory(DefaultMediaSourceFactory(httpFactory, extractorsFactory))
             .setAudioAttributes(
                 AudioAttributes.Builder()

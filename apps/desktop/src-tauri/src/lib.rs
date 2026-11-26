@@ -1,6 +1,7 @@
 //! Tauri v2 desktop application bootstrapper binding `VesselEngine` and `MpvWindowBackend`.
 
 mod commands;
+mod embedded_player;
 mod events;
 mod updater;
 
@@ -12,6 +13,7 @@ use vessel_engine::VesselEngine;
 use vessel_player_mpv::{MpvConfig, MpvWindowBackend};
 
 use commands::AppState;
+use embedded_player::EmbeddedPlayerHost;
 use events::TauriEventSink;
 
 /// Runs the Vessel Tauri desktop shell.
@@ -76,7 +78,12 @@ pub fn run() {
                 }
             });
 
-            app.manage(AppState { engine, paths });
+            let embedded_host = Arc::new(EmbeddedPlayerHost::new(app.handle().clone()));
+            app.manage(AppState {
+                engine,
+                paths,
+                embedded_host,
+            });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -132,6 +139,17 @@ pub fn run() {
             commands::player_pause,
             commands::player_seek,
             commands::player_stop,
+            commands::embedded_mpv_capabilities,
+            commands::embedded_mpv_load,
+            commands::embedded_mpv_play,
+            commands::embedded_mpv_pause,
+            commands::embedded_mpv_seek,
+            commands::embedded_mpv_set_volume,
+            commands::embedded_mpv_set_speed,
+            commands::embedded_mpv_set_fit_mode,
+            commands::embedded_mpv_select_audio_track,
+            commands::embedded_mpv_select_subtitle_track,
+            commands::embedded_mpv_stop,
             commands::add_subtitle,
             commands::set_subtitle_delay,
             commands::list_iptv_profiles,
@@ -166,7 +184,9 @@ pub fn run() {
         .expect("error while building Vessel desktop application")
         .run(|app_handle, event| {
             if let tauri::RunEvent::Exit = event {
-                let engine = Arc::clone(&app_handle.state::<AppState>().engine);
+                let state = app_handle.state::<AppState>();
+                state.embedded_host.player.destroy();
+                let engine = Arc::clone(&state.engine);
                 tauri::async_runtime::block_on(engine.shutdown());
             }
         });

@@ -5,6 +5,7 @@ import type {
   BackupImportMode,
   ContinueWatchingEntry,
   DownloadKind,
+  EmbeddedCapabilities,
   EngineEvent,
   EngineInfo,
   EpgNowNext,
@@ -184,6 +185,21 @@ export const vesselApi = {
   playerPause: () => call<void>('player_pause'),
   playerSeek: (positionMs: number) => call<void>('player_seek', { positionMs }),
   playerStop: () => call<void>('player_stop'),
+  embeddedMpvCapabilities: () => call<EmbeddedCapabilities>('embedded_mpv_capabilities'),
+  embeddedMpvLoad: (payload: { candidate: StreamCandidate; startPositionMs?: number }) =>
+    call<string>('embedded_mpv_load', { payload }),
+  embeddedMpvPlay: () => call<void>('embedded_mpv_play'),
+  embeddedMpvPause: () => call<void>('embedded_mpv_pause'),
+  embeddedMpvSeek: (positionMs: number) => call<void>('embedded_mpv_seek', { positionMs }),
+  embeddedMpvSetVolume: (volume: number) => call<void>('embedded_mpv_set_volume', { volume }),
+  embeddedMpvSetSpeed: (speed: number) => call<void>('embedded_mpv_set_speed', { speed }),
+  embeddedMpvSetFitMode: (mode: 'contain' | 'cover' | 'fill') =>
+    call<void>('embedded_mpv_set_fit_mode', { mode }),
+  embeddedMpvSelectAudioTrack: (trackId: number) =>
+    call<void>('embedded_mpv_select_audio_track', { trackId }),
+  embeddedMpvSelectSubtitleTrack: (trackId: number | null) =>
+    call<void>('embedded_mpv_select_subtitle_track', { trackId }),
+  embeddedMpvStop: (destroy = false) => call<void>('embedded_mpv_stop', { destroy }),
   addSubtitle: (track: SubtitleTrack) => call<void>('add_subtitle', { track }),
   setSubtitleDelay: (delayMs: number) => call<void>('set_subtitle_delay', { delayMs }),
 
