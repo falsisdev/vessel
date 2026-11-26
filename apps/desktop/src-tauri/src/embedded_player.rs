@@ -375,7 +375,7 @@ fn linux_set_surface_visible(
             gl_area.set_can_focus(false);
 
             let p_realize = Arc::clone(&player_ref);
-            let gl_weak = gl_area.downgrade();
+            let gl_weak = glib::SendWeakRef::from(gl_area.downgrade());
             gl_area.connect_realize(move |area| {
                 area.make_current();
                 if area.error().is_some() {
@@ -432,9 +432,13 @@ fn windows_set_surface_visible(
     };
 
     let player_ref = Arc::clone(player);
+    let parent_hwnd_raw = window
+        .hwnd()
+        .map_err(|err| VesselError::Player(format!("resolve Windows HWND: {err}")))?
+        .0 as isize;
     window
-        .with_webview(move |webview| {
-            let parent_hwnd = webview.hwnd();
+        .with_webview(move |_webview| {
+            let parent_hwnd = HWND(parent_hwnd_raw as *mut std::ffi::c_void);
             let mut rect = RECT::default();
             unsafe {
                 let _ = GetClientRect(parent_hwnd, &mut rect);
