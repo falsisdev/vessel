@@ -12,6 +12,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -58,11 +60,13 @@ import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.ProvideTextStyle
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -403,7 +407,32 @@ fun VesselSearchField(
 ) {
     val palette = LocalVesselPalette.current
     val tokens = LocalVesselUiTokens.current
+    val isTv = LocalIsTvDevice.current
+    val keyboard = LocalSoftwareKeyboardController.current
+    val interactionSource = remember { MutableInteractionSource() }
     var isFieldFocused by remember { mutableStateOf(false) }
+    var tvEditing by remember { mutableStateOf(false) }
+
+    LaunchedEffect(isTv, tvEditing) {
+        if (isTv && tvEditing) {
+            keyboard?.show()
+        }
+    }
+    LaunchedEffect(isTv, isFieldFocused) {
+        if (isTv && !isFieldFocused) {
+            tvEditing = false
+            keyboard?.hide()
+        }
+    }
+    LaunchedEffect(interactionSource, isTv) {
+        if (!isTv) return@LaunchedEffect
+        interactionSource.interactions.collect { interaction ->
+            if (interaction is PressInteraction.Release) {
+                tvEditing = true
+            }
+        }
+    }
+
     Surface(
         shape = RoundedCornerShape(tokens.cornerRadius),
         color = palette.bgSurface,
@@ -442,6 +471,8 @@ fun VesselSearchField(
                 BasicTextField(
                     value = value,
                     onValueChange = onValueChange,
+                    readOnly = isTv && !tvEditing,
+                    interactionSource = interactionSource,
                     singleLine = true,
                     textStyle = LocalTextStyle.current.copy(
                         color = palette.textPrimary,
@@ -449,11 +480,41 @@ fun VesselSearchField(
                     ),
                     cursorBrush = SolidColor(palette.accent),
                     keyboardOptions = KeyboardOptions(imeAction = imeAction),
-                    keyboardActions = KeyboardActions(onSearch = { onSearch?.invoke() }),
+                    keyboardActions = KeyboardActions(
+                        onSearch = {
+                            tvEditing = false
+                            keyboard?.hide()
+                            onSearch?.invoke()
+                        },
+                        onDone = {
+                            tvEditing = false
+                            keyboard?.hide()
+                            onSearch?.invoke()
+                        },
+                    ),
                     modifier = Modifier
                         .fillMaxWidth()
                         .onFocusChanged { isFieldFocused = it.isFocused || it.hasFocus }
-                        .vesselDpadInputEscape(isTextEmpty = value.isEmpty(), onSubmit = onSearch),
+                        .onPreviewKeyEvent { ev ->
+                            if (!isTv || !isFieldFocused || ev.type != KeyEventType.KeyDown) {
+                                return@onPreviewKeyEvent false
+                            }
+                            if (!tvEditing && (ev.key == Key.Enter || ev.key == Key.NumPadEnter || ev.key == Key.DirectionCenter)) {
+                                tvEditing = true
+                                keyboard?.show()
+                                return@onPreviewKeyEvent true
+                            }
+                            if (tvEditing && (ev.key == Key.Back || ev.key == Key.Escape)) {
+                                tvEditing = false
+                                keyboard?.hide()
+                                return@onPreviewKeyEvent true
+                            }
+                            false
+                        }
+                        .vesselDpadInputEscape(isTextEmpty = value.isEmpty(), onSubmit = {
+                            tvEditing = false
+                            onSearch?.invoke()
+                        }),
                 )
             }
             if (value.isNotEmpty()) {
@@ -474,6 +535,101 @@ fun VesselSearchField(
             }
         }
     }
+}
+
+@Composable
+fun VesselOutlinedTextField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    readOnly: Boolean = false,
+    label: (@Composable () -> Unit)? = null,
+    placeholder: (@Composable () -> Unit)? = null,
+    singleLine: Boolean = false,
+    minLines: Int = 1,
+    maxLines: Int = if (singleLine) 1 else Int.MAX_VALUE,
+    isError: Boolean = false,
+    supportingText: (@Composable () -> Unit)? = null,
+    keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
+    keyboardActions: KeyboardActions = KeyboardActions.Default,
+    onSubmit: (() -> Unit)? = null,
+) {
+    val isTv = LocalIsTvDevice.current
+    val keyboard = LocalSoftwareKeyboardController.current
+    val interactionSource = remember { MutableInteractionSource() }
+    var isFieldFocused by remember { mutableStateOf(false) }
+    var tvEditing by remember { mutableStateOf(false) }
+
+    LaunchedEffect(isTv, tvEditing) {
+        if (isTv && tvEditing) {
+            keyboard?.show()
+        }
+    }
+    LaunchedEffect(isTv, isFieldFocused) {
+        if (isTv && !isFieldFocused) {
+            tvEditing = false
+            keyboard?.hide()
+        }
+    }
+    LaunchedEffect(interactionSource, isTv) {
+        if (!isTv) return@LaunchedEffect
+        interactionSource.interactions.collect { interaction ->
+            if (interaction is PressInteraction.Release && enabled && !readOnly) {
+                tvEditing = true
+            }
+        }
+    }
+
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        enabled = enabled,
+        readOnly = readOnly || (isTv && !tvEditing),
+        interactionSource = interactionSource,
+        label = label,
+        placeholder = placeholder,
+        singleLine = singleLine,
+        minLines = minLines,
+        maxLines = maxLines,
+        isError = isError,
+        supportingText = supportingText,
+        keyboardOptions = keyboardOptions,
+        keyboardActions = if (onSubmit != null) {
+            KeyboardActions(
+                onDone = {
+                    tvEditing = false
+                    keyboard?.hide()
+                    onSubmit()
+                },
+                onSearch = {
+                    tvEditing = false
+                    keyboard?.hide()
+                    onSubmit()
+                },
+            )
+        } else {
+            keyboardActions
+        },
+        modifier = modifier
+            .onFocusChanged { isFieldFocused = it.isFocused || it.hasFocus }
+            .onPreviewKeyEvent { ev ->
+                if (!isTv || !isFieldFocused || !enabled || readOnly || ev.type != KeyEventType.KeyDown) {
+                    return@onPreviewKeyEvent false
+                }
+                if (!tvEditing && (ev.key == Key.Enter || ev.key == Key.NumPadEnter || ev.key == Key.DirectionCenter)) {
+                    tvEditing = true
+                    keyboard?.show()
+                    return@onPreviewKeyEvent true
+                }
+                if (tvEditing && (ev.key == Key.Back || ev.key == Key.Escape)) {
+                    tvEditing = false
+                    keyboard?.hide()
+                    return@onPreviewKeyEvent true
+                }
+                false
+            },
+    )
 }
 
 @Composable

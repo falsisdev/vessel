@@ -95,6 +95,7 @@ import dev.falsis.vessel.ui.components.VesselButton
 import dev.falsis.vessel.ui.components.VesselCompactIconButton
 import dev.falsis.vessel.ui.components.VesselFilterChip
 import dev.falsis.vessel.ui.components.VesselOutlinedButton
+import dev.falsis.vessel.ui.components.VesselOutlinedTextField
 import dev.falsis.vessel.ui.components.VesselTextButton
 import dev.falsis.vessel.ui.components.vesselDpadInputEscape
 import dev.falsis.vessel.ui.components.vesselFocusBorder
@@ -928,7 +929,7 @@ fun DetailsScreen(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        OutlinedTextField(
+                        VesselOutlinedTextField(
                             value = searchQuery,
                             onValueChange = { searchQuery = it },
                             placeholder = { Text(VesselI18n.tr("details.match_search_placeholder")) },
@@ -1066,7 +1067,7 @@ fun DetailsScreen(
                                 )
                             }
                         }
-                        OutlinedTextField(
+                        VesselOutlinedTextField(
                             value = fixIdInput,
                             onValueChange = { fixIdInput = it },
                             placeholder = { Text(VesselI18n.tr("details.match_id_placeholder")) },
@@ -1176,7 +1177,7 @@ fun DetailsScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     Text(VesselI18n.tr("details.include_sources_desc"), style = MaterialTheme.typography.bodySmall, color = palette.textMuted)
-                    OutlinedTextField(
+                    VesselOutlinedTextField(
                         value = targetQuery,
                         onValueChange = { targetQuery = it },
                         placeholder = { Text(VesselI18n.tr("details.include_search_placeholder")) },

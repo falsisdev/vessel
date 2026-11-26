@@ -102,6 +102,9 @@ const hoverPercent = ref(0)
 
 const activeSubtitleIndex = ref<number>(-1)
 const subtitleDelayMs = ref(0)
+const subtitleTranscriptOpen = ref(false)
+const subtitleTranscriptQuery = ref('')
+const transcriptListRef = ref<HTMLElement | null>(null)
 const activeCues = shallowRef<SubtitleCue[]>([])
 const loadingSubtitle = shallowRef(false)
 const subtitleError = shallowRef('')
@@ -486,6 +489,60 @@ const activeStream = computed<StreamCandidate | null>(() => {
   if (!session.value) return null
   return session.value.streams[session.value.activeStreamIndex] ?? session.value.streams[0] ?? null
 })
+
+watch(
+  activeDrawer,
+  (nextDrawer) => {
+    if (nextDrawer !== 'subtitles') {
+      subtitleTranscriptOpen.value = false
+      subtitleTranscriptQuery.value = ''
+    }
+  },
+)
+
+const filteredTranscriptCues = computed<SubtitleCue[]>(() => {
+  const q = subtitleTranscriptQuery.value.trim().toLowerCase()
+  if (!q) return activeCues.value
+  return activeCues.value.filter((cue) => cue.lines.some((line) => line.toLowerCase().includes(q)))
+})
+
+const nearestTranscriptIndex = computed<number>(() => {
+  const list = filteredTranscriptCues.value
+  if (!list.length) return -1
+  const targetMs = currentTime.value * 1000 - subtitleDelayMs.value
+  const activeIdx = list.findIndex((cue) => targetMs >= cue.startMs && targetMs <= cue.endMs)
+  if (activeIdx >= 0) return activeIdx
+  const upcoming = list.findIndex((cue) => cue.startMs >= targetMs)
+  return upcoming >= 0 ? upcoming : list.length - 1
+})
+
+async function openSubtitleTranscript(): Promise<void> {
+  if (!activeCues.value.length) return
+  subtitleTranscriptOpen.value = true
+  await nextTick()
+  const activeEl = transcriptListRef.value?.querySelector('.cs-transcript-item.active')
+  if (activeEl instanceof HTMLElement) {
+    activeEl.scrollIntoView({ block: 'center', behavior: 'auto' })
+  }
+}
+
+function applyTranscriptSync(cue: SubtitleCue): void {
+  const nextDelay = Math.round(currentTime.value * 1000 - cue.startMs)
+  subtitleDelayMs.value = nextDelay
+  subtitleTranscriptOpen.value = false
+  subtitleTranscriptQuery.value = ''
+  showGestureHud(t('player.sync_transcript_applied', { delay: nextDelay }))
+  scheduleHideControls()
+}
+
+function closeDrawerOrTranscript(): void {
+  if (activeDrawer.value === 'subtitles' && subtitleTranscriptOpen.value) {
+    subtitleTranscriptOpen.value = false
+    subtitleTranscriptQuery.value = ''
+  } else {
+    activeDrawer.value = null
+  }
+}
 
 const availableSubtitles = computed<SubtitleTrack[]>(() => {
   const fromStream = activeStream.value?.subtitles ?? []
@@ -1962,11 +2019,13 @@ onUnmounted(() => {
                   : activeDrawer === 'audio'
                     ? `${t('player.audio_tracks')}${audioTracks.length ? ` (${audioTracks.length})` : ''}`
                     : activeDrawer === 'subtitles'
-                      ? 'Subtitles & Sync'
+                      ? subtitleTranscriptOpen
+                        ? t('player.sync_transcript')
+                        : t('player.subtitles_sync')
                       : 'Player Settings'
             }}
           </h3>
-          <button type="button" class="cs-icon-btn" @click="activeDrawer = null">
+          <button type="button" class="cs-icon-btn" @click="closeDrawerOrTranscript">
             <X :size="18" aria-hidden="true" />
           </button>
         </div>
@@ -2071,6 +2130,54 @@ onUnmounted(() => {
         </div>
 
         <!-- SUBTITLES & APPEARANCE (VOD only) -->
+        <div
+          v-else-if="activeDrawer === 'subtitles' && !isLive && subtitleTranscriptOpen && activeCues.length"
+          class="cs-drawer-body cs-transcript-panel"
+        >
+          <p class="cs-transcript-hint">{{ t('player.sync_transcript_hint') }}</p>
+          <div class="cs-transcript-meta">
+            <span class="cs-tag accent">{{ formatClock(currentTime) }} · {{ subtitleDelayMs }} ms</span>
+            <div class="cs-transcript-meta-actions">
+              <button
+                v-if="subtitleDelayMs !== 0"
+                type="button"
+                class="cs-mini-pill"
+                @click="subtitleDelayMs = 0"
+              >
+                {{ t('player.sync_reset') }}
+              </button>
+              <button
+                type="button"
+                class="cs-mini-pill"
+                @click="subtitleTranscriptOpen = false; subtitleTranscriptQuery = ''"
+              >
+                Back
+              </button>
+            </div>
+          </div>
+          <input
+            v-model="subtitleTranscriptQuery"
+            type="search"
+            class="cs-transcript-search"
+            :placeholder="t('player.sync_transcript_search')"
+          />
+          <div ref="transcriptListRef" class="cs-transcript-list">
+            <button
+              v-for="(cue, idx) in filteredTranscriptCues"
+              :key="`${cue.startMs}-${idx}`"
+              type="button"
+              class="cs-drawer-item cs-transcript-item"
+              :class="{ active: idx === nearestTranscriptIndex }"
+              @click="applyTranscriptSync(cue)"
+            >
+              <span class="cs-tag" :class="{ accent: idx === nearestTranscriptIndex }">
+                {{ formatClock(cue.startMs / 1000) }}
+              </span>
+              <span class="cs-transcript-text">{{ cue.lines.join(' ') }}</span>
+            </button>
+          </div>
+        </div>
+
         <div v-else-if="activeDrawer === 'subtitles' && !isLive" class="cs-drawer-body">
           <div class="cs-setting-block">
             <span class="cs-setting-label">{{ t('player.subtitles_delay') }}</span>
@@ -2078,6 +2185,20 @@ onUnmounted(() => {
               <button type="button" class="cs-mini-pill" @click="subtitleDelayMs -= 500">-500ms</button>
               <span class="cs-delay-val">{{ subtitleDelayMs }} ms</span>
               <button type="button" class="cs-mini-pill" @click="subtitleDelayMs += 500">+500ms</button>
+            </div>
+            <div v-if="activeCues.length" class="cs-transcript-actions">
+              <button type="button" class="cs-mini-pill" @click="void openSubtitleTranscript()">
+                <ListVideo :size="14" aria-hidden="true" />
+                <span>{{ t('player.sync_transcript') }}</span>
+              </button>
+              <button
+                v-if="subtitleDelayMs !== 0"
+                type="button"
+                class="cs-mini-pill"
+                @click="subtitleDelayMs = 0"
+              >
+                {{ t('player.sync_reset') }}
+              </button>
             </div>
           </div>
 
@@ -3172,5 +3293,72 @@ onUnmounted(() => {
   transform: scale(1.16);
   border-color: var(--vessel-accent, #cba6f7);
   box-shadow: 0 0 0 2px rgba(203, 166, 247, 0.35);
+}
+
+.cs-transcript-panel {
+  overflow: hidden;
+}
+
+.cs-transcript-hint {
+  margin: 0;
+  font-size: 0.76rem;
+  color: rgba(244, 244, 248, 0.72);
+  line-height: 1.35;
+}
+
+.cs-transcript-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.cs-transcript-meta-actions,
+.cs-transcript-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.cs-transcript-actions {
+  margin-top: 0.35rem;
+}
+
+.cs-transcript-search {
+  width: 100%;
+  padding: 0.5rem 0.7rem;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.06);
+  color: #f4f4f8;
+  font-size: 0.82rem;
+  outline: none;
+}
+
+.cs-transcript-search:focus {
+  border-color: var(--vessel-accent, #cba6f7);
+}
+
+.cs-transcript-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.cs-transcript-item {
+  align-items: flex-start;
+  justify-content: flex-start;
+}
+
+.cs-transcript-text {
+  flex: 1;
+  font-size: 0.82rem;
+  line-height: 1.35;
+  color: #f4f4f8;
+  text-align: left;
 }
 </style>

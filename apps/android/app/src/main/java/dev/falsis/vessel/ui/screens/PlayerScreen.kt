@@ -23,6 +23,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -50,6 +51,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -106,6 +108,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -120,6 +123,8 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
+import dev.falsis.vessel.ui.components.VesselOutlinedTextField
+import dev.falsis.vessel.ui.components.vesselDpadInputEscape
 import dev.falsis.vessel.ui.components.vesselFocusBorder
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -282,6 +287,8 @@ fun PlayerScreen(
     // External parsed subtitles (full Desktop SubtitleParser + Sync Delay + Styling parity)
     var activeExternalSubIndex by remember(currentEpisode, selectedIndex) { mutableIntStateOf(-1) }
     var subtitleDelayMs by remember { mutableLongStateOf(0L) }
+    var subtitleTranscriptOpen by remember { mutableStateOf(false) }
+    var subtitleTranscriptQuery by remember { mutableStateOf("") }
     var externalCues by remember { mutableStateOf<List<SubtitleCue>>(emptyList()) }
     var loadingSubtitle by remember { mutableStateOf(false) }
     var subtitleError by remember { mutableStateOf<String?>(null) }
@@ -926,14 +933,27 @@ fun PlayerScreen(
 
     val playerRootFocusRequester = remember { FocusRequester() }
     val playPauseFocusRequester = remember { FocusRequester() }
+    val drawerFocusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(activeDrawer) {
+        if (activeDrawer == null) {
+            subtitleTranscriptOpen = false
+            subtitleTranscriptQuery = ""
+        }
+    }
 
     LaunchedEffect(controlsVisible, isLocked, activeDrawer, playbackError) {
-        if (playbackError == null && activeDrawer == null) {
-            if (!controlsVisible || isLocked) {
-                runCatching { playerRootFocusRequester.requestFocus() }
-            } else {
-                kotlinx.coroutines.delay(50)
-                runCatching { playPauseFocusRequester.requestFocus() }
+        if (playbackError == null) {
+            if (activeDrawer != null && !isLocked) {
+                kotlinx.coroutines.delay(60)
+                runCatching { drawerFocusRequester.requestFocus() }
+            } else if (activeDrawer == null) {
+                if (!controlsVisible || isLocked) {
+                    runCatching { playerRootFocusRequester.requestFocus() }
+                } else {
+                    kotlinx.coroutines.delay(50)
+                    runCatching { playPauseFocusRequester.requestFocus() }
+                }
             }
         }
     }
@@ -942,6 +962,11 @@ fun PlayerScreen(
         when {
             isLocked -> {
                 isLocked = false
+                bumpControls()
+            }
+            activeDrawer == PlayerDrawer.SUBTITLES && subtitleTranscriptOpen -> {
+                subtitleTranscriptOpen = false
+                subtitleTranscriptQuery = ""
                 bumpControls()
             }
             activeDrawer != null -> {
@@ -990,6 +1015,7 @@ fun PlayerScreen(
             .fillMaxSize()
             .background(Color.Black)
             .focusRequester(playerRootFocusRequester)
+            .focusProperties { canFocus = activeDrawer == null }
             .focusable()
             .onPreviewKeyEvent { ev ->
                 if (ev.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
@@ -1006,7 +1032,12 @@ fun PlayerScreen(
                 }
                 if (activeDrawer != null) {
                     if (ev.key == Key.Back || ev.key == Key.Escape) {
-                        activeDrawer = null
+                        if (activeDrawer == PlayerDrawer.SUBTITLES && subtitleTranscriptOpen) {
+                            subtitleTranscriptOpen = false
+                            subtitleTranscriptQuery = ""
+                        } else {
+                            activeDrawer = null
+                        }
                         bumpControls()
                         return@onPreviewKeyEvent true
                     }
@@ -1427,6 +1458,7 @@ fun PlayerScreen(
             BoxWithConstraints(
                 modifier = Modifier
                     .fillMaxSize()
+                    .focusProperties { canFocus = activeDrawer == null }
                     .systemBarsPadding()
                     .padding(horizontal = 14.dp, vertical = 10.dp),
             ) {
@@ -2027,10 +2059,9 @@ fun PlayerScreen(
             BoxWithConstraints(
                 modifier = Modifier
                     .fillMaxSize()
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                    ) { activeDrawer = null },
+                    .pointerInput(Unit) {
+                        detectTapGestures { activeDrawer = null }
+                    },
             ) {
                 val drawerWidth = if (maxWidth > 600.dp) minOf(300.dp, maxWidth * 0.44f) else minOf(296.dp, maxWidth * 0.84f)
                 Surface(
@@ -2044,10 +2075,10 @@ fun PlayerScreen(
                         .padding(8.dp)
                         .width(drawerWidth)
                         .fillMaxHeight()
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null,
-                        ) {},
+                        .focusGroup()
+                        .pointerInput(Unit) {
+                            detectTapGestures { }
+                        },
                 ) {
                     Column(modifier = Modifier.fillMaxSize()) {
                         // Compact Drawer Header
@@ -2067,7 +2098,8 @@ fun PlayerScreen(
                                 PlayerDrawer.AUDIO ->
                                     "${VesselI18n.tr("player.audio_tracks")}${if (audioTracks.isNotEmpty()) " (${audioTracks.size})" else ""}"
                                 PlayerDrawer.SUBTITLES ->
-                                    VesselI18n.tr("player.subtitles_sync")
+                                    if (subtitleTranscriptOpen) VesselI18n.tr("player.sync_transcript", "Transkriptten Eşitle")
+                                    else VesselI18n.tr("player.subtitles_sync")
                                 PlayerDrawer.SETTINGS ->
                                     VesselI18n.tr("nav.settings")
                                 null -> ""
@@ -2078,7 +2110,18 @@ fun PlayerScreen(
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.Bold,
                             )
-                            HudCircleIconButton(onClick = { activeDrawer = null }, size = 28.dp) {
+                            HudCircleIconButton(
+                                onClick = {
+                                    if (activeDrawer == PlayerDrawer.SUBTITLES && subtitleTranscriptOpen) {
+                                        subtitleTranscriptOpen = false
+                                        subtitleTranscriptQuery = ""
+                                    } else {
+                                        activeDrawer = null
+                                    }
+                                },
+                                size = 28.dp,
+                                modifier = Modifier.focusRequester(drawerFocusRequester),
+                            ) {
                                 Icon(Icons.Default.Close, contentDescription = VesselI18n.tr("common.close"), tint = Color.White, modifier = Modifier.size(14.dp))
                             }
                         }
@@ -2251,11 +2294,135 @@ fun PlayerScreen(
                             }
 
                             PlayerDrawer.SUBTITLES -> {
-                                Column(
+                                if (subtitleTranscriptOpen && externalCues.isNotEmpty()) {
+                                    val filteredCues = remember(externalCues, subtitleTranscriptQuery) {
+                                        val q = subtitleTranscriptQuery.trim().lowercase(Locale.US)
+                                        if (q.isEmpty()) externalCues
+                                        else externalCues.filter { cue ->
+                                            cue.lines.any { it.lowercase(Locale.US).contains(q) }
+                                        }
+                                    }
+                                    val targetTimelineMs = currentPosMs - subtitleDelayMs
+                                    val nearestIndex = remember(filteredCues, targetTimelineMs) {
+                                        if (filteredCues.isEmpty()) -1
+                                        else {
+                                            val activeIdx = filteredCues.indexOfFirst {
+                                                targetTimelineMs >= it.startMs && targetTimelineMs <= it.endMs
+                                            }
+                                            if (activeIdx >= 0) activeIdx
+                                            else {
+                                                val upcoming = filteredCues.indexOfFirst { it.startMs >= targetTimelineMs }
+                                                if (upcoming >= 0) upcoming else filteredCues.lastIndex
+                                            }
+                                        }
+                                    }
+                                    val transcriptListState = rememberLazyListState()
+                                    LaunchedEffect(subtitleTranscriptOpen) {
+                                        if (subtitleTranscriptOpen && nearestIndex >= 0) {
+                                            transcriptListState.scrollToItem((nearestIndex - 1).coerceAtLeast(0))
+                                        }
+                                    }
+                                    Column(
+                                        modifier = Modifier.fillMaxSize().padding(10.dp),
+                                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                                    ) {
+                                        Text(
+                                            text = VesselI18n.tr("player.sync_transcript_hint"),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = Color.White.copy(alpha = 0.72f),
+                                        )
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically,
+                                        ) {
+                                            Text(
+                                                text = "${formatClockMs(currentPosMs)} · ${subtitleDelayMs} ms",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = FontWeight.Bold,
+                                                color = palette.accent,
+                                            )
+                                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                                if (subtitleDelayMs != 0L) {
+                                                    PlayerHudPill(
+                                                        icon = null,
+                                                        label = VesselI18n.tr("player.sync_reset"),
+                                                        active = false,
+                                                        onClick = { subtitleDelayMs = 0L },
+                                                    )
+                                                }
+                                                PlayerHudPill(
+                                                    icon = null,
+                                                    label = VesselI18n.tr("common.back"),
+                                                    active = false,
+                                                    onClick = {
+                                                        subtitleTranscriptOpen = false
+                                                        subtitleTranscriptQuery = ""
+                                                    },
+                                                )
+                                            }
+                                        }
+                                        VesselOutlinedTextField(
+                                            value = subtitleTranscriptQuery,
+                                            onValueChange = { subtitleTranscriptQuery = it },
+                                            placeholder = {
+                                                Text(
+                                                    VesselI18n.tr("player.sync_transcript_search"),
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis,
+                                                )
+                                            },
+                                            singleLine = true,
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .vesselDpadInputEscape(isTextEmpty = subtitleTranscriptQuery.isEmpty()),
+                                        )
+                                        LazyColumn(
+                                            state = transcriptListState,
+                                            modifier = Modifier.weight(1f).fillMaxWidth(),
+                                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                                        ) {
+                                            itemsIndexed(filteredCues) { idx, cue ->
+                                                val isNearest = idx == nearestIndex
+                                                DrawerItemCard(
+                                                    active = isNearest,
+                                                    accentColor = palette.accent,
+                                                    onClick = {
+                                                        val newDelay = currentPosMs - cue.startMs
+                                                        subtitleDelayMs = newDelay
+                                                        subtitleTranscriptOpen = false
+                                                        subtitleTranscriptQuery = ""
+                                                        showHud(VesselI18n.trf("player.sync_transcript_applied", "delay" to newDelay))
+                                                    },
+                                                ) {
+                                                    Row(
+                                                        modifier = Modifier.fillMaxWidth(),
+                                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                                        verticalAlignment = Alignment.Top,
+                                                    ) {
+                                                        DrawerTagBadge(
+                                                            text = formatClockMs(cue.startMs),
+                                                            accent = isNearest,
+                                                            accentColor = palette.accent,
+                                                        )
+                                                        Text(
+                                                            text = cue.lines.joinToString(" "),
+                                                            color = Color.White,
+                                                            style = MaterialTheme.typography.bodySmall,
+                                                            maxLines = 3,
+                                                            overflow = TextOverflow.Ellipsis,
+                                                            modifier = Modifier.weight(1f),
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                } else Column(
                                     modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(9.dp),
                                     verticalArrangement = Arrangement.spacedBy(7.dp),
                                 ) {
-                                    // Subtitle Delay (-500ms / +500ms) — Desktop parity
+                                    // Subtitle Delay (-500ms / +500ms) + Nuvio-style Transcript Sync
                                     DrawerSettingBlock(title = VesselI18n.tr("player.subtitles_delay")) {
                                         Row(
                                             modifier = Modifier.fillMaxWidth(),
@@ -2281,6 +2448,36 @@ fun PlayerScreen(
                                                 onClick = { subtitleDelayMs += 500L },
                                             )
                                         }
+                                        if (externalCues.isNotEmpty()) {
+                                            Spacer(Modifier.height(4.dp))
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                            ) {
+                                                PlayerHudPill(
+                                                    icon = {
+                                                        Icon(
+                                                            Icons.AutoMirrored.Filled.List,
+                                                            contentDescription = null,
+                                                            tint = Color.White,
+                                                            modifier = Modifier.size(13.dp),
+                                                        )
+                                                    },
+                                                    label = VesselI18n.tr("player.sync_transcript"),
+                                                    active = false,
+                                                    onClick = { subtitleTranscriptOpen = true },
+                                                )
+                                                if (subtitleDelayMs != 0L) {
+                                                    PlayerHudPill(
+                                                        icon = null,
+                                                        label = VesselI18n.tr("player.sync_reset"),
+                                                        active = false,
+                                                        onClick = { subtitleDelayMs = 0L },
+                                                    )
+                                                }
+                                            }
+                                        }
                                     }
 
                                     // Font Size Slider
@@ -2292,7 +2489,16 @@ fun PlayerScreen(
                                                 saveSubPrefs { it.copy(subtitles = it.subtitles.copy(fontSizePx = rounded.coerceIn(16, 52))) }
                                             },
                                             valueRange = 16f..52f,
-                                            modifier = Modifier.height(24.dp),
+                                            modifier = Modifier
+                                                .height(24.dp)
+                                                .tvStepSliderKeys(
+                                                    current = prefs.subtitles.fontSizePx,
+                                                    step = 2,
+                                                    range = 16..52,
+                                                    onStep = { next ->
+                                                        saveSubPrefs { it.copy(subtitles = it.subtitles.copy(fontSizePx = next)) }
+                                                    },
+                                                ),
                                             colors = SliderDefaults.colors(
                                                 thumbColor = palette.accent,
                                                 activeTrackColor = palette.accent,
@@ -2310,7 +2516,16 @@ fun PlayerScreen(
                                                 saveSubPrefs { it.copy(subtitles = it.subtitles.copy(bottomOffsetPx = rounded.coerceIn(16, 220))) }
                                             },
                                             valueRange = 16f..220f,
-                                            modifier = Modifier.height(24.dp),
+                                            modifier = Modifier
+                                                .height(24.dp)
+                                                .tvStepSliderKeys(
+                                                    current = prefs.subtitles.bottomOffsetPx,
+                                                    step = 4,
+                                                    range = 16..220,
+                                                    onStep = { next ->
+                                                        saveSubPrefs { it.copy(subtitles = it.subtitles.copy(bottomOffsetPx = next)) }
+                                                    },
+                                                ),
                                             colors = SliderDefaults.colors(
                                                 thumbColor = palette.accent,
                                                 activeTrackColor = palette.accent,
@@ -2328,7 +2543,16 @@ fun PlayerScreen(
                                                 saveSubPrefs { it.copy(subtitles = it.subtitles.copy(backgroundOpacity = rounded.coerceIn(0, 100))) }
                                             },
                                             valueRange = 0f..100f,
-                                            modifier = Modifier.height(24.dp),
+                                            modifier = Modifier
+                                                .height(24.dp)
+                                                .tvStepSliderKeys(
+                                                    current = prefs.subtitles.backgroundOpacity,
+                                                    step = 5,
+                                                    range = 0..100,
+                                                    onStep = { next ->
+                                                        saveSubPrefs { it.copy(subtitles = it.subtitles.copy(backgroundOpacity = next)) }
+                                                    },
+                                                ),
                                             colors = SliderDefaults.colors(
                                                 thumbColor = palette.accent,
                                                 activeTrackColor = palette.accent,
@@ -2821,18 +3045,41 @@ private fun DesktopScrubberBar(
     }
 }
 
+private fun Modifier.tvStepSliderKeys(
+    current: Int,
+    step: Int,
+    range: IntRange,
+    onStep: (Int) -> Unit,
+): Modifier = this
+    .vesselFocusBorder(RoundedCornerShape(8.dp))
+    .onPreviewKeyEvent { ev ->
+        if (ev.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+        when (ev.key) {
+            Key.DirectionLeft -> {
+                onStep((current - step).coerceIn(range.first, range.last))
+                true
+            }
+            Key.DirectionRight -> {
+                onStep((current + step).coerceIn(range.first, range.last))
+                true
+            }
+            else -> false
+        }
+    }
+
 @Composable
 private fun HudCircleIconButton(
     onClick: () -> Unit,
     enabled: Boolean = true,
     size: androidx.compose.ui.unit.Dp = 34.dp,
+    modifier: Modifier = Modifier,
     content: @Composable () -> Unit,
 ) {
     Surface(
         shape = CircleShape,
         color = HudControlBg,
         border = BorderStroke(1.dp, HudBorderColor),
-        modifier = Modifier
+        modifier = modifier
             .size(size)
             .clip(CircleShape)
             .vesselFocusBorder(CircleShape)

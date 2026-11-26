@@ -101,6 +101,7 @@ import dev.falsis.vessel.ui.components.VesselButton
 import dev.falsis.vessel.ui.components.VesselCompactIconButton
 import dev.falsis.vessel.ui.components.VesselFilterChip
 import dev.falsis.vessel.ui.components.VesselOutlinedButton
+import dev.falsis.vessel.ui.components.VesselOutlinedTextField
 import dev.falsis.vessel.ui.components.VesselSearchField
 import dev.falsis.vessel.ui.components.VesselTextButton
 import dev.falsis.vessel.ui.components.vesselDpadInputEscape
@@ -1172,13 +1173,13 @@ fun LiveTvScreen(
                         VesselFilterChip(selected = !isXtream, onClick = { isXtream = false }, label = "M3U+")
                         VesselFilterChip(selected = isXtream, onClick = { isXtream = true }, label = "Xtream")
                     }
-                    OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text(VesselI18n.tr("iptv.name")) }, singleLine = true, modifier = Modifier.fillMaxWidth().vesselDpadInputEscape(isTextEmpty = name.isEmpty()))
-                    OutlinedTextField(value = serverUrl, onValueChange = { serverUrl = it }, label = { Text(VesselI18n.tr("iptv.server_url")) }, singleLine = true, modifier = Modifier.fillMaxWidth().vesselDpadInputEscape(isTextEmpty = serverUrl.isEmpty()))
+                    VesselOutlinedTextField(value = name, onValueChange = { name = it }, label = { Text(VesselI18n.tr("iptv.name")) }, singleLine = true, modifier = Modifier.fillMaxWidth().vesselDpadInputEscape(isTextEmpty = name.isEmpty()))
+                    VesselOutlinedTextField(value = serverUrl, onValueChange = { serverUrl = it }, label = { Text(VesselI18n.tr("iptv.server_url")) }, singleLine = true, modifier = Modifier.fillMaxWidth().vesselDpadInputEscape(isTextEmpty = serverUrl.isEmpty()))
                     if (isXtream) {
-                        OutlinedTextField(value = username, onValueChange = { username = it }, label = { Text(VesselI18n.tr("iptv.username")) }, singleLine = true, modifier = Modifier.fillMaxWidth().vesselDpadInputEscape(isTextEmpty = username.isEmpty()))
-                        OutlinedTextField(value = password, onValueChange = { password = it }, label = { Text(VesselI18n.tr("iptv.password")) }, singleLine = true, modifier = Modifier.fillMaxWidth().vesselDpadInputEscape(isTextEmpty = password.isEmpty()))
+                        VesselOutlinedTextField(value = username, onValueChange = { username = it }, label = { Text(VesselI18n.tr("iptv.username")) }, singleLine = true, modifier = Modifier.fillMaxWidth().vesselDpadInputEscape(isTextEmpty = username.isEmpty()))
+                        VesselOutlinedTextField(value = password, onValueChange = { password = it }, label = { Text(VesselI18n.tr("iptv.password")) }, singleLine = true, modifier = Modifier.fillMaxWidth().vesselDpadInputEscape(isTextEmpty = password.isEmpty()))
                     }
-                    OutlinedTextField(value = epgUrl, onValueChange = { epgUrl = it }, label = { Text(VesselI18n.tr("iptv.epg_url")) }, singleLine = true, modifier = Modifier.fillMaxWidth().vesselDpadInputEscape(isTextEmpty = epgUrl.isEmpty()))
+                    VesselOutlinedTextField(value = epgUrl, onValueChange = { epgUrl = it }, label = { Text(VesselI18n.tr("iptv.epg_url")) }, singleLine = true, modifier = Modifier.fillMaxWidth().vesselDpadInputEscape(isTextEmpty = epgUrl.isEmpty()))
                 }
             },
             confirmButton = {

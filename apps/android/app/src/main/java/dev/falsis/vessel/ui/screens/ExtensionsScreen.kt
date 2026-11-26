@@ -71,6 +71,7 @@ import dev.falsis.vessel.ui.components.VesselButton
 import dev.falsis.vessel.ui.components.VesselCompactIconButton
 import dev.falsis.vessel.ui.components.VesselFilterChip
 import dev.falsis.vessel.ui.components.VesselOutlinedButton
+import dev.falsis.vessel.ui.components.VesselOutlinedTextField
 import dev.falsis.vessel.ui.components.VesselSearchField
 import dev.falsis.vessel.ui.components.VesselTextButton
 import dev.falsis.vessel.ui.components.vesselDpadInputEscape
@@ -329,7 +330,7 @@ fun ExtensionsScreen(
         item {
             Surface(shape = RoundedCornerShape(14.dp), color = palette.bgSurface) {
                 Column(modifier = Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    OutlinedTextField(
+                    VesselOutlinedTextField(
                         value = sourceInput,
                         onValueChange = { sourceInput = it },
                         placeholder = { Text(VesselI18n.tr("extensions.source_placeholder")) },

@@ -76,6 +76,7 @@ import androidx.compose.material3.Text
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
 import dev.falsis.vessel.data.PlaybackProgress
+import dev.falsis.vessel.ui.theme.LocalIsTvDevice
 import dev.falsis.vessel.ui.theme.LocalVesselFloatingNavInset
 import dev.falsis.vessel.ui.theme.LocalVesselUiTokens
 import androidx.compose.runtime.Composable
@@ -92,6 +93,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -121,6 +125,7 @@ import dev.falsis.vessel.ui.components.VesselCompactIconButton
 import dev.falsis.vessel.ui.components.VesselFilterChip
 import dev.falsis.vessel.ui.components.VesselLogoMark
 import dev.falsis.vessel.ui.components.VesselOutlinedButton
+import dev.falsis.vessel.ui.components.VesselOutlinedTextField
 import dev.falsis.vessel.ui.components.VesselTextButton
 import dev.falsis.vessel.ui.components.vesselDpadInputEscape
 import dev.falsis.vessel.ui.components.vesselFocusBorder
@@ -401,6 +406,11 @@ fun HomeScreen(
         if (hasEnabledPlugins && prefs.home.heroBanner != "hidden") {
             val heroHeight = if (prefs.home.heroBanner == "compact") 280.dp else 400.dp
             item(key = "spotlight-hero") {
+                val isTv = LocalIsTvDevice.current
+                val feedsBtnFocus = remember { FocusRequester() }
+                val refreshBtnFocus = remember { FocusRequester() }
+                val heroWatchFocus = remember { FocusRequester() }
+                val heroInfoFocus = remember { FocusRequester() }
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -474,7 +484,10 @@ fun HomeScreen(
                                 modifier = Modifier
                                     .fillMaxSize()
                                     .clip(RoundedCornerShape(0.dp))
-                                    .clickable { onOpenDetails(hero.pluginId, hero.summary.nativeId) },
+                                    .then(
+                                        if (isTv) Modifier
+                                        else Modifier.clickable { onOpenDetails(hero.pluginId, hero.summary.nativeId) },
+                                    ),
                             ) {
                                 if (!fallbackUrl.isNullOrBlank()) {
                                     AsyncImage(
@@ -645,6 +658,7 @@ fun HomeScreen(
 
                                     val isHeroLaunching = launchingHeroKey == detailKey
                                     val homeTokens = LocalVesselUiTokens.current
+                                    val isCurrentHeroPage = pagerState.currentPage == page
                                     Row(
                                         modifier = Modifier.padding(top = 4.dp),
                                         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -654,6 +668,14 @@ fun HomeScreen(
                                             enabled = launchingHeroKey == null,
                                             height = homeTokens.compactButtonHeight,
                                             contentPadding = PaddingValues(horizontal = 13.dp, vertical = 0.dp),
+                                            modifier = Modifier
+                                                .then(if (isCurrentHeroPage) Modifier.focusRequester(heroWatchFocus) else Modifier)
+                                                .focusProperties {
+                                                    up = feedsBtnFocus
+                                                    if (isCurrentHeroPage) {
+                                                        right = heroInfoFocus
+                                                    }
+                                                },
                                         ) {
                                             if (isHeroLaunching) {
                                                 CircularProgressIndicator(
@@ -678,6 +700,13 @@ fun HomeScreen(
                                             modifier = Modifier
                                                 .height(homeTokens.compactButtonHeight)
                                                 .clip(RoundedCornerShape(homeTokens.cornerRadius))
+                                                .then(if (isCurrentHeroPage) Modifier.focusRequester(heroInfoFocus) else Modifier)
+                                                .focusProperties {
+                                                    up = feedsBtnFocus
+                                                    if (isCurrentHeroPage) {
+                                                        left = heroWatchFocus
+                                                    }
+                                                }
                                                 .vesselFocusBorder(RoundedCornerShape(homeTokens.cornerRadius))
                                                 .clickable { onOpenDetails(hero.pluginId, hero.summary.nativeId) },
                                         ) {
@@ -726,15 +755,18 @@ fun HomeScreen(
                                             .width(barWidth)
                                             .clip(CircleShape)
                                             .background(barColor)
-                                            .clickable {
-                                                val diff = index - activeLogical
-                                                scope.launch {
-                                                    pagerState.animateScrollToPage(
-                                                        pagerState.currentPage + diff,
-                                                        animationSpec = tween(650, easing = FastOutSlowInEasing),
-                                                    )
-                                                }
-                                            },
+                                            .then(
+                                                if (isTv) Modifier
+                                                else Modifier.clickable {
+                                                    val diff = index - activeLogical
+                                                    scope.launch {
+                                                        pagerState.animateScrollToPage(
+                                                            pagerState.currentPage + diff,
+                                                            animationSpec = tween(650, easing = FastOutSlowInEasing),
+                                                        )
+                                                    }
+                                                },
+                                            ),
                                     )
                                 }
                             }
@@ -797,6 +829,13 @@ fun HomeScreen(
                             modifier = Modifier
                                 .height(heroTopTokens.smallIconButtonSize)
                                 .clip(RoundedCornerShape(999.dp))
+                                .focusRequester(feedsBtnFocus)
+                                .focusProperties {
+                                    right = refreshBtnFocus
+                                    if (spotlightPool.isNotEmpty()) {
+                                        down = heroWatchFocus
+                                    }
+                                }
                                 .vesselFocusBorder(RoundedCornerShape(999.dp))
                                 .clickable { showFeedsModal = true },
                         ) {
@@ -819,6 +858,14 @@ fun HomeScreen(
                             size = heroTopTokens.smallIconButtonSize,
                             containerColor = Color.Black.copy(alpha = 0.48f),
                             borderColor = Color.White.copy(alpha = 0.18f),
+                            modifier = Modifier
+                                .focusRequester(refreshBtnFocus)
+                                .focusProperties {
+                                    left = feedsBtnFocus
+                                    if (spotlightPool.isNotEmpty()) {
+                                        down = heroWatchFocus
+                                    }
+                                },
                         ) {
                             Icon(
                                 Icons.Default.Refresh,
@@ -1676,7 +1723,7 @@ fun HomeScreen(
                         }
 
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                            OutlinedTextField(
+                            VesselOutlinedTextField(
                                 value = seasonText,
                                 onValueChange = { v ->
                                     val clean = v.filter { it.isDigit() }
@@ -1694,7 +1741,7 @@ fun HomeScreen(
                                 singleLine = true,
                                 modifier = Modifier.weight(1f).vesselDpadInputEscape(isTextEmpty = seasonText.isEmpty()),
                             )
-                            OutlinedTextField(
+                            VesselOutlinedTextField(
                                 value = episodeText,
                                 onValueChange = { v ->
                                     val clean = v.filter { it.isDigit() }
@@ -1732,7 +1779,7 @@ fun HomeScreen(
                     }
 
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        OutlinedTextField(
+                        VesselOutlinedTextField(
                             value = watchedMinText,
                             onValueChange = { v ->
                                 val clean = v.filter { it.isDigit() }

@@ -77,6 +77,7 @@ import dev.falsis.vessel.data.VesselRepository
 import dev.falsis.vessel.ui.components.VesselButton
 import dev.falsis.vessel.ui.components.VesselFilterChip
 import dev.falsis.vessel.ui.components.VesselOutlinedButton
+import dev.falsis.vessel.ui.components.VesselOutlinedTextField
 import dev.falsis.vessel.ui.components.VesselTextButton
 import dev.falsis.vessel.ui.components.vesselDpadInputEscape
 import dev.falsis.vessel.ui.components.vesselTopSafeInset
@@ -285,7 +286,7 @@ fun SettingsScreen(
                         exit = shrinkVertically(tween(180)) + fadeOut(tween(140)),
                     ) {
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedTextField(
+                            VesselOutlinedTextField(
                                 value = themeJsonInput,
                                 onValueChange = { themeJsonInput = it },
                                 placeholder = { Text(VesselI18n.tr("settings.theme_paste_hint")) },
@@ -796,14 +797,14 @@ fun SettingsScreen(
                             )
                         }
 
-                        OutlinedTextField(
+                        VesselOutlinedTextField(
                             value = tmdbKey,
                             onValueChange = { tmdbKey = it },
                             label = { Text(VesselI18n.tr("settings.tmdb_key")) },
                             singleLine = true,
                             modifier = Modifier.fillMaxWidth().vesselDpadInputEscape(isTextEmpty = tmdbKey.isEmpty()),
                         )
-                        OutlinedTextField(
+                        VesselOutlinedTextField(
                             value = simklClientId,
                             onValueChange = { simklClientId = it },
                             label = { Text(VesselI18n.tr("settings.simkl_client_id")) },
@@ -884,7 +885,7 @@ fun SettingsScreen(
                         }
                     }
 
-                    OutlinedTextField(
+                    VesselOutlinedTextField(
                         value = backupJsonInput,
                         onValueChange = { backupJsonInput = it },
                         placeholder = { Text(VesselI18n.tr("settings.backup_paste_hint")) },
