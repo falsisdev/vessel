@@ -128,6 +128,7 @@ let forceNativeHlsNextTry = false
 let lastTargetStartSec = 0
 let isResettingMedia = false
 let userExplicitPause = false
+let triedAutoMpv = false
 let boundAudioTrackList: NativeAudioTrackList | null = null
 
 const handleNativeAudioTrackChange = (): void => {
@@ -920,8 +921,8 @@ async function switchEpisode(ep: Episode): Promise<void> {
   }
 }
 
-async function openInExternalMpv(): Promise<void> {
-  if (!detail.value || !currentEpisode.value || !activeStream.value) return
+async function openInExternalMpv(silentOnFailure = false): Promise<boolean> {
+  if (!detail.value || !currentEpisode.value || !activeStream.value) return false
   try {
     await vesselApi.playCandidate({
       pluginId: props.pluginId,
@@ -938,9 +939,14 @@ async function openInExternalMpv(): Promise<void> {
         : `${detail.value.title} — S${currentEpisode.value.season}:E${currentEpisode.value.episode}`,
     })
     videoRef.value?.pause()
+    playbackError.value = ''
     pushToast('info', 'Handed off playback to external mpv')
+    return true
   } catch (err) {
-    pushToast('warn', String(err))
+    if (!silentOnFailure) {
+      pushToast('warn', String(err))
+    }
+    return false
   }
 }
 
@@ -1093,6 +1099,18 @@ function onVideoError(): void {
       return
     }
   }
+  if (code === 4 && !triedAutoMpv) {
+    triedAutoMpv = true
+    isBuffering.value = false
+    isPlaying.value = false
+    controlsVisible.value = true
+    void openInExternalMpv(true).then((launched) => {
+      if (!launched) {
+        playbackError.value = t('player.error_unsupported')
+      }
+    })
+    return
+  }
   playbackError.value =
     code === 4
       ? t('player.error_unsupported')
@@ -1218,6 +1236,7 @@ async function attachMediaSource(
   if (!el || !src) return
 
   userExplicitPause = false
+  triedAutoMpv = false
   lastTargetStartSec = startSec
   destroyMediaEngines()
   isResettingMedia = false
@@ -1611,7 +1630,7 @@ onUnmounted(() => {
               type="button"
               class="cs-pill-btn"
               title="Open in external mpv (if installed)"
-              @click="openInExternalMpv"
+              @click="() => void openInExternalMpv()"
             >
               <ExternalLink :size="15" aria-hidden="true" />
               <span>MPV</span>

@@ -112,6 +112,13 @@ fn resolve_mpv_binary(configured: &Path) -> PathBuf {
         extra_candidates.push(PathBuf::from("/usr/bin/mpv"));
         extra_candidates.push(PathBuf::from("/usr/local/bin/mpv"));
         extra_candidates.push(PathBuf::from("/snap/bin/mpv"));
+        extra_candidates.push(PathBuf::from("/home/linuxbrew/.linuxbrew/bin/mpv"));
+        extra_candidates.push(PathBuf::from("/run/current-system/sw/bin/mpv"));
+        if let Some(home) = std::env::var_os("HOME") {
+            let h = PathBuf::from(home);
+            extra_candidates.push(h.join(".linuxbrew/bin/mpv"));
+            extra_candidates.push(h.join(".nix-profile/bin/mpv"));
+        }
     }
     #[cfg(windows)]
     {
