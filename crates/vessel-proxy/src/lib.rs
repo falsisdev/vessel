@@ -610,6 +610,10 @@ async fn add_cors_headers(mut resp: Response) -> Response {
     resp
 }
 
+async fn options_cors_handler() -> StatusCode {
+    StatusCode::NO_CONTENT
+}
+
 /// Localhost-bound `axum` proxy server with shared `reqwest` (`rustls`) pool and HMAC key.
 #[derive(Debug)]
 pub struct ProxyServer {
@@ -651,9 +655,9 @@ impl ProxyServer {
 
         let router = Router::new()
             .route("/health", get(health_handler))
-            .route("/s/{token}/master", get(master_stream_handler))
-            .route("/s/{token}/seg", get(seg_stream_handler))
-            .route("/local/{token}/{*path}", get(local_file_handler))
+            .route("/s/{token}/master", get(master_stream_handler).options(options_cors_handler))
+            .route("/s/{token}/seg", get(seg_stream_handler).options(options_cors_handler))
+            .route("/local/{token}/{*path}", get(local_file_handler).options(options_cors_handler))
             .with_state(state)
             .layer(middleware::map_response(add_cors_headers));
         let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();

@@ -4,12 +4,14 @@ pub mod ipc;
 
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::Stdio;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use async_trait::async_trait;
 use serde_json::Value;
+use tokio::io::AsyncReadExt;
 use tokio::process::{Child, Command};
 use tokio::sync::Mutex;
 use vessel_domain::{
@@ -19,9 +21,37 @@ use vessel_domain::{
 
 use ipc::MpvIpcClient;
 
-const SOCKET_CONNECT_TIMEOUT: Duration = Duration::from_secs(3);
+const SOCKET_CONNECT_TIMEOUT: Duration = Duration::from_secs(6);
+const HOST_PROBE_TIMEOUT: Duration = Duration::from_secs(5);
 const SOCKET_POLL_INTERVAL: Duration = Duration::from_millis(25);
+const MAX_STDERR_CAPTURE_BYTES: usize = 4096;
 static NEXT_INSTANCE_ID: AtomicU64 = AtomicU64::new(1);
+
+/// Returns `true` when running inside a Linux Flatpak sandbox.
+fn is_flatpak_sandbox() -> bool {
+    cfg!(target_os = "linux")
+        && (Path::new("/.flatpak-info").exists() || std::env::var_os("FLATPAK_ID").is_some())
+}
+
+/// Computes a runtime directory accessible to both the Flatpak sandbox and host `mpv`.
+///
+/// Flatpak bind-mounts `$XDG_RUNTIME_DIR/app/$FLATPAK_ID` at the exact same path inside the
+/// sandbox and on the host, whereas `/tmp` is private to the sandbox.
+fn resolve_default_runtime_dir(
+    flatpak: bool,
+    xdg_runtime_dir: Option<&Path>,
+    flatpak_id: Option<&str>,
+    temp_dir: &Path,
+    suffix: &str,
+) -> PathBuf {
+    if flatpak
+        && let Some(runtime_base) = xdg_runtime_dir.filter(|p| !p.as_os_str().is_empty())
+        && let Some(app_id) = flatpak_id.map(str::trim).filter(|s| !s.is_empty())
+    {
+        return runtime_base.join("app").join(app_id).join(suffix);
+    }
+    temp_dir.join(suffix)
+}
 
 /// Launch configuration for `MpvWindowBackend`.
 #[derive(Debug, Clone)]
@@ -41,10 +71,20 @@ impl Default for MpvConfig {
             .unwrap_or_default()
             .as_nanos();
         let seq = NEXT_INSTANCE_ID.fetch_add(1, Ordering::Relaxed);
+        let suffix = format!("vessel-mpv-{nanos}-{seq}");
+        let xdg_runtime = std::env::var_os("XDG_RUNTIME_DIR").map(PathBuf::from);
+        let flatpak_id = std::env::var("FLATPAK_ID").ok();
+        let temp_dir = std::env::temp_dir();
         Self {
             binary_path: PathBuf::from("mpv"),
             extra_args: Vec::new(),
-            runtime_dir: std::env::temp_dir().join(format!("vessel-mpv-{nanos}-{seq}")),
+            runtime_dir: resolve_default_runtime_dir(
+                is_flatpak_sandbox(),
+                xdg_runtime.as_deref(),
+                flatpak_id.as_deref(),
+                &temp_dir,
+                &suffix,
+            ),
         }
     }
 }
@@ -79,6 +119,21 @@ fn subtitle_extension(format: SubtitleFormat) -> &'static str {
         SubtitleFormat::Ssa => "ssa",
         SubtitleFormat::Vtt => "vtt",
     }
+}
+
+/// Resolved process invocation strategy for `mpv` (native direct or Flatpak host bridge).
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum MpvLaunchPlan {
+    Direct(PathBuf),
+    FlatpakHostBinary {
+        spawn_bin: PathBuf,
+        binary: String,
+    },
+    FlatpakHostApp {
+        spawn_bin: PathBuf,
+        app_id: String,
+        runtime_dir: PathBuf,
+    },
 }
 
 /// Resolves `mpv` executable even when macOS/Windows GUI bundles launch with a stripped `PATH`.
@@ -139,6 +194,222 @@ fn resolve_mpv_binary(configured: &Path) -> PathBuf {
         .unwrap_or_else(|| configured.to_path_buf())
 }
 
+fn resolve_flatpak_spawn_binary() -> Option<PathBuf> {
+    if let Some(path_var) = std::env::var_os("PATH") {
+        for dir in std::env::split_paths(&path_var) {
+            let candidate = dir.join("flatpak-spawn");
+            if candidate.is_file() {
+                return Some(candidate);
+            }
+        }
+    }
+    [
+        Path::new("/usr/bin/flatpak-spawn"),
+        Path::new("/bin/flatpak-spawn"),
+        Path::new("/app/bin/flatpak-spawn"),
+    ]
+    .into_iter()
+    .find(|p| p.is_file())
+    .map(Path::to_path_buf)
+}
+
+const FLATPAK_APP_PROBE_PREFIX: &str = "__FLATPAK_APP__:";
+
+fn parse_host_mpv_probe_output(raw: &str) -> Option<Result<String, String>> {
+    let line = raw
+        .lines()
+        .map(str::trim)
+        .find(|line| !line.is_empty())?;
+    if let Some(app_id) = line.strip_prefix(FLATPAK_APP_PROBE_PREFIX) {
+        let trimmed = app_id.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(Err(trimmed.to_owned()))
+        }
+    } else {
+        Some(Ok(line.to_owned()))
+    }
+}
+
+fn missing_mpv_error(is_flatpak: bool) -> VesselError {
+    if is_flatpak {
+        VesselError::Player(
+            "mpv executable not found on the host system. Install mpv on your host (e.g. 'sudo apt install mpv', 'sudo dnf install mpv', 'sudo pacman -S mpv', or 'flatpak install flathub io.mpv.Mpv') to launch external playback."
+                .into(),
+        )
+    } else if cfg!(target_os = "linux") {
+        VesselError::Player(
+            "mpv executable not found. Install mpv (e.g. 'sudo apt install mpv', 'sudo dnf install mpv', 'sudo pacman -S mpv', or 'flatpak install flathub io.mpv.Mpv') to launch external playback."
+                .into(),
+        )
+    } else {
+        VesselError::Player(
+            "mpv executable not found. Install mpv (e.g. 'brew install mpv' on macOS or winget/scoop on Windows) to launch external playback."
+                .into(),
+        )
+    }
+}
+
+async fn resolve_mpv_launch(config: &MpvConfig) -> VesselResult<MpvLaunchPlan> {
+    if is_flatpak_sandbox() {
+        let explicit_sandbox_bin =
+            config.binary_path != Path::new("mpv") && config.binary_path.is_file();
+        if explicit_sandbox_bin {
+            return Ok(MpvLaunchPlan::Direct(config.binary_path.clone()));
+        }
+
+        let Some(spawn_bin) = resolve_flatpak_spawn_binary() else {
+            return Err(VesselError::Player(
+                "flatpak-spawn is unavailable inside the sandbox; grant org.freedesktop.Flatpak portal access or install mpv locally."
+                    .into(),
+            ));
+        };
+
+        let probe_script = r#"
+if [ -n "$1" ] && [ "$1" != "mpv" ] && [ -x "$1" ]; then
+  printf '%s\n' "$1"
+  exit 0
+fi
+if command -v mpv >/dev/null 2>&1; then
+  command -v mpv
+  exit 0
+fi
+for p in \
+  /usr/bin/mpv \
+  /usr/local/bin/mpv \
+  /snap/bin/mpv \
+  /var/lib/snapd/snap/bin/mpv \
+  /home/linuxbrew/.linuxbrew/bin/mpv \
+  /run/current-system/sw/bin/mpv \
+  "$HOME/.linuxbrew/bin/mpv" \
+  "$HOME/.nix-profile/bin/mpv" \
+  "/etc/profiles/per-user/${USER:-}/bin/mpv"
+do
+  if [ -x "$p" ]; then
+    printf '%s\n' "$p"
+    exit 0
+  fi
+done
+if command -v flatpak >/dev/null 2>&1 && flatpak info io.mpv.Mpv >/dev/null 2>&1; then
+  printf '__FLATPAK_APP__:io.mpv.Mpv\n'
+  exit 0
+fi
+exit 1
+"#;
+
+        let mut probe_cmd = Command::new(&spawn_bin);
+        probe_cmd
+            .arg("--host")
+            .arg("/bin/sh")
+            .arg("-c")
+            .arg(probe_script)
+            .arg("vessel-mpv-probe")
+            .arg(config.binary_path.to_string_lossy().as_ref())
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+
+        let output = tokio::time::timeout(HOST_PROBE_TIMEOUT, probe_cmd.output())
+            .await
+            .map_err(|_| {
+                VesselError::Player(
+                    "timed out probing host mpv via flatpak-spawn".into(),
+                )
+            })?
+            .map_err(|err| {
+                VesselError::Player(format!(
+                    "probe host mpv via {}: {err}",
+                    spawn_bin.display()
+                ))
+            })?;
+
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            match parse_host_mpv_probe_output(&stdout) {
+                Some(Ok(binary)) => {
+                    return Ok(MpvLaunchPlan::FlatpakHostBinary { spawn_bin, binary });
+                }
+                Some(Err(app_id)) => {
+                    return Ok(MpvLaunchPlan::FlatpakHostApp {
+                        spawn_bin,
+                        app_id,
+                        runtime_dir: config.runtime_dir.clone(),
+                    });
+                }
+                None => {}
+            }
+        }
+
+        let stderr_text = String::from_utf8_lossy(&output.stderr).trim().to_owned();
+        if !stderr_text.is_empty() && output.status.code() != Some(1) {
+            return Err(VesselError::Player(format!(
+                "flatpak-spawn host mpv check failed: {stderr_text}"
+            )));
+        }
+        return Err(missing_mpv_error(true));
+    }
+
+    Ok(MpvLaunchPlan::Direct(resolve_mpv_binary(
+        &config.binary_path,
+    )))
+}
+
+fn build_mpv_command(
+    plan: &MpvLaunchPlan,
+    socket_path: &Path,
+    initial_title: Option<&str>,
+    extra_args: &[String],
+) -> (Command, String) {
+    let mut cmd = match plan {
+        MpvLaunchPlan::Direct(bin) => Command::new(bin),
+        MpvLaunchPlan::FlatpakHostBinary { spawn_bin, binary } => {
+            let mut c = Command::new(spawn_bin);
+            c.arg("--host").arg(binary);
+            c
+        }
+        MpvLaunchPlan::FlatpakHostApp {
+            spawn_bin,
+            app_id,
+            runtime_dir,
+        } => {
+            let mut c = Command::new(spawn_bin);
+            c.arg("--host")
+                .arg("flatpak")
+                .arg("run")
+                .arg(format!("--filesystem={}", runtime_dir.display()))
+                .arg(app_id);
+            c
+        }
+    };
+
+    cmd.arg("--idle=yes")
+        .arg("--force-window=yes")
+        .arg("--no-terminal")
+        .arg(format!("--input-ipc-server={}", socket_path.display()));
+    if let Some(title) = initial_title {
+        cmd.arg(format!("--title={title}"));
+    }
+    for arg in extra_args {
+        cmd.arg(arg);
+    }
+    cmd.stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true);
+
+    let display_target = match plan {
+        MpvLaunchPlan::Direct(bin) => bin.display().to_string(),
+        MpvLaunchPlan::FlatpakHostBinary { binary, .. } => {
+            format!("flatpak-spawn --host {binary}")
+        }
+        MpvLaunchPlan::FlatpakHostApp { app_id, .. } => {
+            format!("flatpak-spawn --host flatpak run {app_id}")
+        }
+    };
+    (cmd, display_target)
+}
+
 impl MpvWindowBackend {
     /// Creates a desktop `mpv` window backend using `config` and forwarding state to `event_sink`.
     pub fn new(config: MpvConfig, event_sink: Option<Arc<dyn EventSink>>) -> Self {
@@ -187,39 +458,59 @@ impl MpvWindowBackend {
         let socket_path = self.config.runtime_dir.join(format!("mpv-{seq}.sock"));
         let _ = fs::remove_file(&socket_path);
 
-        let resolved_bin = resolve_mpv_binary(&self.config.binary_path);
-        let mut cmd = Command::new(&resolved_bin);
-        cmd.arg("--idle=yes")
-            .arg("--force-window=yes")
-            .arg("--no-terminal")
-            .arg(format!("--input-ipc-server={}", socket_path.display()));
-        if let Some(title) = initial_title {
-            cmd.arg(format!("--title={title}"));
-        }
-        for arg in &self.config.extra_args {
-            cmd.arg(arg);
-        }
-        cmd.kill_on_drop(true);
+        let plan = resolve_mpv_launch(&self.config).await?;
+        let is_flatpak = !matches!(plan, MpvLaunchPlan::Direct(_));
+        let (mut cmd, display_target) = build_mpv_command(
+            &plan,
+            &socket_path,
+            initial_title,
+            &self.config.extra_args,
+        );
 
         let mut child = cmd.spawn().map_err(|err| {
             if err.kind() == std::io::ErrorKind::NotFound {
-                VesselError::Player(
-                    "mpv executable not found. Install mpv (e.g. 'brew install mpv' on macOS or winget/scoop on Windows) to launch external playback."
-                        .into(),
-                )
+                missing_mpv_error(is_flatpak)
             } else {
-                VesselError::Player(format!(
-                    "spawn mpv process ({}): {err}",
-                    resolved_bin.display()
-                ))
+                VesselError::Player(format!("spawn mpv process ({display_target}): {err}"))
             }
         })?;
+
+        let stderr_buf = Arc::new(std::sync::Mutex::new(Vec::<u8>::new()));
+        if let Some(mut stderr_pipe) = child.stderr.take() {
+            let stderr_buf_task = Arc::clone(&stderr_buf);
+            tokio::spawn(async move {
+                let mut chunk = [0u8; 1024];
+                while let Ok(n) = stderr_pipe.read(&mut chunk).await {
+                    if n == 0 {
+                        break;
+                    }
+                    if let Ok(mut buf) = stderr_buf_task.lock() {
+                        if buf.len() < MAX_STDERR_CAPTURE_BYTES {
+                            let remaining = MAX_STDERR_CAPTURE_BYTES - buf.len();
+                            let take = n.min(remaining);
+                            buf.extend_from_slice(&chunk[..take]);
+                        }
+                    }
+                }
+            });
+        }
 
         let deadline = tokio::time::Instant::now() + SOCKET_CONNECT_TIMEOUT;
         let ipc = loop {
             if let Ok(Some(status)) = child.try_wait() {
+                tokio::time::sleep(Duration::from_millis(20)).await;
+                let stderr_msg = stderr_buf
+                    .lock()
+                    .ok()
+                    .map(|b| String::from_utf8_lossy(&b).trim().to_owned())
+                    .unwrap_or_default();
+                if stderr_msg.is_empty() {
+                    return Err(VesselError::Player(format!(
+                        "mpv exited early with status {status}"
+                    )));
+                }
                 return Err(VesselError::Player(format!(
-                    "mpv exited early with status {status}"
+                    "mpv exited early with status {status}: {stderr_msg}"
                 )));
             }
             match MpvIpcClient::connect(&socket_path, self.event_sink.clone()).await {
@@ -582,5 +873,44 @@ mod tests {
         drop(backend);
         server_task.abort();
         let _ = std::fs::remove_dir_all(&runtime_dir);
+    }
+
+    #[test]
+    fn resolve_default_runtime_dir_uses_shared_xdg_app_dir_inside_flatpak() {
+        use std::path::Path;
+
+        let dir = super::resolve_default_runtime_dir(
+            true,
+            Some(Path::new("/run/user/1000")),
+            Some("dev.falsis.vessel"),
+            Path::new("/tmp"),
+            "vessel-mpv-1-1",
+        );
+        assert_eq!(
+            dir,
+            Path::new("/run/user/1000/app/dev.falsis.vessel/vessel-mpv-1-1")
+        );
+
+        let fallback = super::resolve_default_runtime_dir(
+            false,
+            Some(Path::new("/run/user/1000")),
+            Some("dev.falsis.vessel"),
+            Path::new("/tmp"),
+            "vessel-mpv-1-1",
+        );
+        assert_eq!(fallback, Path::new("/tmp/vessel-mpv-1-1"));
+    }
+
+    #[test]
+    fn parse_host_mpv_probe_output_handles_binary_and_flatpak_app() {
+        assert_eq!(
+            super::parse_host_mpv_probe_output("\n  /usr/bin/mpv \n"),
+            Some(Ok("/usr/bin/mpv".to_owned()))
+        );
+        assert_eq!(
+            super::parse_host_mpv_probe_output("__FLATPAK_APP__:io.mpv.Mpv\n"),
+            Some(Err("io.mpv.Mpv".to_owned()))
+        );
+        assert_eq!(super::parse_host_mpv_probe_output("   \n "), None);
     }
 }

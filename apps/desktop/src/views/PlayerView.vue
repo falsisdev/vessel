@@ -81,6 +81,7 @@ const progressBarRef = ref<HTMLElement | null>(null)
 const loadingInitial = ref(false)
 const switchingEpisode = ref(false)
 const playbackError = ref('')
+const externalPlayerActive = ref(false)
 
 const isPlaying = ref(false)
 const isBuffering = ref(false)
@@ -129,7 +130,44 @@ let lastTargetStartSec = 0
 let isResettingMedia = false
 let userExplicitPause = false
 let triedAutoMpv = false
+let loadWatchdogTimer: number | null = null
 let boundAudioTrackList: NativeAudioTrackList | null = null
+
+function clearLoadWatchdog(): void {
+  if (loadWatchdogTimer !== null) {
+    window.clearTimeout(loadWatchdogTimer)
+    loadWatchdogTimer = null
+  }
+}
+
+function isLikelyUnsupportedInWebView(
+  el: HTMLVideoElement,
+  stream: StreamCandidate,
+  src: string,
+): boolean {
+  const pathWithoutQuery = src.split(/[?#]/)[0]?.toLowerCase() ?? ''
+  const meta = `${stream.label ?? ''} ${stream.quality ?? ''}`.toLowerCase()
+  const isMatroska =
+    stream.kind === 'mkv' ||
+    pathWithoutQuery.endsWith('.mkv') ||
+    /\bmkv\b/.test(meta)
+  if (isMatroska && el.canPlayType('video/x-matroska') === '') {
+    return true
+  }
+  if (/\.(?:avi|flv|wmv)$/.test(pathWithoutQuery)) {
+    return true
+  }
+  if (/\b(?:truehd|dts(?:-hd)?|ac-?3|e-?ac-?3|ddp)\b/.test(meta)) {
+    return true
+  }
+  if (
+    /\b(?:h\.?265|hevc)\b/.test(meta) &&
+    el.canPlayType('video/mp4; codecs="hvc1.1.6.L93.B0"') === ''
+  ) {
+    return true
+  }
+  return false
+}
 
 const handleNativeAudioTrackChange = (): void => {
   syncAudioTracks()
@@ -228,6 +266,7 @@ function switchAudioTrack(option: AudioTrackOption): void {
 }
 
 function destroyMediaEngines(): void {
+  clearLoadWatchdog()
   unbindNativeAudioListeners()
   audioTracks.value = []
   if (hlsInstance) {
@@ -938,8 +977,12 @@ async function openInExternalMpv(silentOnFailure = false): Promise<boolean> {
         ? (currentEpisode.value.title ?? detail.value.title)
         : `${detail.value.title} — S${currentEpisode.value.season}:E${currentEpisode.value.episode}`,
     })
-    videoRef.value?.pause()
+    destroyMediaEngines()
+    isBuffering.value = false
+    isPlaying.value = false
     playbackError.value = ''
+    externalPlayerActive.value = true
+    controlsVisible.value = true
     pushToast('info', 'Handed off playback to external mpv')
     return true
   } catch (err) {
@@ -985,6 +1028,7 @@ function goToDetails(): void {
 function onLoadedMetadata(): void {
   const el = videoRef.value
   if (!el) return
+  clearLoadWatchdog()
   playbackError.value = ''
   duration.value = Number.isFinite(el.duration) ? el.duration : 0
   if (
@@ -1032,6 +1076,7 @@ function onSeeked(): void {
 function onCanPlay(): void {
   const el = videoRef.value
   if (!el) return
+  clearLoadWatchdog()
   playbackError.value = ''
   syncAudioTracks()
   if (pendingSeekSeconds.value !== null && pendingSeekSeconds.value > 2 && !hlsInstance) {
@@ -1051,6 +1096,7 @@ function onCanPlay(): void {
 }
 
 function onPlaying(): void {
+  clearLoadWatchdog()
   playbackError.value = ''
   isBuffering.value = false
   isPlaying.value = true
@@ -1078,6 +1124,7 @@ function onVideoError(): void {
     playbackError.value = ''
     return
   }
+  clearLoadWatchdog()
 
   const src = playableSrc.value
   const stream = activeStream.value
@@ -1092,12 +1139,6 @@ function onVideoError(): void {
       void attachMediaSource(src, stream, true, lastTargetStartSec)
       return
     }
-    // Auto-try next stream candidate (e.g. Xtream HLS <-> MPEG-TS) when primary stream fails
-    const curIdx = session.value?.activeStreamIndex ?? 0
-    if (curIdx + 1 < streams.value.length) {
-      switchSource(curIdx + 1)
-      return
-    }
   }
   if (code === 4 && !triedAutoMpv) {
     triedAutoMpv = true
@@ -1105,10 +1146,19 @@ function onVideoError(): void {
     isPlaying.value = false
     controlsVisible.value = true
     void openInExternalMpv(true).then((launched) => {
-      if (!launched) {
-        playbackError.value = t('player.error_unsupported')
+      if (launched) return
+      const curIdx = session.value?.activeStreamIndex ?? 0
+      if (curIdx + 1 < streams.value.length) {
+        switchSource(curIdx + 1)
+        return
       }
+      playbackError.value = t('player.error_unsupported')
     })
+    return
+  }
+  const curIdx = session.value?.activeStreamIndex ?? 0
+  if (curIdx + 1 < streams.value.length) {
+    switchSource(curIdx + 1)
     return
   }
   playbackError.value =
@@ -1120,13 +1170,14 @@ function onVideoError(): void {
   controlsVisible.value = true
 }
 
-function retryStream(): void {
+function retryStream(forceInApp = false): void {
   const stream = activeStream.value
   const src = playableSrc.value
   if (!stream || !src) return
   playbackError.value = ''
+  externalPlayerActive.value = false
   isBuffering.value = true
-  void attachMediaSource(src, stream, forceNativeHlsNextTry, lastTargetStartSec)
+  void attachMediaSource(src, stream, forceNativeHlsNextTry, lastTargetStartSec, forceInApp)
 }
 
 function handleKeydown(ev: KeyboardEvent): void {
@@ -1230,22 +1281,40 @@ async function attachMediaSource(
   stream: StreamCandidate,
   preferNativeFallback = false,
   startSec = 0,
+  skipExternalAuto = false,
 ): Promise<void> {
   await nextTick()
   const el = videoRef.value
   if (!el || !src) return
 
   userExplicitPause = false
-  triedAutoMpv = false
+  triedAutoMpv = skipExternalAuto
+  externalPlayerActive.value = false
   lastTargetStartSec = startSec
   destroyMediaEngines()
   isResettingMedia = false
 
   const lowerSrc = src.toLowerCase()
+  const lowerOriginal = stream.url.toLowerCase()
   const looksMpegTs =
     stream.kind === 'mpeg_ts' ||
-    (lowerSrc.includes('.ts') && !lowerSrc.includes('.m3u8'))
-  const looksHls = stream.kind === 'hls' || lowerSrc.includes('.m3u8')
+    ((lowerSrc.includes('.ts') || lowerOriginal.includes('.ts')) &&
+      !lowerSrc.includes('.m3u8') &&
+      !lowerOriginal.includes('.m3u8'))
+  const looksHls =
+    stream.kind === 'hls' || lowerSrc.includes('.m3u8') || lowerOriginal.includes('.m3u8')
+
+  if (
+    !preferNativeFallback &&
+    !skipExternalAuto &&
+    !looksHls &&
+    !looksMpegTs &&
+    isLikelyUnsupportedInWebView(el, stream, stream.url)
+  ) {
+    triedAutoMpv = true
+    const launched = await openInExternalMpv(true)
+    if (launched) return
+  }
 
   if (looksMpegTs && mpegts.isSupported()) {
     try {
@@ -1343,6 +1412,29 @@ async function attachMediaSource(
   bindNativeAudioListeners(el)
   pendingSeekSeconds.value = startSec > 2 ? startSec : null
   el.src = src
+
+  const watchdogSeq = attachSeq
+  loadWatchdogTimer = window.setTimeout(() => {
+    loadWatchdogTimer = null
+    if (watchdogSeq !== attachSeq) return
+    if (playbackError.value || externalPlayerActive.value) return
+    if (!isBuffering.value || el.readyState >= 2) return
+    if (!triedAutoMpv) {
+      triedAutoMpv = true
+      void openInExternalMpv(true).then((launched) => {
+        if (launched || watchdogSeq !== attachSeq) return
+        isBuffering.value = false
+        isPlaying.value = false
+        controlsVisible.value = true
+        playbackError.value = t('player.error_failed')
+      })
+      return
+    }
+    isBuffering.value = false
+    isPlaying.value = false
+    controlsVisible.value = true
+    playbackError.value = t('player.error_failed')
+  }, 12_000)
 }
 
 let attachSeq = 0
@@ -1354,6 +1446,7 @@ watch(
     destroyMediaEngines()
     forceNativeHlsNextTry = false
     lastTargetStartSec = 0
+    externalPlayerActive.value = false
     playbackError.value = ''
     isBuffering.value = true
     currentTime.value = 0
@@ -1466,7 +1559,10 @@ onUnmounted(() => {
     <div v-if="controlsVisible && !isLocked" class="cs-vignette-bottom" />
 
     <!-- Buffering / Initial Loading Overlay -->
-    <div v-if="loadingInitial || switchingEpisode || (isBuffering && !playbackError)" class="cs-center-state">
+    <div
+      v-if="loadingInitial || switchingEpisode || (isBuffering && !playbackError && !externalPlayerActive)"
+      class="cs-center-state"
+    >
       <div class="cs-spinner" />
       <span class="cs-state-label">
         {{
@@ -1479,13 +1575,43 @@ onUnmounted(() => {
       </span>
     </div>
 
+    <!-- External MPV Active Overlay -->
+    <div v-else-if="externalPlayerActive && !playbackError" class="cs-error-overlay">
+      <div class="v-card cs-error-card">
+        <h3>Playing in External MPV</h3>
+        <p>Playback was handed off to mpv for full container &amp; codec support.</p>
+        <div class="cs-error-actions">
+          <button type="button" class="v-btn v-btn-primary" @click="() => void openInExternalMpv()">
+            Open in MPV
+          </button>
+          <button type="button" class="v-btn v-btn-secondary" @click="() => retryStream(true)">
+            Play in App
+          </button>
+          <button
+            v-if="streams.length > 1"
+            type="button"
+            class="v-btn v-btn-secondary"
+            @click="activeDrawer = 'sources'"
+          >
+            Switch Source ({{ streams.length }})
+          </button>
+          <button v-if="!isLive" type="button" class="v-btn v-btn-ghost" @click="goToDetails">
+            {{ t('player.go_to_details') }}
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- Error Overlay -->
     <div v-if="playbackError" class="cs-error-overlay">
       <div class="v-card cs-error-card">
         <h3>Playback Issue</h3>
         <p>{{ playbackError }}</p>
         <div class="cs-error-actions">
-          <button type="button" class="v-btn v-btn-primary" @click="retryStream">Retry</button>
+          <button type="button" class="v-btn v-btn-primary" @click="() => retryStream(false)">Retry</button>
+          <button type="button" class="v-btn v-btn-secondary" @click="() => void openInExternalMpv()">
+            Open in MPV
+          </button>
           <button
             v-if="streams.length > 1"
             type="button"
