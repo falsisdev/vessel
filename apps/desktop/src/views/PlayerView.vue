@@ -74,6 +74,14 @@ interface AudioTrackOption {
   source: 'hls' | 'native' | 'embedded'
 }
 
+interface MuxedSubtitleOption {
+  id: number
+  label: string
+  lang?: string
+  active: boolean
+  source: 'hls' | 'native'
+}
+
 interface NativeAudioTrack {
   id?: string
   kind?: string
@@ -141,6 +149,8 @@ const pendingSeekSeconds = ref<number | null>(null)
 const playableSrc = ref<string>('')
 const gestureLabel = ref<string>('')
 const audioTracks = ref<AudioTrackOption[]>([])
+const muxedWebSubtitleTracks = ref<MuxedSubtitleOption[]>([])
+const activeMuxedWebSubKey = ref<string | null>(null)
 const skipSegments = ref<SkipSegment[]>([])
 const dismissedSkipKeys = ref<Set<string>>(new Set())
 const loadedPlugins = ref<PluginListEntry[]>([])
@@ -165,6 +175,12 @@ let triedAutoMpv = false
 let loadWatchdogTimer: number | null = null
 let unlistenEmbedded: UnlistenFn | null = null
 let boundAudioTrackList: NativeAudioTrackList | null = null
+let boundTextTrackList: TextTrackList | null = null
+let lastEmbeddedTracksSig = ''
+
+function trackListSignature(tracks: EmbeddedTrackInfo[]): string {
+  return tracks.map((t) => `${t.id}:${t.selected ? 1 : 0}:${t.title ?? ''}:${t.lang ?? ''}`).join('|')
+}
 
 function setEmbeddedSurfaceClass(active: boolean): void {
   document.documentElement.classList.toggle('embedded-mpv-active', active)
@@ -263,22 +279,121 @@ const handleNativeAudioTrackChange = (): void => {
   syncAudioTracks()
 }
 
+const handleNativeTextTrackChange = (): void => {
+  syncMuxedWebSubtitles()
+}
+
 function unbindNativeAudioListeners(): void {
-  if (!boundAudioTrackList) return
-  boundAudioTrackList.removeEventListener('addtrack', handleNativeAudioTrackChange)
-  boundAudioTrackList.removeEventListener('removetrack', handleNativeAudioTrackChange)
-  boundAudioTrackList.removeEventListener('change', handleNativeAudioTrackChange)
-  boundAudioTrackList = null
+  if (boundAudioTrackList) {
+    boundAudioTrackList.removeEventListener('addtrack', handleNativeAudioTrackChange)
+    boundAudioTrackList.removeEventListener('removetrack', handleNativeAudioTrackChange)
+    boundAudioTrackList.removeEventListener('change', handleNativeAudioTrackChange)
+    boundAudioTrackList = null
+  }
+  if (boundTextTrackList) {
+    boundTextTrackList.removeEventListener('addtrack', handleNativeTextTrackChange)
+    boundTextTrackList.removeEventListener('removetrack', handleNativeTextTrackChange)
+    boundTextTrackList.removeEventListener('change', handleNativeTextTrackChange)
+    boundTextTrackList = null
+  }
 }
 
 function bindNativeAudioListeners(el: HTMLVideoElement): void {
   unbindNativeAudioListeners()
   const list = (el as HTMLVideoElement & { audioTracks?: NativeAudioTrackList }).audioTracks
-  if (!list || typeof list.addEventListener !== 'function') return
-  boundAudioTrackList = list
-  list.addEventListener('addtrack', handleNativeAudioTrackChange)
-  list.addEventListener('removetrack', handleNativeAudioTrackChange)
-  list.addEventListener('change', handleNativeAudioTrackChange)
+  if (list && typeof list.addEventListener === 'function') {
+    boundAudioTrackList = list
+    list.addEventListener('addtrack', handleNativeAudioTrackChange)
+    list.addEventListener('removetrack', handleNativeAudioTrackChange)
+    list.addEventListener('change', handleNativeAudioTrackChange)
+  }
+  const textList = el.textTracks
+  if (textList && typeof textList.addEventListener === 'function') {
+    boundTextTrackList = textList
+    textList.addEventListener('addtrack', handleNativeTextTrackChange)
+    textList.addEventListener('removetrack', handleNativeTextTrackChange)
+    textList.addEventListener('change', handleNativeTextTrackChange)
+  }
+}
+
+function syncMuxedWebSubtitles(): void {
+  if (isEmbeddedMpv.value) {
+    muxedWebSubtitleTracks.value = []
+    activeMuxedWebSubKey.value = null
+    return
+  }
+
+  if (hlsInstance) {
+    const raw = hlsInstance.subtitleTracks ?? []
+    const currentId = hlsInstance.subtitleTrack
+    muxedWebSubtitleTracks.value = raw.map((trk, idx) => {
+      const id = trk.id ?? idx
+      const lang = trk.lang?.trim() || undefined
+      const active = id === currentId && currentId >= 0
+      return {
+        id,
+        label: trk.name?.trim() || lang?.toUpperCase() || `Subtitle ${idx + 1}`,
+        lang,
+        active,
+        source: 'hls',
+      }
+    })
+    const activeTrk = muxedWebSubtitleTracks.value.find((t) => t.active)
+    activeMuxedWebSubKey.value = activeTrk ? `hls:${activeTrk.id}` : null
+    return
+  }
+
+  const textList = videoRef.value?.textTracks
+  if (textList && textList.length > 0) {
+    const items: MuxedSubtitleOption[] = []
+    for (let i = 0; i < textList.length; i += 1) {
+      const trk = textList[i]
+      if (!trk || (trk.kind !== 'subtitles' && trk.kind !== 'captions')) continue
+      const lang = trk.language?.trim() || undefined
+      items.push({
+        id: i,
+        label: trk.label?.trim() || lang?.toUpperCase() || `Subtitle ${items.length + 1}`,
+        lang,
+        active: trk.mode === 'showing',
+        source: 'native',
+      })
+    }
+    muxedWebSubtitleTracks.value = items
+    const activeTrk = items.find((t) => t.active)
+    activeMuxedWebSubKey.value = activeTrk ? `native:${activeTrk.id}` : null
+    return
+  }
+
+  muxedWebSubtitleTracks.value = []
+  activeMuxedWebSubKey.value = null
+}
+
+function selectMuxedWebSubtitle(option: MuxedSubtitleOption | null): void {
+  if (option !== null) {
+    activeSubtitleIndex.value = -1
+    selectEmbeddedSubtitle(null)
+  }
+  if (hlsInstance) {
+    if (!option || option.source !== 'hls') {
+      hlsInstance.subtitleDisplay = false
+      hlsInstance.subtitleTrack = -1
+    } else {
+      hlsInstance.subtitleDisplay = true
+      hlsInstance.subtitleTrack = option.id
+    }
+    syncMuxedWebSubtitles()
+    return
+  }
+
+  const textList = videoRef.value?.textTracks
+  if (textList) {
+    for (let i = 0; i < textList.length; i += 1) {
+      const trk = textList[i]
+      if (!trk) continue
+      trk.mode = option && option.source === 'native' && i === option.id ? 'showing' : 'disabled'
+    }
+  }
+  syncMuxedWebSubtitles()
 }
 
 function syncAudioTracks(): void {
@@ -389,6 +504,8 @@ function destroyMediaEngines(): void {
   clearLoadWatchdog()
   unbindNativeAudioListeners()
   audioTracks.value = []
+  muxedWebSubtitleTracks.value = []
+  activeMuxedWebSubKey.value = null
   if (hlsInstance) {
     hlsInstance.destroy()
     hlsInstance = null
@@ -1235,6 +1352,7 @@ function applyFitMode(mode: FitMode): void {
 function selectEmbeddedSubtitle(trackId: number | null): void {
   if (trackId !== null) {
     activeSubtitleIndex.value = -1
+    selectMuxedWebSubtitle(null)
   }
   activeEmbeddedSubId.value = trackId
   void vesselApi.embeddedMpvSelectSubtitleTrack(trackId).catch(() => {})
@@ -1410,6 +1528,7 @@ function onLoadedMetadata(): void {
   el.volume = volume.value
   el.muted = isMuted.value
   syncAudioTracks()
+  syncMuxedWebSubtitles()
   if (
     pendingSeekSeconds.value !== null &&
     pendingSeekSeconds.value > 2 &&
@@ -1759,7 +1878,7 @@ async function attachMediaSource(
     let networkRetries = 0
     let mediaRetries = 0
     const hls = new Hls({
-      enableWorker: true,
+      enableWorker: false,
       lowLatencyMode: isLive.value,
       startPosition: startSec > 2 ? startSec : -1,
       fragLoadingTimeOut: 20000,
@@ -1773,12 +1892,15 @@ async function attachMediaSource(
       playbackError.value = ''
       isBuffering.value = false
       syncAudioTracks()
+      syncMuxedWebSubtitles()
       if (!userExplicitPause) {
         void el.play().catch(() => {})
       }
     })
     hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, syncAudioTracks)
     hls.on(Hls.Events.AUDIO_TRACK_SWITCHED, syncAudioTracks)
+    hls.on(Hls.Events.SUBTITLE_TRACKS_UPDATED, syncMuxedWebSubtitles)
+    hls.on(Hls.Events.SUBTITLE_TRACK_SWITCH, syncMuxedWebSubtitles)
     hls.on(Hls.Events.ERROR, (_ev, data) => {
       if (!data.fatal) return
       if (hlsInstance !== hls) return
@@ -1795,6 +1917,40 @@ async function attachMediaSource(
       if (canPlayNativeHls && !preferNativeFallback) {
         forceNativeHlsNextTry = true
         void attachMediaSource(src, stream, true, startSec)
+        return
+      }
+      if (!triedAutoMpv && playerEngineMode.value !== 'html5') {
+        triedAutoMpv = true
+        const resumePos = currentTime.value > 2 ? currentTime.value : startSec
+        destroyMediaEngines()
+        if (embeddedMpvCapable.value) {
+          void launchEmbeddedMpv(stream, resumePos).then((launched) => {
+            if (launched) return
+            void openInExternalMpv(true).then((ext) => {
+              if (ext) return
+              const curIdx = session.value?.activeStreamIndex ?? 0
+              if (curIdx + 1 < streams.value.length) {
+                switchSource(curIdx + 1)
+              } else {
+                playbackError.value = t('player.error_failed')
+                isBuffering.value = false
+                isPlaying.value = false
+              }
+            })
+          })
+          return
+        }
+        void openInExternalMpv(true).then((ext) => {
+          if (ext) return
+          const curIdx = session.value?.activeStreamIndex ?? 0
+          if (curIdx + 1 < streams.value.length) {
+            switchSource(curIdx + 1)
+          } else {
+            playbackError.value = t('player.error_failed')
+            isBuffering.value = false
+            isPlaying.value = false
+          }
+        })
         return
       }
       destroyMediaEngines()
@@ -1905,11 +2061,15 @@ onMounted(async () => {
       if (st.positionMs >= 0) {
         currentTime.value = st.positionMs / 1000
       }
-      embeddedAudioTracks.value = st.audioTracks
-      embeddedSubtitleTracks.value = st.subtitleTracks
-      const activeSub = st.subtitleTracks.find((t) => t.selected)
-      activeEmbeddedSubId.value = activeSub ? activeSub.id : null
-      syncAudioTracks()
+      const nextSig = `${trackListSignature(st.audioTracks)}##${trackListSignature(st.subtitleTracks)}`
+      if (nextSig !== lastEmbeddedTracksSig) {
+        lastEmbeddedTracksSig = nextSig
+        embeddedAudioTracks.value = st.audioTracks
+        embeddedSubtitleTracks.value = st.subtitleTracks
+        const activeSub = st.subtitleTracks.find((t) => t.selected)
+        activeEmbeddedSubId.value = activeSub ? activeSub.id : null
+        syncAudioTracks()
+      }
       if (st.error) {
         playbackError.value = st.error
         isBuffering.value = false
@@ -2719,12 +2879,12 @@ onUnmounted(() => {
           <button
             type="button"
             class="cs-drawer-item"
-            :class="{ active: activeSubtitleIndex === -1 && activeEmbeddedSubId === null }"
-            @click="activeSubtitleIndex = -1; selectEmbeddedSubtitle(null)"
+            :class="{ active: activeSubtitleIndex === -1 && activeEmbeddedSubId === null && activeMuxedWebSubKey === null }"
+            @click="activeSubtitleIndex = -1; selectEmbeddedSubtitle(null); selectMuxedWebSubtitle(null)"
           >
             <span class="cs-item-title">{{ t('player.subtitles_off') }}</span>
             <Check
-              v-if="activeSubtitleIndex === -1 && activeEmbeddedSubId === null"
+              v-if="activeSubtitleIndex === -1 && activeEmbeddedSubId === null && activeMuxedWebSubKey === null"
               :size="16"
               class="cs-active-check"
             />
@@ -2736,13 +2896,34 @@ onUnmounted(() => {
             type="button"
             class="cs-drawer-item"
             :class="{ active: activeSubtitleIndex === idx }"
-            @click="selectEmbeddedSubtitle(null); activeSubtitleIndex = idx"
+            @click="selectEmbeddedSubtitle(null); selectMuxedWebSubtitle(null); activeSubtitleIndex = idx"
           >
             <div class="cs-item-main">
               <span class="cs-item-title">{{ sub.label }}</span>
               <span class="cs-item-sub">{{ sub.lang.toUpperCase() }} · {{ sub.format.toUpperCase() }}</span>
             </div>
             <Check v-if="activeSubtitleIndex === idx" :size="16" class="cs-active-check" />
+          </button>
+
+          <button
+            v-for="wtrk in muxedWebSubtitleTracks"
+            :key="`${wtrk.source}-sub-${wtrk.id}`"
+            type="button"
+            class="cs-drawer-item"
+            :class="{ active: activeSubtitleIndex === -1 && activeMuxedWebSubKey === `${wtrk.source}:${wtrk.id}` }"
+            @click="selectMuxedWebSubtitle(wtrk)"
+          >
+            <div class="cs-item-main">
+              <span class="cs-item-title">{{ wtrk.label }}</span>
+              <span class="cs-item-sub">
+                {{ [wtrk.lang?.toUpperCase(), wtrk.source.toUpperCase(), 'Muxed'].filter(Boolean).join(' · ') }}
+              </span>
+            </div>
+            <Check
+              v-if="activeSubtitleIndex === -1 && activeMuxedWebSubKey === `${wtrk.source}:${wtrk.id}`"
+              :size="16"
+              class="cs-active-check"
+            />
           </button>
 
           <button
@@ -2771,7 +2952,7 @@ onUnmounted(() => {
           <p v-else-if="activeSubtitleIndex >= 0 && activeCues.length" class="cs-empty-note">
             Loaded {{ activeCues.length }} subtitle cues.
           </p>
-          <p v-if="!availableSubtitles.length && !embeddedSubtitleTracks.length" class="cs-empty-note">
+          <p v-if="!availableSubtitles.length && !embeddedSubtitleTracks.length && !muxedWebSubtitleTracks.length" class="cs-empty-note">
             No subtitle tracks were provided by this source.
           </p>
 

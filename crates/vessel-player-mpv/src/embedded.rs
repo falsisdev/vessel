@@ -5,6 +5,7 @@ use std::ffi::{c_char, c_void};
 use std::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
+use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 use vessel_domain::{VesselError, VesselResult};
@@ -185,7 +186,8 @@ impl MpvEmbeddedPlayer {
             lib.set_option_string(handle, "input-default-bindings", "no")?;
             lib.set_option_string(handle, "input-vo-keyboard", "no")?;
             lib.set_option_string(handle, "osc", "no")?;
-            lib.set_option_string(handle, "sub-visibility", "no")?;
+            lib.set_option_string(handle, "sub-visibility", "yes")?;
+            lib.set_option_string(handle, "sid", "no")?;
             lib.set_option_string(handle, "video-timing-offset", "0")?;
             lib.initialize(handle)?;
 
@@ -218,6 +220,7 @@ impl MpvEmbeddedPlayer {
             .name("vessel-libmpv-events".into())
             .spawn(move || {
                 let handle_ptr = handle_addr as *mut MpvHandle;
+                let mut last_time_pos_emit = Instant::now() - Duration::from_secs(1);
                 while running_ev.load(Ordering::Acquire) {
                     let ev_ptr = lib_ev.wait_event(handle_ptr, 0.25);
                     if ev_ptr.is_null() {
@@ -231,6 +234,7 @@ impl MpvEmbeddedPlayer {
                         break;
                     }
                     let mut changed = false;
+                    let mut time_pos_only = false;
                     {
                         let mut st = state_ev.lock().expect("lock embedded state");
                         match ev.event_id {
@@ -271,16 +275,35 @@ impl MpvEmbeddedPlayer {
                                     let prop = unsafe {
                                         &*(ev.data as *const crate::libmpv_ffi::MpvEventProperty)
                                     };
+                                    let is_time_pos = !prop.name.is_null()
+                                        && unsafe { std::ffi::CStr::from_ptr(prop.name) }.to_bytes()
+                                            == b"time-pos";
                                     changed = apply_property_change(&lib_ev, prop, &mut st);
+                                    time_pos_only = is_time_pos;
                                 }
                             }
                             _ => {}
                         }
                     }
                     if changed {
-                        let snap = state_ev.lock().expect("lock state").clone();
-                        if let Some(listener) = listener_ev.lock().expect("lock listener").as_ref() {
-                            listener(snap);
+                        let should_emit = if time_pos_only {
+                            if last_time_pos_emit.elapsed() >= Duration::from_millis(200) {
+                                last_time_pos_emit = Instant::now();
+                                true
+                            } else {
+                                false
+                            }
+                        } else {
+                            last_time_pos_emit = Instant::now();
+                            true
+                        };
+                        if should_emit {
+                            let snap = state_ev.lock().expect("lock state").clone();
+                            if let Some(listener) =
+                                listener_ev.lock().expect("lock listener").as_ref()
+                            {
+                                listener(snap);
+                            }
                         }
                     }
                 }
@@ -673,5 +696,148 @@ mod tests {
         assert_eq!(st.audio_tracks[0].channels.as_deref(), Some("6ch"));
         assert_eq!(st.subtitle_tracks.len(), 1);
         assert_eq!(st.subtitle_tracks[0].codec.as_deref(), Some("ass"));
+    }
+
+    #[test]
+    fn initializes_reloads_and_selects_audio_and_subtitles_when_libmpv_available() {
+        if super::MpvEmbeddedPlayer::probe_availability().is_none() {
+            return;
+        }
+        let mkv_path = std::env::temp_dir().join(format!(
+            "vessel-mpv-smoke-{}.mkv",
+            std::process::id()
+        ));
+        let srt_path = std::env::temp_dir().join(format!(
+            "vessel-mpv-smoke-{}.srt",
+            std::process::id()
+        ));
+        if std::fs::write(
+            &srt_path,
+            "1\n00:00:00,000 --> 00:00:01,500\nVessel Subtitle Check\n",
+        )
+        .is_err()
+        {
+            return;
+        }
+        let ff_status = std::process::Command::new("ffmpeg")
+            .args([
+                "-y",
+                "-f",
+                "lavfi",
+                "-i",
+                "color=c=blue:s=320x180:d=1.5",
+                "-f",
+                "lavfi",
+                "-i",
+                "sine=frequency=440:duration=1.5",
+                "-f",
+                "lavfi",
+                "-i",
+                "sine=frequency=660:duration=1.5",
+                "-i",
+            ])
+            .arg(&srt_path)
+            .args([
+                "-map",
+                "0:v:0",
+                "-map",
+                "1:a:0",
+                "-map",
+                "2:a:0",
+                "-map",
+                "3:s:0",
+                "-c:v",
+                "libx264",
+                "-c:a",
+                "aac",
+                "-c:s",
+                "srt",
+            ])
+            .arg(&mkv_path)
+            .output();
+        let Ok(ff_out) = ff_status else {
+            let _ = std::fs::remove_file(&srt_path);
+            return;
+        };
+        if !ff_out.status.success() {
+            let _ = std::fs::remove_file(&srt_path);
+            let _ = std::fs::remove_file(&mkv_path);
+            return;
+        }
+        let _ = std::fs::remove_file(&srt_path);
+
+        let player = super::MpvEmbeddedPlayer::new();
+        let events = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let events_cb = std::sync::Arc::clone(&events);
+        player.set_state_listener(std::sync::Arc::new(move |st| {
+            events_cb.lock().expect("lock events").push(st);
+        }));
+
+        let url = mkv_path.to_string_lossy().into_owned();
+        let headers = std::collections::BTreeMap::new();
+        player.load(&url, &headers, 0).expect("load mkv cycle 1");
+
+        let mut loaded_tracks = None;
+        for _ in 0..80 {
+            std::thread::sleep(std::time::Duration::from_millis(50));
+            let snap = events.lock().expect("lock").last().cloned();
+            if let Some(st) = snap
+                && st.active
+                && st.audio_tracks.len() == 2
+                && !st.subtitle_tracks.is_empty()
+            {
+                loaded_tracks = Some(st);
+                break;
+            }
+        }
+        let all_events = events.lock().expect("lock").clone();
+        let st1 = loaded_tracks.unwrap_or_else(|| {
+            panic!("expected 2 audio + >=1 sub track in cycle 1; events={all_events:#?}")
+        });
+        assert!(
+            !st1.subtitle_tracks[0].selected,
+            "default sid=no should leave subtitle unselected until enabled"
+        );
+
+        player
+            .select_subtitle_track(Some(st1.subtitle_tracks[0].id))
+            .expect("enable subtitle");
+        player
+            .select_audio_track(st1.audio_tracks[1].id)
+            .expect("switch audio track 2");
+
+        let mut switched = false;
+        for _ in 0..40 {
+            std::thread::sleep(std::time::Duration::from_millis(50));
+            if let Some(st) = events.lock().expect("lock").last()
+                && st.subtitle_tracks.first().is_some_and(|t| t.selected)
+                && st.audio_tracks.get(1).is_some_and(|t| t.selected)
+            {
+                switched = true;
+                break;
+            }
+        }
+        assert!(switched, "expected subtitle and second audio track selection to stick");
+        player.destroy();
+
+        // Cycle 2 after destroy must re-initialize and load cleanly.
+        events.lock().expect("lock").clear();
+        player.load(&url, &headers, 0).expect("load mkv cycle 2");
+        let mut loaded_cycle2 = false;
+        for _ in 0..80 {
+            std::thread::sleep(std::time::Duration::from_millis(50));
+            if let Some(st) = events.lock().expect("lock").last()
+                && st.active
+                && !st.audio_tracks.is_empty()
+            {
+                loaded_cycle2 = true;
+                break;
+            }
+        }
+        assert!(loaded_cycle2, "expected cycle 2 playback after destroy to succeed");
+        player.destroy();
+
+        let _ = std::fs::remove_file(&srt_path);
+        let _ = std::fs::remove_file(&mkv_path);
     }
 }

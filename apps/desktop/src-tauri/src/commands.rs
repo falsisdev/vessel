@@ -1522,6 +1522,13 @@ pub struct EmbeddedMpvLoadPayload {
 
 #[tauri::command]
 pub async fn embedded_mpv_capabilities() -> Result<EmbeddedCapabilitiesDto, String> {
+    #[cfg(target_os = "linux")]
+    if std::env::var_os("VESSEL_ENABLE_LINUX_EMBEDDED_MPV").is_none() {
+        return Ok(EmbeddedCapabilitiesDto {
+            available: false,
+            library_path: None,
+        });
+    }
     let library_path = MpvEmbeddedPlayer::probe_availability();
     Ok(EmbeddedCapabilitiesDto {
         available: library_path.is_some(),
@@ -1619,11 +1626,11 @@ pub async fn embedded_mpv_stop(
     state: State<'_, AppState>,
     destroy: Option<bool>,
 ) -> Result<(), String> {
-    let _ = state.embedded_host.set_surface_visible(&app, false);
     if destroy.unwrap_or(false) {
-        state.embedded_host.player.destroy();
+        state.embedded_host.teardown(&app);
         return Ok(());
     }
+    let _ = state.embedded_host.set_surface_visible(&app, false);
     let _ = state.embedded_host.player.stop();
     Ok(())
 }

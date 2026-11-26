@@ -1,10 +1,10 @@
-//! Native platform video surface controller embedding `libmpv` behind Tauri's transparent WebView.
+//! Native platform video surface controller embedding `libmpv` behind Tauri's WebView.
 
 use std::sync::Arc;
 #[cfg(target_os = "macos")]
 use std::sync::OnceLock;
 #[cfg(target_os = "macos")]
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 
 use tauri::{AppHandle, Emitter, Manager, WebviewWindow};
 use vessel_domain::{VesselError, VesselResult};
@@ -16,6 +16,8 @@ pub const EMBEDDED_PLAYER_EVENT: &str = "vessel://embedded-player-state";
 static SHARED_PLAYER: OnceLock<Arc<MpvEmbeddedPlayer>> = OnceLock::new();
 #[cfg(target_os = "macos")]
 static MACOS_GL_VIEW: AtomicUsize = AtomicUsize::new(0);
+#[cfg(target_os = "macos")]
+static MACOS_VIEW_GEN: AtomicU64 = AtomicU64::new(1);
 
 /// Holds the shared lazy `MpvEmbeddedPlayer` and binds it to the main Tauri window surface.
 pub struct EmbeddedPlayerHost {
@@ -57,6 +59,32 @@ impl EmbeddedPlayerHost {
             let _ = (window, visible);
         }
         Ok(())
+    }
+
+    /// Safely releases platform GL views/surfaces on the UI thread before destroying `libmpv`.
+    pub fn teardown(&self, app: &AppHandle) {
+        let maybe_window = app.get_webview_window("main");
+        #[cfg(target_os = "macos")]
+        {
+            macos_teardown_surface(maybe_window.as_ref(), &self.player);
+        }
+        #[cfg(target_os = "linux")]
+        {
+            if let Some(ref window) = maybe_window {
+                let _ = linux_set_surface_visible(window, &self.player, false);
+            }
+        }
+        #[cfg(target_os = "windows")]
+        {
+            if let Some(ref window) = maybe_window {
+                let _ = windows_set_surface_visible(window, &self.player, false);
+            }
+        }
+        #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+        {
+            let _ = maybe_window;
+        }
+        self.player.destroy();
     }
 }
 
@@ -132,13 +160,24 @@ fn macos_set_surface_visible(window: &WebviewWindow, visible: bool) -> VesselRes
         unsafe { dlsym(RTLD_DEFAULT, name) }
     }
 
+    struct MacosRedrawToken {
+        view_addr: usize,
+        generation: u64,
+    }
+
     extern "C" fn trigger_view_redraw(ctx: *mut c_void) {
         if ctx.is_null() {
             return;
         }
-        unsafe {
-            let view = ctx as *mut AnyObject;
-            let _: () = msg_send![view, setNeedsDisplay: Bool::YES];
+        let token = unsafe { Box::from_raw(ctx.cast::<MacosRedrawToken>()) };
+        if MACOS_VIEW_GEN.load(Ordering::Acquire) == token.generation
+            && MACOS_GL_VIEW.load(Ordering::Acquire) == token.view_addr
+            && token.view_addr != 0
+        {
+            unsafe {
+                let view = token.view_addr as *mut AnyObject;
+                let _: () = msg_send![view, setNeedsDisplay: Bool::YES];
+            }
         }
     }
 
@@ -163,14 +202,20 @@ fn macos_set_surface_visible(window: &WebviewWindow, visible: bool) -> VesselRes
                     player.ensure_opengl_render_context(gl_get_proc_address, std::ptr::null_mut());
             }
             let view_addr = this as usize;
+            let view_gen = MACOS_VIEW_GEN.load(Ordering::Acquire);
             player.set_render_update_callback(Arc::new(move || unsafe {
+                let boxed = Box::into_raw(Box::new(MacosRedrawToken {
+                    view_addr,
+                    generation: view_gen,
+                }));
                 dispatch_async_f(
                     &_dispatch_main_q as *const c_void,
-                    view_addr as *mut c_void,
+                    boxed.cast(),
                     trigger_view_redraw,
                 );
             }));
         }
+        let _: () = unsafe { msg_send![this, setNeedsDisplay: Bool::YES] };
     }
 
     unsafe extern "C" fn draw_rect(this: *mut AnyObject, _sel: Sel, _dirty: CGRect) {
@@ -237,10 +282,13 @@ fn macos_set_surface_visible(window: &WebviewWindow, visible: bool) -> VesselRes
         })
     }
 
-    window
+    let is_main: Bool = unsafe { msg_send![class!(NSThread), isMainThread] };
+    let (done_tx, done_rx) = std::sync::mpsc::sync_channel::<()>(1);
+    let res = window
         .with_webview(move |webview| unsafe {
             let wk = webview.inner() as *mut AnyObject;
             if wk.is_null() {
+                let _ = done_tx.send(());
                 return;
             }
             let draws_bg_val: *mut AnyObject =
@@ -282,14 +330,21 @@ fn macos_set_surface_visible(window: &WebviewWindow, visible: bool) -> VesselRes
                         ];
                         let _: () =
                             msg_send![view_ptr, setWantsBestResolutionOpenGLSurface: Bool::YES];
+                        MACOS_VIEW_GEN.fetch_add(1, Ordering::AcqRel);
+                        MACOS_GL_VIEW.store(view_ptr as usize, Ordering::Release);
                         let _: () = msg_send![
                             superview,
                             addSubview: view_ptr,
                             positioned: NS_WINDOW_BELOW,
                             relativeTo: wk
                         ];
-                        MACOS_GL_VIEW.store(view_ptr as usize, Ordering::Release);
                     }
+                }
+            } else if !view_ptr.is_null() && visible {
+                let superview: *mut AnyObject = msg_send![wk, superview];
+                if !superview.is_null() {
+                    let bounds: CGRect = msg_send![superview, bounds];
+                    let _: () = msg_send![view_ptr, setFrame: bounds];
                 }
             }
 
@@ -297,6 +352,7 @@ fn macos_set_surface_visible(window: &WebviewWindow, visible: bool) -> VesselRes
                 let _: () = msg_send![view_ptr, setHidden: Bool::new(!visible)];
                 if visible {
                     let _: () = msg_send![view_ptr, setNeedsDisplay: Bool::YES];
+                    let _: () = msg_send![view_ptr, displayIfNeeded];
                 }
             }
 
@@ -305,12 +361,111 @@ fn macos_set_surface_visible(window: &WebviewWindow, visible: bool) -> VesselRes
                 let color: *mut AnyObject = if visible {
                     msg_send![class!(NSColor), blackColor]
                 } else {
-                    msg_send![class!(NSColor), clearColor]
+                    msg_send![
+                        class!(NSColor),
+                        colorWithSRGBRed: 0.0392_f64,
+                        green: 0.0431_f64,
+                        blue: 0.0627_f64,
+                        alpha: 1.0_f64
+                    ]
                 };
                 let _: () = msg_send![ns_win, setBackgroundColor: color];
             }
+            let _ = done_tx.send(());
         })
-        .map_err(|err| VesselError::Player(format!("update macOS embedded surface: {err}")))
+        .map_err(|err| VesselError::Player(format!("update macOS embedded surface: {err}")));
+    if res.is_ok() && !is_main.as_bool() {
+        let _ = done_rx.recv_timeout(std::time::Duration::from_millis(800));
+    }
+    res
+}
+
+#[cfg(target_os = "macos")]
+fn macos_teardown_surface(window: Option<&WebviewWindow>, player: &Arc<MpvEmbeddedPlayer>) {
+    use objc2::runtime::{AnyObject, Bool};
+    use objc2::{class, msg_send};
+
+    unsafe fn teardown_on_main(wk: *mut AnyObject, ns_win: *mut AnyObject, player: &MpvEmbeddedPlayer) {
+        unsafe {
+            if !wk.is_null() {
+                let draws_bg_val: *mut AnyObject =
+                    msg_send![class!(NSNumber), numberWithBool: Bool::YES];
+                let key: *mut AnyObject =
+                    msg_send![class!(NSString), stringWithUTF8String: c"drawsBackground".as_ptr()];
+                let _: () = msg_send![wk, setValue: draws_bg_val, forKey: key];
+            }
+            if !ns_win.is_null() {
+                let color: *mut AnyObject = msg_send![
+                    class!(NSColor),
+                    colorWithSRGBRed: 0.0392_f64,
+                    green: 0.0431_f64,
+                    blue: 0.0627_f64,
+                    alpha: 1.0_f64
+                ];
+                let _: () = msg_send![ns_win, setBackgroundColor: color];
+            }
+
+            MACOS_VIEW_GEN.fetch_add(1, Ordering::AcqRel);
+            let view_ptr = MACOS_GL_VIEW.swap(0, Ordering::AcqRel) as *mut AnyObject;
+            if !view_ptr.is_null() {
+                let ctx: *mut AnyObject = msg_send![view_ptr, openGLContext];
+                if !ctx.is_null() {
+                    let _: () = msg_send![ctx, makeCurrentContext];
+                }
+                player.free_opengl_render_context();
+                if !ctx.is_null() {
+                    let _: () = msg_send![class!(NSOpenGLContext), clearCurrentContext];
+                }
+                let _: () = msg_send![view_ptr, setHidden: Bool::YES];
+                let _: () = msg_send![view_ptr, removeFromSuperview];
+                let _: () = msg_send![view_ptr, release];
+            } else {
+                player.free_opengl_render_context();
+            }
+        }
+    }
+
+    let is_main: Bool = unsafe { msg_send![class!(NSThread), isMainThread] };
+    if is_main.as_bool() {
+        unsafe {
+            teardown_on_main(std::ptr::null_mut(), std::ptr::null_mut(), player);
+        }
+        return;
+    }
+
+    if let Some(win) = window {
+        let player_ref = Arc::clone(player);
+        let (done_tx, done_rx) = std::sync::mpsc::sync_channel::<()>(1);
+        if win
+            .with_webview(move |webview| unsafe {
+                let wk = webview.inner() as *mut AnyObject;
+                let ns_win = webview.ns_window() as *mut AnyObject;
+                teardown_on_main(wk, ns_win, &player_ref);
+                let _ = done_tx.send(());
+            })
+            .is_ok()
+        {
+            let _ = done_rx.recv_timeout(std::time::Duration::from_millis(800));
+            return;
+        }
+    }
+
+    MACOS_VIEW_GEN.fetch_add(1, Ordering::AcqRel);
+    let view_ptr = MACOS_GL_VIEW.swap(0, Ordering::AcqRel) as *mut AnyObject;
+    if !view_ptr.is_null() {
+        unsafe {
+            let ctx: *mut AnyObject = msg_send![view_ptr, openGLContext];
+            if !ctx.is_null() {
+                let _: () = msg_send![ctx, makeCurrentContext];
+            }
+            player.free_opengl_render_context();
+            if !ctx.is_null() {
+                let _: () = msg_send![class!(NSOpenGLContext), clearCurrentContext];
+            }
+        }
+    } else {
+        player.free_opengl_render_context();
+    }
 }
 
 #[cfg(target_os = "linux")]

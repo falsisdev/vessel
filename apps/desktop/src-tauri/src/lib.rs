@@ -188,7 +188,7 @@ pub fn run() {
         .run(|app_handle, event| {
             if let tauri::RunEvent::Exit = event {
                 let state = app_handle.state::<AppState>();
-                state.embedded_host.player.destroy();
+                state.embedded_host.teardown(app_handle);
                 let engine = Arc::clone(&state.engine);
                 tauri::async_runtime::block_on(engine.shutdown());
             }
