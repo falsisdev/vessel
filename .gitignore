@@ -22,4 +22,7 @@ apps/android/.idea/
 apps/android/build/
 apps/android/app/build/
 apps/android/local.properties
+apps/android/keystore.properties
+*.jks
+*.keystore
 apps/android/app/src/main/jniLibs/

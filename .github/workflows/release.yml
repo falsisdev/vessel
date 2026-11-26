@@ -172,7 +172,6 @@ jobs:
   build-android:
     name: Build (Android .apk)
     runs-on: ubuntu-latest
-    continue-on-error: true
 
     steps:
       - name: Checkout repository
@@ -198,13 +197,29 @@ jobs:
       - name: Build Rust JNI libraries
         run: bash apps/android/build-rust-jni.sh release
 
-      - name: Build Android APK
+      - name: Decode Android release keystore
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo "Missing ANDROID_KEYSTORE_BASE64 secret for signed APK builds." >&2
+            exit 1
+          fi
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "${{ runner.temp }}/vessel-release.jks"
+
+      - name: Build signed Android APK
+        env:
+          ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/vessel-release.jks
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           cd apps/android
           chmod +x gradlew
           ./gradlew assembleRelease
 
-      - name: Stage APK artifact
+      - name: Verify APK signature and stage artifact
         shell: bash
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
@@ -217,7 +232,14 @@ jobs:
             echo "No APK produced in apps/android/app/build/outputs/apk/release" >&2
             exit 1
           fi
+          APKSIGNER="$(find "${ANDROID_HOME:-$ANDROID_SDK_ROOT}/build-tools" -name apksigner | sort -V | tail -n 1)"
+          if [ -z "$APKSIGNER" ]; then
+            echo "apksigner tool not found in Android SDK build-tools" >&2
+            exit 1
+          fi
+          "$APKSIGNER" verify --verbose "$APK_PATH"
           cp "$APK_PATH" "android-release/Vessel_${VERSION}_android.apk"
+          rm -f "${{ runner.temp }}/vessel-release.jks"
           ls -lh android-release/
 
       - name: Upload Android APK artifact

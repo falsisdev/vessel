@@ -26,6 +26,11 @@
   </categories>
   <content_rating type="oars-1.1" />
   <releases>
+    <release version="0.2.1" date="2026-11-26">
+      <description>
+        <p>Fixed Android APK release signing, removed global transparent window mode causing Linux/Flatpak compositor flickering, isolated QuickJS search cancellation so plugin details/streams never fail with VesselCancelledError, filtered unimplemented subtitle search errors, and fixed macOS embedded libmpv OpenGL/subtitle lifecycle and WebView HLS subtitle/worker playback.</p>
+      </description>
+    </release>
     <release version="0.1.50" date="2026-11-26">
       <description>
         <p>Updated Flatpak runtime and SDK from EOL GNOME 47 to GNOME 51.</p>

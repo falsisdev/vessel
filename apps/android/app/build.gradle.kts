@@ -1,8 +1,42 @@
+import java.util.Properties
+import org.gradle.api.GradleException
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
     id("org.jetbrains.kotlin.plugin.serialization")
+}
+
+val keystoreProps = Properties().apply {
+    val propsFile = rootProject.file("keystore.properties")
+    if (propsFile.isFile) {
+        propsFile.inputStream().use { load(it) }
+    }
+}
+
+fun signingProp(propKey: String, envKey: String): String? =
+    keystoreProps.getProperty(propKey)?.trim()?.takeIf { it.isNotEmpty() }
+        ?: System.getenv(envKey)?.trim()?.takeIf { it.isNotEmpty() }
+
+val releaseStorePath = signingProp("storeFile", "ANDROID_KEYSTORE_PATH")
+val releaseStorePassword = signingProp("storePassword", "ANDROID_KEYSTORE_PASSWORD")
+val releaseKeyAlias = signingProp("keyAlias", "ANDROID_KEY_ALIAS")
+val releaseKeyPassword = signingProp("keyPassword", "ANDROID_KEY_PASSWORD") ?: releaseStorePassword
+val hasReleaseSigning =
+    releaseStorePath != null &&
+        file(releaseStorePath).isFile &&
+        releaseStorePassword != null &&
+        releaseKeyAlias != null &&
+        releaseKeyPassword != null
+
+val isReleaseBuildRequested = gradle.startParameter.taskNames.any {
+    it.contains("Release", ignoreCase = true)
+}
+if (isReleaseBuildRequested && !hasReleaseSigning) {
+    throw GradleException(
+        "Android release signing requires ANDROID_KEYSTORE_PATH/ANDROID_KEYSTORE_PASSWORD/ANDROID_KEY_ALIAS env vars or apps/android/keystore.properties.",
+    )
 }
 
 android {
@@ -13,16 +47,33 @@ android {
         applicationId = "dev.falsis.vessel"
         minSdk = 26
         targetSdk = 36
-        versionCode = 21
-        versionName = "0.2.0"
+        versionCode = 22
+        versionName = "0.2.1"
 
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
         }
     }
 
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = file(releaseStorePath!!)
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+                enableV1Signing = true
+                enableV2Signing = true
+                enableV3Signing = true
+            }
+        }
+    }
+
     buildTypes {
         release {
+            if (hasReleaseSigning) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
