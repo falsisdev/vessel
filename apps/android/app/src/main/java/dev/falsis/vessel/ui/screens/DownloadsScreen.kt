@@ -45,6 +45,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.falsis.vessel.data.LocalPlaybackBundle
@@ -103,6 +105,18 @@ fun DownloadsScreen(
 
     val queue = remember(merged) {
         merged.filter { it.status in setOf("queued", "downloading", "paused", "failed") }
+    }
+    val queueFocusRequesters = remember { mutableMapOf<String, Pair<FocusRequester, FocusRequester>>() }
+    var pendingQueueFocus by remember { mutableStateOf<Pair<String, Boolean>?>(null) }
+
+    LaunchedEffect(pendingQueueFocus, queue) {
+        val target = pendingQueueFocus ?: return@LaunchedEffect
+        kotlinx.coroutines.delay(16)
+        val pair = queueFocusRequesters[target.first]
+        if (pair != null) {
+            runCatching { (if (target.second) pair.first else pair.second).requestFocus() }
+        }
+        pendingQueueFocus = null
     }
 
     val groupedByContent = remember(merged) {
@@ -169,21 +183,34 @@ fun DownloadsScreen(
                             }
                             Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
                                 val idx = queue.indexOfFirst { it.id == dl.id }
+                                val (upReq, downReq) = queueFocusRequesters.getOrPut(dl.id) { FocusRequester() to FocusRequester() }
                                 if (idx > 0) {
-                                    VesselCompactIconButton(size = 28.dp, onClick = {
-                                        val ids = queue.map { it.id }.toMutableList()
-                                        ids.add(idx - 1, ids.removeAt(idx))
-                                        scope.launch { repo.reorderDownloads(ids); reload() }
-                                    }) {
+                                    VesselCompactIconButton(
+                                        size = 28.dp,
+                                        modifier = Modifier.focusRequester(upReq),
+                                        onClick = {
+                                            val ids = queue.map { it.id }.toMutableList()
+                                            val newIdx = idx - 1
+                                            ids.add(newIdx, ids.removeAt(idx))
+                                            pendingQueueFocus = dl.id to (newIdx > 0)
+                                            scope.launch { repo.reorderDownloads(ids); reload() }
+                                        },
+                                    ) {
                                         Icon(Icons.Default.ArrowUpward, contentDescription = "Move Up", modifier = Modifier.size(16.dp))
                                     }
                                 }
                                 if (idx >= 0 && idx < queue.lastIndex) {
-                                    VesselCompactIconButton(size = 28.dp, onClick = {
-                                        val ids = queue.map { it.id }.toMutableList()
-                                        ids.add(idx + 1, ids.removeAt(idx))
-                                        scope.launch { repo.reorderDownloads(ids); reload() }
-                                    }) {
+                                    VesselCompactIconButton(
+                                        size = 28.dp,
+                                        modifier = Modifier.focusRequester(downReq),
+                                        onClick = {
+                                            val ids = queue.map { it.id }.toMutableList()
+                                            val newIdx = idx + 1
+                                            ids.add(newIdx, ids.removeAt(idx))
+                                            pendingQueueFocus = dl.id to (newIdx >= ids.lastIndex)
+                                            scope.launch { repo.reorderDownloads(ids); reload() }
+                                        },
+                                    ) {
                                         Icon(Icons.Default.ArrowDownward, contentDescription = "Move Down", modifier = Modifier.size(16.dp))
                                     }
                                 }

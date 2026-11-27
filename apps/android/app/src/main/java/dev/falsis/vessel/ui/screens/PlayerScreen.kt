@@ -403,11 +403,21 @@ fun PlayerScreen(
     val currentEpIdx = remember(episodes, currentEpisode) {
         episodes.indexOfFirst { it.streamId == currentEpisode.streamId }
     }
-    val prevEpisode = remember(episodes, currentEpIdx) {
-        if (currentEpIdx > 0) episodes[currentEpIdx - 1] else null
+    val prevEpisode = remember(episodes, currentEpIdx, isLive) {
+        when {
+            isLive && episodes.size > 1 && currentEpIdx >= 0 ->
+                if (currentEpIdx > 0) episodes[currentEpIdx - 1] else episodes.last()
+            currentEpIdx > 0 -> episodes[currentEpIdx - 1]
+            else -> null
+        }
     }
-    val nextEpisode = remember(episodes, currentEpIdx) {
-        if (currentEpIdx >= 0 && currentEpIdx + 1 < episodes.size) episodes[currentEpIdx + 1] else null
+    val nextEpisode = remember(episodes, currentEpIdx, isLive) {
+        when {
+            isLive && episodes.size > 1 && currentEpIdx >= 0 ->
+                if (currentEpIdx + 1 < episodes.size) episodes[currentEpIdx + 1] else episodes.first()
+            currentEpIdx >= 0 && currentEpIdx + 1 < episodes.size -> episodes[currentEpIdx + 1]
+            else -> null
+        }
     }
 
     val httpFactory = remember {
@@ -772,6 +782,7 @@ fun PlayerScreen(
             lastSkipFetchDurationMs = -1L
             playbackError = null
             activeDrawer = null
+            if (isLive) showHud(target.title?.takeIf { it.isNotBlank() } ?: activeDetail.title)
             bumpControls()
             return
         }
@@ -787,6 +798,14 @@ fun PlayerScreen(
                         )
                     } else {
                         currentEpisode = target
+                        if (isLive) {
+                            activeDetail = activeDetail.copy(
+                                title = target.title?.takeIf { it.isNotBlank() } ?: activeDetail.title,
+                                poster = target.thumbnail ?: activeDetail.poster,
+                                backdrop = target.thumbnail ?: activeDetail.backdrop,
+                            )
+                            showHud(target.title?.takeIf { it.isNotBlank() } ?: activeDetail.title)
+                        }
                         activeStreamResult = sr
                         selectedIndex = sr.streams.indexOfFirst { it.isDefault }.takeIf { it >= 0 } ?: 0
                         currentStartPosMs = 0L
@@ -1166,12 +1185,43 @@ fun PlayerScreen(
                         bumpControls()
                         return@onPreviewKeyEvent true
                     }
+                    if (isLive && activeDrawer == PlayerDrawer.EPISODES && ev.key == Key.DirectionRight) {
+                        activeDrawer = null
+                        return@onPreviewKeyEvent true
+                    }
                     bumpControls()
                     return@onPreviewKeyEvent false
                 }
+                when (ev.nativeKeyEvent.keyCode) {
+                    android.view.KeyEvent.KEYCODE_CHANNEL_UP,
+                    android.view.KeyEvent.KEYCODE_PAGE_UP -> {
+                        if (isLive && nextEpisode != null) {
+                            playEpisode(nextEpisode)
+                            return@onPreviewKeyEvent true
+                        }
+                    }
+                    android.view.KeyEvent.KEYCODE_CHANNEL_DOWN,
+                    android.view.KeyEvent.KEYCODE_PAGE_DOWN -> {
+                        if (isLive && prevEpisode != null) {
+                            playEpisode(prevEpisode)
+                            return@onPreviewKeyEvent true
+                        }
+                    }
+                }
                 if (!controlsVisible) {
                     return@onPreviewKeyEvent when (ev.key) {
-                        Key.DirectionLeft, Key.MediaRewind -> {
+                        Key.DirectionLeft -> {
+                            if (isLive && episodes.size > 1) {
+                                activeDrawer = PlayerDrawer.EPISODES
+                                bumpControls()
+                            } else if (!isLive) {
+                                seekByMs(-10_000L)
+                            } else {
+                                bumpControls()
+                            }
+                            true
+                        }
+                        Key.MediaRewind -> {
                             if (!isLive) seekByMs(-10_000L) else bumpControls()
                             true
                         }
@@ -1185,10 +1235,26 @@ fun PlayerScreen(
                         }
                         Key.Menu -> {
                             controlsVisible = true
-                            activeDrawer = PlayerDrawer.SOURCES
+                            activeDrawer = if (isLive && episodes.size > 1) PlayerDrawer.EPISODES else PlayerDrawer.SOURCES
                             true
                         }
-                        Key.DirectionCenter, Key.Enter, Key.NumPadEnter, Key.DirectionUp, Key.DirectionDown -> {
+                        Key.DirectionUp -> {
+                            if (isLive && nextEpisode != null) {
+                                playEpisode(nextEpisode)
+                            } else {
+                                bumpControls()
+                            }
+                            true
+                        }
+                        Key.DirectionDown -> {
+                            if (isLive && prevEpisode != null) {
+                                playEpisode(prevEpisode)
+                            } else {
+                                bumpControls()
+                            }
+                            true
+                        }
+                        Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> {
                             bumpControls()
                             true
                         }
@@ -1330,6 +1396,26 @@ fun PlayerScreen(
                             longPressSpeedActive = true
                             exoPlayer.playbackParameters = exoPlayer.playbackParameters.withSpeed(2.0f)
                         },
+                    )
+                }
+                .pointerInput(isLocked, isLive, activeDrawer, prevEpisode, nextEpisode) {
+                    var totalDragX = 0f
+                    detectHorizontalDragGestures(
+                        onDragStart = { totalDragX = 0f },
+                        onHorizontalDrag = { _, dragAmount ->
+                            totalDragX += dragAmount
+                        },
+                        onDragEnd = {
+                            if (!isLocked && isLive && activeDrawer == null) {
+                                if (totalDragX < -90f && nextEpisode != null) {
+                                    playEpisode(nextEpisode)
+                                } else if (totalDragX > 90f && prevEpisode != null) {
+                                    playEpisode(prevEpisode)
+                                }
+                            }
+                            totalDragX = 0f
+                        },
+                        onDragCancel = { totalDragX = 0f },
                     )
                 }
                 .pointerInput(isLocked) {
@@ -2407,11 +2493,18 @@ fun PlayerScreen(
             }
         }
 
-        // Compact Slide-Over Right Drawer (Desktop .cs-drawer glassmorphic parity)
+        // Compact Slide-Over Drawer (Mini Channel List on Start for Live TV, Right Drawer for others)
+        val isMiniLiveChannelList = isLive && activeDrawer == PlayerDrawer.EPISODES
         AnimatedVisibility(
             visible = activeDrawer != null && !isLocked,
-            enter = slideInHorizontally(tween(240), initialOffsetX = { it }) + fadeIn(tween(200)),
-            exit = slideOutHorizontally(tween(200), targetOffsetX = { it }) + fadeOut(tween(180)),
+            enter = slideInHorizontally(
+                tween(240),
+                initialOffsetX = { if (isMiniLiveChannelList) -it else it },
+            ) + fadeIn(tween(200)),
+            exit = slideOutHorizontally(
+                tween(200),
+                targetOffsetX = { if (isMiniLiveChannelList) -it else it },
+            ) + fadeOut(tween(180)),
             modifier = Modifier.fillMaxSize(),
         ) {
             BoxWithConstraints(
@@ -2421,18 +2514,23 @@ fun PlayerScreen(
                         detectTapGestures { activeDrawer = null }
                     },
             ) {
-                val drawerWidth = if (maxWidth > 600.dp) minOf(300.dp, maxWidth * 0.44f) else minOf(296.dp, maxWidth * 0.84f)
+                val drawerWidth = when {
+                    isMiniLiveChannelList && maxWidth > 600.dp -> minOf(256.dp, maxWidth * 0.34f)
+                    isMiniLiveChannelList -> minOf(244.dp, maxWidth * 0.72f)
+                    maxWidth > 600.dp -> minOf(300.dp, maxWidth * 0.44f)
+                    else -> minOf(296.dp, maxWidth * 0.84f)
+                }
                 Surface(
                     shape = RoundedCornerShape(14.dp),
-                    color = DrawerSurfaceColor,
-                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.12f)),
+                    color = if (isMiniLiveChannelList) Color(0xC90B0C14) else DrawerSurfaceColor,
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.14f)),
                     shadowElevation = 20.dp,
                     modifier = Modifier
-                        .align(Alignment.CenterEnd)
+                        .align(if (isMiniLiveChannelList) Alignment.CenterStart else Alignment.CenterEnd)
                         .systemBarsPadding()
                         .padding(8.dp)
                         .width(drawerWidth)
-                        .fillMaxHeight()
+                        .fillMaxHeight(if (isMiniLiveChannelList) 0.84f else 1f)
                         .focusGroup()
                         .pointerInput(Unit) {
                             detectTapGestures { }
@@ -2488,16 +2586,23 @@ fun PlayerScreen(
                         // Drawer Content
                         when (activeDrawer) {
                             PlayerDrawer.EPISODES -> {
-                                val epListState = rememberLazyListState(
-                                    initialFirstVisibleItemIndex = currentEpIdx.coerceAtLeast(0),
-                                )
                                 val initialFocusIdx = if (currentEpIdx >= 0) currentEpIdx else 0
+                                val epListState = rememberLazyListState(
+                                    initialFirstVisibleItemIndex = initialFocusIdx,
+                                )
+                                LaunchedEffect(activeDrawer, currentEpIdx) {
+                                    if (activeDrawer == PlayerDrawer.EPISODES) {
+                                        epListState.scrollToItem(initialFocusIdx)
+                                        kotlinx.coroutines.delay(50)
+                                        runCatching { drawerFirstFocusRequester.requestFocus() }
+                                    }
+                                }
                                 LazyColumn(
                                     state = epListState,
-                                    modifier = Modifier.fillMaxSize().padding(12.dp),
-                                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier.fillMaxSize().padding(if (isLive) 8.dp else 12.dp),
+                                    verticalArrangement = Arrangement.spacedBy(if (isLive) 5.dp else 8.dp),
                                 ) {
-                                    itemsIndexed(episodes, key = { _, ep -> ep.streamId }) { idx, ep ->
+                                    itemsIndexed(episodes, key = { idx, ep -> "${idx}:${ep.streamId}" }) { idx, ep ->
                                         val isCur = ep.streamId == currentEpisode.streamId
                                         val itemMod = Modifier
                                             .then(if (idx == initialFocusIdx) Modifier.focusRequester(drawerFirstFocusRequester) else Modifier)
@@ -2514,7 +2619,7 @@ fun PlayerScreen(
                                             Row(
                                                 modifier = Modifier.fillMaxWidth(),
                                                 verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp),
                                             ) {
                                                 val thumb = ep.thumbnail ?: if (!isLive) (activeDetail.backdrop ?: activeDetail.poster) else null
                                                 if (!thumb.isNullOrBlank()) {
@@ -2523,13 +2628,13 @@ fun PlayerScreen(
                                                         contentDescription = null,
                                                         contentScale = if (isLive) ContentScale.Fit else ContentScale.Crop,
                                                         modifier = Modifier
-                                                            .width(if (isLive) 36.dp else 84.dp)
-                                                            .height(if (isLive) 36.dp else 48.dp)
+                                                            .width(if (isLive) 30.dp else 84.dp)
+                                                            .height(if (isLive) 30.dp else 48.dp)
                                                             .clip(RoundedCornerShape(7.dp))
                                                             .background(Color(0xBF0A0B12)),
                                                     )
                                                 }
-                                                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
                                                     Text(
                                                         text = if (isLive) "CH ${ep.episode}" else "S${ep.season} · E${ep.episode}",
                                                         style = MaterialTheme.typography.labelSmall,
@@ -2539,22 +2644,25 @@ fun PlayerScreen(
                                                     Text(
                                                         text = ep.title?.takeIf { it.isNotBlank() } ?: if (isLive) "Channel ${ep.episode}" else "Episode ${ep.episode}",
                                                         color = Color.White,
+                                                        style = if (isLive) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyMedium,
                                                         fontWeight = FontWeight.SemiBold,
                                                         maxLines = 1,
                                                         overflow = TextOverflow.Ellipsis,
                                                     )
-                                                    ep.overview?.takeIf { it.isNotBlank() }?.let { ov ->
-                                                        Text(
-                                                            text = ov,
-                                                            style = MaterialTheme.typography.labelSmall,
-                                                            color = Color.White.copy(alpha = 0.65f),
-                                                            maxLines = 2,
-                                                            overflow = TextOverflow.Ellipsis,
-                                                        )
+                                                    if (!isLive) {
+                                                        ep.overview?.takeIf { it.isNotBlank() }?.let { ov ->
+                                                            Text(
+                                                                text = ov,
+                                                                style = MaterialTheme.typography.labelSmall,
+                                                                color = Color.White.copy(alpha = 0.65f),
+                                                                maxLines = 2,
+                                                                overflow = TextOverflow.Ellipsis,
+                                                            )
+                                                        }
                                                     }
                                                 }
                                                 if (isCur) {
-                                                    Icon(Icons.Default.Check, contentDescription = null, tint = palette.accent, modifier = Modifier.size(17.dp))
+                                                    Icon(Icons.Default.Check, contentDescription = null, tint = palette.accent, modifier = Modifier.size(16.dp))
                                                 }
                                             }
                                         }

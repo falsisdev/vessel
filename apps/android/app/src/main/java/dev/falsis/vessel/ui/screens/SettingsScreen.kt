@@ -84,6 +84,7 @@ import dev.falsis.vessel.ui.components.vesselDpadInputEscape
 import dev.falsis.vessel.ui.components.vesselTopSafeInset
 import dev.falsis.vessel.ui.i18n.VesselI18n
 import dev.falsis.vessel.ui.theme.DYNAMIC_MATERIAL_THEME_ID
+import dev.falsis.vessel.ui.theme.LocalIsTvDevice
 import dev.falsis.vessel.ui.theme.LocalVesselPalette
 import dev.falsis.vessel.ui.theme.LocalVesselUiTokens
 import dev.falsis.vessel.ui.theme.parseHexColor
@@ -323,37 +324,70 @@ fun SettingsScreen(
                         Text(VesselI18n.tr("settings.ui_customization"), fontWeight = FontWeight.Bold)
                     }
 
+                    val isTv = LocalIsTvDevice.current
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween,
                     ) {
-                        Text(VesselI18n.tr("settings.nav_layout"), modifier = Modifier.weight(1f))
+                        Text(
+                            VesselI18n.tr(if (isTv) "settings.tv_nav_layout" else "settings.nav_layout"),
+                            modifier = Modifier.weight(1f),
+                        )
                         Box {
-                            val navLabel = if (prefs.shell.mobileNavLayout == "floating_bottom") {
-                                VesselI18n.tr("settings.layout_floating_bottom")
+                            if (isTv) {
+                                val tvOptions = listOf(
+                                    "expanded_sidebar" to VesselI18n.tr("settings.tv_layout_expanded"),
+                                    "collapsed_rail" to VesselI18n.tr("settings.tv_layout_collapsed"),
+                                    "pinned_sidebar" to VesselI18n.tr("settings.tv_layout_pinned"),
+                                    "top_navbar" to VesselI18n.tr("settings.tv_layout_top"),
+                                )
+                                val tvNavLabel = tvOptions.firstOrNull { it.first == prefs.shell.tvNavLayout }?.second
+                                    ?: VesselI18n.tr("settings.tv_layout_expanded")
+                                VesselOutlinedButton(onClick = { showNavLayoutMenu = true }, height = tokens.compactButtonHeight) {
+                                    Text(tvNavLabel, style = MaterialTheme.typography.labelMedium)
+                                }
+                                DropdownMenu(expanded = showNavLayoutMenu, onDismissRequest = { showNavLayoutMenu = false }) {
+                                    tvOptions.forEach { (layoutKey, txt) ->
+                                        DropdownMenuItem(
+                                            text = { Text(txt) },
+                                            onClick = {
+                                                showNavLayoutMenu = false
+                                                scope.launch {
+                                                    repo.saveUiPreferences(
+                                                        prefs.copy(shell = prefs.shell.copy(tvNavLayout = layoutKey)),
+                                                    )
+                                                }
+                                            },
+                                        )
+                                    }
+                                }
                             } else {
-                                VesselI18n.tr("settings.nav_standard")
-                            }
-                            VesselOutlinedButton(onClick = { showNavLayoutMenu = true }, height = tokens.compactButtonHeight) {
-                                Text(navLabel, style = MaterialTheme.typography.labelMedium)
-                            }
-                            DropdownMenu(expanded = showNavLayoutMenu, onDismissRequest = { showNavLayoutMenu = false }) {
-                                listOf(
-                                    "standard" to VesselI18n.tr("settings.nav_standard"),
-                                    "floating_bottom" to VesselI18n.tr("settings.layout_floating_bottom"),
-                                ).forEach { (layoutKey, txt) ->
-                                    DropdownMenuItem(
-                                        text = { Text(txt) },
-                                        onClick = {
-                                            showNavLayoutMenu = false
-                                            scope.launch {
-                                                repo.saveUiPreferences(
-                                                    prefs.copy(shell = prefs.shell.copy(mobileNavLayout = layoutKey)),
-                                                )
-                                            }
-                                        },
-                                    )
+                                val navLabel = if (prefs.shell.mobileNavLayout == "floating_bottom") {
+                                    VesselI18n.tr("settings.layout_floating_bottom")
+                                } else {
+                                    VesselI18n.tr("settings.nav_standard")
+                                }
+                                VesselOutlinedButton(onClick = { showNavLayoutMenu = true }, height = tokens.compactButtonHeight) {
+                                    Text(navLabel, style = MaterialTheme.typography.labelMedium)
+                                }
+                                DropdownMenu(expanded = showNavLayoutMenu, onDismissRequest = { showNavLayoutMenu = false }) {
+                                    listOf(
+                                        "standard" to VesselI18n.tr("settings.nav_standard"),
+                                        "floating_bottom" to VesselI18n.tr("settings.layout_floating_bottom"),
+                                    ).forEach { (layoutKey, txt) ->
+                                        DropdownMenuItem(
+                                            text = { Text(txt) },
+                                            onClick = {
+                                                showNavLayoutMenu = false
+                                                scope.launch {
+                                                    repo.saveUiPreferences(
+                                                        prefs.copy(shell = prefs.shell.copy(mobileNavLayout = layoutKey)),
+                                                    )
+                                                }
+                                            },
+                                        )
+                                    }
                                 }
                             }
                         }

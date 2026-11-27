@@ -36,6 +36,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -43,6 +44,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -82,6 +85,18 @@ fun DebridSettingsSection(repo: VesselRepository) {
     var cloudAutoPoll by remember { mutableStateOf(true) }
     var rdDeviceAuth by remember { mutableStateOf<RealDebridDeviceAuthStart?>(null) }
     val apiKeyInputs = remember { mutableStateMapOf<String, String>() }
+    val providerFocusRequesters = remember { mutableMapOf<String, Pair<FocusRequester, FocusRequester>>() }
+    var pendingProviderFocus by remember { mutableStateOf<Pair<String, Boolean>?>(null) }
+
+    LaunchedEffect(pendingProviderFocus, overview?.accounts) {
+        val target = pendingProviderFocus ?: return@LaunchedEffect
+        delay(16)
+        val pair = providerFocusRequesters[target.first]
+        if (pair != null) {
+            runCatching { (if (target.second) pair.first else pair.second).requestFocus() }
+        }
+        pendingProviderFocus = null
+    }
 
     suspend fun refreshOverview() {
         runCatching { repo.getDebridOverview() }
@@ -217,6 +232,8 @@ fun DebridSettingsSection(repo: VesselRepository) {
                 Text(VesselI18n.tr("debrid.priority_hint"), style = MaterialTheme.typography.labelSmall, color = palette.textMuted)
 
                 accounts.forEachIndexed { idx, acc ->
+                    key(acc.target) {
+                    val (upReq, downReq) = providerFocusRequesters.getOrPut(acc.target) { FocusRequester() to FocusRequester() }
                     Surface(
                         shape = RoundedCornerShape(10.dp),
                         color = palette.bgElevated,
@@ -280,14 +297,24 @@ fun DebridSettingsSection(repo: VesselRepository) {
                                 VesselCompactIconButton(
                                     enabled = idx > 0,
                                     size = 28.dp,
-                                    onClick = { moveProvider(accounts, idx, -1) },
+                                    modifier = Modifier.focusRequester(upReq),
+                                    onClick = {
+                                        val newIdx = idx - 1
+                                        moveProvider(accounts, idx, -1)
+                                        pendingProviderFocus = acc.target to (newIdx > 0)
+                                    },
                                 ) {
                                     Icon(Icons.Default.ArrowUpward, contentDescription = null, modifier = Modifier.size(14.dp))
                                 }
                                 VesselCompactIconButton(
                                     enabled = idx < accounts.lastIndex,
                                     size = 28.dp,
-                                    onClick = { moveProvider(accounts, idx, 1) },
+                                    modifier = Modifier.focusRequester(downReq),
+                                    onClick = {
+                                        val newIdx = idx + 1
+                                        moveProvider(accounts, idx, 1)
+                                        pendingProviderFocus = acc.target to (newIdx >= accounts.lastIndex)
+                                    },
                                 ) {
                                     Icon(Icons.Default.ArrowDownward, contentDescription = null, modifier = Modifier.size(14.dp))
                                 }
@@ -516,6 +543,7 @@ fun DebridSettingsSection(repo: VesselRepository) {
                                 )
                             }
                         }
+                    }
                     }
                 }
             }

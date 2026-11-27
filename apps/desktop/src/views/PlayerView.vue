@@ -740,12 +740,22 @@ const activeStream = computed<StreamCandidate | null>(() => {
   return session.value.streams[session.value.activeStreamIndex] ?? session.value.streams[0] ?? null
 })
 
+const episodesListRef = ref<HTMLElement | null>(null)
+
 watch(
   activeDrawer,
-  (nextDrawer) => {
+  async (nextDrawer) => {
     if (nextDrawer !== 'subtitles') {
       subtitleTranscriptOpen.value = false
       subtitleTranscriptQuery.value = ''
+    }
+    if (nextDrawer === 'episodes') {
+      await nextTick()
+      const activeEl = episodesListRef.value?.querySelector('.cs-drawer-item.active')
+      if (activeEl instanceof HTMLElement) {
+        activeEl.scrollIntoView({ block: 'center', behavior: 'auto' })
+        activeEl.focus()
+      }
     }
   },
 )
@@ -1029,14 +1039,22 @@ const currentEpisodeIndex = computed(() => {
   if (!ep) return -1
   return allEpisodes.value.findIndex((item) => item.streamId === ep.streamId)
 })
-const prevEpisode = computed(() =>
-  currentEpisodeIndex.value > 0 ? allEpisodes.value[currentEpisodeIndex.value - 1] : null,
-)
-const nextEpisode = computed(() =>
-  currentEpisodeIndex.value >= 0 && currentEpisodeIndex.value < allEpisodes.value.length - 1
-    ? allEpisodes.value[currentEpisodeIndex.value + 1]
-    : null,
-)
+const prevEpisode = computed(() => {
+  const list = allEpisodes.value
+  const idx = currentEpisodeIndex.value
+  if (isLive.value && list.length > 1 && idx >= 0) {
+    return idx > 0 ? list[idx - 1] : list[list.length - 1]
+  }
+  return idx > 0 ? list[idx - 1] : null
+})
+const nextEpisode = computed(() => {
+  const list = allEpisodes.value
+  const idx = currentEpisodeIndex.value
+  if (isLive.value && list.length > 1 && idx >= 0) {
+    return idx < list.length - 1 ? list[idx + 1] : list[0]
+  }
+  return idx >= 0 && idx < list.length - 1 ? list[idx + 1] : null
+})
 
 function skipSegKey(seg: SkipSegment): string {
   return `${seg.type}:${seg.startMs}:${seg.endMs ?? 'end'}`
@@ -1489,6 +1507,9 @@ async function switchEpisode(ep: Episode): Promise<void> {
         subtitles: [],
         activeStreamIndex: 0,
       })
+      if (isLive.value) {
+        showGestureHud(ep.title ?? detail.value.title)
+      }
       activeDrawer.value = null
       return
     }
@@ -1503,7 +1524,26 @@ async function switchEpisode(ep: Episode): Promise<void> {
       return
     }
     pendingSeekSeconds.value = 0
-    updateEpisodeSession(ep, res.streams, res.subtitles, 0, res.skipSegments)
+    if (isLive.value && activeSession.value && detail.value) {
+      setSession({
+        ...activeSession.value,
+        detail: {
+          ...detail.value,
+          title: ep.title ?? detail.value.title,
+          poster: ep.thumbnail ?? detail.value.poster,
+          backdrop: ep.thumbnail ?? detail.value.backdrop,
+        },
+        episode: ep,
+        streams: res.streams,
+        subtitles: res.subtitles,
+        skipSegments: res.skipSegments,
+        activeStreamIndex: 0,
+        startPositionMs: 0,
+      })
+      showGestureHud(ep.title ?? detail.value.title)
+    } else {
+      updateEpisodeSession(ep, res.streams, res.subtitles, 0, res.skipSegments)
+    }
     activeDrawer.value = null
   } catch (err) {
     pushToast('error', String(err))
@@ -1811,6 +1851,26 @@ function handleKeydown(ev: KeyboardEvent): void {
     case 'i':
       ev.preventDefault()
       toggleStatsHud()
+      break
+    case 'pageup':
+    case ']':
+      if (isLive.value && nextEpisode.value) {
+        ev.preventDefault()
+        void switchEpisode(nextEpisode.value)
+      }
+      break
+    case 'pagedown':
+    case '[':
+      if (isLive.value && prevEpisode.value) {
+        ev.preventDefault()
+        void switchEpisode(prevEpisode.value)
+      }
+      break
+    case 'c':
+      if (isLive.value && allEpisodes.value.length > 1) {
+        ev.preventDefault()
+        toggleDrawer('episodes')
+      }
       break
   }
 }
@@ -2789,7 +2849,12 @@ onUnmounted(() => {
 
     <!-- SLIDE-OVER RIGHT DRAWER (Episodes or Channels / Sources / Subtitles / Settings) -->
     <Transition name="drawer-slide">
-      <aside v-if="activeDrawer && !isLocked" class="cs-drawer" @click.stop>
+      <aside
+        v-if="activeDrawer && !isLocked"
+        class="cs-drawer"
+        :class="{ 'is-live-mini-channels': isLive && activeDrawer === 'episodes' }"
+        @click.stop
+      >
         <div class="cs-drawer-head">
           <h3>
             {{
@@ -2814,7 +2879,7 @@ onUnmounted(() => {
         </div>
 
         <!-- EPISODES OR CHANNELS LIST -->
-        <div v-if="activeDrawer === 'episodes'" class="cs-drawer-body">
+        <div v-if="activeDrawer === 'episodes'" ref="episodesListRef" class="cs-drawer-body">
           <button
             v-for="ep in allEpisodes"
             :key="ep.streamId"
@@ -3834,6 +3899,24 @@ onUnmounted(() => {
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.75);
   z-index: 15;
   overflow: hidden;
+}
+
+.cs-drawer.is-live-mini-channels {
+  right: auto;
+  left: 1rem;
+  top: 3.75rem;
+  bottom: 3.75rem;
+  width: min(275px, calc(100vw - 2rem));
+  background: rgba(12, 13, 22, 0.8);
+}
+
+.cs-drawer.is-live-mini-channels .cs-drawer-item {
+  padding: 0.5rem 0.65rem;
+}
+
+.cs-drawer-item:focus-visible {
+  outline: 2px solid var(--vessel-accent, #a78bfa);
+  outline-offset: -2px;
 }
 
 .cs-drawer-head {

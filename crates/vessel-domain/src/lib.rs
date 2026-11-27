@@ -51,8 +51,9 @@ pub use stream::{
 pub use ui::{
     AdvancedUiPreferences, CardAspectRatio, CardPreferences, CornerStyle, DetailsPreferences,
     EpisodeListLayout, FavoriteLiveChannel, HeroBannerMode, HomePreferences, HomePreset,
-    LiveTvPreferences, LiveTvViewMode, MobileNavLayout, NavLayout, NavModule, PlayClickBehavior,
-    PlaybackPreferences, ShellPreferences, ThemeColors, ThemeSpec, UiDensity, UiPreferences,
+    LiveTvCardAspect, LiveTvLogoStyle, LiveTvPreferences, LiveTvViewMode, MobileNavLayout,
+    NavLayout, NavModule, PlayClickBehavior, PlaybackPreferences, ShellPreferences, ThemeColors,
+    ThemeSpec, TvNavLayout, UiDensity, UiPreferences,
 };
 
 /// Returns the crate version embedded at compile time from `Cargo.toml`.

@@ -625,6 +625,7 @@ export interface UiPreferences {
   shell: {
     layout: NavLayout
     mobileNavLayout?: 'standard' | 'floating_bottom'
+    tvNavLayout?: 'expanded_sidebar' | 'collapsed_rail' | 'pinned_sidebar' | 'top_navbar'
     visibleModules: NavModule[]
     density: UiDensity
     fontScalePercent: number
@@ -638,6 +639,7 @@ export interface UiPreferences {
     continueWatchingLimit: number
     showRecentIptv: boolean
     hiddenSections: string[]
+    catalogOrder: string[]
     selectedPlugins?: string[] | null
     heroPlugins?: string[] | null
   }
@@ -692,11 +694,27 @@ export interface UiPreferences {
     columns?: number
     showLogos: boolean
     showCategories: boolean
+    logoStyle: LiveTvLogoStyle
+    cardAspect: LiveTvCardAspect
+    showChannelNumbers: boolean
+    showFavoritesBar: boolean
+    showSectionHeaders: boolean
+    showActionButtons: boolean
+    titleLines: number
   }
   searchHistory?: string[]
 }
 
-export type LiveTvViewMode = 'grid' | 'compact_list' | 'showcase_tiles'
+export type LiveTvViewMode =
+  | 'grid'
+  | 'compact_list'
+  | 'showcase_tiles'
+  | 'guide_rows'
+  | 'logo_wall'
+  | 'split_directory'
+
+export type LiveTvLogoStyle = 'rounded' | 'circle' | 'square' | 'plain'
+export type LiveTvCardAspect = 'auto' | 'square' | 'wide_16x9' | 'classic_4x3'
 
 export interface FavoriteLiveChannel {
   pluginId: string

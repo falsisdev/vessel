@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onActivated, onMounted, ref, shallowRef } from 'vue'
+import { computed, nextTick, onActivated, onMounted, ref, shallowRef } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   ArrowDown,
@@ -25,9 +25,12 @@ import { pushToast } from '@/composables/useVesselEvents'
 import { isLiveTvPlugin, resolveLiveGroupName } from '@/utils/liveTv'
 import type {
   EpgNowNext,
+  Episode,
   FavoriteLiveChannel,
   HomeSection,
   IptvKind,
+  LiveTvCardAspect,
+  LiveTvLogoStyle,
   LiveTvViewMode,
   MediaSummary,
   PluginListEntry,
@@ -46,6 +49,7 @@ const activeTab = shallowRef<'playlists' | 'plugins'>('plugins')
 const livePlugins = ref<PluginListEntry[]>([])
 const selectedLivePluginId = shallowRef<string>('')
 const pluginLiveSections = ref<HomeSection[]>([])
+const selectedSectionId = shallowRef('')
 const loadingPluginLive = shallowRef(false)
 const pluginChannelFilter = shallowRef('')
 const pluginFavoritesOnly = shallowRef(false)
@@ -85,9 +89,14 @@ const liveGridStyle = computed(() => {
 const liveContainerClasses = computed(() => [
   `mode-${livePrefs.value.viewMode || 'grid'}`,
   `density-${livePrefs.value.density || 'comfortable'}`,
+  `logo-${livePrefs.value.logoStyle || 'rounded'}`,
+  `aspect-${livePrefs.value.cardAspect || 'auto'}`,
+  `lines-${livePrefs.value.titleLines || 1}`,
   {
     'hide-logos': !livePrefs.value.showLogos,
     'hide-categories': !livePrefs.value.showCategories,
+    'hide-actions': !livePrefs.value.showActionButtons,
+    'hide-numbers': !livePrefs.value.showChannelNumbers,
   },
 ])
 
@@ -145,7 +154,9 @@ const orderedPluginLiveSections = computed(() => {
 const filteredPluginLiveSections = computed(() => {
   const q = pluginChannelFilter.value.trim().toLowerCase()
   const pid = selectedLivePluginId.value
+  const secFilter = selectedSectionId.value
   return orderedPluginLiveSections.value
+    .filter((sec) => !secFilter || sec.id === secFilter)
     .map((sec) => ({
       ...sec,
       items: sec.items.filter((it) => {
@@ -158,6 +169,26 @@ const filteredPluginLiveSections = computed(() => {
     }))
     .filter((sec) => sec.items.length > 0)
 })
+
+const pluginSiblingItems = computed(() =>
+  filteredPluginLiveSections.value.flatMap((sec) =>
+    sec.items.map((item) => ({ sectionTitle: sec.title, item })),
+  ),
+)
+
+const favoriteSiblingItems = computed(() =>
+  filteredPluginFavorites.value.map((f) => ({
+    sectionTitle: f.sectionTitle ?? f.pluginId,
+    item: {
+      nativeId: f.nativeId,
+      pluginId: f.pluginId,
+      type: 'live' as const,
+      isAnime: false,
+      title: f.title,
+      poster: f.poster,
+    },
+  })),
+)
 
 const filteredPluginFavorites = computed(() => {
   const q = pluginChannelFilter.value.trim().toLowerCase()
@@ -228,6 +259,7 @@ async function playFavoritePluginEntry(fav: FavoriteLiveChannel): Promise<void> 
       poster: fav.poster,
     },
     fav.sectionTitle ?? fav.pluginId,
+    favoriteSiblingItems.value.filter((s) => s.item.pluginId === fav.pluginId),
   )
 }
 
@@ -241,6 +273,18 @@ function setLiveDensity(density: UiDensity): void {
 
 function setLiveColumns(cols: number | undefined): void {
   void patchLivePrefs({ columns: cols })
+}
+
+function setLiveLogoStyle(logoStyle: LiveTvLogoStyle): void {
+  void patchLivePrefs({ logoStyle })
+}
+
+function setLiveCardAspect(cardAspect: LiveTvCardAspect): void {
+  void patchLivePrefs({ cardAspect })
+}
+
+function setLiveTitleLines(titleLines: number): void {
+  void patchLivePrefs({ titleLines })
 }
 
 async function persistLiveTvOrder(
@@ -257,6 +301,10 @@ async function moveLivePlugin(pluginId: string, delta: -1 | 1): Promise<void> {
   if (idx < 0 || target < 0 || target >= ids.length) return
   ;[ids[idx], ids[target]] = [ids[target], ids[idx]]
   await persistLiveTvOrder(ids, livePrefs.value.sectionOrderByPlugin ?? {})
+  const preferDir = delta === -1 ? (target > 0 ? 'up' : 'down') : (target < ids.length - 1 ? 'down' : 'up')
+  await nextTick()
+  const el = pluginOrderListRef.value?.querySelector(`[data-reorder-id="${CSS.escape(pluginId)}"] [data-move-dir="${preferDir}"]`)
+  if (el instanceof HTMLElement) el.focus()
 }
 
 async function moveLiveSection(sectionId: string, delta: -1 | 1): Promise<void> {
@@ -271,6 +319,10 @@ async function moveLiveSection(sectionId: string, delta: -1 | 1): Promise<void> 
     ...(livePrefs.value.sectionOrderByPlugin ?? {}),
     [pid]: ids,
   })
+  const preferDir = delta === -1 ? (target > 0 ? 'up' : 'down') : (target < ids.length - 1 ? 'down' : 'up')
+  await nextTick()
+  const el = sectionOrderListRef.value?.querySelector(`[data-reorder-id="${CSS.escape(sectionId)}"] [data-move-dir="${preferDir}"]`)
+  if (el instanceof HTMLElement) el.focus()
 }
 
 function startVerticalDrag(
@@ -382,6 +434,9 @@ async function refreshFavoriteIptv(): Promise<void> {
 }
 
 async function selectLivePlugin(pluginId: string): Promise<void> {
+  if (selectedLivePluginId.value !== pluginId) {
+    selectedSectionId.value = ''
+  }
   selectedLivePluginId.value = pluginId
   if (!pluginId || !isTauriRuntime()) return
   loadingPluginLive.value = true
@@ -410,21 +465,41 @@ async function switchIptvTab(tab: 'playlists' | 'plugins'): Promise<void> {
   }
 }
 
-async function playPluginLiveItem(item: MediaSummary, sectionTitle: string): Promise<void> {
+async function playPluginLiveItem(
+  item: MediaSummary,
+  sectionTitle: string,
+  siblings: Array<{ sectionTitle: string; item: MediaSummary }> = pluginSiblingItems.value,
+): Promise<void> {
   const pluginId = item.pluginId || selectedLivePluginId.value
   if (!pluginId || launchingChannelId.value) return
   launchingChannelId.value = item.nativeId
   try {
     const detail = await vesselApi.getDetailsWithEnrichment(pluginId, item.nativeId, 'en')
-    const ep = detail.episodes[0] ?? {
-      streamId: item.nativeId,
+    const siblingEpisodes: Episode[] = siblings.map((entry, idx) => ({
+      streamId: entry.item.nativeId,
       season: 1,
-      episode: 1,
-      title: item.title,
-      overview: sectionTitle,
-      thumbnail: item.poster,
+      episode: idx + 1,
+      title: entry.item.title,
+      overview: entry.sectionTitle,
+      thumbnail: entry.item.poster,
       tags: [],
-    }
+    }))
+    const ep =
+      siblingEpisodes.find((e) => e.streamId === item.nativeId) ??
+      detail.episodes[0] ?? {
+        streamId: item.nativeId,
+        season: 1,
+        episode: 1,
+        title: item.title,
+        overview: sectionTitle,
+        thumbnail: item.poster,
+        tags: [],
+      }
+    const finalEpisodes = siblingEpisodes.some((e) => e.streamId === ep.streamId)
+      ? siblingEpisodes
+      : detail.episodes.length
+        ? detail.episodes
+        : [ep]
     const streamRes = await vesselApi.getStreams(pluginId, ep.streamId)
     if (!streamRes.streams.length) {
       pushToast('warn', `No playable live streams returned for ${item.title}`)
@@ -439,6 +514,7 @@ async function playPluginLiveItem(item: MediaSummary, sectionTitle: string): Pro
         title: detail.title || item.title,
         poster: detail.poster ?? item.poster,
         backdrop: detail.backdrop ?? item.poster,
+        episodes: finalEpisodes,
       },
       episode: ep,
       streams: streamRes.streams,
@@ -739,9 +815,21 @@ onActivated(() => {
       </div>
     </header>
 
-    <!-- Top Unified Favorites Section (always immediately visible when opening Live TV) -->
+    <!-- Top Unified Favorites Section (always immediately visible when opening Live TV unless hidden) -->
+    <div v-if="!livePrefs.showFavoritesBar" class="live-section-head" style="justify-content: flex-end;">
+      <button
+        type="button"
+        class="v-btn v-btn-sm"
+        :class="{ 'v-btn-primary': showViewPanel }"
+        @click="showViewPanel = !showViewPanel"
+      >
+        <SlidersHorizontal :size="14" aria-hidden="true" />
+        <span>{{ t('iptv.customize_view') }}</span>
+      </button>
+    </div>
+
     <section class="v-card live-favorites-box">
-      <div class="live-section-head" style="justify-content: space-between;">
+      <div v-if="livePrefs.showFavoritesBar" class="live-section-head" style="justify-content: space-between;">
         <div class="live-section-head">
           <Star :size="16" fill="currentColor" style="color: var(--vessel-warning);" aria-hidden="true" />
           <strong>{{ t('iptv.favorites_section') }}</strong>
@@ -763,7 +851,7 @@ onActivated(() => {
           <span class="v-muted view-pref-label">{{ t('iptv.view_layout') }}</span>
           <div class="view-pref-chips">
             <button
-              v-for="m in (['grid', 'compact_list', 'showcase_tiles'] as const)"
+              v-for="m in (['grid', 'compact_list', 'showcase_tiles', 'guide_rows', 'logo_wall', 'split_directory'] as const)"
               :key="m"
               type="button"
               class="v-btn v-btn-sm"
@@ -812,6 +900,51 @@ onActivated(() => {
             </button>
           </div>
         </div>
+        <div class="view-pref-group">
+          <span class="v-muted view-pref-label">{{ t('iptv.logo_style') }}</span>
+          <div class="view-pref-chips">
+            <button
+              v-for="ls in (['rounded', 'circle', 'square', 'plain'] as const)"
+              :key="ls"
+              type="button"
+              class="v-btn v-btn-sm"
+              :class="{ 'v-btn-primary': (livePrefs.logoStyle || 'rounded') === ls }"
+              @click="setLiveLogoStyle(ls)"
+            >
+              {{ t(`iptv.logo_${ls}`) }}
+            </button>
+          </div>
+        </div>
+        <div class="view-pref-group">
+          <span class="v-muted view-pref-label">{{ t('iptv.card_aspect') }}</span>
+          <div class="view-pref-chips">
+            <button
+              v-for="ar in (['auto', 'square', 'wide_16x9', 'classic_4x3'] as const)"
+              :key="ar"
+              type="button"
+              class="v-btn v-btn-sm"
+              :class="{ 'v-btn-primary': (livePrefs.cardAspect || 'auto') === ar }"
+              @click="setLiveCardAspect(ar)"
+            >
+              {{ t(`iptv.aspect_${ar}`) }}
+            </button>
+          </div>
+        </div>
+        <div class="view-pref-group">
+          <span class="v-muted view-pref-label">{{ t('iptv.title_lines') }}</span>
+          <div class="view-pref-chips">
+            <button
+              v-for="ln in [1, 2]"
+              :key="ln"
+              type="button"
+              class="v-btn v-btn-sm"
+              :class="{ 'v-btn-primary': (livePrefs.titleLines || 1) === ln }"
+              @click="setLiveTitleLines(ln)"
+            >
+              {{ t(`iptv.lines_${ln}`) }}
+            </button>
+          </div>
+        </div>
         <div class="view-pref-toggles">
           <label class="v-switch">
             <input
@@ -833,9 +966,50 @@ onActivated(() => {
             <span class="v-switch-track" aria-hidden="true" />
             <span>{{ t('iptv.show_categories') }}</span>
           </label>
+          <label class="v-switch">
+            <input
+              :checked="livePrefs.showChannelNumbers"
+              type="checkbox"
+              class="v-switch-input"
+              @change="patchLivePrefs({ showChannelNumbers: ($event.target as HTMLInputElement).checked })"
+            />
+            <span class="v-switch-track" aria-hidden="true" />
+            <span>{{ t('iptv.show_channel_numbers') }}</span>
+          </label>
+          <label class="v-switch">
+            <input
+              :checked="livePrefs.showFavoritesBar"
+              type="checkbox"
+              class="v-switch-input"
+              @change="patchLivePrefs({ showFavoritesBar: ($event.target as HTMLInputElement).checked })"
+            />
+            <span class="v-switch-track" aria-hidden="true" />
+            <span>{{ t('iptv.show_favorites_bar') }}</span>
+          </label>
+          <label class="v-switch">
+            <input
+              :checked="livePrefs.showSectionHeaders"
+              type="checkbox"
+              class="v-switch-input"
+              @change="patchLivePrefs({ showSectionHeaders: ($event.target as HTMLInputElement).checked })"
+            />
+            <span class="v-switch-track" aria-hidden="true" />
+            <span>{{ t('iptv.show_section_headers') }}</span>
+          </label>
+          <label class="v-switch">
+            <input
+              :checked="livePrefs.showActionButtons"
+              type="checkbox"
+              class="v-switch-input"
+              @change="patchLivePrefs({ showActionButtons: ($event.target as HTMLInputElement).checked })"
+            />
+            <span class="v-switch-track" aria-hidden="true" />
+            <span>{{ t('iptv.show_action_buttons') }}</span>
+          </label>
         </div>
       </div>
 
+      <template v-if="livePrefs.showFavoritesBar">
       <p v-if="!totalFavoritesCount" class="v-muted" style="margin: 0; font-size: 0.85rem;">
         {{ t('iptv.favorites_empty_hint') }}
       </p>
@@ -873,7 +1047,7 @@ onActivated(() => {
               {{ fav.sectionTitle || fav.pluginId }}
             </span>
           </button>
-          <div class="ch-actions">
+          <div v-if="livePrefs.showActionButtons" class="ch-actions">
             <button
               type="button"
               class="v-btn v-btn-icon"
@@ -916,7 +1090,7 @@ onActivated(() => {
             <strong class="ch-name">{{ ch.name }}</strong>
             <span v-if="livePrefs.showCategories" class="v-muted ch-group">{{ ch.groupTitle }}</span>
           </button>
-          <div class="ch-actions">
+          <div v-if="livePrefs.showActionButtons" class="ch-actions">
             <button
               type="button"
               class="v-btn v-btn-icon"
@@ -936,6 +1110,7 @@ onActivated(() => {
           </div>
         </div>
       </div>
+      </template>
     </section>
 
     <template v-if="activeTab === 'playlists'">
@@ -1020,12 +1195,79 @@ onActivated(() => {
 
     <div v-if="!channels.length" class="v-card v-muted">{{ t('common.empty') }}</div>
 
+    <div v-else-if="livePrefs.viewMode === 'split_directory' && groups.length" class="split-directory-shell">
+      <aside class="v-card split-dir-sidebar">
+        <button
+          type="button"
+          class="split-dir-btn"
+          :class="{ 'is-active': !selectedGroup }"
+          @click="selectedGroup = ''; runChannelSearch()"
+        >
+          <span>{{ t('iptv.all_groups') }}</span>
+        </button>
+        <button
+          v-for="g in groups"
+          :key="`iptv-split-${g}`"
+          type="button"
+          class="split-dir-btn"
+          :class="{ 'is-active': selectedGroup === g }"
+          @click="selectedGroup = g; runChannelSearch()"
+        >
+          <span class="split-dir-title">{{ g }}</span>
+        </button>
+      </aside>
+      <div class="channels-grid" :class="liveContainerClasses" :style="[liveGridStyle, { flex: '1', minWidth: '0' }]">
+        <div
+          v-for="(ch, chIdx) in channels"
+          :key="ch.id"
+          class="v-card channel-card"
+        >
+          <span v-if="livePrefs.showChannelNumbers" class="ch-num-badge">{{ String(chIdx + 1).padStart(2, '0') }}</span>
+          <div v-if="livePrefs.showLogos" class="ch-logo-box">
+            <img
+              v-if="ch.logoUrl && !failedLogos[ch.id]"
+              :src="ch.logoUrl"
+              :alt="ch.name"
+              loading="lazy"
+              decoding="async"
+              class="ch-logo-img"
+              @error="failedLogos = { ...failedLogos, [ch.id]: true }"
+            />
+            <Tv v-else :size="18" class="ch-logo-fallback" aria-hidden="true" />
+          </div>
+          <button type="button" class="ch-info-btn" @click="selectChannel(ch)">
+            <strong class="ch-name">{{ ch.name }}</strong>
+            <span v-if="livePrefs.showCategories" class="v-muted ch-group">{{ ch.groupTitle }}</span>
+          </button>
+          <div v-if="livePrefs.showActionButtons" class="ch-actions">
+            <button
+              type="button"
+              class="v-btn v-btn-icon"
+              :aria-label="ch.isFavorite ? `Unfavorite ${ch.name}` : `Favorite ${ch.name}`"
+              @click.stop="toggleFavorite(ch)"
+            >
+              <Star :size="14" :fill="ch.isFavorite ? 'currentColor' : 'none'" :style="ch.isFavorite ? 'color: var(--vessel-warning);' : ''" aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              class="v-btn v-btn-icon v-btn-primary"
+              :aria-label="`Play ${ch.name}`"
+              @click="playChannel(ch)"
+            >
+              <Play :size="14" aria-hidden="true" />
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div v-else class="channels-grid" :class="liveContainerClasses" :style="liveGridStyle">
       <div
-        v-for="ch in channels"
+        v-for="(ch, chIdx) in channels"
         :key="ch.id"
         class="v-card channel-card"
       >
+        <span v-if="livePrefs.showChannelNumbers" class="ch-num-badge">{{ String(chIdx + 1).padStart(2, '0') }}</span>
         <div v-if="livePrefs.showLogos" class="ch-logo-box">
           <img
             v-if="ch.logoUrl && !failedLogos[ch.id]"
@@ -1042,7 +1284,7 @@ onActivated(() => {
           <strong class="ch-name">{{ ch.name }}</strong>
           <span v-if="livePrefs.showCategories" class="v-muted ch-group">{{ ch.groupTitle }}</span>
         </button>
-        <div class="ch-actions">
+        <div v-if="livePrefs.showActionButtons" class="ch-actions">
           <button
             type="button"
             class="v-btn v-btn-icon"
@@ -1145,6 +1387,7 @@ onActivated(() => {
                 <div
                   v-for="(plug, pIdx) in orderedLivePlugins"
                   :key="plug.manifest.id"
+                  :data-reorder-id="plug.manifest.id"
                   class="reorder-row"
                   :class="{ 'is-dragging': draggingPluginIndex === pIdx }"
                 >
@@ -1161,6 +1404,7 @@ onActivated(() => {
                     <button
                       type="button"
                       class="v-btn v-btn-icon v-btn-sm"
+                      data-move-dir="up"
                       :disabled="pIdx === 0"
                       :aria-label="t('iptv.move_up')"
                       @click="moveLivePlugin(plug.manifest.id, -1)"
@@ -1170,6 +1414,7 @@ onActivated(() => {
                     <button
                       type="button"
                       class="v-btn v-btn-icon v-btn-sm"
+                      data-move-dir="down"
                       :disabled="pIdx === orderedLivePlugins.length - 1"
                       :aria-label="t('iptv.move_down')"
                       @click="moveLivePlugin(plug.manifest.id, 1)"
@@ -1187,6 +1432,7 @@ onActivated(() => {
                 <div
                   v-for="(sec, sIdx) in orderedPluginLiveSections"
                   :key="sec.id"
+                  :data-reorder-id="sec.id"
                   class="reorder-row"
                   :class="{ 'is-dragging': draggingSectionIndex === sIdx }"
                 >
@@ -1203,6 +1449,7 @@ onActivated(() => {
                     <button
                       type="button"
                       class="v-btn v-btn-icon v-btn-sm"
+                      data-move-dir="up"
                       :disabled="sIdx === 0"
                       :aria-label="t('iptv.move_up')"
                       @click="moveLiveSection(sec.id, -1)"
@@ -1212,6 +1459,7 @@ onActivated(() => {
                     <button
                       type="button"
                       class="v-btn v-btn-icon v-btn-sm"
+                      data-move-dir="down"
                       :disabled="sIdx === orderedPluginLiveSections.length - 1"
                       :aria-label="t('iptv.move_down')"
                       @click="moveLiveSection(sec.id, 1)"
@@ -1233,18 +1481,105 @@ onActivated(() => {
           {{ t('common.empty') }}
         </div>
 
+        <div v-else-if="livePrefs.viewMode === 'split_directory' && orderedPluginLiveSections.length > 1" class="split-directory-shell">
+          <aside class="v-card split-dir-sidebar">
+            <button
+              type="button"
+              class="split-dir-btn"
+              :class="{ 'is-active': !selectedSectionId }"
+              @click="selectedSectionId = ''"
+            >
+              <span>{{ t('common.all') }}</span>
+            </button>
+            <button
+              v-for="sec in orderedPluginLiveSections"
+              :key="`split-${sec.id}`"
+              type="button"
+              class="split-dir-btn"
+              :class="{ 'is-active': selectedSectionId === sec.id }"
+              @click="selectedSectionId = sec.id"
+            >
+              <span class="split-dir-title">{{ sec.title }}</span>
+              <span class="v-badge">{{ sec.items.length }}</span>
+            </button>
+          </aside>
+          <div class="plugin-sections-stack" style="flex: 1; min-width: 0;">
+            <section v-for="sec in filteredPluginLiveSections" :key="sec.id" class="live-section">
+              <div v-if="livePrefs.showSectionHeaders" class="live-section-head">
+                <h2 class="live-section-title">{{ sec.title }}</h2>
+                <span class="v-badge">{{ sec.items.length }}</span>
+              </div>
+              <div class="channels-grid" :class="liveContainerClasses" :style="liveGridStyle">
+                <div
+                  v-for="(item, cIdx) in sec.items"
+                  :key="item.nativeId"
+                  class="v-card channel-card"
+                >
+                  <span v-if="livePrefs.showChannelNumbers" class="ch-num-badge">{{ String(cIdx + 1).padStart(2, '0') }}</span>
+                  <div v-if="livePrefs.showLogos" class="ch-logo-box">
+                    <img
+                      v-if="item.poster && !failedPluginLogos[item.nativeId]"
+                      :src="item.poster"
+                      :alt="item.title"
+                      loading="lazy"
+                      decoding="async"
+                      class="ch-logo-img"
+                      @error="failedPluginLogos = { ...failedPluginLogos, [item.nativeId]: true }"
+                    />
+                    <Tv v-else :size="18" class="ch-logo-fallback" aria-hidden="true" />
+                  </div>
+                  <button
+                    type="button"
+                    class="ch-info-btn"
+                    @click="playPluginLiveItem(item, sec.title)"
+                  >
+                    <strong class="ch-name">{{ item.title }}</strong>
+                    <span v-if="livePrefs.showCategories" class="v-muted ch-group">{{ sec.title }}</span>
+                  </button>
+                  <div v-if="livePrefs.showActionButtons" class="ch-actions">
+                    <button
+                      type="button"
+                      class="v-btn v-btn-icon"
+                      :aria-label="isPluginChannelFavorite(item.pluginId || selectedLivePluginId, item.nativeId) ? t('iptv.unfavorite_channel') : t('iptv.favorite_channel')"
+                      @click.stop="togglePluginFavorite(item, sec.title)"
+                    >
+                      <Star
+                        :size="14"
+                        :fill="isPluginChannelFavorite(item.pluginId || selectedLivePluginId, item.nativeId) ? 'currentColor' : 'none'"
+                        :style="isPluginChannelFavorite(item.pluginId || selectedLivePluginId, item.nativeId) ? 'color: var(--vessel-warning);' : ''"
+                        aria-hidden="true"
+                      />
+                    </button>
+                    <button
+                      type="button"
+                      class="v-btn v-btn-icon v-btn-primary"
+                      :disabled="launchingChannelId === item.nativeId"
+                      :aria-label="`Play ${item.title}`"
+                      @click="playPluginLiveItem(item, sec.title)"
+                    >
+                      <RefreshCw v-if="launchingChannelId === item.nativeId" :size="14" class="spin" aria-hidden="true" />
+                      <Play v-else :size="14" aria-hidden="true" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
+        </div>
+
         <div v-else class="plugin-sections-stack">
           <section v-for="sec in filteredPluginLiveSections" :key="sec.id" class="live-section">
-            <div class="live-section-head">
+            <div v-if="livePrefs.showSectionHeaders" class="live-section-head">
               <h2 class="live-section-title">{{ sec.title }}</h2>
               <span class="v-badge">{{ sec.items.length }}</span>
             </div>
             <div class="channels-grid" :class="liveContainerClasses" :style="liveGridStyle">
               <div
-                v-for="item in sec.items"
+                v-for="(item, cIdx) in sec.items"
                 :key="item.nativeId"
                 class="v-card channel-card"
               >
+                <span v-if="livePrefs.showChannelNumbers" class="ch-num-badge">{{ String(cIdx + 1).padStart(2, '0') }}</span>
                 <div v-if="livePrefs.showLogos" class="ch-logo-box">
                   <img
                     v-if="item.poster && !failedPluginLogos[item.nativeId]"
@@ -1265,7 +1600,7 @@ onActivated(() => {
                   <strong class="ch-name">{{ item.title }}</strong>
                   <span v-if="livePrefs.showCategories" class="v-muted ch-group">{{ sec.title }}</span>
                 </button>
-                <div class="ch-actions">
+                <div v-if="livePrefs.showActionButtons" class="ch-actions">
                   <button
                     type="button"
                     class="v-btn v-btn-icon"
@@ -1661,5 +1996,138 @@ onActivated(() => {
 .channels-grid.density-spacious .ch-logo-box {
   width: 48px;
   height: 48px;
+}
+
+.ch-num-badge {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.16rem 0.42rem;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--vessel-accent) 16%, transparent);
+  color: var(--vessel-accent);
+  flex-shrink: 0;
+}
+
+.channels-grid.logo-circle .ch-logo-box {
+  border-radius: 999px;
+}
+
+.channels-grid.logo-square .ch-logo-box {
+  border-radius: 3px;
+}
+
+.channels-grid.logo-plain .ch-logo-box {
+  background: transparent;
+  border-color: transparent;
+}
+
+.channels-grid.aspect-square .channel-card {
+  aspect-ratio: 1 / 1;
+}
+
+.channels-grid.aspect-wide_16x9 .channel-card {
+  aspect-ratio: 16 / 9;
+}
+
+.channels-grid.aspect-classic_4x3 .channel-card {
+  aspect-ratio: 4 / 3;
+}
+
+.channels-grid.mode-compact_list.aspect-square .channel-card,
+.channels-grid.mode-compact_list.aspect-wide_16x9 .channel-card,
+.channels-grid.mode-compact_list.aspect-classic_4x3 .channel-card,
+.channels-grid.mode-guide_rows.aspect-square .channel-card,
+.channels-grid.mode-guide_rows.aspect-wide_16x9 .channel-card,
+.channels-grid.mode-guide_rows.aspect-classic_4x3 .channel-card {
+  aspect-ratio: auto;
+}
+
+.channels-grid.lines-2 .ch-name {
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.channels-grid.mode-guide_rows {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.channels-grid.mode-guide_rows .channel-card {
+  padding: 0.85rem 1rem;
+}
+
+.channels-grid.mode-guide_rows .ch-logo-box {
+  width: 52px;
+  height: 52px;
+}
+
+.channels-grid.mode-logo_wall {
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+}
+
+.channels-grid.mode-logo_wall .channel-card {
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 0.45rem;
+}
+
+.channels-grid.mode-logo_wall .ch-logo-box {
+  width: 100%;
+  height: 82px;
+}
+
+.channels-grid.mode-logo_wall .ch-info-btn {
+  align-items: center;
+  text-align: center;
+}
+
+.split-directory-shell {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.split-dir-sidebar {
+  width: 220px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.65rem;
+}
+
+.split-dir-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+  width: 100%;
+  border: none;
+  border-radius: 9px;
+  padding: 0.5rem 0.7rem;
+  background: transparent;
+  color: var(--vessel-text-primary);
+  font-size: 0.84rem;
+  font-weight: 550;
+  text-align: left;
+  cursor: pointer;
+}
+
+.split-dir-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.split-dir-btn.is-active {
+  background: color-mix(in srgb, var(--vessel-accent) 20%, transparent);
+  color: var(--vessel-accent);
+  font-weight: 700;
+}
+
+.split-dir-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 </style>

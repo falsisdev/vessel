@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
 import {
   ArrowDown,
   ArrowUp,
@@ -168,13 +168,19 @@ async function startRdDeviceAuth(): Promise<void> {
   }
 }
 
+const debridListRef = ref<HTMLElement | null>(null)
+
 async function movePriority(idx: number, delta: -1 | 1): Promise<void> {
   const order = orderedAccounts.value.map((a) => a.target)
   const nextIdx = idx + delta
   if (nextIdx < 0 || nextIdx >= order.length) return
   const [item] = order.splice(idx, 1)
   order.splice(nextIdx, 0, item)
+  const preferDir = delta === -1 ? (nextIdx > 0 ? 'up' : 'down') : (nextIdx < order.length - 1 ? 'down' : 'up')
   await savePrefs({ ...prefs.value, priorityOrder: order })
+  await nextTick()
+  const el = debridListRef.value?.querySelector(`[data-debrid-target="${CSS.escape(item)}"] [data-move-dir="${preferDir}"]`)
+  if (el instanceof HTMLElement) el.focus()
 }
 
 async function savePrefs(next: DebridPreferences): Promise<void> {
@@ -282,8 +288,13 @@ onBeforeUnmount(() => {
       <Loader2 :size="15" class="spin" /> Loading...
     </div>
 
-    <div v-else class="debrid-provider-list">
-      <div v-for="(acc, idx) in orderedAccounts" :key="acc.target" class="debrid-provider-card">
+    <div v-else ref="debridListRef" class="debrid-provider-list">
+      <div
+        v-for="(acc, idx) in orderedAccounts"
+        :key="acc.target"
+        :data-debrid-target="acc.target"
+        class="debrid-provider-card"
+      >
         <div class="debrid-provider-head">
           <div class="debrid-provider-meta">
             <strong>{{ acc.label }}</strong>
@@ -304,6 +315,7 @@ onBeforeUnmount(() => {
             <button
               type="button"
               class="v-btn v-btn-icon v-btn-sm"
+              data-move-dir="up"
               :disabled="idx === 0"
               aria-label="Move up"
               @click="movePriority(idx, -1)"
@@ -313,6 +325,7 @@ onBeforeUnmount(() => {
             <button
               type="button"
               class="v-btn v-btn-icon v-btn-sm"
+              data-move-dir="down"
               :disabled="idx === orderedAccounts.length - 1"
               aria-label="Move down"
               @click="movePriority(idx, 1)"

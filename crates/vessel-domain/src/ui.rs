@@ -137,12 +137,24 @@ pub enum MobileNavLayout {
     FloatingBottom,
 }
 
+/// Android TV navigation bar style (independent of mobile & desktop layouts).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TvNavLayout {
+    #[default]
+    ExpandedSidebar,
+    CollapsedRail,
+    PinnedSidebar,
+    TopNavbar,
+}
+
 /// Shell chrome, sidebar module visibility, and density preferences.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct ShellPreferences {
     pub layout: NavLayout,
     pub mobile_nav_layout: MobileNavLayout,
+    pub tv_nav_layout: TvNavLayout,
     pub visible_modules: Vec<NavModule>,
     pub density: UiDensity,
     pub font_scale_percent: u16,
@@ -155,6 +167,7 @@ impl Default for ShellPreferences {
         Self {
             layout: NavLayout::default(),
             mobile_nav_layout: MobileNavLayout::default(),
+            tv_nav_layout: TvNavLayout::default(),
             visible_modules: vec![
                 NavModule::Home,
                 NavModule::Search,
@@ -202,6 +215,7 @@ pub struct HomePreferences {
     pub continue_watching_limit: u16,
     pub show_recent_iptv: bool,
     pub hidden_sections: Vec<String>,
+    pub catalog_order: Vec<String>,
     pub selected_plugins: Option<Vec<String>>,
     pub hero_plugins: Option<Vec<String>>,
 }
@@ -215,6 +229,7 @@ impl Default for HomePreferences {
             continue_watching_limit: 12,
             show_recent_iptv: true,
             hidden_sections: Vec::new(),
+            catalog_order: Vec::new(),
             selected_plugins: None,
             hero_plugins: None,
         }
@@ -399,6 +414,33 @@ pub enum LiveTvViewMode {
     Grid,
     CompactList,
     ShowcaseTiles,
+    GuideRows,
+    LogoWall,
+    SplitDirectory,
+}
+
+/// Logo frame style on Live TV channel cards.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LiveTvLogoStyle {
+    #[default]
+    Rounded,
+    Circle,
+    Square,
+    Plain,
+}
+
+/// Card aspect ratio preset for Live TV grid/tile cards.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LiveTvCardAspect {
+    #[default]
+    Auto,
+    Square,
+    #[serde(rename = "wide_16x9")]
+    Wide16x9,
+    #[serde(rename = "classic_4x3")]
+    Classic4x3,
 }
 
 /// Persisted favorite Live TV plugin channel stored on-device.
@@ -426,6 +468,13 @@ pub struct LiveTvPreferences {
     pub columns: Option<u8>,
     pub show_logos: bool,
     pub show_categories: bool,
+    pub logo_style: LiveTvLogoStyle,
+    pub card_aspect: LiveTvCardAspect,
+    pub show_channel_numbers: bool,
+    pub show_favorites_bar: bool,
+    pub show_section_headers: bool,
+    pub show_action_buttons: bool,
+    pub title_lines: u8,
 }
 
 impl Default for LiveTvPreferences {
@@ -439,6 +488,13 @@ impl Default for LiveTvPreferences {
             columns: None,
             show_logos: true,
             show_categories: true,
+            logo_style: LiveTvLogoStyle::default(),
+            card_aspect: LiveTvCardAspect::default(),
+            show_channel_numbers: true,
+            show_favorites_bar: true,
+            show_section_headers: true,
+            show_action_buttons: true,
+            title_lines: 1,
         }
     }
 }
@@ -504,6 +560,44 @@ mod tests {
         assert!(prefs.live_tv.show_logos);
         assert!(prefs.live_tv.show_categories);
         assert_eq!(prefs.live_tv.view_mode, super::LiveTvViewMode::Grid);
+        assert_eq!(prefs.shell.tv_nav_layout, super::TvNavLayout::ExpandedSidebar);
+        assert!(prefs.home.catalog_order.is_empty());
+        assert!(prefs.live_tv.show_favorites_bar);
+        assert!(prefs.live_tv.show_section_headers);
+        assert!(prefs.live_tv.show_channel_numbers);
+        assert_eq!(prefs.live_tv.title_lines, 1);
+    }
+
+    #[test]
+    fn round_trips_new_tv_nav_catalog_order_and_live_tv_modes() {
+        let raw = r#"{
+            "shell": { "tvNavLayout": "pinned_sidebar" },
+            "home": { "catalogOrder": ["anizium::latest", "diziwatch::popular"] },
+            "liveTv": {
+                "viewMode": "guide_rows",
+                "logoStyle": "circle",
+                "cardAspect": "wide_16x9",
+                "showChannelNumbers": false,
+                "showFavoritesBar": false,
+                "showSectionHeaders": false,
+                "showActionButtons": false,
+                "titleLines": 2
+            }
+        }"#;
+        let parsed: UiPreferences = serde_json::from_str(raw).expect("parse extended ui prefs");
+        assert_eq!(parsed.shell.tv_nav_layout, super::TvNavLayout::PinnedSidebar);
+        assert_eq!(
+            parsed.home.catalog_order,
+            vec!["anizium::latest", "diziwatch::popular"]
+        );
+        assert_eq!(parsed.live_tv.view_mode, super::LiveTvViewMode::GuideRows);
+        assert_eq!(parsed.live_tv.logo_style, super::LiveTvLogoStyle::Circle);
+        assert_eq!(parsed.live_tv.card_aspect, super::LiveTvCardAspect::Wide16x9);
+        assert!(!parsed.live_tv.show_channel_numbers);
+        assert!(!parsed.live_tv.show_favorites_bar);
+        assert!(!parsed.live_tv.show_section_headers);
+        assert!(!parsed.live_tv.show_action_buttons);
+        assert_eq!(parsed.live_tv.title_lines, 2);
     }
 
     #[test]

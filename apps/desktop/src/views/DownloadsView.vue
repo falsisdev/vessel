@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, shallowRef } from 'vue'
+import { computed, nextTick, onMounted, ref, shallowRef } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   ArrowDown,
@@ -446,6 +446,11 @@ function moveQueueItem(id: string, delta: -1 | 1): void {
   if (!moved) return
   ids.splice(target, 0, moved)
   void commitQueueOrder(ids)
+  const preferDir = delta === -1 ? (target > 0 ? 'up' : 'down') : (target < ids.length - 1 ? 'down' : 'up')
+  void nextTick(() => {
+    const el = queueListRef.value?.querySelector(`[data-queue-id="${CSS.escape(id)}"] [data-move-dir="${preferDir}"]`)
+    if (el instanceof HTMLElement) el.focus()
+  })
 }
 
 function startQueueDrag(id: string, ev: PointerEvent): void {
@@ -704,6 +709,7 @@ onMounted(() => {
         <div
           v-for="(dl, idx) in queueDownloads"
           :key="dl.id"
+          :data-queue-id="dl.id"
           class="v-card dl-queue-row"
           :class="{ 'is-dragging': draggingQueueId === dl.id }"
         >
@@ -740,6 +746,7 @@ onMounted(() => {
             <button
               type="button"
               class="v-btn v-btn-icon v-btn-sm"
+              data-move-dir="up"
               :disabled="idx === 0"
               aria-label="Move up"
               @click="moveQueueItem(dl.id, -1)"
@@ -749,6 +756,7 @@ onMounted(() => {
             <button
               type="button"
               class="v-btn v-btn-icon v-btn-sm"
+              data-move-dir="down"
               :disabled="idx === queueDownloads.length - 1"
               aria-label="Move down"
               @click="moveQueueItem(dl.id, 1)"

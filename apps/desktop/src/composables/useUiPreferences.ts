@@ -8,6 +8,7 @@ export function defaultUiPreferences(): UiPreferences {
     shell: {
       layout: 'expanded_sidebar',
       mobileNavLayout: 'standard',
+      tvNavLayout: 'expanded_sidebar',
       visibleModules: ['home', 'search', 'library', 'live_tv', 'downloads', 'extensions'],
       density: 'comfortable',
       fontScalePercent: 100,
@@ -21,6 +22,7 @@ export function defaultUiPreferences(): UiPreferences {
       continueWatchingLimit: 12,
       showRecentIptv: true,
       hiddenSections: [],
+      catalogOrder: [],
       selectedPlugins: null,
       heroPlugins: null,
     },
@@ -75,6 +77,13 @@ export function defaultUiPreferences(): UiPreferences {
       columns: undefined,
       showLogos: true,
       showCategories: true,
+      logoStyle: 'rounded',
+      cardAspect: 'auto',
+      showChannelNumbers: true,
+      showFavoritesBar: true,
+      showSectionHeaders: true,
+      showActionButtons: true,
+      titleLines: 1,
     },
   }
 }
@@ -139,6 +148,16 @@ export function useUiPreferences() {
             columns: loaded.liveTv?.columns ?? defaults.liveTv.columns,
             showLogos: loaded.liveTv?.showLogos ?? defaults.liveTv.showLogos,
             showCategories: loaded.liveTv?.showCategories ?? defaults.liveTv.showCategories,
+            logoStyle: loaded.liveTv?.logoStyle ?? defaults.liveTv.logoStyle,
+            cardAspect: loaded.liveTv?.cardAspect ?? defaults.liveTv.cardAspect,
+            showChannelNumbers:
+              loaded.liveTv?.showChannelNumbers ?? defaults.liveTv.showChannelNumbers,
+            showFavoritesBar: loaded.liveTv?.showFavoritesBar ?? defaults.liveTv.showFavoritesBar,
+            showSectionHeaders:
+              loaded.liveTv?.showSectionHeaders ?? defaults.liveTv.showSectionHeaders,
+            showActionButtons:
+              loaded.liveTv?.showActionButtons ?? defaults.liveTv.showActionButtons,
+            titleLines: loaded.liveTv?.titleLines ?? defaults.liveTv.titleLines,
           },
         }
       } finally {

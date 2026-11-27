@@ -26,6 +26,11 @@
   </categories>
   <content_rating type="oars-1.1" />
   <releases>
+    <release version="0.3.5" date="2026-11-27">
+      <description>
+        <p>Preserved Android TV Live TV category selection across player navigation, added a collapsible category bar on TV, added cross-platform Live TV channel zapping shortcuts and an in-player mini channel list overlay, enabled focus-following up/down item reordering, expanded Live TV view modes and customization, decoupled Home catalog ordering per section, and added Android TV-specific navigation layouts with a vertically centered left sidebar.</p>
+      </description>
+    </release>
     <release version="0.3.1" date="2026-11-27">
       <description>
         <p>Optimized Android TV player D-pad navigation with guaranteed center play/pause focus, one-press up navigation to Sources and top action pills, content-first drawer focus, reliable TV remote long-press handling on cards, D-pad access to Continue Watching edit button, and persistent Android search state with a desktop-style back reset button.</p>

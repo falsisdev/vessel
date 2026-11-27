@@ -424,6 +424,8 @@ data class HomePreferences(
     val showContinueWatching: Boolean = true,
     val continueWatchingLimit: Int = 12,
     val showRecentIptv: Boolean = true,
+    val hiddenSections: List<String> = emptyList(),
+    val catalogOrder: List<String> = emptyList(),
     val selectedPlugins: List<String>? = null,
     val heroPlugins: List<String>? = null,
 )
@@ -481,12 +483,20 @@ data class LiveTvPreferences(
     val columns: Int? = null,
     val showLogos: Boolean = true,
     val showCategories: Boolean = true,
+    val logoStyle: String = "rounded",
+    val cardAspect: String = "auto",
+    val showChannelNumbers: Boolean = true,
+    val showFavoritesBar: Boolean = true,
+    val showSectionHeaders: Boolean = true,
+    val showActionButtons: Boolean = true,
+    val titleLines: Int = 1,
 )
 
 @Serializable
 data class ShellPreferences(
     val layout: String = "expanded_sidebar",
     val mobileNavLayout: String = "standard",
+    val tvNavLayout: String = "expanded_sidebar",
     val density: String = "comfortable",
     val fontScalePercent: Int = 100,
     val cornerStyle: String = "rounded",

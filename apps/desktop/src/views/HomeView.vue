@@ -1,10 +1,14 @@
 <script setup lang="ts">
-import { computed, onActivated, onDeactivated, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
+import { computed, nextTick, onActivated, onDeactivated, onMounted, onUnmounted, ref, shallowRef, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import {
+  ArrowDown,
+  ArrowUp,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
+  Eye,
+  EyeOff,
   GripVertical,
   Info,
   Layers,
@@ -30,6 +34,8 @@ import type {
   ContinueWatchingEntry,
   Episode,
   HeroBannerMode,
+  HomeSection,
+  HomeShelfResult,
   MediaDetail,
   MediaSummary,
   PlaybackProgress,
@@ -63,7 +69,8 @@ const resumingKey = shallowRef<string | null>(null)
 const heroIndex = shallowRef(0)
 const showSourcePicker = shallowRef(false)
 const orderListRef = ref<HTMLElement | null>(null)
-const draggingPluginIndex = shallowRef<number | null>(null)
+const draggingCatalogIndex = shallowRef<number | null>(null)
+const modalFetchedShelves = ref<Record<string, HomeShelfResult>>({})
 const heroDetails = ref<Record<string, MediaDetail>>({})
 const heroSourceModal = ref<{
   pluginId: string
@@ -194,6 +201,101 @@ const orderedShelves = computed(() => {
       return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib)
     })
 })
+
+interface HomeCatalogEntry {
+  key: string
+  pluginId: string
+  pluginName: string
+  section: HomeSection
+  isHidden: boolean
+}
+
+function catalogSectionKey(pluginId: string, sectionId: string): string {
+  return `${pluginId}::${sectionId}`
+}
+
+function buildOrderedCatalogEntries(
+  sourceShelves: HomeShelfResult[],
+  allowedIds: string[],
+  includeHidden: boolean,
+): HomeCatalogEntry[] {
+  const allowed = new Set(allowedIds)
+  const hiddenSet = new Set(uiPreferences.value.home.hiddenSections ?? [])
+  const explicitOrder = uiPreferences.value.home.catalogOrder ?? []
+  const orderRank = new Map<string, number>()
+  explicitOrder.forEach((k, i) => orderRank.set(k, i))
+  const pluginRank = new Map<string, number>()
+  allowedIds.forEach((pid, i) => pluginRank.set(pid, i))
+
+  const rows: Array<{ entry: HomeCatalogEntry; explicit: number; fallback: number }> = []
+  for (const shelf of sourceShelves) {
+    if (!allowed.has(shelf.pluginId) || livePluginIdSet.value.has(shelf.pluginId)) continue
+    const pRank = pluginRank.get(shelf.pluginId) ?? 9999
+    shelf.sections.forEach((sec, secIdx) => {
+      const items = sec.items
+        .filter((it) => it.type !== 'live')
+        .map((it) => normalizeShelfItem(it, shelf.pluginId))
+      if (!items.length) return
+      const key = catalogSectionKey(shelf.pluginId, sec.id)
+      const isHidden = hiddenSet.has(key) || hiddenSet.has(sec.id)
+      if (!includeHidden && isHidden) return
+      rows.push({
+        entry: {
+          key,
+          pluginId: shelf.pluginId,
+          pluginName: shelf.pluginName,
+          section: { ...sec, items },
+          isHidden,
+        },
+        explicit: orderRank.get(key) ?? Number.MAX_SAFE_INTEGER,
+        fallback: pRank * 1000 + secIdx,
+      })
+    })
+  }
+
+  return rows
+    .sort((a, b) => (a.explicit !== b.explicit ? a.explicit - b.explicit : a.fallback - b.fallback))
+    .map((r) => r.entry)
+}
+
+const orderedCatalogs = computed<HomeCatalogEntry[]>(() =>
+  buildOrderedCatalogEntries(shelves.value, activeHomePluginIds.value, false),
+)
+
+const modalCombinedShelves = computed<HomeShelfResult[]>(() => {
+  const byPid = new Map<string, HomeShelfResult>()
+  for (const s of shelves.value) byPid.set(s.pluginId, s)
+  for (const [pid, s] of Object.entries(modalFetchedShelves.value)) {
+    if (!byPid.has(pid)) byPid.set(pid, s)
+  }
+  return Array.from(byPid.values())
+})
+
+const modalCatalogItems = computed<HomeCatalogEntry[]>(() =>
+  buildOrderedCatalogEntries(modalCombinedShelves.value, activeHomePluginIds.value, true),
+)
+
+watch(
+  [showSourcePicker, activeHomePluginIds],
+  async ([open, ids]) => {
+    if (!open || !isTauriRuntime()) return
+    const loaded = new Set([
+      ...shelves.value.map((s) => s.pluginId),
+      ...Object.keys(modalFetchedShelves.value),
+    ])
+    const missing = ids.filter((id) => !loaded.has(id))
+    if (!missing.length) return
+    try {
+      const fetched = await vesselApi.getHomeFeeds(missing)
+      const next = { ...modalFetchedShelves.value }
+      for (const f of fetched) next[f.pluginId] = f
+      modalFetchedShelves.value = next
+    } catch {
+      // Non-fatal
+    }
+  },
+  { immediate: true },
+)
 
 const spotlightPool = computed<Array<MediaSummary & { resolvedPluginId: string }>>(() => {
   const heroIds = activeHeroPluginIds.value
@@ -407,14 +509,43 @@ async function setHeroBannerMode(mode: HeroBannerMode): Promise<void> {
   await savePreferences(uiPreferences.value)
 }
 
+function moveCatalogItem(key: string, delta: -1 | 1): void {
+  const keys = modalCatalogItems.value.map((c) => c.key)
+  const curIdx = keys.indexOf(key)
+  const targetIdx = curIdx + delta
+  if (curIdx < 0 || targetIdx < 0 || targetIdx >= keys.length) return
+  const [moved] = keys.splice(curIdx, 1)
+  if (!moved) return
+  keys.splice(targetIdx, 0, moved)
+  uiPreferences.value.home.catalogOrder = keys
+  void savePreferences(uiPreferences.value)
+  const preferDir = delta === -1 ? (targetIdx > 0 ? 'up' : 'down') : (targetIdx < keys.length - 1 ? 'down' : 'up')
+  void nextTick(() => {
+    const el = orderListRef.value?.querySelector(`[data-catalog-key="${CSS.escape(key)}"] [data-move-dir="${preferDir}"]`)
+    if (el instanceof HTMLElement) el.focus()
+  })
+}
+
+async function toggleCatalogHidden(entry: HomeCatalogEntry): Promise<void> {
+  const cur = new Set(uiPreferences.value.home.hiddenSections ?? [])
+  if (cur.has(entry.key) || cur.has(entry.section.id)) {
+    cur.delete(entry.key)
+    cur.delete(entry.section.id)
+  } else {
+    cur.add(entry.key)
+  }
+  uiPreferences.value.home.hiddenSections = Array.from(cur)
+  await savePreferences(uiPreferences.value)
+}
+
 function startOrderDrag(index: number, ev: PointerEvent): void {
   if (ev.button !== 0) return
   ev.preventDefault()
-  draggingPluginIndex.value = index
+  draggingCatalogIndex.value = index
 
   const onMove = (moveEv: PointerEvent) => {
     const listEl = orderListRef.value
-    const curIdx = draggingPluginIndex.value
+    const curIdx = draggingCatalogIndex.value
     if (!listEl || curIdx === null) return
     const rows = Array.from(listEl.children) as HTMLElement[]
     let targetIdx = curIdx
@@ -428,12 +559,12 @@ function startOrderDrag(index: number, ev: PointerEvent): void {
       targetIdx = i
     }
     if (targetIdx !== curIdx) {
-      const next = activeHomePluginIds.value.slice()
+      const next = modalCatalogItems.value.map((c) => c.key)
       const [moved] = next.splice(curIdx, 1)
       if (!moved) return
       next.splice(targetIdx, 0, moved)
-      uiPreferences.value.home.selectedPlugins = next
-      draggingPluginIndex.value = targetIdx
+      uiPreferences.value.home.catalogOrder = next
+      draggingCatalogIndex.value = targetIdx
     }
   }
 
@@ -441,7 +572,7 @@ function startOrderDrag(index: number, ev: PointerEvent): void {
     window.removeEventListener('pointermove', onMove)
     window.removeEventListener('pointerup', onUp)
     window.removeEventListener('pointercancel', onUp)
-    draggingPluginIndex.value = null
+    draggingCatalogIndex.value = null
     void savePreferences(uiPreferences.value)
   }
 
@@ -1281,58 +1412,57 @@ onUnmounted(() => {
       </div>
 
       <div v-else class="shelf-stack">
-        <div v-for="shelf in orderedShelves" :key="shelf.pluginId" class="plugin-block">
+        <template v-for="shelf in orderedShelves" :key="`err-${shelf.pluginId}`">
           <div v-if="shelf.error" class="v-card error-shelf">
             <strong>{{ shelf.pluginName }}</strong> — {{ t('home.plugin_error') }}:
             <span class="v-muted">{{ shelf.error }}</span>
           </div>
+        </template>
 
-          <template v-for="section in shelf.sections" :key="`${shelf.pluginId}:${section.id}`">
-            <section
-              v-if="!uiPreferences.home.hiddenSections.includes(section.id)"
-              class="nuvio-rail"
+        <section
+          v-for="cat in orderedCatalogs"
+          :key="cat.key"
+          class="nuvio-rail"
+        >
+          <div class="rail-head">
+            <div class="rail-title-wrap">
+              <h2 class="rail-title">{{ cat.section.title }}</h2>
+              <span class="rail-source v-muted">{{ cat.pluginName }}</span>
+            </div>
+            <div class="rail-arrows">
+              <button
+                type="button"
+                class="v-btn v-btn-icon"
+                aria-label="Scroll shelf left"
+                @click="scrollRail(`rail-${cat.pluginId}-${cat.section.id}`, -1)"
+              >
+                <ChevronLeft :size="16" aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                class="v-btn v-btn-icon"
+                aria-label="Scroll shelf right"
+                @click="scrollRail(`rail-${cat.pluginId}-${cat.section.id}`, 1)"
+              >
+                <ChevronRight :size="16" aria-hidden="true" />
+              </button>
+            </div>
+          </div>
+
+          <div :id="`rail-${cat.pluginId}-${cat.section.id}`" class="rail-track">
+            <div
+              v-for="item in cat.section.items"
+              :key="`${cat.pluginId}:${item.nativeId}`"
+              class="rail-card-slot"
             >
-              <div class="rail-head">
-                <div class="rail-title-wrap">
-                  <h2 class="rail-title">{{ section.title }}</h2>
-                  <span class="rail-source v-muted">{{ shelf.pluginName }}</span>
-                </div>
-                <div class="rail-arrows">
-                  <button
-                    type="button"
-                    class="v-btn v-btn-icon"
-                    aria-label="Scroll shelf left"
-                    @click="scrollRail(`rail-${shelf.pluginId}-${section.id}`, -1)"
-                  >
-                    <ChevronLeft :size="16" aria-hidden="true" />
-                  </button>
-                  <button
-                    type="button"
-                    class="v-btn v-btn-icon"
-                    aria-label="Scroll shelf right"
-                    @click="scrollRail(`rail-${shelf.pluginId}-${section.id}`, 1)"
-                  >
-                    <ChevronRight :size="16" aria-hidden="true" />
-                  </button>
-                </div>
-              </div>
-
-              <div :id="`rail-${shelf.pluginId}-${section.id}`" class="rail-track">
-                <div
-                  v-for="item in section.items"
-                  :key="`${shelf.pluginId}:${item.nativeId}`"
-                  class="rail-card-slot"
-                >
-                  <MediaCard
-                    :item="item"
-                    :cards="uiPreferences.cards"
-                    @open="openDetails"
-                  />
-                </div>
-              </div>
-            </section>
-          </template>
-        </div>
+              <MediaCard
+                :item="item"
+                :cards="uiPreferences.cards"
+                @open="openDetails"
+              />
+            </div>
+          </div>
+        </section>
       </div>
     </div>
 
@@ -1466,36 +1596,62 @@ onUnmounted(() => {
                 </div>
               </div>
 
-              <div v-if="activeHomePluginIds.length" class="order-section">
+              <div v-if="modalCatalogItems.length" class="order-section">
                 <div class="picker-group-head">
-                  <strong>{{ t('home.shelf_order_title') }}</strong>
-                  <span class="v-muted group-hint">{{ t('home.shelf_order_hint') }}</span>
+                  <strong>{{ t('home.catalog_order_title') }}</strong>
+                  <span class="v-muted group-hint">{{ t('home.catalog_order_hint') }}</span>
                 </div>
                 <div ref="orderListRef" class="order-list">
                   <div
-                    v-for="(pid, idx) in activeHomePluginIds"
-                    :key="pid"
+                    v-for="(cat, idx) in modalCatalogItems"
+                    :key="cat.key"
+                    :data-catalog-key="cat.key"
                     class="order-row"
-                    :class="{ 'is-dragging': draggingPluginIndex === idx }"
+                    :class="{ 'is-dragging': draggingCatalogIndex === idx, 'is-hidden-cat': cat.isHidden }"
                   >
                     <button
                       type="button"
                       class="drag-handle"
-                      title="Drag to reorder"
-                      aria-label="Drag to reorder"
+                      :title="t('home.catalog_order_hint')"
+                      :aria-label="t('home.catalog_order_hint')"
                       @pointerdown="startOrderDrag(idx, $event)"
                     >
                       <GripVertical :size="15" aria-hidden="true" />
                     </button>
                     <span class="order-index">{{ idx + 1 }}</span>
-                    <span class="order-name">{{ pluginNameById.get(pid) ?? pid }}</span>
+                    <div class="order-name-col">
+                      <span class="order-name">{{ cat.section.title }}</span>
+                      <span class="v-muted order-plugin-sub">{{ cat.pluginName }}</span>
+                    </div>
                     <button
                       type="button"
-                      class="v-btn v-btn-icon"
-                      title="Remove from Home"
-                      @click="toggleHomePlugin(pid)"
+                      class="v-btn v-btn-icon v-btn-sm"
+                      data-move-dir="up"
+                      :disabled="idx === 0"
+                      :aria-label="t('iptv.move_up')"
+                      @click="moveCatalogItem(cat.key, -1)"
                     >
-                      <X :size="14" />
+                      <ArrowUp :size="13" aria-hidden="true" />
+                    </button>
+                    <button
+                      type="button"
+                      class="v-btn v-btn-icon v-btn-sm"
+                      data-move-dir="down"
+                      :disabled="idx === modalCatalogItems.length - 1"
+                      :aria-label="t('iptv.move_down')"
+                      @click="moveCatalogItem(cat.key, 1)"
+                    >
+                      <ArrowDown :size="13" aria-hidden="true" />
+                    </button>
+                    <button
+                      type="button"
+                      class="v-btn v-btn-icon v-btn-sm"
+                      :title="cat.isHidden ? t('home.show_catalog') : t('home.hide_catalog')"
+                      :aria-label="cat.isHidden ? t('home.show_catalog') : t('home.hide_catalog')"
+                      @click="toggleCatalogHidden(cat)"
+                    >
+                      <EyeOff v-if="cat.isHidden" :size="14" aria-hidden="true" />
+                      <Eye v-else :size="14" aria-hidden="true" />
                     </button>
                   </div>
                 </div>
@@ -2499,15 +2655,34 @@ onUnmounted(() => {
   background: rgba(203, 166, 247, 0.18);
   color: var(--vessel-accent);
   font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+.order-name-col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.08rem;
 }
 
 .order-name {
-  flex: 1;
-  font-size: 0.88rem;
+  font-size: 0.86rem;
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.order-plugin-sub {
+  font-size: 0.72rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.order-row.is-hidden-cat {
+  opacity: 0.56;
 }
 
 .order-btns {

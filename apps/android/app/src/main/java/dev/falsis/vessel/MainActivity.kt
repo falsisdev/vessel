@@ -12,13 +12,17 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
@@ -28,6 +32,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -73,6 +78,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalUriHandler
@@ -99,10 +105,12 @@ import dev.falsis.vessel.ui.screens.ExtensionsScreen
 import dev.falsis.vessel.ui.screens.HomeScreen
 import dev.falsis.vessel.ui.screens.LibraryScreen
 import dev.falsis.vessel.ui.screens.LiveTvScreen
+import dev.falsis.vessel.ui.screens.LiveTvSessionState
 import dev.falsis.vessel.ui.screens.PlayerScreen
 import dev.falsis.vessel.ui.screens.SearchScreen
 import dev.falsis.vessel.ui.screens.SearchSessionState
 import dev.falsis.vessel.ui.screens.SettingsScreen
+import dev.falsis.vessel.ui.theme.LocalIsTvDevice
 import dev.falsis.vessel.ui.theme.LocalVesselFloatingNavInset
 import dev.falsis.vessel.ui.theme.LocalVesselPalette
 import dev.falsis.vessel.ui.theme.VesselTheme
@@ -215,6 +223,7 @@ fun VesselAndroidApp(
     var selectedTab by remember { mutableIntStateOf(0) }
     var overlayStack by remember { mutableStateOf<List<OverlayRoute>>(emptyList()) }
     val searchSessionState = remember { SearchSessionState() }
+    val liveTvSessionState = remember { LiveTvSessionState() }
     var splashAnimDone by remember { mutableStateOf(false) }
     val showSplash = !splashAnimDone || (!isReady && initError == null)
 
@@ -461,6 +470,7 @@ fun VesselAndroidApp(
                                                     )
                                                     TopTab.LIVE_TV -> LiveTvScreen(
                                                         repo = repo,
+                                                        state = liveTvSessionState,
                                                         onPlayUrl = { title, url ->
                                                             val liveDetail = MediaDetail(
                                                                 nativeId = url,
@@ -488,7 +498,150 @@ fun VesselAndroidApp(
                                         }
                                     }
 
-                                    if (prefs.shell.mobileNavLayout == "floating_bottom") {
+                                    val isTv = LocalIsTvDevice.current
+                                    if (isTv) {
+                                        val tvLayout = prefs.shell.tvNavLayout
+                                        if (tvLayout == "top_navbar") {
+                                            Column(modifier = Modifier.fillMaxSize()) {
+                                                Surface(
+                                                    color = palette.bgSurface,
+                                                    border = BorderStroke(1.dp, palette.border.copy(alpha = 0.45f)),
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                ) {
+                                                    Row(
+                                                        modifier = Modifier
+                                                            .fillMaxWidth()
+                                                            .padding(horizontal = 24.dp, vertical = 10.dp),
+                                                        horizontalArrangement = Arrangement.Center,
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                    ) {
+                                                        TopTab.entries.forEachIndexed { idx, tab ->
+                                                            val isSelected = selectedTab == idx
+                                                            val pillColor by animateColorAsState(
+                                                                targetValue = if (isSelected) palette.accent.copy(alpha = 0.22f) else palette.bgSurface.copy(alpha = 0f),
+                                                                animationSpec = tween(180),
+                                                                label = "tv_top_nav_bg",
+                                                            )
+                                                            val contentTint by animateColorAsState(
+                                                                targetValue = if (isSelected) palette.accent else palette.textMuted,
+                                                                animationSpec = tween(180),
+                                                                label = "tv_top_nav_tint",
+                                                            )
+                                                            Row(
+                                                                verticalAlignment = Alignment.CenterVertically,
+                                                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                                                modifier = Modifier
+                                                                    .padding(horizontal = 6.dp)
+                                                                    .clip(RoundedCornerShape(999.dp))
+                                                                    .background(pillColor)
+                                                                    .vesselFocusBorder(RoundedCornerShape(999.dp))
+                                                                    .clickable { selectedTab = idx }
+                                                                    .padding(horizontal = 16.dp, vertical = 9.dp),
+                                                            ) {
+                                                                Icon(
+                                                                    imageVector = tab.icon,
+                                                                    contentDescription = VesselI18n.tr(tab.key),
+                                                                    tint = contentTint,
+                                                                    modifier = Modifier.size(19.dp),
+                                                                )
+                                                                Text(
+                                                                    text = VesselI18n.tr(tab.key),
+                                                                    color = contentTint,
+                                                                    maxLines = 1,
+                                                                    softWrap = false,
+                                                                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                                                                    style = MaterialTheme.typography.labelLarge,
+                                                                )
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                                tabBody(Modifier.weight(1f).fillMaxWidth())
+                                            }
+                                        } else {
+                                            var railHasFocus by remember { mutableStateOf(false) }
+                                            val showLabels = tvLayout == "pinned_sidebar" ||
+                                                (tvLayout == "expanded_sidebar" && railHasFocus)
+                                            val railWidth by animateDpAsState(
+                                                targetValue = if (showLabels) 204.dp else 72.dp,
+                                                animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
+                                                label = "tv_rail_width",
+                                            )
+                                            Row(modifier = Modifier.fillMaxSize()) {
+                                                Surface(
+                                                    color = palette.bgSurface,
+                                                    border = BorderStroke(1.dp, palette.border.copy(alpha = 0.45f)),
+                                                    modifier = Modifier
+                                                        .width(railWidth)
+                                                        .fillMaxHeight()
+                                                        .onFocusChanged { railHasFocus = it.hasFocus },
+                                                ) {
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .fillMaxSize()
+                                                            .padding(horizontal = 10.dp, vertical = 16.dp),
+                                                        contentAlignment = Alignment.Center,
+                                                    ) {
+                                                        Column(
+                                                            verticalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterVertically),
+                                                            horizontalAlignment = Alignment.CenterHorizontally,
+                                                            modifier = Modifier.fillMaxWidth(),
+                                                        ) {
+                                                            TopTab.entries.forEachIndexed { idx, tab ->
+                                                                val isSelected = selectedTab == idx
+                                                                val pillColor by animateColorAsState(
+                                                                    targetValue = if (isSelected) palette.accent.copy(alpha = 0.22f) else palette.bgSurface.copy(alpha = 0f),
+                                                                    animationSpec = tween(180),
+                                                                    label = "tv_rail_bg",
+                                                                )
+                                                                val contentTint by animateColorAsState(
+                                                                    targetValue = if (isSelected) palette.accent else palette.textMuted,
+                                                                    animationSpec = tween(180),
+                                                                    label = "tv_rail_tint",
+                                                                )
+                                                                Row(
+                                                                    verticalAlignment = Alignment.CenterVertically,
+                                                                    horizontalArrangement = if (showLabels) Arrangement.Start else Arrangement.Center,
+                                                                    modifier = Modifier
+                                                                        .fillMaxWidth()
+                                                                        .height(46.dp)
+                                                                        .clip(RoundedCornerShape(12.dp))
+                                                                        .background(pillColor)
+                                                                        .vesselFocusBorder(RoundedCornerShape(12.dp))
+                                                                        .clickable { selectedTab = idx }
+                                                                        .padding(horizontal = if (showLabels) 12.dp else 0.dp),
+                                                                ) {
+                                                                    Icon(
+                                                                        imageVector = tab.icon,
+                                                                        contentDescription = VesselI18n.tr(tab.key),
+                                                                        tint = contentTint,
+                                                                        modifier = Modifier.size(21.dp),
+                                                                    )
+                                                                    AnimatedVisibility(
+                                                                        visible = showLabels,
+                                                                        enter = fadeIn(tween(180)) + expandHorizontally(tween(200)),
+                                                                        exit = fadeOut(tween(120)) + shrinkHorizontally(tween(160)),
+                                                                    ) {
+                                                                        Text(
+                                                                            text = VesselI18n.tr(tab.key),
+                                                                            color = contentTint,
+                                                                            maxLines = 1,
+                                                                            softWrap = false,
+                                                                            overflow = TextOverflow.Ellipsis,
+                                                                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                                                                            style = MaterialTheme.typography.labelLarge,
+                                                                            modifier = Modifier.padding(start = 12.dp),
+                                                                        )
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                                tabBody(Modifier.weight(1f).fillMaxHeight())
+                                            }
+                                        }
+                                    } else if (prefs.shell.mobileNavLayout == "floating_bottom") {
                                         CompositionLocalProvider(LocalVesselFloatingNavInset provides 86.dp) {
                                             Box(modifier = Modifier.fillMaxSize()) {
                                                 tabBody(Modifier.fillMaxSize())

@@ -59,6 +59,8 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
@@ -84,6 +86,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
@@ -117,6 +120,7 @@ import androidx.compose.ui.window.DialogProperties
 import coil3.compose.AsyncImage
 import dev.falsis.vessel.data.ContinueWatchingEntry
 import dev.falsis.vessel.data.Episode
+import dev.falsis.vessel.data.HomeSection
 import dev.falsis.vessel.data.HomeShelfResult
 import dev.falsis.vessel.data.LibraryItem
 import dev.falsis.vessel.data.MediaDetail
@@ -159,6 +163,55 @@ private data class HeroSourcePromptState(
     val streamResult: StreamResult,
     val resumePosMs: Long,
 )
+
+private data class HomeCatalogRow(
+    val key: String,
+    val pluginId: String,
+    val pluginName: String,
+    val section: HomeSection,
+)
+
+private fun catalogSectionKey(pluginId: String, sectionId: String): String = "$pluginId::$sectionId"
+
+private fun buildOrderedCatalogRows(
+    shelves: List<HomeShelfResult>,
+    allowedPluginOrder: List<String>,
+    livePluginIds: Set<String>,
+    catalogOrder: List<String>,
+    hiddenSections: List<String>,
+    includeHidden: Boolean = false,
+): List<HomeCatalogRow> {
+    val allowed = allowedPluginOrder.toSet()
+    val hidden = hiddenSections.toSet()
+    val orderRank = HashMap<String, Int>(catalogOrder.size)
+    catalogOrder.forEachIndexed { i, k -> orderRank[k] = i }
+    val pluginRank = HashMap<String, Int>(allowedPluginOrder.size)
+    allowedPluginOrder.forEachIndexed { i, pid -> pluginRank[pid] = i }
+
+    val rows = mutableListOf<Pair<HomeCatalogRow, Pair<Int, Int>>>()
+    shelves
+        .filter { it.pluginId in allowed && it.pluginId !in livePluginIds }
+        .forEach { shelf ->
+            val pRank = pluginRank[shelf.pluginId] ?: 9999
+            shelf.sections.forEachIndexed { secIdx, sec ->
+                val filteredItems = sec.items.filterNot { it.type == "live" }
+                if (filteredItems.isEmpty()) return@forEachIndexed
+                val cKey = catalogSectionKey(shelf.pluginId, sec.id)
+                if (!includeHidden && (cKey in hidden || sec.id in hidden)) return@forEachIndexed
+                val row = HomeCatalogRow(
+                    key = cKey,
+                    pluginId = shelf.pluginId,
+                    pluginName = shelf.pluginName,
+                    section = sec.copy(items = filteredItems),
+                )
+                val explicitRank = orderRank[cKey] ?: Int.MAX_VALUE
+                rows.add(row to (explicitRank to (pRank * 1000 + secIdx)))
+            }
+        }
+    return rows
+        .sortedWith(compareBy<Pair<HomeCatalogRow, Pair<Int, Int>>> { it.second.first }.thenBy { it.second.second })
+        .map { it.first }
+}
 
 private fun pickDefaultStarterPlugins(homeEligible: List<dev.falsis.vessel.data.PluginListEntry>): List<String> {
     // Same smart curated <= 5 VOD/anime starter selection as Desktop HomeView.vue
@@ -327,6 +380,22 @@ fun HomeScreen(
                 val idx = effectiveHomeIds.indexOf(it.pluginId)
                 if (idx == -1) Int.MAX_VALUE else idx
             }
+    }
+    val orderedCatalogs = remember(
+        shelves,
+        effectiveHomeIds,
+        livePluginIds,
+        prefs.home.catalogOrder,
+        prefs.home.hiddenSections,
+    ) {
+        buildOrderedCatalogRows(
+            shelves = shelves,
+            allowedPluginOrder = effectiveHomeIds,
+            livePluginIds = livePluginIds,
+            catalogOrder = prefs.home.catalogOrder,
+            hiddenSections = prefs.home.hiddenSections,
+            includeHidden = false,
+        )
     }
 
     suspend fun loadHome(forceRefresh: Boolean = false) {
@@ -983,7 +1052,7 @@ fun HomeScreen(
                     }
                 }
             }
-        } else if (loading && orderedShelves.isEmpty()) {
+        } else if (loading && orderedCatalogs.isEmpty() && orderedShelves.isEmpty()) {
             item {
                 Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator(modifier = Modifier.size(26.dp), strokeWidth = 2.5.dp)
@@ -1012,56 +1081,55 @@ fun HomeScreen(
                         }
                     }
                 }
-                result.sections.forEach { section ->
-                    if (section.items.isNotEmpty()) {
-                        item(key = "${result.pluginId}:${section.id}") {
-                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 16.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically,
-                                ) {
-                                    Text(
-                                        text = section.title,
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.Bold,
-                                    )
-                                    Text(
-                                        text = result.pluginName,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = palette.textMuted,
-                                    )
-                                }
-                                LazyRow(
-                                    contentPadding = PaddingValues(horizontal = 16.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                ) {
-                                    items(section.items, key = { "${result.pluginId}:${it.nativeId}" }) { item ->
-                                        val pid = item.pluginId ?: result.pluginId
-                                        MediaPosterCard(
-                                            item = item,
-                                            cards = prefs.cards,
-                                            onClick = { onOpenDetails(pid, item.nativeId) },
-                                            onQuickStatus = { status ->
-                                                scope.launch {
-                                                    repo.upsertLibrary(
-                                                        LibraryItem(
-                                                            media = MediaRef(pid, item.nativeId),
-                                                            mediaType = item.type,
-                                                            isAnime = item.isAnime,
-                                                            title = item.title,
-                                                            posterUrl = item.poster,
-                                                            status = status,
-                                                        ),
-                                                    )
-                                                    repo.notify("${item.title} · ${VesselI18n.tr("library.$status")}")
-                                                }
-                                            },
-                                        )
-                                    }
-                                }
+            }
+            orderedCatalogs.forEach { cat ->
+                val section = cat.section
+                item(key = "cat:${cat.key}") {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text = section.title,
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                            )
+                            Text(
+                                text = cat.pluginName,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = palette.textMuted,
+                            )
+                        }
+                        LazyRow(
+                            contentPadding = PaddingValues(horizontal = 16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            items(section.items, key = { "${cat.pluginId}:${it.nativeId}" }) { item ->
+                                val pid = item.pluginId ?: cat.pluginId
+                                MediaPosterCard(
+                                    item = item,
+                                    cards = prefs.cards,
+                                    onClick = { onOpenDetails(pid, item.nativeId) },
+                                    onQuickStatus = { status ->
+                                        scope.launch {
+                                            repo.upsertLibrary(
+                                                LibraryItem(
+                                                    media = MediaRef(pid, item.nativeId),
+                                                    mediaType = item.type,
+                                                    isAnime = item.isAnime,
+                                                    title = item.title,
+                                                    posterUrl = item.poster,
+                                                    status = status,
+                                                ),
+                                            )
+                                            repo.notify("${item.title} · ${VesselI18n.tr("library.$status")}")
+                                        }
+                                    },
+                                )
                             }
                         }
                     }
@@ -1081,16 +1149,72 @@ fun HomeScreen(
         var draftHeroBanner by remember(showFeedsModal) {
             mutableStateOf(prefs.home.heroBanner)
         }
+        var draftCatalogOrder by remember(showFeedsModal) {
+            mutableStateOf(prefs.home.catalogOrder)
+        }
+        var draftHiddenSections by remember(showFeedsModal) {
+            mutableStateOf(prefs.home.hiddenSections)
+        }
+        var modalShelves by remember(showFeedsModal) {
+            mutableStateOf(shelves)
+        }
         var draggingIndex by remember { mutableIntStateOf(-1) }
         var dragAccumY by remember { mutableFloatStateOf(0f) }
         var rowHeightPx by remember { mutableIntStateOf(120) }
+        val catalogFocusRequesters = remember(showFeedsModal) { mutableMapOf<String, Pair<FocusRequester, FocusRequester>>() }
+        var pendingCatalogFocus by remember { mutableStateOf<Pair<String, Boolean>?>(null) }
 
-        fun moveDraftItem(from: Int, to: Int) {
-            if (from == to || from !in draftSelection.indices || to !in draftSelection.indices) return
-            val next = draftSelection.toMutableList()
-            val item = next.removeAt(from)
-            next.add(to, item)
-            draftSelection = next
+        LaunchedEffect(showFeedsModal, draftSelection) {
+            val loadedIds = modalShelves.map { it.pluginId }.toSet()
+            val missing = draftSelection.filter { it !in loadedIds }
+            if (missing.isNotEmpty()) {
+                runCatching { repo.getHomeFeeds(missing) }
+                    .onSuccess { fetched ->
+                        val byPid = modalShelves.associateBy { it.pluginId }.toMutableMap()
+                        fetched.forEach { byPid[it.pluginId] = it }
+                        modalShelves = byPid.values.toList()
+                    }
+            }
+        }
+
+        val draftCatalogItems = remember(modalShelves, draftSelection, livePluginIds, draftCatalogOrder) {
+            buildOrderedCatalogRows(
+                shelves = modalShelves,
+                allowedPluginOrder = draftSelection,
+                livePluginIds = livePluginIds,
+                catalogOrder = draftCatalogOrder,
+                hiddenSections = emptyList(),
+                includeHidden = true,
+            )
+        }
+
+        LaunchedEffect(pendingCatalogFocus, draftCatalogItems) {
+            val target = pendingCatalogFocus ?: return@LaunchedEffect
+            delay(16)
+            val pair = catalogFocusRequesters[target.first]
+            if (pair != null) {
+                runCatching { (if (target.second) pair.first else pair.second).requestFocus() }
+            }
+            pendingCatalogFocus = null
+        }
+
+        fun moveCatalogItem(from: Int, to: Int) {
+            val keys = draftCatalogItems.map { it.key }.toMutableList()
+            if (from == to || from !in keys.indices || to !in keys.indices) return
+            val movedKey = keys.removeAt(from)
+            keys.add(to, movedKey)
+            draftCatalogOrder = keys
+            pendingCatalogFocus = movedKey to (if (to < from) to > 0 else to >= keys.lastIndex)
+        }
+
+        fun toggleCatalogVisibility(cat: HomeCatalogRow) {
+            val cur = draftHiddenSections.toMutableList()
+            if (cat.key in cur || cat.section.id in cur) {
+                cur.removeAll { it == cat.key || it == cat.section.id }
+            } else {
+                cur.add(cat.key)
+            }
+            draftHiddenSections = cur
         }
 
         fun toggleDraftHome(pid: String) {
@@ -1291,8 +1415,8 @@ fun HomeScreen(
                             }
                         }
 
-                        // 2. Active Home Shelf Order Section (Desktop .order-section)
-                        if (draftSelection.isNotEmpty()) {
+                        // 2. Independent Catalog Order & Visibility Section
+                        if (draftCatalogItems.isNotEmpty()) {
                             Surface(
                                 shape = RoundedCornerShape(12.dp),
                                 color = palette.accent.copy(alpha = 0.06f),
@@ -1305,21 +1429,24 @@ fun HomeScreen(
                                 ) {
                                     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                                         Text(
-                                            text = VesselI18n.tr("home.shelf_order_title"),
+                                            text = VesselI18n.tr("home.catalog_order_title"),
                                             fontWeight = FontWeight.Bold,
                                             style = MaterialTheme.typography.labelLarge,
                                             color = palette.textPrimary,
                                         )
                                         Text(
-                                            text = VesselI18n.tr("home.shelf_order_hint"),
+                                            text = VesselI18n.tr("home.catalog_order_hint"),
                                             style = MaterialTheme.typography.labelSmall,
                                             color = palette.textMuted,
                                         )
                                     }
 
                                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                        draftSelection.forEachIndexed { idx, pid ->
+                                        draftCatalogItems.forEachIndexed { idx, cat ->
+                                            key(cat.key) {
                                             val isDragging = draggingIndex == idx
+                                            val isHidden = cat.key in draftHiddenSections || cat.section.id in draftHiddenSections
+                                            val (upReq, downReq) = catalogFocusRequesters.getOrPut(cat.key) { FocusRequester() to FocusRequester() }
                                             Surface(
                                                 shape = RoundedCornerShape(9.dp),
                                                 color = if (isDragging) palette.accent.copy(alpha = 0.16f) else palette.bgElevated,
@@ -1340,14 +1467,14 @@ fun HomeScreen(
                                                 ) {
                                                     Icon(
                                                         Icons.Default.DragIndicator,
-                                                        contentDescription = VesselI18n.tr("home.shelf_order_hint"),
+                                                        contentDescription = VesselI18n.tr("home.catalog_order_hint"),
                                                         tint = palette.textMuted,
                                                         modifier = Modifier
                                                             .size(22.dp)
-                                                            .pointerInput(pid) {
+                                                            .pointerInput(cat.key) {
                                                                 detectVerticalDragGestures(
                                                                     onDragStart = {
-                                                                        draggingIndex = draftSelection.indexOf(pid)
+                                                                        draggingIndex = draftCatalogItems.indexOfFirst { it.key == cat.key }
                                                                         dragAccumY = 0f
                                                                     },
                                                                     onDragEnd = {
@@ -1359,16 +1486,16 @@ fun HomeScreen(
                                                                         dragAccumY = 0f
                                                                     },
                                                                     onVerticalDrag = { _, dragAmount ->
-                                                                        val cur = draftSelection.indexOf(pid)
+                                                                        val cur = draftCatalogItems.indexOfFirst { it.key == cat.key }
                                                                         if (cur == -1) return@detectVerticalDragGestures
                                                                         dragAccumY += dragAmount
                                                                         val stepPx = (rowHeightPx + 12).coerceAtLeast(60)
-                                                                        if (dragAccumY > stepPx * 0.55f && cur < draftSelection.lastIndex) {
-                                                                            moveDraftItem(cur, cur + 1)
+                                                                        if (dragAccumY > stepPx * 0.55f && cur < draftCatalogItems.lastIndex) {
+                                                                            moveCatalogItem(cur, cur + 1)
                                                                             draggingIndex = cur + 1
                                                                             dragAccumY -= stepPx
                                                                         } else if (dragAccumY < -stepPx * 0.55f && cur > 0) {
-                                                                            moveDraftItem(cur, cur - 1)
+                                                                            moveCatalogItem(cur, cur - 1)
                                                                             draggingIndex = cur - 1
                                                                             dragAccumY += stepPx
                                                                         }
@@ -1390,51 +1517,62 @@ fun HomeScreen(
                                                             fontWeight = FontWeight.Bold,
                                                         )
                                                     }
-                                                    Text(
-                                                        text = pluginNameById[pid] ?: pid,
-                                                        color = palette.textPrimary,
-                                                        style = MaterialTheme.typography.bodySmall,
-                                                        fontWeight = FontWeight.SemiBold,
-                                                        maxLines = 1,
-                                                        overflow = TextOverflow.Ellipsis,
-                                                        modifier = Modifier.weight(1f),
-                                                    )
-                                                    IconButton(
+                                                    Column(modifier = Modifier.weight(1f)) {
+                                                        Text(
+                                                            text = cat.section.title,
+                                                            color = if (isHidden) palette.textMuted else palette.textPrimary,
+                                                            style = MaterialTheme.typography.bodySmall,
+                                                            fontWeight = FontWeight.SemiBold,
+                                                            maxLines = 1,
+                                                            overflow = TextOverflow.Ellipsis,
+                                                        )
+                                                        Text(
+                                                            text = cat.pluginName,
+                                                            color = palette.textMuted,
+                                                            style = MaterialTheme.typography.labelSmall,
+                                                            maxLines = 1,
+                                                            overflow = TextOverflow.Ellipsis,
+                                                        )
+                                                    }
+                                                    VesselCompactIconButton(
                                                         enabled = idx > 0,
-                                                        onClick = { moveDraftItem(idx, idx - 1) },
-                                                        modifier = Modifier.size(26.dp),
+                                                        size = 26.dp,
+                                                        modifier = Modifier.focusRequester(upReq),
+                                                        onClick = { moveCatalogItem(idx, idx - 1) },
                                                     ) {
                                                         Icon(
                                                             Icons.Default.KeyboardArrowUp,
-                                                            contentDescription = "Move Up",
+                                                            contentDescription = VesselI18n.tr("iptv.move_up"),
                                                             tint = if (idx > 0) palette.textPrimary else palette.textMuted.copy(alpha = 0.35f),
                                                             modifier = Modifier.size(18.dp),
                                                         )
                                                     }
-                                                    IconButton(
-                                                        enabled = idx < draftSelection.lastIndex,
-                                                        onClick = { moveDraftItem(idx, idx + 1) },
-                                                        modifier = Modifier.size(26.dp),
+                                                    VesselCompactIconButton(
+                                                        enabled = idx < draftCatalogItems.lastIndex,
+                                                        size = 26.dp,
+                                                        modifier = Modifier.focusRequester(downReq),
+                                                        onClick = { moveCatalogItem(idx, idx + 1) },
                                                     ) {
                                                         Icon(
                                                             Icons.Default.KeyboardArrowDown,
-                                                            contentDescription = "Move Down",
-                                                            tint = if (idx < draftSelection.lastIndex) palette.textPrimary else palette.textMuted.copy(alpha = 0.35f),
+                                                            contentDescription = VesselI18n.tr("iptv.move_down"),
+                                                            tint = if (idx < draftCatalogItems.lastIndex) palette.textPrimary else palette.textMuted.copy(alpha = 0.35f),
                                                             modifier = Modifier.size(18.dp),
                                                         )
                                                     }
-                                                    IconButton(
-                                                        onClick = { toggleDraftHome(pid) },
-                                                        modifier = Modifier.size(26.dp),
+                                                    VesselCompactIconButton(
+                                                        size = 26.dp,
+                                                        onClick = { toggleCatalogVisibility(cat) },
                                                     ) {
                                                         Icon(
-                                                            Icons.Default.Close,
-                                                            contentDescription = VesselI18n.tr("common.remove"),
-                                                            tint = palette.textMuted,
+                                                            if (isHidden) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                                            contentDescription = VesselI18n.tr(if (isHidden) "home.show_catalog" else "home.hide_catalog"),
+                                                            tint = if (isHidden) palette.textMuted.copy(alpha = 0.5f) else palette.accent,
                                                             modifier = Modifier.size(15.dp),
                                                         )
                                                     }
                                                 }
+                                            }
                                             }
                                         }
                                     }
@@ -1557,6 +1695,8 @@ fun HomeScreen(
                                                     heroBanner = draftHeroBanner,
                                                     selectedPlugins = nextSelected,
                                                     heroPlugins = nextHero,
+                                                    catalogOrder = draftCatalogItems.map { it.key },
+                                                    hiddenSections = draftHiddenSections,
                                                 ),
                                             ),
                                         )
