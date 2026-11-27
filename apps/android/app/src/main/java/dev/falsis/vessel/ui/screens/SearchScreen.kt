@@ -25,11 +25,13 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.History
@@ -43,6 +45,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -72,6 +75,7 @@ import dev.falsis.vessel.ui.components.VesselSearchField
 import dev.falsis.vessel.ui.components.VesselTextButton
 import dev.falsis.vessel.ui.components.vesselFocusBorder
 import dev.falsis.vessel.ui.theme.LocalVesselFloatingNavInset
+import dev.falsis.vessel.ui.theme.LocalVesselUiTokens
 import dev.falsis.vessel.ui.components.isLandscapeCardRatio
 import dev.falsis.vessel.ui.components.vesselTopSafeInset
 import dev.falsis.vessel.ui.i18n.VesselI18n
@@ -79,14 +83,41 @@ import dev.falsis.vessel.ui.isLiveMediaSummary
 import dev.falsis.vessel.ui.isLiveTvPlugin
 import dev.falsis.vessel.ui.isNonCatalogPlugin
 import dev.falsis.vessel.ui.theme.LocalVesselPalette
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
 private const val MAX_SEARCH_HISTORY = 10
+
+@Stable
+class SearchSessionState {
+    var query by mutableStateOf("")
+    var selectedType by mutableStateOf("all")
+    var selectedPluginId by mutableStateOf<String?>(null)
+    var activeSearchId by mutableStateOf<String?>(null)
+    var searching by mutableStateOf(false)
+    var searchingGlobal by mutableStateOf(false)
+    var results by mutableStateOf<List<Pair<String, MediaSummary>>>(emptyList())
+    var globalHits by mutableStateOf<List<MetadataSearchHit>>(emptyList())
+    val gridState = LazyGridState()
+
+    fun reset() {
+        query = ""
+        selectedType = "all"
+        selectedPluginId = null
+        activeSearchId = null
+        searching = false
+        searchingGlobal = false
+        results = emptyList()
+        globalHits = emptyList()
+    }
+}
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SearchScreen(
     repo: VesselRepository,
+    state: SearchSessionState = remember { SearchSessionState() },
+    searchScope: CoroutineScope = rememberCoroutineScope(),
     onOpenDetails: (pluginId: String, nativeId: String) -> Unit,
     onPlayLiveStream: (pluginId: String, detail: MediaDetail, episode: Episode, streams: StreamResult) -> Unit = { _, _, _, _ -> },
 ) {
@@ -101,16 +132,16 @@ fun SearchScreen(
     val pluginNameMap = remember(plugins) { plugins.associate { it.manifest.id to it.manifest.name } }
     var launchingLiveKey by remember { mutableStateOf<String?>(null) }
 
-    var query by remember { mutableStateOf("") }
-    var selectedType by remember { mutableStateOf("all") }
-    var selectedPluginId by remember { mutableStateOf<String?>(null) }
     var showPluginMenu by remember { mutableStateOf(false) }
-    var activeSearchId by remember { mutableStateOf<String?>(null) }
-    var searching by remember { mutableStateOf(false) }
-    var searchingGlobal by remember { mutableStateOf(false) }
-    var results by remember { mutableStateOf<List<Pair<String, MediaSummary>>>(emptyList()) }
-    var globalHits by remember { mutableStateOf<List<MetadataSearchHit>>(emptyList()) }
     var libraryStatusMap by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+
+    val hasActiveSearch = state.query.isNotBlank() ||
+        state.searching ||
+        state.searchingGlobal ||
+        state.results.isNotEmpty() ||
+        state.globalHits.isNotEmpty() ||
+        state.selectedType != "all" ||
+        state.selectedPluginId != null
 
     LaunchedEffect(Unit) {
         runCatching {
@@ -120,90 +151,84 @@ fun SearchScreen(
         }
     }
 
-    LaunchedEffect(Unit) {
-        repo.searchEvents.collect { ev ->
-            if (ev.searchId != activeSearchId) return@collect
-            if (ev.items.isNotEmpty()) {
-                val mapped = ev.items.map { item -> (item.pluginId ?: ev.pluginId) to item }
-                results = (results + mapped).distinctBy { "${it.first}:${it.second.nativeId}" }
-            }
-            if (ev.done) searching = false
-        }
-    }
-
     fun recordSearchHistory(term: String) {
         val clean = term.trim()
         if (clean.isEmpty()) return
         val next = (listOf(clean) + prefs.searchHistory.filterNot { it.equals(clean, ignoreCase = true) })
             .take(MAX_SEARCH_HISTORY)
-        scope.launch {
+        searchScope.launch {
             runCatching { repo.saveUiPreferences(prefs.copy(searchHistory = next)) }
         }
     }
 
     fun removeHistoryItem(term: String) {
         val next = prefs.searchHistory.filterNot { it == term }
-        scope.launch {
+        searchScope.launch {
             runCatching { repo.saveUiPreferences(prefs.copy(searchHistory = next)) }
         }
     }
 
     fun clearSearchHistory() {
-        scope.launch {
+        searchScope.launch {
             runCatching { repo.saveUiPreferences(prefs.copy(searchHistory = emptyList())) }
         }
     }
 
     fun triggerSearch(overrideQuery: String? = null) {
-        val q = (overrideQuery ?: query).trim()
+        val q = (overrideQuery ?: state.query).trim()
         if (q.isEmpty()) return
-        if (overrideQuery != null) query = q
+        if (overrideQuery != null) state.query = q
         recordSearchHistory(q)
-        results = emptyList()
-        globalHits = emptyList()
-        searching = enabledPlugins.isNotEmpty()
-        searchingGlobal = selectedPluginId == null
-        scope.launch {
+        state.results = emptyList()
+        state.globalHits = emptyList()
+        state.searching = enabledPlugins.isNotEmpty()
+        state.searchingGlobal = state.selectedPluginId == null
+        searchScope.launch {
             runCatching {
                 repo.cancelSearch()
                 if (enabledPlugins.isNotEmpty()) {
-                    activeSearchId = repo.searchStreams(
+                    state.activeSearchId = repo.searchStreams(
                         query = q,
-                        pluginIds = selectedPluginId?.let { listOf(it) },
+                        pluginIds = state.selectedPluginId?.let { listOf(it) },
                     )
                 } else {
-                    searching = false
+                    state.searching = false
                 }
             }.onFailure {
-                searching = false
+                state.searching = false
                 repo.notifyError(it, "Search failed")
             }
         }
-        if (selectedPluginId == null) {
-            scope.launch {
+        if (state.selectedPluginId == null) {
+            searchScope.launch {
                 runCatching { repo.searchMetadata(q, "all") }
-                    .onSuccess { globalHits = it.hits }
-                searchingGlobal = false
+                    .onSuccess { state.globalHits = it.hits }
+                state.searchingGlobal = false
             }
         }
     }
 
     fun stopSearch() {
-        searching = false
-        searchingGlobal = false
-        scope.launch { repo.cancelSearch() }
+        state.searching = false
+        state.searchingGlobal = false
+        searchScope.launch { repo.cancelSearch() }
     }
 
-    val filteredGlobalHits = remember(globalHits, selectedType, selectedPluginId) {
-        if (selectedPluginId != null) {
+    fun resetToInitialSearch() {
+        state.reset()
+        searchScope.launch { repo.cancelSearch() }
+    }
+
+    val filteredGlobalHits = remember(state.globalHits, state.selectedType, state.selectedPluginId) {
+        if (state.selectedPluginId != null) {
             emptyList()
         } else {
-            globalHits.filter { hit ->
+            state.globalHits.filter { hit ->
                 val isAnime = hit.mediaType == "anime" ||
                     hit.externalIds.anilist != null ||
                     hit.externalIds.mal != null ||
                     hit.externalIds.kitsu != null
-                when (selectedType) {
+                when (state.selectedType) {
                     "movie" -> hit.mediaType == "movie"
                     "series" -> hit.mediaType != "movie" && !isAnime
                     "anime" -> isAnime
@@ -213,10 +238,10 @@ fun SearchScreen(
         }
     }
 
-    val groupedBuckets = remember(results, selectedType, selectedPluginId) {
-        val filtered = results.filter { (pid, item) ->
-            val pluginMatch = selectedPluginId == null || pid == selectedPluginId
-            val typeMatch = when (selectedType) {
+    val groupedBuckets = remember(state.results, state.selectedType, state.selectedPluginId) {
+        val filtered = state.results.filter { (pid, item) ->
+            val pluginMatch = state.selectedPluginId == null || pid == state.selectedPluginId
+            val typeMatch = when (state.selectedType) {
                 "movie" -> item.type == "movie"
                 "series" -> item.type == "series" && !item.isAnime
                 "anime" -> item.isAnime
@@ -243,7 +268,7 @@ fun SearchScreen(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(VesselI18n.tr("search.title"), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-            if (searching || searchingGlobal) {
+            if (state.searching || state.searchingGlobal) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Surface(shape = RoundedCornerShape(999.dp), color = palette.accent.copy(alpha = 0.16f)) {
                         Row(
@@ -264,19 +289,51 @@ fun SearchScreen(
             }
         }
 
-        VesselSearchField(
-            value = query,
-            onValueChange = { query = it },
-            placeholder = VesselI18n.tr("search.placeholder"),
-            imeAction = ImeAction.Search,
-            onSearch = { triggerSearch() },
-            onClear = {
-                results = emptyList()
-                globalHits = emptyList()
-                stopSearch()
-            },
+        Row(
             modifier = Modifier.fillMaxWidth(),
-        )
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (hasActiveSearch) {
+                VesselOutlinedButton(
+                    onClick = { resetToInitialSearch() },
+                    height = LocalVesselUiTokens.current.searchFieldHeight,
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = VesselI18n.tr("common.back"),
+                        modifier = Modifier.size(16.dp),
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        text = VesselI18n.tr("common.back"),
+                        style = MaterialTheme.typography.labelMedium,
+                        maxLines = 1,
+                    )
+                }
+            }
+            VesselSearchField(
+                value = state.query,
+                onValueChange = { next ->
+                    state.query = next
+                    if (next.isBlank()) {
+                        state.results = emptyList()
+                        state.globalHits = emptyList()
+                        stopSearch()
+                    }
+                },
+                placeholder = VesselI18n.tr("search.placeholder"),
+                imeAction = ImeAction.Search,
+                onSearch = { triggerSearch() },
+                onClear = {
+                    state.results = emptyList()
+                    state.globalHits = emptyList()
+                    stopSearch()
+                },
+                modifier = Modifier.weight(1f),
+            )
+        }
 
         Row(
             modifier = Modifier
@@ -292,14 +349,14 @@ fun SearchScreen(
                 "anime" to VesselI18n.tr("search.filter_anime"),
             ).forEach { (key, label) ->
                 VesselFilterChip(
-                    selected = selectedType == key,
-                    onClick = { selectedType = key },
+                    selected = state.selectedType == key,
+                    onClick = { state.selectedType = key },
                     label = label,
                 )
             }
 
             Box {
-                val pluginLabel = enabledPlugins.firstOrNull { it.manifest.id == selectedPluginId }?.manifest?.name
+                val pluginLabel = enabledPlugins.firstOrNull { it.manifest.id == state.selectedPluginId }?.manifest?.name
                     ?: VesselI18n.tr("search.all_plugins")
                 VesselOutlinedButton(
                     onClick = { showPluginMenu = true },
@@ -319,18 +376,18 @@ fun SearchScreen(
                     DropdownMenuItem(
                         text = { Text(VesselI18n.tr("search.all_plugins")) },
                         onClick = {
-                            selectedPluginId = null
+                            state.selectedPluginId = null
                             showPluginMenu = false
-                            if (query.isNotBlank()) triggerSearch()
+                            if (state.query.isNotBlank()) triggerSearch()
                         },
                     )
                     enabledPlugins.forEach { p ->
                         DropdownMenuItem(
                             text = { Text(p.manifest.name) },
                             onClick = {
-                                selectedPluginId = p.manifest.id
+                                state.selectedPluginId = p.manifest.id
                                 showPluginMenu = false
-                                if (query.isNotBlank()) triggerSearch()
+                                if (state.query.isNotBlank()) triggerSearch()
                             },
                         )
                     }
@@ -338,7 +395,7 @@ fun SearchScreen(
             }
         }
 
-        if (searching || searchingGlobal) {
+        if (state.searching || state.searchingGlobal) {
             LinearProgressIndicator(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -349,7 +406,7 @@ fun SearchScreen(
         }
 
         AnimatedContent(
-            targetState = groupedBuckets.isEmpty() && filteredGlobalHits.isEmpty() && !searching && !searchingGlobal,
+            targetState = groupedBuckets.isEmpty() && filteredGlobalHits.isEmpty() && !state.searching && !state.searchingGlobal,
             transitionSpec = { fadeIn(tween(200)).togetherWith(fadeOut(tween(150))) },
             label = "search_results_transition",
             modifier = Modifier.fillMaxSize(),
@@ -434,6 +491,7 @@ fun SearchScreen(
                 }
             } else {
                 LazyVerticalGrid(
+                    state = state.gridState,
                     columns = GridCells.Adaptive(minSize = if (isWideCard) 168.dp else 110.dp),
                     contentPadding = PaddingValues(top = 2.dp, bottom = 24.dp + LocalVesselFloatingNavInset.current),
                     horizontalArrangement = Arrangement.spacedBy(10.dp),

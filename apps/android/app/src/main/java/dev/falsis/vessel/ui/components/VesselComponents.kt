@@ -66,25 +66,35 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -119,6 +129,90 @@ fun Modifier.vesselFocusBorder(
     this
         .onFocusChanged { focused = it.isFocused || it.hasFocus }
         .then(if (focused) Modifier.border(width, palette.accent, shape) else Modifier)
+}
+
+/**
+ * Reliable D-Pad long-press + Menu key handler for Android TV remotes.
+ * Triggers [onLongPress] after holding Center/Enter (via both timer and native repeat/longPress),
+ * and consumes the subsequent KeyUp so [clickable]/[combinedClickable] never fires a short click.
+ */
+fun Modifier.vesselDpadLongPress(
+    enabled: Boolean = true,
+    onLongPress: () -> Unit,
+): Modifier = composed {
+    val scope = rememberCoroutineScope()
+    val haptic = LocalHapticFeedback.current
+    var longPressJob by remember { mutableStateOf<Job?>(null) }
+    var longPressFired by remember { mutableStateOf(false) }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            longPressJob?.cancel()
+            longPressJob = null
+        }
+    }
+
+    this
+        .onFocusChanged { state ->
+            if (!state.isFocused && !state.hasFocus) {
+                longPressJob?.cancel()
+                longPressJob = null
+                longPressFired = false
+            }
+        }
+        .onPreviewKeyEvent { ev ->
+            if (!enabled) return@onPreviewKeyEvent false
+            when (ev.key) {
+                Key.Menu, Key.MediaTopMenu -> {
+                    if (ev.type == KeyEventType.KeyDown && ev.nativeKeyEvent.repeatCount == 0) {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onLongPress()
+                        true
+                    } else {
+                        false
+                    }
+                }
+                Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> {
+                    when (ev.type) {
+                        KeyEventType.KeyDown -> {
+                            val native = ev.nativeKeyEvent
+                            if (native.repeatCount == 0 && !native.isLongPress) {
+                                longPressFired = false
+                                longPressJob?.cancel()
+                                longPressJob = scope.launch {
+                                    delay(440L)
+                                    longPressFired = true
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    onLongPress()
+                                }
+                                false
+                            } else {
+                                if (!longPressFired) {
+                                    longPressJob?.cancel()
+                                    longPressJob = null
+                                    longPressFired = true
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    onLongPress()
+                                }
+                                true
+                            }
+                        }
+                        KeyEventType.KeyUp -> {
+                            longPressJob?.cancel()
+                            longPressJob = null
+                            if (longPressFired) {
+                                longPressFired = false
+                                true
+                            } else {
+                                false
+                            }
+                        }
+                        else -> false
+                    }
+                }
+                else -> false
+            }
+        }
 }
 
 fun Modifier.vesselDpadInputEscape(
@@ -696,14 +790,7 @@ fun MediaPosterCard(
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(12.dp))
                 .vesselFocusBorder(RoundedCornerShape(12.dp))
-                .onPreviewKeyEvent { ev ->
-                    if (ev.type == KeyEventType.KeyDown && ev.key == Key.Menu && onQuickStatus != null) {
-                        showMenu = true
-                        true
-                    } else {
-                        false
-                    }
-                }
+                .vesselDpadLongPress(enabled = onQuickStatus != null) { showMenu = true }
                 .combinedClickable(
                     onClick = onClick,
                     onLongClick = { if (onQuickStatus != null) showMenu = true },
@@ -869,6 +956,13 @@ fun MediaPosterCard(
                         modifier = Modifier.size((19f * tokens.scale).dp),
                     )
                 }
+                val firstStatusFocus = remember { FocusRequester() }
+                LaunchedEffect(showMenu) {
+                    if (showMenu) {
+                        delay(50)
+                        runCatching { firstStatusFocus.requestFocus() }
+                    }
+                }
                 DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
                     listOf(
                         "watching" to VesselI18n.tr("library.watching"),
@@ -876,8 +970,10 @@ fun MediaPosterCard(
                         "completed" to VesselI18n.tr("library.completed"),
                         "on_hold" to VesselI18n.tr("library.on_hold"),
                         "dropped" to VesselI18n.tr("library.dropped"),
-                    ).forEach { (statusKey, label) ->
+                    ).forEachIndexed { idx, (statusKey, label) ->
                         DropdownMenuItem(
+                            modifier = (if (idx == 0) Modifier.focusRequester(firstStatusFocus) else Modifier)
+                                .vesselFocusBorder(RoundedCornerShape(8.dp)),
                             text = {
                                 Text(
                                     text = label,
@@ -922,20 +1018,28 @@ fun ContinueWatchingCard(
         if (ep != null) "$prefix · $ep" else prefix
     }
 
+    val cardFocus = remember { FocusRequester() }
+    val editFocus = remember { FocusRequester() }
+    val firstMenuFocus = remember { FocusRequester() }
+
+    LaunchedEffect(showMenu) {
+        if (showMenu) {
+            delay(50)
+            runCatching { firstMenuFocus.requestFocus() }
+        }
+    }
+
     Box(modifier = modifier.width(if (isTv) 164.dp else 228.dp)) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(12.dp))
-                .vesselFocusBorder(RoundedCornerShape(12.dp))
-                .onPreviewKeyEvent { ev ->
-                    if (ev.type == KeyEventType.KeyDown && ev.key == Key.Menu) {
-                        showMenu = true
-                        true
-                    } else {
-                        false
-                    }
+                .focusRequester(cardFocus)
+                .focusProperties {
+                    up = editFocus
                 }
+                .vesselFocusBorder(RoundedCornerShape(12.dp))
+                .vesselDpadLongPress { showMenu = true }
                 .combinedClickable(
                     onClick = onResume,
                     onLongClick = { showMenu = true },
@@ -1027,7 +1131,7 @@ fun ContinueWatchingCard(
             )
         }
 
-        // D-Pad accessible Edit button at top-right
+        // D-Pad accessible Edit button at top-right (reachable via D-Pad Up from card)
         Box(
             modifier = Modifier
                 .align(Alignment.TopEnd)
@@ -1035,6 +1139,10 @@ fun ContinueWatchingCard(
                 .size(cwTokens.smallIconButtonSize)
                 .clip(CircleShape)
                 .background(Color.Black.copy(alpha = 0.58f))
+                .focusRequester(editFocus)
+                .focusProperties {
+                    down = cardFocus
+                }
                 .vesselFocusBorder(CircleShape)
                 .clickable { onEdit() },
             contentAlignment = Alignment.Center,
@@ -1049,14 +1157,19 @@ fun ContinueWatchingCard(
 
         DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
             DropdownMenuItem(
+                modifier = Modifier
+                    .focusRequester(firstMenuFocus)
+                    .vesselFocusBorder(RoundedCornerShape(8.dp)),
                 text = { Text(VesselI18n.tr("home.go_to_details")) },
                 onClick = { showMenu = false; onGoToDetails() },
             )
             DropdownMenuItem(
+                modifier = Modifier.vesselFocusBorder(RoundedCornerShape(8.dp)),
                 text = { Text(VesselI18n.tr("home.edit_cw")) },
                 onClick = { showMenu = false; onEdit() },
             )
             DropdownMenuItem(
+                modifier = Modifier.vesselFocusBorder(RoundedCornerShape(8.dp)),
                 text = { Text(VesselI18n.tr("common.remove")) },
                 onClick = { showMenu = false; onRemove() },
             )

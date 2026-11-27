@@ -26,6 +26,11 @@
   </categories>
   <content_rating type="oars-1.1" />
   <releases>
+    <release version="0.3.1" date="2026-11-27">
+      <description>
+        <p>Optimized Android TV player D-pad navigation with guaranteed center play/pause focus, one-press up navigation to Sources and top action pills, content-first drawer focus, reliable TV remote long-press handling on cards, D-pad access to Continue Watching edit button, and persistent Android search state with a desktop-style back reset button.</p>
+      </description>
+    </release>
     <release version="0.3.0" date="2026-11-27">
       <description>
         <p>Added multi-provider Debrid support (Real-Debrid with OAuth Device Code and API key, TorBox, AllDebrid, Premiumize, Debrid-Link, and community Debrid plugins via QuickJS), full Stremio stream addon support (including catalog-less Torrentio playback via Cinemeta/TMDB Global Catalog), live Debrid cloud queue tracking, player Stats HUD, and long-press 2x speed boost in Desktop and Android players.</p>

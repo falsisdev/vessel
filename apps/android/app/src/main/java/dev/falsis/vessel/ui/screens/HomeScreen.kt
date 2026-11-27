@@ -100,6 +100,11 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
@@ -1594,10 +1599,14 @@ fun HomeScreen(
                         Surface(
                             shape = RoundedCornerShape(10.dp),
                             color = palette.bgElevated,
-                            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable {
-                                heroSourceModal = null
-                                onPlayHero(modal.pluginId, modal.nativeId, modal.detail, modal.episode, modal.streamResult, idx, modal.resumePosMs)
-                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .vesselFocusBorder(RoundedCornerShape(10.dp))
+                                .clickable {
+                                    heroSourceModal = null
+                                    onPlayHero(modal.pluginId, modal.nativeId, modal.detail, modal.episode, modal.streamResult, idx, modal.resumePosMs)
+                                },
                         ) {
                             Row(
                                 modifier = Modifier.padding(12.dp),
@@ -1778,6 +1787,26 @@ fun HomeScreen(
                                 watchedMinText = ((curDurMin * pct) / 100f).toInt().toString()
                             },
                             valueRange = 0f..95f,
+                            modifier = Modifier
+                                .vesselFocusBorder(RoundedCornerShape(8.dp))
+                                .onPreviewKeyEvent { ev ->
+                                    if (ev.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                                    when (ev.key) {
+                                        Key.DirectionLeft -> {
+                                            val next = (progressPct - 5f).coerceIn(0f, 95f)
+                                            progressPct = next
+                                            watchedMinText = ((curDurMin * next) / 100f).toInt().toString()
+                                            true
+                                        }
+                                        Key.DirectionRight -> {
+                                            val next = (progressPct + 5f).coerceIn(0f, 95f)
+                                            progressPct = next
+                                            watchedMinText = ((curDurMin * next) / 100f).toInt().toString()
+                                            true
+                                        }
+                                        else -> false
+                                    }
+                                },
                         )
                     }
 

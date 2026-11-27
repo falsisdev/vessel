@@ -184,6 +184,7 @@ import dev.falsis.vessel.data.VesselRepository
 import dev.falsis.vessel.ui.components.formatSizeBytes
 import dev.falsis.vessel.ui.i18n.VesselI18n
 import dev.falsis.vessel.ui.isLiveMediaIdentifier
+import dev.falsis.vessel.ui.theme.LocalIsTvDevice
 import dev.falsis.vessel.ui.theme.LocalVesselPalette
 import dev.falsis.vessel.ui.theme.parseHexColor
 import dev.falsis.vessel.ui.utils.SubtitleCue
@@ -239,6 +240,7 @@ fun PlayerScreen(
     val view = LocalView.current
     val activity = context as? Activity
     val palette = LocalVesselPalette.current
+    val isTv = LocalIsTvDevice.current
     val scope = rememberCoroutineScope()
     val prefs by repo.uiPreferences.collectAsState()
     val appLocale by repo.locale.collectAsState()
@@ -1048,7 +1050,13 @@ fun PlayerScreen(
 
     val playerRootFocusRequester = remember { FocusRequester() }
     val playPauseFocusRequester = remember { FocusRequester() }
-    val drawerFocusRequester = remember { FocusRequester() }
+    val drawerFirstFocusRequester = remember { FocusRequester() }
+    val drawerCloseFocusRequester = remember { FocusRequester() }
+    val backBtnFocus = remember { FocusRequester() }
+    val sourcesPillFocus = remember { FocusRequester() }
+    val scrubberFocus = remember { FocusRequester() }
+    val bottomPlayPauseFocus = remember { FocusRequester() }
+    val errorRetryFocus = remember { FocusRequester() }
 
     LaunchedEffect(activeDrawer) {
         if (activeDrawer == null) {
@@ -1057,18 +1065,20 @@ fun PlayerScreen(
         }
     }
 
-    LaunchedEffect(controlsVisible, isLocked, activeDrawer, playbackError) {
-        if (playbackError == null) {
-            if (activeDrawer != null && !isLocked) {
-                kotlinx.coroutines.delay(60)
-                runCatching { drawerFocusRequester.requestFocus() }
-            } else if (activeDrawer == null) {
-                if (!controlsVisible || isLocked) {
-                    runCatching { playerRootFocusRequester.requestFocus() }
-                } else {
-                    kotlinx.coroutines.delay(50)
-                    runCatching { playPauseFocusRequester.requestFocus() }
-                }
+    LaunchedEffect(controlsVisible, isLocked, activeDrawer, playbackError, subtitleTranscriptOpen) {
+        if (playbackError != null) {
+            kotlinx.coroutines.delay(60)
+            runCatching { errorRetryFocus.requestFocus() }
+        } else if (activeDrawer != null && !isLocked) {
+            kotlinx.coroutines.delay(80)
+            runCatching { drawerFirstFocusRequester.requestFocus() }
+                .onFailure { runCatching { drawerCloseFocusRequester.requestFocus() } }
+        } else if (activeDrawer == null) {
+            if (!controlsVisible || isLocked) {
+                runCatching { playerRootFocusRequester.requestFocus() }
+            } else {
+                kotlinx.coroutines.delay(50)
+                runCatching { playPauseFocusRequester.requestFocus() }
             }
         }
     }
@@ -1162,18 +1172,23 @@ fun PlayerScreen(
                 if (!controlsVisible) {
                     return@onPreviewKeyEvent when (ev.key) {
                         Key.DirectionLeft, Key.MediaRewind -> {
-                            seekByMs(-10_000L)
+                            if (!isLive) seekByMs(-10_000L) else bumpControls()
                             true
                         }
                         Key.DirectionRight, Key.MediaFastForward -> {
-                            seekByMs(10_000L)
+                            if (!isLive) seekByMs(10_000L) else bumpControls()
                             true
                         }
                         Key.Spacebar, Key.MediaPlayPause, Key.MediaPlay, Key.MediaPause -> {
                             togglePlayPause()
                             true
                         }
-                        Key.DirectionCenter, Key.Enter, Key.NumPadEnter, Key.DirectionUp, Key.DirectionDown, Key.Menu -> {
+                        Key.Menu -> {
+                            controlsVisible = true
+                            activeDrawer = PlayerDrawer.SOURCES
+                            true
+                        }
+                        Key.DirectionCenter, Key.Enter, Key.NumPadEnter, Key.DirectionUp, Key.DirectionDown -> {
                             bumpControls()
                             true
                         }
@@ -1192,6 +1207,11 @@ fun PlayerScreen(
                     }
                     Key.MediaFastForward -> {
                         seekByMs(10_000L)
+                        bumpControls()
+                        true
+                    }
+                    Key.Menu -> {
+                        activeDrawer = PlayerDrawer.SOURCES
                         bumpControls()
                         true
                     }
@@ -1555,8 +1575,8 @@ fun PlayerScreen(
             }
         }
 
-        // Center Buffering / Loading Indicator (Desktop .cs-center-state parity)
-        if ((isBuffering || switchingEpisode) && playbackError == null) {
+        // Center Buffering / Loading Indicator (shown standalone when HUD is hidden)
+        if ((isBuffering || switchingEpisode) && playbackError == null && (!controlsVisible || isLocked)) {
             Column(
                 modifier = Modifier.align(Alignment.Center),
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -1630,16 +1650,25 @@ fun PlayerScreen(
                                     }
                                 },
                                 colors = ButtonDefaults.buttonColors(containerColor = palette.accent),
+                                modifier = Modifier
+                                    .focusRequester(errorRetryFocus)
+                                    .vesselFocusBorder(RoundedCornerShape(999.dp)),
                             ) {
                                 Text(VesselI18n.tr("common.retry", "Tekrar Dene"), color = Color(0xFF0B0B12))
                             }
                             if (activeStreamResult.streams.size > 1) {
-                                OutlinedButton(onClick = { activeDrawer = PlayerDrawer.SOURCES }) {
+                                OutlinedButton(
+                                    onClick = { activeDrawer = PlayerDrawer.SOURCES },
+                                    modifier = Modifier.vesselFocusBorder(RoundedCornerShape(999.dp)),
+                                ) {
                                     Text("${VesselI18n.tr("details.sources", "Kaynaklar")} (${activeStreamResult.streams.size})")
                                 }
                             }
                             if (!isLive) {
-                                TextButton(onClick = onGoToDetails) {
+                                TextButton(
+                                    onClick = onGoToDetails,
+                                    modifier = Modifier.vesselFocusBorder(RoundedCornerShape(999.dp)),
+                                ) {
                                     Text(VesselI18n.tr("player.go_to_details"))
                                 }
                             }
@@ -1659,14 +1688,17 @@ fun PlayerScreen(
                 .systemBarsPadding()
                 .padding(top = 14.dp, end = 16.dp),
         ) {
-            Surface(
+                Surface(
                 shape = RoundedCornerShape(999.dp),
                 color = Color(0xE010101A),
                 border = BorderStroke(1.dp, palette.accent.copy(alpha = 0.55f)),
-                modifier = Modifier.clickable {
-                    isLocked = false
-                    bumpControls()
-                },
+                modifier = Modifier
+                    .clip(RoundedCornerShape(999.dp))
+                    .vesselFocusBorder(RoundedCornerShape(999.dp))
+                    .clickable {
+                        isLocked = false
+                        bumpControls()
+                    },
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -1715,6 +1747,11 @@ fun PlayerScreen(
                         HudCircleIconButton(
                             onClick = onBack,
                             size = 34.dp,
+                            modifier = Modifier
+                                .focusRequester(backBtnFocus)
+                                .focusProperties {
+                                    down = if (!wideLayout || isTv) sourcesPillFocus else playPauseFocusRequester
+                                },
                         ) {
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = VesselI18n.tr("common.back"), tint = Color.White, modifier = Modifier.size(17.dp))
                         }
@@ -1722,7 +1759,13 @@ fun PlayerScreen(
                         Column(
                             modifier = Modifier
                                 .weight(1f)
-                                .let { m -> if (!isLive) m.clickable { onGoToDetails() } else m },
+                                .let { m ->
+                                    if (!isLive && !isTv) {
+                                        m.clip(RoundedCornerShape(8.dp))
+                                            .vesselFocusBorder(RoundedCornerShape(8.dp))
+                                            .clickable { onGoToDetails() }
+                                    } else m
+                                },
                             verticalArrangement = Arrangement.spacedBy(2.dp),
                         ) {
                             Row(
@@ -1817,16 +1860,20 @@ fun PlayerScreen(
                             }
                         }
 
-                        if (wideLayout) {
+                        if (wideLayout && !isTv) {
                             TopActionPillsRow(
                                 pluginId = pluginId,
                                 isLive = isLive,
+                                isTv = isTv,
                                 episodesCount = episodes.size,
                                 streamsCount = activeStreamResult.streams.size,
                                 audioCount = audioTracks.size,
                                 activeDrawer = activeDrawer,
                                 showStatsHud = showStatsHud,
                                 isLandscape = isLandscape,
+                                sourcesPillFocus = sourcesPillFocus,
+                                backBtnFocus = backBtnFocus,
+                                centerFocus = playPauseFocusRequester,
                                 onGoToDetails = onGoToDetails,
                                 onLock = {
                                     isLocked = true
@@ -1846,16 +1893,20 @@ fun PlayerScreen(
                         }
                     }
 
-                    if (!wideLayout) {
+                    if (!wideLayout || isTv) {
                         TopActionPillsRow(
                             pluginId = pluginId,
                             isLive = isLive,
+                            isTv = isTv,
                             episodesCount = episodes.size,
                             streamsCount = activeStreamResult.streams.size,
                             audioCount = audioTracks.size,
                             activeDrawer = activeDrawer,
                             showStatsHud = showStatsHud,
                             isLandscape = isLandscape,
+                            sourcesPillFocus = sourcesPillFocus,
+                            backBtnFocus = backBtnFocus,
+                            centerFocus = playPauseFocusRequester,
                             onGoToDetails = onGoToDetails,
                             onLock = {
                                 isLocked = true
@@ -1877,8 +1928,9 @@ fun PlayerScreen(
                     }
                 }
 
-                // CENTER TRANSPORT CONTROLS (Desktop .cs-center-controls)
-                if (playbackError == null && !isBuffering && !switchingEpisode) {
+                // CENTER TRANSPORT CONTROLS (Always mounted while HUD is visible so D-pad center focus never drops)
+                if (playbackError == null) {
+                    val downTargetFromCenter = if (!isLive) scrubberFocus else bottomPlayPauseFocus
                     Row(
                         modifier = Modifier.align(Alignment.Center),
                         verticalAlignment = Alignment.CenterVertically,
@@ -1889,6 +1941,10 @@ fun PlayerScreen(
                                 enabled = prevEpisode != null,
                                 onClick = { prevEpisode?.let(::playEpisode) },
                                 size = 40.dp,
+                                modifier = Modifier.focusProperties {
+                                    up = sourcesPillFocus
+                                    down = downTargetFromCenter
+                                },
                             ) {
                                 Icon(
                                     Icons.Default.SkipPrevious,
@@ -1907,6 +1963,10 @@ fun PlayerScreen(
                                     bumpControls()
                                 },
                                 size = 40.dp,
+                                modifier = Modifier.focusProperties {
+                                    up = sourcesPillFocus
+                                    down = downTargetFromCenter
+                                },
                             ) {
                                 Icon(Icons.Default.Replay10, contentDescription = "-10s", tint = Color.White, modifier = Modifier.size(20.dp))
                             }
@@ -1919,16 +1979,28 @@ fun PlayerScreen(
                                 .size(54.dp)
                                 .clip(CircleShape)
                                 .focusRequester(playPauseFocusRequester)
+                                .focusProperties {
+                                    up = sourcesPillFocus
+                                    down = downTargetFromCenter
+                                }
                                 .vesselFocusBorder(CircleShape, width = 3.dp)
                                 .clickable { togglePlayPause() },
                         ) {
                             Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                                    contentDescription = if (isPlaying) "Pause" else "Play",
-                                    tint = Color(0xFF0B0B12),
-                                    modifier = Modifier.size(26.dp),
-                                )
+                                if (isBuffering || switchingEpisode) {
+                                    CircularProgressIndicator(
+                                        color = Color(0xFF0B0B12),
+                                        strokeWidth = 2.5.dp,
+                                        modifier = Modifier.size(24.dp),
+                                    )
+                                } else {
+                                    Icon(
+                                        imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                        contentDescription = if (isPlaying) "Pause" else "Play",
+                                        tint = Color(0xFF0B0B12),
+                                        modifier = Modifier.size(26.dp),
+                                    )
+                                }
                             }
                         }
                         if (!isLive) {
@@ -1941,6 +2013,10 @@ fun PlayerScreen(
                                     bumpControls()
                                 },
                                 size = 40.dp,
+                                modifier = Modifier.focusProperties {
+                                    up = sourcesPillFocus
+                                    down = downTargetFromCenter
+                                },
                             ) {
                                 Icon(Icons.Default.Forward10, contentDescription = "+10s", tint = Color.White, modifier = Modifier.size(20.dp))
                             }
@@ -1950,6 +2026,10 @@ fun PlayerScreen(
                                 enabled = nextEpisode != null,
                                 onClick = { nextEpisode?.let(::playEpisode) },
                                 size = 40.dp,
+                                modifier = Modifier.focusProperties {
+                                    up = sourcesPillFocus
+                                    down = downTargetFromCenter
+                                },
                             ) {
                                 Icon(
                                     Icons.Default.SkipNext,
@@ -2001,6 +2081,13 @@ fun PlayerScreen(
                                     isScrubbing = false
                                     bumpControls()
                                 },
+                                onTogglePlayPause = ::togglePlayPause,
+                                scrubberModifier = Modifier
+                                    .focusRequester(scrubberFocus)
+                                    .focusProperties {
+                                        up = playPauseFocusRequester
+                                        down = bottomPlayPauseFocus
+                                    },
                                 modifier = Modifier.weight(1f),
                             )
                             Text(
@@ -2066,6 +2153,7 @@ fun PlayerScreen(
                     }
 
                     // Bottom Actions Row (Desktop .cs-bottom-actions)
+                    val bottomUpTarget = if (!isLive) scrubberFocus else playPauseFocusRequester
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -2075,7 +2163,13 @@ fun PlayerScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
-                            HudCircleIconButton(onClick = ::togglePlayPause, size = 36.dp) {
+                            HudCircleIconButton(
+                                onClick = ::togglePlayPause,
+                                size = 36.dp,
+                                modifier = Modifier
+                                    .focusRequester(bottomPlayPauseFocus)
+                                    .focusProperties { up = bottomUpTarget },
+                            ) {
                                 Icon(
                                     if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                                     contentDescription = "Play/Pause",
@@ -2090,6 +2184,7 @@ fun PlayerScreen(
                                     bumpControls()
                                 },
                                 size = 36.dp,
+                                modifier = Modifier.focusProperties { up = bottomUpTarget },
                             ) {
                                 Icon(
                                     if (isMuted || playerVolume == 0f) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp,
@@ -2098,7 +2193,7 @@ fun PlayerScreen(
                                     modifier = Modifier.size(18.dp),
                                 )
                             }
-                            if (wideLayout) {
+                            if (wideLayout && !isTv) {
                                 Slider(
                                     value = if (isMuted) 0f else playerVolume,
                                     onValueChange = { v ->
@@ -2127,6 +2222,7 @@ fun PlayerScreen(
                                     icon = null,
                                     label = "${playbackSpeed}x",
                                     active = playbackSpeed != 1.0f,
+                                    modifier = Modifier.focusProperties { up = bottomUpTarget },
                                     onClick = {
                                         activeDrawer = if (activeDrawer == PlayerDrawer.SETTINGS) null else PlayerDrawer.SETTINGS
                                         bumpControls()
@@ -2137,6 +2233,7 @@ fun PlayerScreen(
                                 icon = null,
                                 label = fitLabel,
                                 active = resizeMode != AspectRatioFrameLayout.RESIZE_MODE_FIT,
+                                modifier = Modifier.focusProperties { up = bottomUpTarget },
                                 onClick = ::cycleFitMode,
                             )
                             if (!isLive && nextEpisode != null) {
@@ -2144,16 +2241,23 @@ fun PlayerScreen(
                                     icon = { Icon(Icons.Default.SkipNext, contentDescription = null, tint = Color.White, modifier = Modifier.size(13.dp)) },
                                     label = VesselI18n.trf("player.next_ep_short", "ep" to nextEpisode.episode),
                                     active = true,
+                                    modifier = Modifier.focusProperties { up = bottomUpTarget },
                                     onClick = { playEpisode(nextEpisode) },
                                 )
                             }
-                            HudCircleIconButton(onClick = ::toggleOrientation, size = 32.dp) {
-                                Icon(
-                                    if (isLandscape) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
-                                    contentDescription = VesselI18n.tr("common.landscape"),
-                                    tint = Color.White,
-                                    modifier = Modifier.size(16.dp),
-                                )
+                            if (!isTv) {
+                                HudCircleIconButton(
+                                    onClick = ::toggleOrientation,
+                                    size = 32.dp,
+                                    modifier = Modifier.focusProperties { up = bottomUpTarget },
+                                ) {
+                                    Icon(
+                                        if (isLandscape) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
+                                        contentDescription = VesselI18n.tr("common.landscape"),
+                                        tint = Color.White,
+                                        modifier = Modifier.size(16.dp),
+                                    )
+                                }
                             }
                         }
                     }
@@ -2196,6 +2300,8 @@ fun PlayerScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
                             modifier = Modifier
+                                .clip(RoundedCornerShape(topStart = 999.dp, bottomStart = 999.dp))
+                                .vesselFocusBorder(RoundedCornerShape(topStart = 999.dp, bottomStart = 999.dp))
                                 .clickable {
                                     dismissedSkipKeys = dismissedSkipKeys + segKey
                                     if (jumpToNext) {
@@ -2231,6 +2337,8 @@ fun PlayerScreen(
                         )
                         Box(
                             modifier = Modifier
+                                .clip(RoundedCornerShape(topEnd = 999.dp, bottomEnd = 999.dp))
+                                .vesselFocusBorder(RoundedCornerShape(topEnd = 999.dp, bottomEnd = 999.dp))
                                 .clickable { dismissedSkipKeys = dismissedSkipKeys + segKey }
                                 .padding(start = 8.dp, end = 11.dp, top = 7.dp, bottom = 7.dp),
                             contentAlignment = Alignment.Center,
@@ -2282,12 +2390,16 @@ fun PlayerScreen(
                         Button(
                             onClick = { playEpisode(nextEp) },
                             colors = ButtonDefaults.buttonColors(containerColor = palette.accent),
+                            modifier = Modifier.vesselFocusBorder(RoundedCornerShape(999.dp)),
                         ) {
                             Icon(Icons.Default.SkipNext, contentDescription = null, tint = Color(0xFF0B0B12), modifier = Modifier.size(16.dp))
                             Spacer(Modifier.width(4.dp))
                             Text(VesselI18n.tr("common.play", "Oynat"), color = Color(0xFF0B0B12), fontWeight = FontWeight.Bold)
                         }
-                        TextButton(onClick = { dismissUpNext = true }) {
+                        TextButton(
+                            onClick = { dismissUpNext = true },
+                            modifier = Modifier.vesselFocusBorder(RoundedCornerShape(999.dp)),
+                        ) {
                             Text("×", color = Color.White.copy(alpha = 0.8f))
                         }
                     }
@@ -2366,7 +2478,7 @@ fun PlayerScreen(
                                     }
                                 },
                                 size = 28.dp,
-                                modifier = Modifier.focusRequester(drawerFocusRequester),
+                                modifier = Modifier.focusRequester(drawerCloseFocusRequester),
                             ) {
                                 Icon(Icons.Default.Close, contentDescription = VesselI18n.tr("common.close"), tint = Color.White, modifier = Modifier.size(14.dp))
                             }
@@ -2376,15 +2488,24 @@ fun PlayerScreen(
                         // Drawer Content
                         when (activeDrawer) {
                             PlayerDrawer.EPISODES -> {
+                                val epListState = rememberLazyListState(
+                                    initialFirstVisibleItemIndex = currentEpIdx.coerceAtLeast(0),
+                                )
+                                val initialFocusIdx = if (currentEpIdx >= 0) currentEpIdx else 0
                                 LazyColumn(
+                                    state = epListState,
                                     modifier = Modifier.fillMaxSize().padding(12.dp),
                                     verticalArrangement = Arrangement.spacedBy(8.dp),
                                 ) {
-                                    items(episodes, key = { it.streamId }) { ep ->
+                                    itemsIndexed(episodes, key = { _, ep -> ep.streamId }) { idx, ep ->
                                         val isCur = ep.streamId == currentEpisode.streamId
+                                        val itemMod = Modifier
+                                            .then(if (idx == initialFocusIdx) Modifier.focusRequester(drawerFirstFocusRequester) else Modifier)
+                                            .then(if (idx == 0) Modifier.focusProperties { up = drawerCloseFocusRequester } else Modifier)
                                         DrawerItemCard(
                                             active = isCur,
                                             accentColor = palette.accent,
+                                            modifier = itemMod,
                                             onClick = {
                                                 activeDrawer = null
                                                 if (!isCur) playEpisode(ep)
@@ -2442,15 +2563,24 @@ fun PlayerScreen(
                             }
 
                             PlayerDrawer.SOURCES -> {
+                                val srcListState = rememberLazyListState(
+                                    initialFirstVisibleItemIndex = selectedIndex.coerceIn(0, (activeStreamResult.streams.size - 1).coerceAtLeast(0)),
+                                )
+                                val initialFocusIdx = selectedIndex.coerceIn(0, (activeStreamResult.streams.size - 1).coerceAtLeast(0))
                                 LazyColumn(
+                                    state = srcListState,
                                     modifier = Modifier.fillMaxSize().padding(12.dp),
                                     verticalArrangement = Arrangement.spacedBy(8.dp),
                                 ) {
                                     itemsIndexed(activeStreamResult.streams) { idx, cand ->
                                         val isCur = idx == selectedIndex
+                                        val itemMod = Modifier
+                                            .then(if (idx == initialFocusIdx) Modifier.focusRequester(drawerFirstFocusRequester) else Modifier)
+                                            .then(if (idx == 0) Modifier.focusProperties { up = drawerCloseFocusRequester } else Modifier)
                                         DrawerItemCard(
                                             active = isCur,
                                             accentColor = palette.accent,
+                                            modifier = itemMod,
                                             onClick = {
                                                 val isTorrent = cand.kind.equals("torrent", ignoreCase = true) ||
                                                     cand.torrent != null ||
@@ -2552,10 +2682,15 @@ fun PlayerScreen(
                                     modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp),
                                     verticalArrangement = Arrangement.spacedBy(8.dp),
                                 ) {
-                                    audioTracks.forEach { trk ->
+                                    val firstAudioFocusIdx = audioTracks.indexOfFirst { it.selected }.let { if (it >= 0) it else 0 }
+                                    audioTracks.forEachIndexed { idx, trk ->
+                                        val itemMod = Modifier
+                                            .then(if (idx == firstAudioFocusIdx) Modifier.focusRequester(drawerFirstFocusRequester) else Modifier)
+                                            .then(if (idx == 0) Modifier.focusProperties { up = drawerCloseFocusRequester } else Modifier)
                                         DrawerItemCard(
                                             active = trk.selected,
                                             accentColor = palette.accent,
+                                            modifier = itemMod,
                                             onClick = {
                                                 exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters
                                                     .buildUpon()
@@ -2661,6 +2796,7 @@ fun PlayerScreen(
                                                     icon = null,
                                                     label = VesselI18n.tr("common.back"),
                                                     active = false,
+                                                    modifier = Modifier.focusRequester(drawerFirstFocusRequester),
                                                     onClick = {
                                                         subtitleTranscriptOpen = false
                                                         subtitleTranscriptQuery = ""
@@ -2739,6 +2875,9 @@ fun PlayerScreen(
                                                 icon = null,
                                                 label = "-500ms",
                                                 active = false,
+                                                modifier = Modifier
+                                                    .focusRequester(drawerFirstFocusRequester)
+                                                    .focusProperties { up = drawerCloseFocusRequester },
                                                 onClick = { subtitleDelayMs -= 500L },
                                             )
                                             Text(
@@ -2928,6 +3067,8 @@ fun PlayerScreen(
                                                     ),
                                                     modifier = Modifier
                                                         .size(20.dp)
+                                                        .clip(CircleShape)
+                                                        .vesselFocusBorder(CircleShape)
                                                         .clickable {
                                                             saveSubPrefs { it.copy(subtitles = it.subtitles.copy(textColor = hex)) }
                                                         },
@@ -3095,7 +3236,13 @@ fun PlayerScreen(
                                                     onValueChange = { extSubQueryText = it },
                                                     placeholder = { Text(VesselI18n.tr("player.ext_sub_placeholder")) },
                                                     singleLine = true,
-                                                    modifier = Modifier.weight(1f),
+                                                    onSubmit = { runExternalSubSearch() },
+                                                    modifier = Modifier
+                                                        .weight(1f)
+                                                        .vesselDpadInputEscape(
+                                                            isTextEmpty = extSubQueryText.isEmpty(),
+                                                            onSubmit = { runExternalSubSearch() },
+                                                        ),
                                                 )
                                                 DrawerChipButton(
                                                     label = VesselI18n.tr("common.search"),
@@ -3268,11 +3415,16 @@ fun PlayerScreen(
                                                 horizontalArrangement = Arrangement.spacedBy(5.dp),
                                                 verticalArrangement = Arrangement.spacedBy(5.dp),
                                             ) {
-                                                listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f).forEach { spd ->
+                                                listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f).forEachIndexed { idx, spd ->
+                                                    val isSel = playbackSpeed == spd
+                                                    val chipMod = Modifier
+                                                        .then(if (isSel || (playbackSpeed !in listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f) && idx == 0)) Modifier.focusRequester(drawerFirstFocusRequester) else Modifier)
+                                                        .focusProperties { up = drawerCloseFocusRequester }
                                                     DrawerChipButton(
                                                         label = "${spd}x",
-                                                        active = playbackSpeed == spd,
+                                                        active = isSel,
                                                         accentColor = palette.accent,
+                                                        modifier = chipMod,
                                                         onClick = {
                                                             playbackSpeed = spd
                                                             exoPlayer.setPlaybackSpeed(spd)
@@ -3293,11 +3445,20 @@ fun PlayerScreen(
                                                 AspectRatioFrameLayout.RESIZE_MODE_FIT to VesselI18n.tr("player.fit_contain"),
                                                 AspectRatioFrameLayout.RESIZE_MODE_ZOOM to VesselI18n.tr("player.fit_fill"),
                                                 AspectRatioFrameLayout.RESIZE_MODE_FILL to VesselI18n.tr("player.fit_stretch"),
-                                            ).forEach { (mode, label) ->
+                                            ).forEachIndexed { idx, (mode, label) ->
+                                                val isSel = resizeMode == mode
+                                                val chipMod = if (isLive && isSel) {
+                                                    Modifier
+                                                        .focusRequester(drawerFirstFocusRequester)
+                                                        .focusProperties { up = drawerCloseFocusRequester }
+                                                } else if (isLive && idx == 0) {
+                                                    Modifier.focusProperties { up = drawerCloseFocusRequester }
+                                                } else Modifier
                                                 DrawerChipButton(
                                                     label = label,
-                                                    active = resizeMode == mode,
+                                                    active = isSel,
                                                     accentColor = palette.accent,
+                                                    modifier = chipMod,
                                                     onClick = {
                                                         resizeMode = mode
                                                         showHud(label)
@@ -3323,12 +3484,16 @@ fun PlayerScreen(
 private fun TopActionPillsRow(
     pluginId: String,
     isLive: Boolean,
+    isTv: Boolean,
     episodesCount: Int,
     streamsCount: Int,
     audioCount: Int,
     activeDrawer: PlayerDrawer?,
     showStatsHud: Boolean,
     isLandscape: Boolean,
+    sourcesPillFocus: FocusRequester,
+    backBtnFocus: FocusRequester,
+    centerFocus: FocusRequester,
     onGoToDetails: () -> Unit,
     onLock: () -> Unit,
     onToggleStats: () -> Unit,
@@ -3336,6 +3501,10 @@ private fun TopActionPillsRow(
     onToggleOrientation: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val pillNavModifier = Modifier.focusProperties {
+        up = backBtnFocus
+        down = centerFocus
+    }
     Row(
         modifier = modifier,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -3346,20 +3515,25 @@ private fun TopActionPillsRow(
                 icon = { Icon(Icons.Default.Info, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp)) },
                 label = VesselI18n.tr("player.go_to_details"),
                 active = false,
+                modifier = pillNavModifier,
                 onClick = onGoToDetails,
             )
         }
-        PlayerHudPill(
-            icon = { Icon(Icons.Default.LockOpen, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp)) },
-            label = VesselI18n.tr("player.lock", "Kilitle"),
-            active = false,
-            onClick = onLock,
-        )
+        if (!isTv) {
+            PlayerHudPill(
+                icon = { Icon(Icons.Default.LockOpen, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp)) },
+                label = VesselI18n.tr("player.lock", "Kilitle"),
+                active = false,
+                modifier = pillNavModifier,
+                onClick = onLock,
+            )
+        }
         if (!isLive || episodesCount > 1) {
             PlayerHudPill(
                 icon = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp)) },
                 label = if (isLive) "${VesselI18n.tr("iptv.channels", "Kanallar")} ($episodesCount)" else "${VesselI18n.tr("details.episodes", "Bölümler")} ($episodesCount)",
                 active = activeDrawer == PlayerDrawer.EPISODES,
+                modifier = pillNavModifier,
                 onClick = { onToggleDrawer(PlayerDrawer.EPISODES) },
             )
         }
@@ -3367,6 +3541,7 @@ private fun TopActionPillsRow(
             icon = { Icon(Icons.Default.Layers, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp)) },
             label = "${VesselI18n.tr("details.sources", "Kaynaklar")} ($streamsCount)",
             active = activeDrawer == PlayerDrawer.SOURCES,
+            modifier = pillNavModifier.focusRequester(sourcesPillFocus),
             onClick = { onToggleDrawer(PlayerDrawer.SOURCES) },
         )
         if (!isLive) {
@@ -3374,6 +3549,7 @@ private fun TopActionPillsRow(
                 icon = { Icon(Icons.Default.Audiotrack, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp)) },
                 label = if (audioCount > 1) "${VesselI18n.tr("player.audio", "Ses")} ($audioCount)" else VesselI18n.tr("player.audio", "Ses"),
                 active = activeDrawer == PlayerDrawer.AUDIO,
+                modifier = pillNavModifier,
                 onClick = { onToggleDrawer(PlayerDrawer.AUDIO) },
             )
         }
@@ -3382,6 +3558,7 @@ private fun TopActionPillsRow(
                 icon = { Icon(Icons.Default.ClosedCaption, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp)) },
                 label = VesselI18n.tr("settings.tab_subtitles", "Altyazı"),
                 active = activeDrawer == PlayerDrawer.SUBTITLES,
+                modifier = pillNavModifier,
                 onClick = { onToggleDrawer(PlayerDrawer.SUBTITLES) },
             )
         }
@@ -3389,20 +3566,25 @@ private fun TopActionPillsRow(
             icon = { Icon(Icons.Default.Settings, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp)) },
             label = VesselI18n.tr("nav.settings", "Ayarlar"),
             active = activeDrawer == PlayerDrawer.SETTINGS,
+            modifier = pillNavModifier,
             onClick = { onToggleDrawer(PlayerDrawer.SETTINGS) },
         )
         PlayerHudPill(
             icon = null,
             label = VesselI18n.tr("stats.title", "Stats"),
             active = showStatsHud,
+            modifier = pillNavModifier,
             onClick = onToggleStats,
         )
-        PlayerHudPill(
-            icon = { Icon(Icons.Default.ScreenRotation, contentDescription = null, tint = Color.White, modifier = Modifier.size(13.dp)) },
-            label = if (isLandscape) VesselI18n.tr("common.portrait") else VesselI18n.tr("common.landscape"),
-            active = isLandscape,
-            onClick = onToggleOrientation,
-        )
+        if (!isTv) {
+            PlayerHudPill(
+                icon = { Icon(Icons.Default.ScreenRotation, contentDescription = null, tint = Color.White, modifier = Modifier.size(13.dp)) },
+                label = if (isLandscape) VesselI18n.tr("common.portrait") else VesselI18n.tr("common.landscape"),
+                active = isLandscape,
+                modifier = pillNavModifier,
+                onClick = onToggleOrientation,
+            )
+        }
     }
 }
 
@@ -3416,6 +3598,8 @@ private fun DesktopScrubberBar(
     isScrubbing: Boolean,
     onScrubChange: (Long) -> Unit,
     onScrubCommit: (Long) -> Unit,
+    onTogglePlayPause: () -> Unit = {},
+    scrubberModifier: Modifier = Modifier,
     modifier: Modifier = Modifier,
 ) {
     val safeDur = durationMs.coerceAtLeast(1L)
@@ -3456,21 +3640,29 @@ private fun DesktopScrubberBar(
             }
         }
         Canvas(
-            modifier = Modifier
+            modifier = scrubberModifier
                 .fillMaxWidth()
                 .height(28.dp)
                 .clip(RoundedCornerShape(8.dp))
                 .vesselFocusBorder(RoundedCornerShape(8.dp))
                 .focusable()
                 .onPreviewKeyEvent { ev ->
-                    if (ev.type != KeyEventType.KeyDown || safeDur <= 1L) return@onPreviewKeyEvent false
+                    if (ev.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                     when (ev.key) {
                         Key.DirectionLeft -> {
-                            onScrubCommit((currentMs - 10_000L).coerceAtLeast(0L))
-                            true
+                            if (safeDur > 1L) {
+                                onScrubCommit((currentMs - 10_000L).coerceAtLeast(0L))
+                                true
+                            } else false
                         }
                         Key.DirectionRight -> {
-                            onScrubCommit((currentMs + 10_000L).coerceAtMost(durationMs.coerceAtLeast(currentMs)))
+                            if (safeDur > 1L) {
+                                onScrubCommit((currentMs + 10_000L).coerceAtMost(durationMs.coerceAtLeast(currentMs)))
+                                true
+                            } else false
+                        }
+                        Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> {
+                            onTogglePlayPause()
                             true
                         }
                         else -> false
@@ -3614,6 +3806,7 @@ private fun PlayerHudPill(
     icon: (@Composable () -> Unit)?,
     label: String,
     active: Boolean,
+    modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
     val palette = LocalVesselPalette.current
@@ -3624,7 +3817,7 @@ private fun PlayerHudPill(
             width = 1.dp,
             color = if (active) palette.accent.copy(alpha = 0.65f) else HudBorderColor,
         ),
-        modifier = Modifier
+        modifier = modifier
             .clip(RoundedCornerShape(999.dp))
             .vesselFocusBorder(RoundedCornerShape(999.dp))
             .clickable(onClick = onClick),
@@ -3650,6 +3843,7 @@ private fun PlayerHudPill(
 private fun DrawerItemCard(
     active: Boolean,
     accentColor: Color,
+    modifier: Modifier = Modifier,
     onClick: () -> Unit,
     content: @Composable () -> Unit,
 ) {
@@ -3660,7 +3854,7 @@ private fun DrawerItemCard(
             width = 1.dp,
             color = if (active) accentColor.copy(alpha = 0.55f) else Color.White.copy(alpha = 0.08f),
         ),
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(10.dp))
             .vesselFocusBorder(RoundedCornerShape(10.dp))
@@ -3723,6 +3917,7 @@ private fun DrawerChipButton(
     label: String,
     active: Boolean,
     accentColor: Color,
+    modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
     Surface(
@@ -3732,7 +3927,7 @@ private fun DrawerChipButton(
             width = 1.dp,
             color = if (active) Color.Transparent else Color.White.copy(alpha = 0.14f),
         ),
-        modifier = Modifier
+        modifier = modifier
             .clip(RoundedCornerShape(999.dp))
             .vesselFocusBorder(RoundedCornerShape(999.dp))
             .clickable(onClick = onClick),

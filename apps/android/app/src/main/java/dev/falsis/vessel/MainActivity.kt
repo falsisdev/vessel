@@ -101,6 +101,7 @@ import dev.falsis.vessel.ui.screens.LibraryScreen
 import dev.falsis.vessel.ui.screens.LiveTvScreen
 import dev.falsis.vessel.ui.screens.PlayerScreen
 import dev.falsis.vessel.ui.screens.SearchScreen
+import dev.falsis.vessel.ui.screens.SearchSessionState
 import dev.falsis.vessel.ui.screens.SettingsScreen
 import dev.falsis.vessel.ui.theme.LocalVesselFloatingNavInset
 import dev.falsis.vessel.ui.theme.LocalVesselPalette
@@ -213,8 +214,22 @@ fun VesselAndroidApp(
 
     var selectedTab by remember { mutableIntStateOf(0) }
     var overlayStack by remember { mutableStateOf<List<OverlayRoute>>(emptyList()) }
+    val searchSessionState = remember { SearchSessionState() }
     var splashAnimDone by remember { mutableStateOf(false) }
     val showSplash = !splashAnimDone || (!isReady && initError == null)
+
+    // Keep collecting streaming search results even when navigating to Details and returning back
+    LaunchedEffect(repo, searchSessionState) {
+        repo.searchEvents.collect { ev ->
+            if (ev.searchId != searchSessionState.activeSearchId) return@collect
+            if (ev.items.isNotEmpty()) {
+                val mapped = ev.items.map { item -> (item.pluginId ?: ev.pluginId) to item }
+                searchSessionState.results = (searchSessionState.results + mapped)
+                    .distinctBy { "${it.first}:${it.second.nativeId}" }
+            }
+            if (ev.done) searchSessionState.searching = false
+        }
+    }
 
     val overlay = overlayStack.lastOrNull()
 
@@ -433,6 +448,8 @@ fun VesselAndroidApp(
                                                     )
                                                     TopTab.SEARCH -> SearchScreen(
                                                         repo = repo,
+                                                        state = searchSessionState,
+                                                        searchScope = scope,
                                                         onOpenDetails = { pid, nid -> pushOverlay(OverlayRoute.Details(pid, nid)) },
                                                         onPlayLiveStream = { pid, detail, ep, sr ->
                                                             pushOverlay(OverlayRoute.Player(pid, detail.nativeId, detail, ep, sr, 0, 0L))
