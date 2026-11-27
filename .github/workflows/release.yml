@@ -252,7 +252,7 @@ jobs:
   publish-release:
     name: Publish GitHub Release
     needs: [build, build-flatpak, build-android]
-    if: always() && needs.build.result == 'success'
+    if: always() && needs.build.result == 'success' && needs.build-android.result == 'success'
     runs-on: ubuntu-latest
 
     steps:
