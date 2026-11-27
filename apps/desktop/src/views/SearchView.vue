@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onActivated, onMounted, ref, shallowRef } from 'vue'
 import { useRouter } from 'vue-router'
-import { History, Loader2, Search as SearchIcon, Trash2, X } from 'lucide-vue-next'
+import { ArrowLeft, History, Loader2, Search as SearchIcon, Trash2, X } from 'lucide-vue-next'
 import { isTauriRuntime, vesselApi } from '@/api/vessel'
 import MediaCard from '@/components/media/MediaCard.vue'
 import { useI18n } from '@/composables/useI18n'
@@ -19,7 +19,7 @@ const { t } = useI18n()
 const { uiPreferences, savePreferences } = useUiPreferences()
 const { refreshLibraryState } = useLibraryState()
 const { setSession } = usePlayerSession()
-const { isSearching, searchBuckets, startSearch } = useVesselEvents()
+const { isSearching, searchBuckets, startSearch, resetSearch } = useVesselEvents()
 
 const MAX_SEARCH_HISTORY = 10
 const query = shallowRef('')
@@ -27,6 +27,28 @@ const mediaTypeFilter = shallowRef('')
 const selectedPluginId = shallowRef('')
 const plugins = ref<PluginListEntry[]>([])
 const launchingLiveKey = shallowRef('')
+
+const hasActiveSearch = computed(
+  () =>
+    query.value.trim().length > 0 ||
+    isSearching.value ||
+    Object.keys(searchBuckets.value).length > 0 ||
+    mediaTypeFilter.value.length > 0 ||
+    selectedPluginId.value.length > 0,
+)
+
+function resetToInitialSearch(): void {
+  query.value = ''
+  mediaTypeFilter.value = ''
+  selectedPluginId.value = ''
+  resetSearch()
+}
+
+function handleSearchInputEvent(): void {
+  if (!query.value.trim()) {
+    resetSearch()
+  }
+}
 
 const searchHistory = computed(() => (uiPreferences.value.searchHistory ?? []).slice(0, MAX_SEARCH_HISTORY))
 
@@ -236,6 +258,17 @@ function cardItemFor(pluginId: string, item: MediaSummary): MediaSummary {
     </header>
 
     <form class="search-bar" @submit.prevent="runSearch">
+      <button
+        v-if="hasActiveSearch"
+        type="button"
+        class="v-btn search-back-btn"
+        :aria-label="t('common.back')"
+        :title="t('common.back')"
+        @click="resetToInitialSearch"
+      >
+        <ArrowLeft :size="16" aria-hidden="true" />
+        <span>{{ t('common.back') }}</span>
+      </button>
       <input
         v-model="query"
         type="search"
@@ -244,6 +277,7 @@ function cardItemFor(pluginId: string, item: MediaSummary): MediaSummary {
         aria-label="Search media"
         class="v-input"
         :placeholder="t('search.placeholder')"
+        @search="handleSearchInputEvent"
       />
       <select
         v-if="enabledPlugins.length"

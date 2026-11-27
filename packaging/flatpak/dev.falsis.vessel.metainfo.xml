@@ -26,6 +26,11 @@
   </categories>
   <content_rating type="oars-1.1" />
   <releases>
+    <release version="0.2.2" date="2026-11-27">
+      <description>
+        <p>Added cinemata and hexion shortcodes, moved Extensions right above Settings in the Desktop sidebar, added a Search reset/back button returning to Recent Searches, and overhauled the built-in Subtitles Container with automatic Cinemeta/IMDb enrichment, key-free OpenSubtitles REST and SubDL web providers, accurate TurkceAltyazi.org matching, and fixed Addic7ed/YIFY/Kitsunekko lookup.</p>
+      </description>
+    </release>
     <release version="0.2.1" date="2026-11-26">
       <description>
         <p>Fixed Android APK release signing, removed global transparent window mode causing Linux/Flatpak compositor flickering, isolated QuickJS search cancellation so plugin details/streams never fail with VesselCancelledError, filtered unimplemented subtitle search errors, and fixed macOS embedded libmpv OpenGL/subtitle lifecycle and WebView HLS subtitle/worker playback.</p>

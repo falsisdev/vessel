@@ -183,6 +183,16 @@ export function useVesselEvents() {
     }
   }
 
+  function resetSearch(): void {
+    const wasSearching = isSearching.value
+    activeSearchId.value = ''
+    isSearching.value = false
+    searchBuckets.value = {}
+    if (wasSearching) {
+      void vesselApi.cancelSearch().catch(() => {})
+    }
+  }
+
   async function startHomeFeedsStream(pluginIds?: string[] | null): Promise<string> {
     homeStreamShelves.value = []
     isLoadingHome.value = true
@@ -243,6 +253,7 @@ export function useVesselEvents() {
     startListening,
     stopListening,
     startSearch,
+    resetSearch,
     startHomeFeedsStream,
     resolveDomainPrompt,
     setDownloadSnapshot,

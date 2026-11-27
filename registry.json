@@ -1,9 +1,11 @@
 {
   "schemaVersion": 1,
-  "updatedAt": "2026-11-25T12:41:00Z",
+  "updatedAt": "2026-11-27T17:15:00Z",
   "codes": {
     "anthology": "gh:falsisdev/anthology-vessel",
     "tr": "gh:falsisdev/anthology-vessel",
-    "nuvio": "gh:falsisdev/anthology"
+    "nuvio": "gh:falsisdev/anthology",
+    "cinemata": "https://v3-cinemeta.strem.io/manifest.json",
+    "hexion": "https://raw.githubusercontent.com/miscomisco/eclipsia-vessel/refs/heads/main/repo.json"
   }
 }

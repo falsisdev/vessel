@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "subtitles-container",
   "name": "Subtitles Container",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "author": "Vessel",
   "description": "Built-in multi-language subtitle container supporting OpenSubtitles, SubDL, SubSource, TurkceAltyazi.org, YIFY Subtitles, Addic7ed, TVSubtitles.net, and Kitsunekko.",
   "entry": "index.ts",
@@ -12,11 +12,20 @@
   "domains": [
     "api.opensubtitles.com",
     "*.opensubtitles.com",
+    "rest.opensubtitles.org",
+    "dl.opensubtitles.org",
+    "*.opensubtitles.org",
     "opensubtitles-v3.strem.io",
     "*.strem.io",
+    "v3-cinemeta.strem.io",
+    "v3.sg.media-imdb.com",
+    "subdl.com",
+    "www.subdl.com",
     "api.subdl.com",
     "dl.subdl.com",
     "*.subdl.com",
+    "subsource.net",
+    "www.subsource.net",
     "api.subsource.net",
     "*.subsource.net",
     "turkcealtyazi.org",
@@ -40,9 +49,9 @@
     },
     {
       "key": "openSubtitlesApiKey",
-      "label": "OpenSubtitles API Key (optional, uses Stremio v3 fallback if empty)",
+      "label": "OpenSubtitles API Key (optional, uses key-free REST + Stremio v3 if empty)",
       "type": "secret",
-      "placeholder": "Your api.opensubtitles.com Consumer Api-Key"
+      "placeholder": "Optional api.opensubtitles.com Consumer Api-Key"
     },
     {
       "key": "openSubtitlesUsername",
@@ -64,9 +73,9 @@
     },
     {
       "key": "subdlApiKey",
-      "label": "SubDL API Key",
+      "label": "SubDL API Key (optional, uses subdl.com web fallback if empty)",
       "type": "secret",
-      "placeholder": "Required when SubDL is enabled (subdl.com)"
+      "placeholder": "Optional api.subdl.com key"
     },
     {
       "key": "enableSubsource",

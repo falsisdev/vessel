@@ -3859,7 +3859,7 @@ mod tests {
             }
         }
 
-        // 2. Series search (Breaking Bad S01E01 tt0903747 -> Addic7ed + TVSubtitles + OpenSubtitles v3)
+        // 2. Series search (Breaking Bad S01E01 tt0903747 -> OpenSubtitles + SubDL + TurkceAltyazi + Addic7ed + TVSubtitles)
         let series_outcome = engine
             .search_subtitles(
                 SubtitleQuery {
@@ -3893,6 +3893,111 @@ mod tests {
             !series_outcome.hits.is_empty(),
             "expected hits for Breaking Bad; errors={:?}",
             series_outcome.errors
+        );
+
+        // Verify resolving OpenSubtitles (.gz) and SubDL (.zip) works end-to-end.
+        if let Some(os_hit) = movie_outcome
+            .hits
+            .iter()
+            .find(|h| h.candidate.source_name.as_deref() == Some("OpenSubtitles"))
+        {
+            let resolved = engine
+                .resolve_subtitle(
+                    &container_id,
+                    &os_hit.candidate.id,
+                    &os_hit.candidate.lang,
+                    &os_hit.candidate.label,
+                )
+                .await
+                .expect("resolve OpenSubtitles subtitle");
+            match resolved.source {
+                SubtitleSource::InlineContent { content } => {
+                    assert!(content.contains("-->"), "expected valid OS cues");
+                }
+                SubtitleSource::Url { url, .. } => {
+                    assert!(url.starts_with("https://"), "expected valid OS URL");
+                }
+            }
+        }
+        if let Some(subdl_hit) = series_outcome
+            .hits
+            .iter()
+            .find(|h| h.candidate.source_name.as_deref() == Some("SubDL"))
+        {
+            let resolved = engine
+                .resolve_subtitle(
+                    &container_id,
+                    &subdl_hit.candidate.id,
+                    &subdl_hit.candidate.lang,
+                    &subdl_hit.candidate.label,
+                )
+                .await
+                .expect("resolve SubDL subtitle");
+            match resolved.source {
+                SubtitleSource::InlineContent { content } => {
+                    assert!(content.contains("-->"), "expected valid SubDL cues");
+                }
+                other => panic!("expected inline_content for SubDL, got {other:?}"),
+            }
+        }
+
+        // 3. Turkish-titled movie without IMDb ID ("Esaretin Bedeli" -> auto-enriches tt0111161)
+        let tr_no_imdb = engine
+            .search_subtitles(
+                SubtitleQuery {
+                    title: "Esaretin Bedeli".into(),
+                    original_title: None,
+                    year: Some(1994),
+                    media_type: MediaType::Movie,
+                    season: None,
+                    episode: None,
+                    external_ids: ExternalIds::default(),
+                    preferred_languages: vec!["tr".into(), "en".into()],
+                },
+                None,
+            )
+            .await
+            .expect("Turkish title without imdb search");
+        eprintln!(
+            "TR_NO_IMDB HITS={} ERRORS={:?} SOURCES={:?}",
+            tr_no_imdb.hits.len(),
+            tr_no_imdb.errors,
+            tr_no_imdb
+                .hits
+                .iter()
+                .map(|h| h.candidate.source_name.as_deref().unwrap_or("?"))
+                .collect::<Vec<_>>()
+        );
+        assert!(
+            !tr_no_imdb.hits.is_empty(),
+            "expected hits for Esaretin Bedeli without IMDb ID"
+        );
+
+        // 4. Non-existent title must NOT return unrelated sidebar subtitles from TurkceAltyazi.
+        let miss_outcome = engine
+            .search_subtitles(
+                SubtitleQuery {
+                    title: "xyznonexistentvesseltest998877".into(),
+                    original_title: None,
+                    year: None,
+                    media_type: MediaType::Series,
+                    season: Some(1),
+                    episode: Some(1),
+                    external_ids: ExternalIds::default(),
+                    preferred_languages: vec!["tr".into()],
+                },
+                None,
+            )
+            .await
+            .expect("miss search");
+        assert!(
+            miss_outcome.hits.is_empty(),
+            "expected 0 hits for nonexistent title, got {:?}",
+            miss_outcome
+                .hits
+                .iter()
+                .map(|h| (&h.candidate.source_name, &h.candidate.label))
+                .collect::<Vec<_>>()
         );
 
         engine.shutdown().await;

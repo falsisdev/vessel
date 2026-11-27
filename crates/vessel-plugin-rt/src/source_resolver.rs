@@ -41,6 +41,10 @@ pub fn builtin_shortcode(code: &str) -> Option<&'static str> {
     match code.trim().to_ascii_lowercase().as_str() {
         "anthology" | "tr" => Some("gh:falsisdev/anthology-vessel"),
         "nuvio" => Some("gh:falsisdev/anthology"),
+        "cinemata" => Some("https://v3-cinemeta.strem.io/manifest.json"),
+        "hexion" => Some(
+            "https://raw.githubusercontent.com/miscomisco/eclipsia-vessel/refs/heads/main/repo.json",
+        ),
         _ => None,
     }
 }
@@ -1446,6 +1450,20 @@ mod tests {
                 .expect("nuvio shortcode"),
             "gh:falsisdev/anthology"
         );
+        assert_eq!(
+            resolver
+                .lookup_shortcode("cinemata")
+                .await
+                .expect("cinemata shortcode"),
+            "https://v3-cinemeta.strem.io/manifest.json"
+        );
+        assert_eq!(
+            resolver
+                .lookup_shortcode("hexion")
+                .await
+                .expect("hexion shortcode"),
+            "https://raw.githubusercontent.com/miscomisco/eclipsia-vessel/refs/heads/main/repo.json"
+        );
         assert!(resolver.lookup_shortcode("unknown-code").await.is_err());
 
         let repo_registry_raw = include_str!("../../../registry.json");
@@ -1462,6 +1480,14 @@ mod tests {
         assert_eq!(
             parsed.codes.get("nuvio").map(String::as_str),
             Some("gh:falsisdev/anthology")
+        );
+        assert_eq!(
+            parsed.codes.get("cinemata").map(String::as_str),
+            Some("https://v3-cinemeta.strem.io/manifest.json")
+        );
+        assert_eq!(
+            parsed.codes.get("hexion").map(String::as_str),
+            Some("https://raw.githubusercontent.com/miscomisco/eclipsia-vessel/refs/heads/main/repo.json")
         );
     }
 }

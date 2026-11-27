@@ -351,10 +351,13 @@ fun PlayerScreen(
             "en" -> listOf("en")
             else -> defaultPreferredSubLangs
         }
-        val ids = if (imdbMatch) {
-            activeDetail.externalIds.copy(imdb = rawInput.lowercase(Locale.US))
-        } else {
-            activeDetail.externalIds
+        val matchesOriginalTitle = rawInput.isBlank() ||
+            rawInput.equals(activeDetail.title.trim(), ignoreCase = true) ||
+            (activeDetail.originalTitle?.trim()?.let { rawInput.equals(it, ignoreCase = true) } == true)
+        val ids = when {
+            imdbMatch -> activeDetail.externalIds.copy(imdb = rawInput.lowercase(Locale.US))
+            matchesOriginalTitle -> activeDetail.externalIds
+            else -> dev.falsis.vessel.data.ExternalIds()
         }
         extSubSearching = true
         extSubSearchedOnce = true
@@ -366,7 +369,7 @@ fun PlayerScreen(
                     SubtitleQueryPayload(
                         title = searchTitle,
                         originalTitle = if (imdbMatch) activeDetail.originalTitle else rawInput.ifBlank { activeDetail.originalTitle },
-                        year = activeDetail.year,
+                        year = if (matchesOriginalTitle || imdbMatch) activeDetail.year else null,
                         mediaType = activeDetail.type,
                         season = if (activeDetail.type == "series") currentEpisode.season else null,
                         episode = if (activeDetail.type == "series") currentEpisode.episode else null,

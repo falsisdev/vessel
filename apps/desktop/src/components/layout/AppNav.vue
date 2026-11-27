@@ -45,6 +45,15 @@ const navItems = computed(() =>
 const isTop = computed(() => props.layout === 'top_navbar')
 const isPinned = computed(() => props.layout === 'pinned_sidebar')
 const isFloatingBottom = computed(() => props.layout === 'floating_bottom')
+const isSidebar = computed(() => !isTop.value && !isFloatingBottom.value)
+const showFooterExtensions = computed(
+  () => isSidebar.value && props.visibleModules.includes('extensions'),
+)
+const mainNavItems = computed(() =>
+  isSidebar.value
+    ? navItems.value.filter((item) => item.key !== 'extensions')
+    : navItems.value,
+)
 const isExpanded = computed(
   () => isPinned.value || (props.layout === 'expanded_sidebar' && hovering.value),
 )
@@ -74,7 +83,7 @@ const showLabels = computed(() => isTop.value || isExpanded.value)
 
     <nav class="nav-list">
       <RouterLink
-        v-for="item in navItems"
+        v-for="item in mainNavItems"
         :key="item.key"
         :to="item.path"
         class="nav-pill"
@@ -88,6 +97,17 @@ const showLabels = computed(() => isTop.value || isExpanded.value)
     </nav>
 
     <div class="nav-footer">
+      <RouterLink
+        v-if="showFooterExtensions"
+        to="/extensions"
+        class="nav-pill"
+        :class="{ 'is-active': route.path === '/extensions' }"
+        :aria-label="t('nav.extensions')"
+        :title="t('nav.extensions')"
+      >
+        <Puzzle :size="19" class="nav-icon" aria-hidden="true" />
+        <span v-if="showLabels" class="nav-label">{{ t('nav.extensions') }}</span>
+      </RouterLink>
       <RouterLink
         to="/settings"
         class="nav-pill"
@@ -290,6 +310,7 @@ const showLabels = computed(() => isTop.value || isExpanded.value)
 .nav-footer {
   display: flex;
   flex-direction: column;
+  gap: 0.45rem;
   padding-top: 0.65rem;
   border-top: 1px solid var(--vessel-border);
 }

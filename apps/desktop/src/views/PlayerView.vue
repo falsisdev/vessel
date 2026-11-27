@@ -840,6 +840,15 @@ async function runExternalSubtitleSearch(): Promise<void> {
   const searchTitle = imdbMatch
     ? d.originalTitle || d.title
     : rawInput || d.originalTitle || d.title
+  const matchesOriginalDetailTitle =
+    !rawInput ||
+    rawInput.toLowerCase() === d.title.trim().toLowerCase() ||
+    (d.originalTitle ? rawInput.toLowerCase() === d.originalTitle.trim().toLowerCase() : false)
+  const effectiveExternalIds = imdbMatch
+    ? { ...d.externalIds, imdb: imdbMatch }
+    : matchesOriginalDetailTitle
+      ? d.externalIds
+      : undefined
 
   extSubSearching.value = true
   extSubSearchedOnce.value = true
@@ -849,11 +858,11 @@ async function runExternalSubtitleSearch(): Promise<void> {
     const res = await vesselApi.searchSubtitles({
       title: searchTitle,
       originalTitle: imdbMatch ? d.originalTitle : rawInput || d.originalTitle,
-      year: d.year,
+      year: matchesOriginalDetailTitle || imdbMatch ? d.year : undefined,
       mediaType: d.type,
       season: d.type === 'series' ? currentEpisode.value?.season : undefined,
       episode: d.type === 'series' ? currentEpisode.value?.episode : undefined,
-      externalIds: imdbMatch ? { ...d.externalIds, imdb: imdbMatch } : d.externalIds,
+      externalIds: effectiveExternalIds,
       preferredLanguages: buildExtSubLanguages(),
     })
     extSubHits.value = res.hits
