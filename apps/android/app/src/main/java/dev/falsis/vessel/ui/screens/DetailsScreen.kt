@@ -79,6 +79,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
+import dev.falsis.vessel.data.DebridResolution
 import dev.falsis.vessel.data.EnqueueDownloadPayload
 import dev.falsis.vessel.data.Episode
 import dev.falsis.vessel.data.LibraryItem
@@ -89,8 +90,11 @@ import dev.falsis.vessel.data.MediaSummary
 import dev.falsis.vessel.data.MetadataSearchHit
 import dev.falsis.vessel.data.PlaybackProgress
 import dev.falsis.vessel.data.PluginListEntry
+import dev.falsis.vessel.data.ResolveDebridRequest
+import dev.falsis.vessel.data.StreamCandidate
 import dev.falsis.vessel.data.StreamResult
 import dev.falsis.vessel.data.VesselRepository
+import dev.falsis.vessel.ui.components.formatSizeBytes
 import dev.falsis.vessel.ui.components.VesselButton
 import dev.falsis.vessel.ui.components.VesselCompactIconButton
 import dev.falsis.vessel.ui.components.VesselFilterChip
@@ -106,6 +110,22 @@ import dev.falsis.vessel.ui.theme.LocalVesselPalette
 import java.util.Locale
 import kotlinx.coroutines.launch
 
+private data class PendingUncachedAction(
+    val detail: MediaDetail,
+    val episode: Episode,
+    val streamResult: StreamResult,
+    val index: Int,
+    val savedPosMs: Long,
+    val candidate: StreamCandidate,
+    val resolution: DebridResolution,
+    val isDownload: Boolean,
+)
+
+private fun isTorrentCandidate(cand: StreamCandidate): Boolean =
+    cand.kind.equals("torrent", ignoreCase = true) ||
+        cand.torrent != null ||
+        cand.url.startsWith("magnet:", ignoreCase = true)
+
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun DetailsScreen(
@@ -113,6 +133,7 @@ fun DetailsScreen(
     pluginId: String,
     nativeId: String,
     onBack: () -> Unit,
+    onOpenDebridSettings: () -> Unit = {},
     onPlayStream: (detail: MediaDetail, episode: Episode, streams: StreamResult, selectedIdx: Int, resumePosMs: Long) -> Unit,
     onPlayLiveReplace: ((detail: MediaDetail, episode: Episode, streams: StreamResult) -> Unit)? = null,
 ) {
@@ -138,12 +159,20 @@ fun DetailsScreen(
     var loadingStreams by remember { mutableStateOf(false) }
     var resolvedStreamResult by remember { mutableStateOf<StreamResult?>(null) }
     var quickStartingStreamId by remember { mutableStateOf<String?>(null) }
+    var resolvingTorrent by remember { mutableStateOf(false) }
+    var uncachedPrompt by remember { mutableStateOf<PendingUncachedAction?>(null) }
+    var showNoDebridDialog by remember { mutableStateOf(false) }
 
     suspend fun loadAll() {
         loading = true
         runCatching {
-            val loaded = repo.getDetails(pluginId, nativeId)
-            val isLiveRedirect = isLiveMediaIdentifier(
+            val isVirtual = pluginId == "vessel.metadata"
+            val loaded = if (isVirtual) {
+                repo.getVirtualMetadataDetail(nativeId)
+            } else {
+                repo.getDetails(pluginId, nativeId)
+            }
+            val isLiveRedirect = !isVirtual && isLiveMediaIdentifier(
                 mediaType = loaded.type,
                 pluginId = pluginId,
                 streamId = loaded.episodes.firstOrNull()?.streamId,
@@ -170,7 +199,7 @@ fun DetailsScreen(
                 return@runCatching
             }
             detail = loaded
-            linkedSources = runCatching { repo.getLinkedSources(pluginId, nativeId) }.getOrDefault(emptyList())
+            linkedSources = if (isVirtual) emptyList() else runCatching { repo.getLinkedSources(pluginId, nativeId) }.getOrDefault(emptyList())
             val seasons = loaded.episodes.map { it.season }.distinct().sorted()
             if (seasons.isNotEmpty() && selectedSeason !in seasons) {
                 selectedSeason = seasons.first()
@@ -198,13 +227,171 @@ fun DetailsScreen(
     fun progressFor(ep: Episode): PlaybackProgress? =
         progressList.firstOrNull { it.season == ep.season && it.episode == ep.episode }
 
+    suspend fun resolveAndLaunchCandidate(
+        d: MediaDetail,
+        ep: Episode,
+        sr: StreamResult,
+        idx: Int,
+        savedPos: Long,
+        allowUncachedQueue: Boolean = false,
+    ) {
+        val cand = sr.streams.getOrNull(idx) ?: return
+        if (!isTorrentCandidate(cand)) {
+            activeEpisodeForSources = null
+            onPlayStream(d, ep, sr, idx, savedPos)
+            return
+        }
+        resolvingTorrent = true
+        try {
+            val res = repo.resolveTorrentCandidate(
+                ResolveDebridRequest(
+                    url = cand.url,
+                    torrent = cand.torrent,
+                    preferredTarget = cand.debridCache?.takeIf { it.state == "cached" }?.target,
+                    allowUncachedQueue = allowUncachedQueue,
+                    season = if (d.type == "movie") null else ep.season,
+                    episode = if (d.type == "movie") null else ep.episode,
+                ),
+            )
+            when (res.status) {
+                "ready" -> {
+                    val resolvedUrl = res.url ?: run {
+                        repo.notify("Debrid returned an empty URL")
+                        return
+                    }
+                    val updatedStreams = sr.streams.mapIndexed { i, item ->
+                        if (i == idx) {
+                            item.copy(
+                                url = resolvedUrl,
+                                kind = "auto",
+                                headers = res.headers,
+                                flags = if (res.headers.isNotEmpty()) (item.flags + "requires_proxy").distinct() else item.flags,
+                            )
+                        } else {
+                            item
+                        }
+                    }
+                    activeEpisodeForSources = null
+                    onPlayStream(d, ep, sr.copy(streams = updatedStreams), idx, savedPos)
+                }
+                "needs_confirmation" -> {
+                    if (allowUncachedQueue) {
+                        val pct = res.progressPct?.toInt() ?: 0
+                        repo.notify("${res.providerLabel ?: "Debrid"}: ${res.cloudStatus ?: "queued"} ($pct%)")
+                    } else {
+                        uncachedPrompt = PendingUncachedAction(
+                            detail = d,
+                            episode = ep,
+                            streamResult = sr,
+                            index = idx,
+                            savedPosMs = savedPos,
+                            candidate = cand,
+                            resolution = res,
+                            isDownload = false,
+                        )
+                    }
+                }
+                "no_provider_configured" -> showNoDebridDialog = true
+                else -> repo.notify(res.message ?: "Failed to resolve torrent")
+            }
+        } catch (err: Throwable) {
+            repo.notifyError(err, "Failed to resolve torrent")
+        } finally {
+            resolvingTorrent = false
+        }
+    }
+
+    suspend fun resolveAndDownloadCandidate(
+        d: MediaDetail,
+        ep: Episode,
+        sr: StreamResult,
+        idx: Int,
+        allowUncachedQueue: Boolean = false,
+    ) {
+        val cand = sr.streams.getOrNull(idx) ?: return
+        var targetUrl = cand.url
+        var targetHeaders = cand.headers
+        var targetKind = if (cand.kind == "hls" || cand.url.contains(".m3u8")) "hls" else cand.kind.ifBlank { "auto" }
+        if (isTorrentCandidate(cand)) {
+            resolvingTorrent = true
+            try {
+                val res = repo.resolveTorrentCandidate(
+                    ResolveDebridRequest(
+                        url = cand.url,
+                        torrent = cand.torrent,
+                        preferredTarget = cand.debridCache?.takeIf { it.state == "cached" }?.target,
+                        allowUncachedQueue = allowUncachedQueue,
+                        season = if (d.type == "movie") null else ep.season,
+                        episode = if (d.type == "movie") null else ep.episode,
+                    ),
+                )
+                when (res.status) {
+                    "ready" -> {
+                        targetUrl = res.url ?: return
+                        targetHeaders = res.headers
+                        targetKind = "auto"
+                    }
+                    "needs_confirmation" -> {
+                        if (allowUncachedQueue) {
+                            val pct = res.progressPct?.toInt() ?: 0
+                            repo.notify("${res.providerLabel ?: "Debrid"}: ${res.cloudStatus ?: "queued"} ($pct%)")
+                        } else {
+                            uncachedPrompt = PendingUncachedAction(
+                                detail = d,
+                                episode = ep,
+                                streamResult = sr,
+                                index = idx,
+                                savedPosMs = 0L,
+                                candidate = cand,
+                                resolution = res,
+                                isDownload = true,
+                            )
+                        }
+                        return
+                    }
+                    "no_provider_configured" -> {
+                        showNoDebridDialog = true
+                        return
+                    }
+                    else -> {
+                        repo.notify(res.message ?: "Failed to resolve torrent")
+                        return
+                    }
+                }
+            } finally {
+                resolvingTorrent = false
+            }
+        }
+
+        runCatching {
+            repo.enqueueDownload(
+                EnqueueDownloadPayload(
+                    pluginId = pluginId,
+                    nativeId = nativeId,
+                    title = d.title,
+                    season = if (d.type == "movie") null else ep.season,
+                    episode = if (d.type == "movie") null else ep.episode,
+                    streamLabel = cand.label,
+                    kind = targetKind,
+                    sourceUrl = targetUrl,
+                    headers = targetHeaders,
+                    subtitles = cand.subtitles + sr.subtitles,
+                ),
+            )
+        }.onSuccess {
+            repo.notify("${VesselI18n.tr("details.download_episode")}: ${cand.label}")
+        }.onFailure {
+            repo.notifyError(it, "Download failed")
+        }
+    }
+
     fun openEpisodeSources(ep: Episode) {
         activeEpisodeForSources = ep
         resolvedStreamResult = null
         loadingStreams = true
         scope.launch {
             runCatching {
-                repo.getStreamsWithLinked(
+                repo.getStreamsWithExternalIds(
                     pluginId = pluginId,
                     nativeId = nativeId,
                     episodeId = ep.streamId,
@@ -212,9 +399,22 @@ fun DetailsScreen(
                     episode = ep.episode,
                     absoluteEpisode = ep.absoluteEpisode,
                     isMovie = detail?.type == "movie",
+                    externalIds = detail?.externalIds,
                 )
             }
-                .onSuccess { resolvedStreamResult = it }
+                .onSuccess { sr ->
+                    resolvedStreamResult = sr
+                    if (sr.streams.any(::isTorrentCandidate)) {
+                        scope.launch {
+                            runCatching { repo.probeTorrentCache(sr.streams) }
+                                .onSuccess { probed ->
+                                    if (activeEpisodeForSources?.streamId == ep.streamId) {
+                                        resolvedStreamResult = sr.copy(streams = probed)
+                                    }
+                                }
+                        }
+                    }
+                }
                 .onFailure { repo.notifyError(it, "Failed to resolve streams") }
             loadingStreams = false
         }
@@ -229,7 +429,7 @@ fun DetailsScreen(
         quickStartingStreamId = ep.streamId
         scope.launch {
             runCatching {
-                repo.getStreamsWithLinked(
+                repo.getStreamsWithExternalIds(
                     pluginId = pluginId,
                     nativeId = nativeId,
                     episodeId = ep.streamId,
@@ -237,6 +437,7 @@ fun DetailsScreen(
                     episode = ep.episode,
                     absoluteEpisode = ep.absoluteEpisode,
                     isMovie = d.type == "movie",
+                    externalIds = d.externalIds,
                 )
             }
                 .onSuccess { sr ->
@@ -246,11 +447,21 @@ fun DetailsScreen(
                     } else if (sr.streams.size == 1 || prefs.playback.clickBehavior == "quick_start_best") {
                         val bestIdx = sr.streams.indexOfFirst { it.isDefault }.takeIf { it >= 0 } ?: 0
                         val savedPos = progressFor(ep)?.takeIf { !it.completed }?.positionMs ?: 0L
-                        onPlayStream(d, ep, sr, bestIdx, savedPos)
+                        resolveAndLaunchCandidate(d, ep, sr, bestIdx, savedPos)
                     } else {
                         activeEpisodeForSources = ep
                         resolvedStreamResult = sr
                         loadingStreams = false
+                        if (sr.streams.any(::isTorrentCandidate)) {
+                            scope.launch {
+                                runCatching { repo.probeTorrentCache(sr.streams) }
+                                    .onSuccess { probed ->
+                                        if (activeEpisodeForSources?.streamId == ep.streamId) {
+                                            resolvedStreamResult = sr.copy(streams = probed)
+                                        }
+                                    }
+                            }
+                        }
                     }
                 }
                 .onFailure {
@@ -764,10 +975,11 @@ fun DetailsScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clip(RoundedCornerShape(10.dp))
-                                    .clickable {
+                                    .clickable(enabled = !resolvingTorrent) {
                                         val savedPos = progressFor(epSheet)?.takeIf { !it.completed }?.positionMs ?: 0L
-                                        activeEpisodeForSources = null
-                                        onPlayStream(d, epSheet, sr, idx, savedPos)
+                                        scope.launch {
+                                            resolveAndLaunchCandidate(d, epSheet, sr, idx, savedPos)
+                                        }
                                     },
                             ) {
                                 Row(
@@ -775,7 +987,7 @@ fun DetailsScreen(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                 ) {
-                                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                         Text(candidate.label, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                                         Text(
                                             listOfNotNull(
@@ -787,6 +999,80 @@ fun DetailsScreen(
                                             style = MaterialTheme.typography.labelSmall,
                                             color = palette.textMuted,
                                         )
+                                        if (candidate.torrent != null || candidate.debridCache != null) {
+                                            FlowRow(
+                                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                                verticalArrangement = Arrangement.spacedBy(4.dp),
+                                            ) {
+                                                candidate.debridCache?.let { cache ->
+                                                    val isCached = cache.state == "cached"
+                                                    val isUncached = cache.state == "uncached"
+                                                    Surface(
+                                                        shape = RoundedCornerShape(6.dp),
+                                                        color = when {
+                                                            isCached -> Color(0x2822C55E)
+                                                            isUncached -> Color(0x28F59E0B)
+                                                            else -> palette.bgSurface
+                                                        },
+                                                    ) {
+                                                        Text(
+                                                            text = when {
+                                                                isCached -> "⚡ ${cache.label}"
+                                                                isUncached -> "☁️ ${cache.label}"
+                                                                else -> cache.label
+                                                            },
+                                                            style = MaterialTheme.typography.labelSmall,
+                                                            color = when {
+                                                                isCached -> Color(0xFF4ADE80)
+                                                                isUncached -> Color(0xFFFBBF24)
+                                                                else -> palette.textMuted
+                                                            },
+                                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                                        )
+                                                    }
+                                                }
+                                                candidate.torrent?.sizeBytes?.takeIf { it > 0L }?.let { bytes ->
+                                                    Surface(shape = RoundedCornerShape(6.dp), color = palette.bgSurface) {
+                                                        Text(
+                                                            text = formatSizeBytes(bytes),
+                                                            style = MaterialTheme.typography.labelSmall,
+                                                            color = palette.textMuted,
+                                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                                        )
+                                                    }
+                                                }
+                                                candidate.torrent?.seeders?.let { seeders ->
+                                                    Surface(shape = RoundedCornerShape(6.dp), color = palette.bgSurface) {
+                                                        Text(
+                                                            text = "👤 $seeders",
+                                                            style = MaterialTheme.typography.labelSmall,
+                                                            color = palette.textMuted,
+                                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                                        )
+                                                    }
+                                                }
+                                                candidate.torrent?.trackerSource?.takeIf { it.isNotBlank() }?.let { tr ->
+                                                    Surface(shape = RoundedCornerShape(6.dp), color = palette.bgSurface) {
+                                                        Text(
+                                                            text = tr,
+                                                            style = MaterialTheme.typography.labelSmall,
+                                                            color = palette.textMuted,
+                                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                                        )
+                                                    }
+                                                }
+                                                candidate.torrent?.hdr?.takeIf { it.isNotBlank() }?.let { hdr ->
+                                                    Surface(shape = RoundedCornerShape(6.dp), color = palette.accent.copy(alpha = 0.16f)) {
+                                                        Text(
+                                                            text = hdr,
+                                                            style = MaterialTheme.typography.labelSmall,
+                                                            color = palette.accent,
+                                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
                                     }
                                     val isLiveMedia = isLiveMediaIdentifier(
                                         mediaType = d.type,
@@ -798,28 +1084,10 @@ fun DetailsScreen(
                                     if (!isLiveMedia) {
                                         VesselCompactIconButton(
                                             size = 34.dp,
+                                            enabled = !resolvingTorrent,
                                             onClick = {
                                                 scope.launch {
-                                                    runCatching {
-                                                        repo.enqueueDownload(
-                                                            EnqueueDownloadPayload(
-                                                                pluginId = pluginId,
-                                                                nativeId = nativeId,
-                                                                title = d.title,
-                                                                season = if (d.type == "movie") null else epSheet.season,
-                                                                episode = if (d.type == "movie") null else epSheet.episode,
-                                                                streamLabel = candidate.label,
-                                                                kind = if (candidate.kind == "hls" || candidate.url.contains(".m3u8")) "hls" else candidate.kind.ifBlank { "auto" },
-                                                                sourceUrl = candidate.url,
-                                                                headers = candidate.headers,
-                                                                subtitles = candidate.subtitles + sr.subtitles,
-                                                            ),
-                                                        )
-                                                    }.onSuccess {
-                                                        repo.notify("${VesselI18n.tr("details.download_episode")}: ${candidate.label}")
-                                                    }.onFailure {
-                                                        repo.notifyError(it, "Download failed")
-                                                    }
+                                                    resolveAndDownloadCandidate(d, epSheet, sr, idx)
                                                 }
                                             },
                                         ) {
@@ -838,6 +1106,63 @@ fun DetailsScreen(
                 Spacer(Modifier.height(16.dp))
             }
         }
+    }
+
+    uncachedPrompt?.let { pending ->
+        AlertDialog(
+            onDismissRequest = { uncachedPrompt = null },
+            title = { Text(VesselI18n.tr("debrid.uncached_title")) },
+            text = {
+                Text(
+                    VesselI18n.trf(
+                        "debrid.uncached_desc",
+                        "provider" to (pending.resolution.providerLabel ?: "Debrid"),
+                    ),
+                )
+            },
+            confirmButton = {
+                VesselButton(onClick = {
+                    val act = pending
+                    uncachedPrompt = null
+                    scope.launch {
+                        if (act.isDownload) {
+                            resolveAndDownloadCandidate(act.detail, act.episode, act.streamResult, act.index, allowUncachedQueue = true)
+                        } else {
+                            resolveAndLaunchCandidate(act.detail, act.episode, act.streamResult, act.index, act.savedPosMs, allowUncachedQueue = true)
+                        }
+                    }
+                }) {
+                    Text(VesselI18n.tr("debrid.queue_cloud"))
+                }
+            },
+            dismissButton = {
+                VesselTextButton(onClick = { uncachedPrompt = null }) {
+                    Text(VesselI18n.tr("common.cancel"))
+                }
+            },
+        )
+    }
+
+    if (showNoDebridDialog) {
+        AlertDialog(
+            onDismissRequest = { showNoDebridDialog = false },
+            title = { Text(VesselI18n.tr("debrid.no_provider_title")) },
+            text = { Text(VesselI18n.tr("debrid.no_provider_desc")) },
+            confirmButton = {
+                VesselButton(onClick = {
+                    showNoDebridDialog = false
+                    activeEpisodeForSources = null
+                    onOpenDebridSettings()
+                }) {
+                    Text(VesselI18n.tr("debrid.open_debrid_settings"))
+                }
+            },
+            dismissButton = {
+                VesselTextButton(onClick = { showNoDebridDialog = false }) {
+                    Text(VesselI18n.tr("common.close"))
+                }
+            },
+        )
     }
 
     if (showFixMatch) {

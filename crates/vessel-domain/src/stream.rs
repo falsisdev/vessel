@@ -4,6 +4,9 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
+use crate::debrid::DebridCacheInfo;
+use crate::magnet::extract_info_hash;
+
 /// Transport or container type of a resolved or embed stream candidate.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -17,6 +20,7 @@ pub enum StreamKind {
     #[default]
     Auto,
     Embed,
+    Torrent,
 }
 
 /// Spoken audio classification of a stream candidate.
@@ -122,6 +126,64 @@ pub struct SkipSegment {
     pub confidence: Option<u8>,
 }
 
+/// Optional BitTorrent metadata attached to a `StreamKind::Torrent` candidate.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TorrentMeta {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub info_hash: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file_index: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub filename: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub season: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub episode: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub seeders: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub size_bytes: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tracker_source: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub codecs: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hdr: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub trackers: Vec<String>,
+}
+
+/// Live stream telemetry & player statistics snapshot for the Stats HUD.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlaybackStats {
+    pub network_speed_bps: u64,
+    pub total_bytes_transferred: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub buffer_seconds: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cache_speed_bps: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub video_bitrate_bps: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub audio_bitrate_bps: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub width: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub height: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fps: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub video_codec: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub audio_codec: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub file_size_bytes: Option<u64>,
+    #[serde(default)]
+    pub is_debrid_stream: bool,
+}
+
 /// Single playable or embed stream candidate returned by a provider or extractor.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -153,6 +215,32 @@ pub struct StreamCandidate {
     pub plugin_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub plugin_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub torrent: Option<TorrentMeta>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub debrid_cache: Option<DebridCacheInfo>,
+}
+
+impl StreamCandidate {
+    /// Returns `true` when this candidate represents a BitTorrent magnet or info-hash.
+    pub fn is_torrent(&self) -> bool {
+        self.kind == StreamKind::Torrent
+            || self.url.trim_start().to_ascii_lowercase().starts_with("magnet:?")
+            || self
+                .torrent
+                .as_ref()
+                .and_then(|t| t.info_hash.as_deref())
+                .is_some()
+    }
+
+    /// Extracts the normalized 40-char hex info-hash from `torrent.info_hash` or `url`.
+    pub fn effective_info_hash(&self) -> Option<String> {
+        self.torrent
+            .as_ref()
+            .and_then(|t| t.info_hash.as_deref())
+            .and_then(extract_info_hash)
+            .or_else(|| extract_info_hash(&self.url))
+    }
 }
 
 /// Combined stream candidates and episode-level subtitle tracks from `getStreams`.

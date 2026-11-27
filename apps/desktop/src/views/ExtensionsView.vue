@@ -5,6 +5,7 @@ import {
   ChevronDown,
   ChevronRight,
   Download,
+  ExternalLink,
   Globe,
   Home,
   Loader2,
@@ -21,7 +22,7 @@ import { useHomeCache } from '@/composables/useHomeCache'
 import { useI18n } from '@/composables/useI18n'
 import { useUiPreferences } from '@/composables/useUiPreferences'
 import { pushToast } from '@/composables/useVesselEvents'
-import { isSubtitleOnlyPlugin } from '@/utils/liveTv'
+import { isNonCatalogPlugin, isSubtitleOnlyPlugin } from '@/utils/liveTv'
 import type { PluginListEntry, PluginManifest, PluginUpdateInfo, ResolvedSource } from '@/types/vessel'
 
 defineOptions({ name: 'ExtensionsView' })
@@ -49,6 +50,7 @@ const updateMap = ref<Record<string, PluginUpdateInfo>>({})
 const checkingUpdates = shallowRef(false)
 const updatingId = shallowRef('')
 const updatingAll = shallowRef(false)
+const disabledStreamAddons = ref<string[]>([])
 
 const availableUpdates = computed(() =>
   Object.values(updateMap.value).filter((item) => item.updateAvailable),
@@ -251,11 +253,32 @@ async function refreshPlugins(): Promise<void> {
   }
   loadingPlugins.value = true
   try {
-    plugins.value = await vesselApi.listPlugins()
+    const [list, debridOv] = await Promise.all([
+      vesselApi.listPlugins(),
+      vesselApi.getDebridOverview().catch(() => null),
+    ])
+    plugins.value = list
+    if (debridOv) {
+      disabledStreamAddons.value = debridOv.disabledStreamAddons
+    }
   } catch (err) {
     pushToast('error', String(err))
   } finally {
     loadingPlugins.value = false
+  }
+}
+
+async function toggleAutoStreamAddon(pluginId: string): Promise<void> {
+  const currentlyEnabled = !disabledStreamAddons.value.includes(pluginId)
+  try {
+    await vesselApi.setStreamAddonAutoEnabled(pluginId, !currentlyEnabled)
+    if (currentlyEnabled) {
+      disabledStreamAddons.value = [...disabledStreamAddons.value, pluginId]
+    } else {
+      disabledStreamAddons.value = disabledStreamAddons.value.filter((x) => x !== pluginId)
+    }
+  } catch (err) {
+    pushToast('error', String(err))
   }
 }
 
@@ -687,7 +710,7 @@ onMounted(() => {
 
             <div class="repo-group-actions" @click.stop>
               <button
-                v-if="!isBuiltinGroup(group) && group.items.some((i) => !isSubtitleOnlyPlugin(i))"
+                v-if="!isBuiltinGroup(group) && group.items.some((i) => !isNonCatalogPlugin(i))"
                 type="button"
                 class="v-btn v-btn-sm"
                 @click="toggleGroupHome(group, group.homeCount === 0)"
@@ -749,7 +772,7 @@ onMounted(() => {
 
               <div class="plugin-actions">
                 <label
-                  v-if="!isSubtitleOnlyPlugin(entry)"
+                  v-if="!isNonCatalogPlugin(entry)"
                   class="v-switch"
                   :title="`Show ${entry.manifest.name} on Home screen`"
                 >
@@ -763,6 +786,31 @@ onMounted(() => {
                   <span class="v-switch-track" />
                   <span class="home-toggle-label">Home</span>
                 </label>
+
+                <label
+                  v-if="entry.manifest.capabilities.includes('stream')"
+                  class="v-switch"
+                  :title="t('debrid.auto_stream_addon')"
+                >
+                  <input
+                    type="checkbox"
+                    class="v-switch-input"
+                    :checked="!disabledStreamAddons.includes(entry.manifest.id)"
+                    :disabled="!entry.enabled"
+                    @change="toggleAutoStreamAddon(entry.manifest.id)"
+                  />
+                  <span class="v-switch-track" />
+                  <span class="home-toggle-label">{{ t('debrid.auto_stream_addon') }}</span>
+                </label>
+
+                <button
+                  v-if="entry.manifest.configureUrl"
+                  type="button"
+                  class="v-btn v-btn-sm"
+                  @click="vesselApi.openExternalUrl(entry.manifest.configureUrl)"
+                >
+                  <ExternalLink :size="13" /> {{ t('debrid.configure_addon') }}
+                </button>
 
                 <span v-if="entry.sourceType === 'builtin'" class="domain-chip v-muted">
                   Built-in

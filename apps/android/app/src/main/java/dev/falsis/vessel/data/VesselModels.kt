@@ -120,6 +120,8 @@ data class StreamCandidate(
     val skipSegments: List<SkipSegment> = emptyList(),
     val pluginId: String? = null,
     val pluginName: String? = null,
+    val torrent: TorrentMeta? = null,
+    val debridCache: DebridCacheInfo? = null,
 )
 
 @Serializable
@@ -304,6 +306,7 @@ data class PluginManifest(
     val languages: List<String> = emptyList(),
     val domains: List<String> = emptyList(),
     val settingsSchema: List<PluginSettingField> = emptyList(),
+    val configureUrl: String? = null,
 )
 
 @Serializable

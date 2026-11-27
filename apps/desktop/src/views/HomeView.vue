@@ -25,7 +25,7 @@ import { useLibraryState } from '@/composables/useLibraryState'
 import { usePlayerSession } from '@/composables/usePlayerSession'
 import { useUiPreferences } from '@/composables/useUiPreferences'
 import { pushToast, useVesselEvents } from '@/composables/useVesselEvents'
-import { isLiveMediaIdentifier, isLiveTvPlugin, isSubtitleOnlyPlugin, resolveLiveGroupName } from '@/utils/liveTv'
+import { isLiveMediaIdentifier, isLiveTvPlugin, isNonCatalogPlugin, resolveLiveGroupName } from '@/utils/liveTv'
 import type {
   ContinueWatchingEntry,
   Episode,
@@ -105,7 +105,7 @@ const livePluginIdSet = computed(
   () => new Set(allPlugins.value.filter(isLiveTvPlugin).map((p) => p.manifest.id)),
 )
 const homeEligiblePlugins = computed(() =>
-  enabledPlugins.value.filter((p) => !isLiveTvPlugin(p) && !isSubtitleOnlyPlugin(p)),
+  enabledPlugins.value.filter((p) => !isLiveTvPlugin(p) && !isNonCatalogPlugin(p)),
 )
 
 const activeHomePluginIds = computed<string[]>(() => {

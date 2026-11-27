@@ -310,6 +310,10 @@ fun VesselAndroidApp(
                                     pluginId = activeOverlay.pluginId,
                                     nativeId = activeOverlay.nativeId,
                                     onBack = { popOverlay() },
+                                    onOpenDebridSettings = {
+                                        overlayStack = emptyList()
+                                        selectedTab = TopTab.entries.indexOf(TopTab.SETTINGS)
+                                    },
                                     onPlayStream = { detail, ep, streams, idx, posMs ->
                                         pushOverlay(
                                             OverlayRoute.Player(

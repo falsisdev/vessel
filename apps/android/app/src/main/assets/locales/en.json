@@ -92,7 +92,9 @@
     "filter_anime": "Anime",
     "all_plugins": "All Plugins",
     "recent_searches": "Recent Searches",
-    "clear_history": "Clear History"
+    "clear_history": "Clear History",
+    "global_catalog": "Global Catalog (Cinemeta / TMDB)",
+    "global_catalog_desc": "Search IMDb & TMDB metadata directly to stream via Torrentio and Debrid addons without catalog plugins."
   },
   "details": {
     "episodes": "Episodes",
@@ -428,5 +430,49 @@
   },
   "media": {
     "quick_status": "Quick Watch Status"
+  },
+  "debrid": {
+    "title": "Debrid & Torrents",
+    "subtitle": "Configure Real-Debrid, TorBox, AllDebrid, Premiumize, Debrid-Link, and community Debrid plugins.",
+    "priority_hint": "Providers are queried in priority order from top to bottom.",
+    "api_key_placeholder": "Paste API token...",
+    "save_key": "Save Key",
+    "disconnect": "Disconnect",
+    "connect_device": "Device Code Login",
+    "device_auth_prompt": "Open {url} and enter code:",
+    "device_auth_waiting": "Waiting for authorization...",
+    "connected": "Connected",
+    "not_configured": "Not configured",
+    "premium": "Premium",
+    "free": "Free",
+    "only_cached": "Only show cached torrent streams",
+    "only_cached_desc": "Hide torrents marked as uncached when instant availability data is returned.",
+    "auto_fallback": "Fallback to next Debrid provider automatically",
+    "auto_fallback_desc": "If a torrent is uncached or fails on the first provider, try the next configured account.",
+    "cloud_title": "Debrid Cloud Transfers",
+    "cloud_refresh": "Refresh",
+    "cloud_empty": "No active or recent transfers in your Debrid cloud.",
+    "cloud_auto_poll": "Live Auto-Refresh (2s)",
+    "cached_badge": "Cached",
+    "uncached_badge": "Uncached",
+    "uncached_title": "Torrent Not Cached Yet",
+    "uncached_desc": "This torrent is not yet cached on {provider}. Do you want to add it to your Debrid cloud and track download progress?",
+    "queue_cloud": "Download to Cloud",
+    "no_provider_title": "Debrid Account Required",
+    "no_provider_desc": "Connect Real-Debrid, TorBox, or a community Debrid plugin in Settings > Debrid to play torrent magnets (native P2P arrives in v0.6.0).",
+    "open_debrid_settings": "Open Debrid Settings",
+    "auto_stream_addon": "Auto IMDb Streams",
+    "configure_addon": "Configure"
+  },
+  "stats": {
+    "title": "Stream Stats",
+    "speed": "Network Speed",
+    "transferred": "Transferred",
+    "buffer": "Buffer",
+    "resolution": "Resolution",
+    "video": "Video",
+    "audio": "Audio",
+    "size": "File Size",
+    "source": "Transport"
   }
 }

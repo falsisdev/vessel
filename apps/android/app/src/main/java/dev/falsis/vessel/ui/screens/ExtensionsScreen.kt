@@ -30,6 +30,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
@@ -72,7 +74,7 @@ import dev.falsis.vessel.data.PluginManifest
 import dev.falsis.vessel.data.PluginUpdateInfo
 import dev.falsis.vessel.data.ResolvedSource
 import dev.falsis.vessel.data.VesselRepository
-import dev.falsis.vessel.ui.isSubtitleOnlyPlugin
+import dev.falsis.vessel.ui.isNonCatalogPlugin
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
@@ -142,9 +144,15 @@ fun ExtensionsScreen(
     onBack: (() -> Unit)? = null,
 ) {
     val palette = LocalVesselPalette.current
+    val uriHandler = LocalUriHandler.current
     val scope = rememberCoroutineScope()
     val plugins by repo.plugins.collectAsState()
     val prefs by repo.uiPreferences.collectAsState()
+    var disabledStreamAddons by remember { mutableStateOf<Set<String>>(emptySet()) }
+    LaunchedEffect(plugins) {
+        runCatching { repo.getDebridOverview() }
+            .onSuccess { disabledStreamAddons = it.disabledStreamAddons.toSet() }
+    }
 
     var sourceInput by remember(initialSourceInput) { mutableStateOf(initialSourceInput ?: "") }
     var resolving by remember { mutableStateOf(false) }
@@ -741,7 +749,7 @@ fun ExtensionsScreen(
 
                     // Clean Group Actions Bar (Pin/Clear Home · Enable/Disable All · Remove Group)
                     val isBuiltinGroup = group.items.any { it.sourceType == "builtin" }
-                    val hasHomeEligible = group.items.any { !isSubtitleOnlyPlugin(it) }
+                    val hasHomeEligible = group.items.any { !isNonCatalogPlugin(it) }
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -981,7 +989,45 @@ fun ExtensionsScreen(
                                                 }
                                             }
 
-                                            if (!isSubtitleOnlyPlugin(plugin)) {
+                                            if ("stream" in plugin.manifest.capabilities) {
+                                                val autoStreamOn = plugin.manifest.id !in disabledStreamAddons
+                                                VesselOutlinedButton(
+                                                    height = 28.dp,
+                                                    onClick = {
+                                                        val next = !autoStreamOn
+                                                        disabledStreamAddons = if (next) {
+                                                            disabledStreamAddons - plugin.manifest.id
+                                                        } else {
+                                                            disabledStreamAddons + plugin.manifest.id
+                                                        }
+                                                        scope.launch {
+                                                            runCatching { repo.setStreamAddonAutoEnabled(plugin.manifest.id, next) }
+                                                                .onFailure { repo.notifyError(it, "Failed to toggle stream addon") }
+                                                        }
+                                                    },
+                                                ) {
+                                                    Text(
+                                                        text = if (autoStreamOn) "IMDb Auto: ON" else "IMDb Auto: OFF",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = if (autoStreamOn) palette.accent else palette.textMuted,
+                                                    )
+                                                }
+                                            }
+                                            plugin.manifest.configureUrl?.takeIf { it.isNotBlank() }?.let { cfgUrl ->
+                                                VesselCompactIconButton(
+                                                    size = 30.dp,
+                                                    containerColor = palette.bgSurface,
+                                                    onClick = { runCatching { uriHandler.openUri(cfgUrl) } },
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                                                        contentDescription = VesselI18n.tr("debrid.configure_addon"),
+                                                        tint = palette.textMuted,
+                                                        modifier = Modifier.size(16.dp),
+                                                    )
+                                                }
+                                            }
+                                            if (!isNonCatalogPlugin(plugin)) {
                                                 val onHome = plugin.enabled && plugin.manifest.id in selectedHomeSet
                                                 VesselCompactIconButton(
                                                     enabled = plugin.enabled,

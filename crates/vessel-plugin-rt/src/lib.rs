@@ -16,7 +16,7 @@ pub use package::{
     collect_relative_imports, load_builtin_package, load_plugin_dir, load_plugin_package,
     pack_plugin_package, verify_sha256,
 };
-pub use provider::QuickJsContentProvider;
+pub use provider::{QuickJsContentProvider, QuickJsDebridProvider};
 pub use sandbox::{
     CallCancellation, DEFAULT_EXECUTION_TIMEOUT, DEFAULT_MAX_STACK_SIZE_BYTES,
     DEFAULT_MEMORY_LIMIT_BYTES, PluginSandbox, SandboxLimits, SandboxMemoryStats,

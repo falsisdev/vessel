@@ -76,7 +76,7 @@ import androidx.compose.material3.Text
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
 import dev.falsis.vessel.data.PlaybackProgress
-import dev.falsis.vessel.ui.isSubtitleOnlyPlugin
+import dev.falsis.vessel.ui.isNonCatalogPlugin
 import dev.falsis.vessel.ui.theme.LocalIsTvDevice
 import dev.falsis.vessel.ui.theme.LocalVesselFloatingNavInset
 import dev.falsis.vessel.ui.theme.LocalVesselUiTokens
@@ -288,7 +288,7 @@ fun HomeScreen(
     val enabledPlugins = remember(plugins) { plugins.filter { it.enabled } }
     val livePluginIds = remember(plugins) { plugins.filter(::isLiveTvPlugin).map { it.manifest.id }.toSet() }
     val homeEligiblePlugins = remember(enabledPlugins) {
-        enabledPlugins.filterNot { isLiveTvPlugin(it) || isSubtitleOnlyPlugin(it) }
+        enabledPlugins.filterNot { isLiveTvPlugin(it) || isNonCatalogPlugin(it) }
     }
     val homeEligibleIds = remember(homeEligiblePlugins) { homeEligiblePlugins.map { it.manifest.id } }
     val pluginNameById = remember(plugins) {

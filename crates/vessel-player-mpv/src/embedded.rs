@@ -8,7 +8,7 @@ use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
-use vessel_domain::{VesselError, VesselResult};
+use vessel_domain::{PlaybackStats, VesselError, VesselResult};
 
 use crate::libmpv_ffi::{
     LibMpv, MPV_END_FILE_REASON_EOF, MPV_END_FILE_REASON_ERROR, MPV_EVENT_END_FILE,
@@ -503,6 +503,40 @@ impl MpvEmbeddedPlayer {
         }
         self.emit_current_state();
         res
+    }
+
+    /// Reads live stream & codec telemetry from the active `libmpv` instance for the Stats HUD.
+    pub fn playback_stats(&self) -> Option<PlaybackStats> {
+        let core = self.core.lock().ok()?;
+        let c = core.as_ref()?;
+        let lib = &c.lib;
+        let handle = c.handle;
+
+        let parse_f64 = |name: &str| -> Option<f64> {
+            lib.get_property_string(handle, name)?
+                .trim()
+                .parse::<f64>()
+                .ok()
+                .filter(|v| v.is_finite() && *v >= 0.0)
+        };
+        let parse_u64 = |name: &str| -> Option<u64> { parse_f64(name).map(|v| v as u64) };
+        let parse_u32 = |name: &str| -> Option<u32> { parse_f64(name).map(|v| v as u32) };
+
+        Some(PlaybackStats {
+            network_speed_bps: parse_u64("cache-speed").unwrap_or(0),
+            total_bytes_transferred: 0,
+            buffer_seconds: parse_f64("demuxer-cache-duration"),
+            cache_speed_bps: parse_u64("cache-speed"),
+            video_bitrate_bps: parse_u64("video-bitrate"),
+            audio_bitrate_bps: parse_u64("audio-bitrate"),
+            width: parse_u32("video-params/w").or_else(|| parse_u32("width")),
+            height: parse_u32("video-params/h").or_else(|| parse_u32("height")),
+            fps: parse_f64("estimated-vf-fps"),
+            video_codec: lib.get_property_string(handle, "video-codec"),
+            audio_codec: lib.get_property_string(handle, "audio-codec"),
+            file_size_bytes: parse_u64("file-size"),
+            is_debrid_stream: false,
+        })
     }
 
     /// Stops playback and tears down `libmpv` completely so zero playback RAM remains allocated.

@@ -13,21 +13,25 @@ use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
 use tokio::task::{JoinHandle, JoinSet};
 use tokio_util::sync::CancellationToken;
+use vessel_debrid::DebridManager;
 use vessel_domain::{
-    ContentProvider, DomainGrantSource, DownloadStatus, EngineEvent, EventSink, ExternalIds,
-    HomeFeed, LibraryItem, LibraryStatus, LinkedMediaSource, LogLevel, MediaDetail, MediaRef,
-    MediaType, PlaybackProgress, PlaybackRequest, PlayerBackend, PluginCapability, PluginId,
-    RepoPluginEntry, SearchPage, SecretStore, SkipSegment, StoragePort, StreamCandidate,
-    StreamKind, StreamResult, SubtitleCandidate, SubtitleFormat, SubtitleProvider, SubtitleQuery,
-    SubtitleSource, SubtitleTrack, UiPreferences, VesselError, VesselPaths, VesselResult,
+    ContentProvider, DebridAccountStatus, DebridCloudItem, DebridPreferences, DebridProvider,
+    DebridProviderKind, DebridResolution, DomainGrantSource, DownloadStatus, EngineEvent,
+    EventSink, ExternalIds, HomeFeed, LibraryItem, LibraryStatus, LinkedMediaSource, LogLevel,
+    MediaDetail, MediaRef, MediaType, PlaybackProgress, PlaybackRequest, PlaybackStats,
+    PlayerBackend, PluginCapability, PluginId, RealDebridDeviceAuthPoll, RealDebridDeviceAuthStart,
+    RepoPluginEntry, ResolveDebridRequest, ResolvedHttpLink, SearchPage, SecretStore, SkipSegment,
+    StoragePort, StreamCandidate, StreamKind, StreamResult, SubtitleCandidate, SubtitleFormat,
+    SubtitleProvider, SubtitleQuery, SubtitleSource, SubtitleTrack, UiPreferences, VesselError,
+    VesselPaths, VesselResult,
 };
 use vessel_iptv::{IptvClient, channel_to_stream_candidate, xtream::xtream_xmltv_url};
 use vessel_metadata::{
     CanonicalMetadata, MetaEndpoints, MetadataService, merge_detail_with_override,
 };
 use vessel_plugin_rt::{
-    LoadedPackage, ResolvedSource, SourceResolver, SourceTrustBadge, TsCompileCache,
-    load_plugin_dir, load_plugin_package, pack_plugin_package,
+    LoadedPackage, QuickJsDebridProvider, ResolvedSource, SourceResolver, SourceTrustBadge,
+    TsCompileCache, load_plugin_dir, load_plugin_package, pack_plugin_package,
 };
 use vessel_proxy::ProxyServer;
 use vessel_storage::{
@@ -232,9 +236,12 @@ pub struct VesselEngine {
     metadata: MetadataService,
     iptv: IptvClient,
     downloader: DownloadManager,
+    debrid: Arc<DebridManager>,
     pool: Arc<PluginPool>,
     always_proxy: AtomicBool,
     metadata_enabled: AtomicBool,
+    last_stream_is_debrid: AtomicBool,
+    last_stream_size_bytes: AtomicU64,
     active_search: Arc<Mutex<Option<(String, CancellationToken)>>>,
     home_feed_cache: Arc<Mutex<HomeFeedCacheMap>>,
     details_cache: Arc<Mutex<DetailsCacheMap>>,
@@ -321,6 +328,8 @@ impl VesselEngine {
         ));
         let downloader =
             DownloadManager::new(Arc::clone(&storage), Arc::clone(&event_sink), downloads_dir);
+        let secrets_port: Arc<dyn SecretStore> = secrets.clone();
+        let debrid = Arc::new(DebridManager::new(secrets_port)?);
 
         Ok(Self {
             storage,
@@ -333,9 +342,12 @@ impl VesselEngine {
             metadata: MetadataService::default(),
             iptv: IptvClient::new(),
             downloader,
+            debrid,
             pool,
             always_proxy: AtomicBool::new(always_proxy),
             metadata_enabled: AtomicBool::new(true),
+            last_stream_is_debrid: AtomicBool::new(false),
+            last_stream_size_bytes: AtomicU64::new(0),
             active_search: Arc::new(Mutex::new(None)),
             home_feed_cache: Arc::new(Mutex::new(HashMap::new())),
             details_cache: Arc::new(Mutex::new(HashMap::new())),
@@ -479,6 +491,7 @@ impl VesselEngine {
         if let Ok(settings) = self.get_plugin_settings(&plugin_id).await {
             let _ = self.pool.set_settings(&plugin_id, settings).await;
         }
+        self.sync_community_debrid_providers().await;
 
         Ok(())
     }
@@ -543,6 +556,7 @@ impl VesselEngine {
         self.clear_plugin_caches(plugin_id).await;
         self.storage.set_plugin_enabled(plugin_id, enabled).await?;
         self.pool.set_enabled(plugin_id, enabled).await?;
+        self.sync_community_debrid_providers().await;
         Ok(())
     }
 
@@ -697,6 +711,7 @@ impl VesselEngine {
                 }
             }
         }
+        self.sync_community_debrid_providers().await;
         Ok(loaded_count)
     }
 
@@ -722,7 +737,9 @@ impl VesselEngine {
                 let _ = std::fs::remove_file(path);
             }
         }
-        self.storage.remove_plugin(plugin_id).await
+        self.storage.remove_plugin(plugin_id).await?;
+        self.sync_community_debrid_providers().await;
+        Ok(())
     }
 
     async fn resolve_repo_entries_cached<'a>(
@@ -1604,7 +1621,8 @@ impl VesselEngine {
         Ok(deduped)
     }
 
-    /// Resolves playable stream candidates from `media.plugin_id` plus any persisted linked providers.
+    /// Resolves playable stream candidates from `media.plugin_id` plus any persisted linked providers
+    /// and automatic `PluginCapability::Stream` addons (e.g. Torrentio) when IMDb ID is known.
     pub async fn streams_with_linked(
         &self,
         media: &MediaRef,
@@ -1614,10 +1632,35 @@ impl VesselEngine {
         absolute_episode: Option<u32>,
         is_movie: bool,
     ) -> VesselResult<StreamResult> {
+        self.streams_with_external_ids(
+            media,
+            episode_id,
+            season,
+            episode,
+            absolute_episode,
+            is_movie,
+            None,
+        )
+        .await
+    }
+
+    /// Resolves playable stream candidates from `media.plugin_id`, linked providers, and automatic
+    /// `PluginCapability::Stream` addons using `external_ids` (or cached detail metadata).
+    #[allow(clippy::too_many_arguments)]
+    pub async fn streams_with_external_ids(
+        &self,
+        media: &MediaRef,
+        episode_id: &str,
+        season: u32,
+        episode: u32,
+        absolute_episode: Option<u32>,
+        is_movie: bool,
+        external_ids: Option<&ExternalIds>,
+    ) -> VesselResult<StreamResult> {
         let plugins_list = self.list_plugins().await.unwrap_or_default();
         let name_map: HashMap<String, String> = plugins_list
-            .into_iter()
-            .map(|p| (p.manifest.id.as_str().to_owned(), p.manifest.name))
+            .iter()
+            .map(|p| (p.manifest.id.as_str().to_owned(), p.manifest.name.clone()))
             .collect();
         let primary_name = name_map
             .get(media.plugin_id.as_str())
@@ -1625,31 +1668,78 @@ impl VesselEngine {
             .unwrap_or_else(|| media.plugin_id.as_str().to_owned());
 
         let linked = self.get_linked_sources(media).await.unwrap_or_default();
-        let primary_res = self.streams(&media.plugin_id, episode_id).await;
+        let is_virtual_meta =
+            media.plugin_id.as_str() == "vessel.metadata" || episode_id.starts_with("virtual::");
 
         let mut merged = StreamResult::default();
         let mut primary_err: Option<VesselError> = None;
 
-        match primary_res {
-            Ok(mut res) => {
-                for cand in &mut res.streams {
-                    cand.plugin_id = Some(media.plugin_id.as_str().to_owned());
-                    cand.plugin_name = Some(primary_name.clone());
+        if !is_virtual_meta {
+            let primary_res = self.streams(&media.plugin_id, episode_id).await;
+            match primary_res {
+                Ok(mut res) => {
+                    for cand in &mut res.streams {
+                        cand.plugin_id = Some(media.plugin_id.as_str().to_owned());
+                        cand.plugin_name = Some(primary_name.clone());
+                    }
+                    merged.streams.extend(res.streams);
+                    merged.subtitles.extend(res.subtitles);
+                    merged.skip_segments.extend(res.skip_segments);
                 }
-                merged.streams.extend(res.streams);
-                merged.subtitles.extend(res.subtitles);
-                merged.skip_segments.extend(res.skip_segments);
-            }
-            Err(err) => {
-                if linked.is_empty() {
-                    return Err(err);
+                Err(err) => {
+                    primary_err = Some(err);
                 }
-                primary_err = Some(err);
             }
         }
 
-        if linked.is_empty() {
-            return Ok(merged);
+        // Determine IMDb / Kitsu ID from argument, cached detail, or virtual streamId.
+        let mut resolved_imdb = external_ids
+            .and_then(|e| e.imdb.clone())
+            .filter(|s| !s.trim().is_empty());
+        if resolved_imdb.is_none()
+            && let Some(raw_imdb) = episode_id
+                .split("::")
+                .find(|part| part.starts_with("tt") && part[2..].chars().all(|c| c.is_ascii_digit()))
+        {
+            resolved_imdb = Some(raw_imdb.to_owned());
+        }
+        if resolved_imdb.is_none() {
+            let guard = self.details_cache.lock().await;
+            if let Some((_, cached_det)) = guard.get(&(media.plugin_id.clone(), media.native_id.clone())) {
+                resolved_imdb = cached_det.external_ids.imdb.clone();
+            }
+        }
+
+        // Collect automatic `PluginCapability::Stream` addons (such as Torrentio / MediaFusion).
+        let stream_addons: Vec<(PluginId, String)> = if let Some(ref imdb) = resolved_imdb {
+            let linked_ids: HashSet<&str> = linked.iter().map(|l| l.plugin_id.as_str()).collect();
+            let auto_disabled: HashSet<String> = self
+                .storage
+                .get_json_setting::<Vec<String>>("stream_addons.disabled")
+                .await
+                .ok()
+                .flatten()
+                .unwrap_or_default()
+                .into_iter()
+                .collect();
+            let _ = imdb;
+            plugins_list
+                .iter()
+                .filter(|p| {
+                    p.enabled
+                        && p.manifest.id != media.plugin_id
+                        && p.manifest.capabilities.contains(&PluginCapability::Stream)
+                        && !linked_ids.contains(p.manifest.id.as_str())
+                        && !auto_disabled.contains(p.manifest.id.as_str())
+                })
+                .map(|p| (p.manifest.id.clone(), p.manifest.name.clone()))
+                .collect()
+        } else {
+            Vec::new()
+        };
+
+        if primary_err.is_some() && linked.is_empty() && stream_addons.is_empty() {
+            return Err(primary_err.expect("checked is_some"));
         }
 
         let mut set = JoinSet::new();
@@ -1717,6 +1807,36 @@ impl VesselEngine {
             });
         }
 
+        if let Some(imdb) = resolved_imdb {
+            for (addon_pid, addon_name) in stream_addons {
+                let pool = Arc::clone(&self.pool);
+                let target_stream_id = if is_movie {
+                    format!("movie::{imdb}")
+                } else {
+                    format!("series::{imdb}:{season}:{episode}")
+                };
+                set.spawn(async move {
+                    let provider = pool.get_or_load(&addon_pid).await.ok()?;
+                    let mut sr = provider.streams(&target_stream_id).await.ok()?;
+                    for cand in &mut sr.streams {
+                        cand.plugin_id = Some(addon_pid.as_str().to_owned());
+                        cand.plugin_name = Some(addon_name.clone());
+                        if let Some(ref mut tor) = cand.torrent
+                            && !is_movie
+                        {
+                            if tor.season.is_none() {
+                                tor.season = Some(season);
+                            }
+                            if tor.episode.is_none() {
+                                tor.episode = Some(episode);
+                            }
+                        }
+                    }
+                    Some(sr)
+                });
+            }
+        }
+
         while let Some(res) = set.join_next().await {
             if let Ok(Some(sr)) = res {
                 merged.streams.extend(sr.streams);
@@ -1730,6 +1850,22 @@ impl VesselEngine {
         {
             return Err(err);
         }
+
+        // Automatically probe bulk Debrid cache status for any returned torrent candidates.
+        if merged.streams.iter().any(StreamCandidate::is_torrent)
+            && let Ok(prefs) = self.get_debrid_preferences().await
+        {
+            self.debrid.probe_cache(&mut merged.streams, &prefs).await;
+            if prefs.only_cached {
+                merged.streams.retain(|c| {
+                    !c.is_torrent()
+                        || c.debrid_cache
+                            .as_ref()
+                            .is_some_and(|info| info.state != vessel_domain::DebridCacheState::Uncached)
+                });
+            }
+        }
+
         Ok(merged)
     }
 
@@ -1765,9 +1901,68 @@ impl VesselEngine {
             .resolve_playback_url(candidate, self.always_proxy())
     }
 
-    /// Routes `candidate` through Smart Proxy, merges subtitles, resolves resume offset,
+    /// Routes `candidate` through Debrid (if torrent) + Smart Proxy, merges subtitles, resolves resume offset,
     /// and dispatches `PlaybackRequest` to `PlayerBackend::load`.
-    pub async fn play_candidate(&self, req: PlayCandidateRequest) -> VesselResult<String> {
+    pub async fn play_candidate(&self, mut req: PlayCandidateRequest) -> VesselResult<String> {
+        let mut is_debrid = false;
+        let debrid_size: u64;
+        if req.candidate.is_torrent() {
+            let res = self
+                .resolve_torrent_candidate(ResolveDebridRequest {
+                    url: req.candidate.url.clone(),
+                    torrent: req.candidate.torrent.clone(),
+                    preferred_target: req
+                        .candidate
+                        .debrid_cache
+                        .as_ref()
+                        .map(|c| c.target.clone()),
+                    allow_uncached_queue: false,
+                    season: Some(req.season),
+                    episode: Some(req.episode),
+                })
+                .await?;
+            match res {
+                DebridResolution::Ready {
+                    url,
+                    headers,
+                    size_bytes,
+                    ..
+                } => {
+                    is_debrid = true;
+                    debrid_size = size_bytes
+                        .or_else(|| req.candidate.torrent.as_ref().and_then(|t| t.size_bytes))
+                        .unwrap_or(0);
+                    req.candidate.url = url.clone();
+                    req.candidate.kind = infer_stream_kind_from_url(&url);
+                    req.candidate.headers = headers;
+                }
+                DebridResolution::NeedsConfirmation {
+                    provider_label,
+                    progress_pct,
+                    ..
+                } => {
+                    return Err(VesselError::InvalidInput(format!(
+                        "Torrent is not cached on {provider_label} ({progress_pct:.0}%). Queue it to Debrid cloud first."
+                    )));
+                }
+                DebridResolution::NoProviderConfigured { message } => {
+                    return Err(VesselError::InvalidInput(message));
+                }
+            }
+        } else {
+            debrid_size = req
+                .candidate
+                .torrent
+                .as_ref()
+                .and_then(|t| t.size_bytes)
+                .unwrap_or(0);
+        }
+
+        self.last_stream_is_debrid
+            .store(is_debrid, Ordering::Release);
+        self.last_stream_size_bytes
+            .store(debrid_size, Ordering::Release);
+
         let always_proxy = self.always_proxy();
         let resolved_url = self
             .proxy
@@ -2328,8 +2523,42 @@ impl VesselEngine {
         .await
     }
 
-    /// Enqueues an offline media download (bounded to `MAX_CONCURRENT_DOWNLOADS = 2`).
-    pub async fn enqueue_download(&self, req: DownloadRequest) -> VesselResult<StoredDownload> {
+    /// Enqueues an offline media download (resolving torrent magnets via Debrid when needed).
+    pub async fn enqueue_download(&self, mut req: DownloadRequest) -> VesselResult<StoredDownload> {
+        if req
+            .source_url
+            .trim_start()
+            .to_ascii_lowercase()
+            .starts_with("magnet:?")
+        {
+            let res = self
+                .resolve_torrent_candidate(ResolveDebridRequest {
+                    url: req.source_url.clone(),
+                    torrent: None,
+                    preferred_target: None,
+                    allow_uncached_queue: false,
+                    season: req.season,
+                    episode: req.episode,
+                })
+                .await?;
+            match res {
+                DebridResolution::Ready { url, headers, .. } => {
+                    req.source_url = url;
+                    if !headers.is_empty() {
+                        req.headers = headers;
+                    }
+                    req.kind = DownloadKind::Direct;
+                }
+                DebridResolution::NeedsConfirmation { provider_label, .. } => {
+                    return Err(VesselError::InvalidInput(format!(
+                        "Torrent is not cached on {provider_label}. Queue it to Debrid cloud before downloading."
+                    )));
+                }
+                DebridResolution::NoProviderConfigured { message } => {
+                    return Err(VesselError::InvalidInput(message));
+                }
+            }
+        }
         self.downloader.enqueue(req).await
     }
 
@@ -2446,6 +2675,247 @@ impl VesselEngine {
         })
     }
 
+    /// Synchronizes enabled `PluginCapability::Debrid` QuickJS community plugins into `DebridManager`.
+    pub async fn sync_community_debrid_providers(&self) {
+        let ids = self
+            .pool
+            .enabled_plugin_ids_with_any(&[PluginCapability::Debrid])
+            .await;
+        let mut community: Vec<Arc<dyn DebridProvider>> = Vec::with_capacity(ids.len());
+        for pid in ids {
+            if let Ok(prov) = self.pool.get_or_load(&pid).await {
+                community.push(Arc::new(QuickJsDebridProvider::new(prov)));
+            }
+        }
+        self.debrid.set_community_providers(community).await;
+    }
+
+    /// Reads persisted Debrid priority order, `only_cached`, and `auto_fallback` preferences.
+    pub async fn get_debrid_preferences(&self) -> VesselResult<DebridPreferences> {
+        Ok(self
+            .storage
+            .get_json_setting::<DebridPreferences>("debrid.preferences")
+            .await?
+            .unwrap_or_default())
+    }
+
+    /// Persists Debrid priority order and routing preferences.
+    pub async fn set_debrid_preferences(
+        &self,
+        prefs: DebridPreferences,
+    ) -> VesselResult<DebridPreferences> {
+        self.storage
+            .set_json_setting("debrid.preferences", &prefs)
+            .await?;
+        Ok(prefs)
+    }
+
+    /// Saves a built-in Debrid API key into `SecretStore`.
+    pub async fn save_debrid_api_key(
+        &self,
+        provider: DebridProviderKind,
+        api_key: &str,
+    ) -> VesselResult<()> {
+        self.debrid.save_builtin_api_key(provider, api_key).await
+    }
+
+    /// Removes stored credentials for a built-in Debrid provider.
+    pub async fn remove_debrid_credentials(&self, provider: DebridProviderKind) -> VesselResult<()> {
+        self.debrid.remove_builtin_credentials(provider).await
+    }
+
+    pub async fn start_real_debrid_device_auth(&self) -> VesselResult<RealDebridDeviceAuthStart> {
+        self.debrid.start_real_debrid_device_auth().await
+    }
+
+    pub async fn poll_real_debrid_device_auth(
+        &self,
+        device_code: &str,
+    ) -> VesselResult<RealDebridDeviceAuthPoll> {
+        self.debrid.poll_real_debrid_device_auth(device_code).await
+    }
+
+    /// Returns live account verification and quota metadata for all built-in + community Debrid providers.
+    pub async fn get_debrid_accounts_status(&self) -> VesselResult<Vec<DebridAccountStatus>> {
+        self.sync_community_debrid_providers().await;
+        let prefs = self.get_debrid_preferences().await?;
+        Ok(self.debrid.accounts_status(&prefs).await)
+    }
+
+    /// Probes bulk Debrid instant cache status for torrent candidates.
+    pub async fn probe_torrent_cache(
+        &self,
+        mut candidates: Vec<StreamCandidate>,
+    ) -> VesselResult<Vec<StreamCandidate>> {
+        self.sync_community_debrid_providers().await;
+        let prefs = self.get_debrid_preferences().await?;
+        self.debrid.probe_cache(&mut candidates, &prefs).await;
+        Ok(candidates)
+    }
+
+    /// Resolves a torrent magnet/info-hash candidate via prioritized Debrid providers.
+    pub async fn resolve_torrent_candidate(
+        &self,
+        req: ResolveDebridRequest,
+    ) -> VesselResult<DebridResolution> {
+        self.sync_community_debrid_providers().await;
+        let prefs = self.get_debrid_preferences().await?;
+        self.debrid.resolve_candidate(&req, &prefs).await
+    }
+
+    /// Lists active and completed transfers across all configured Debrid cloud accounts.
+    pub async fn list_debrid_cloud(&self) -> VesselResult<Vec<DebridCloudItem>> {
+        self.sync_community_debrid_providers().await;
+        let prefs = self.get_debrid_preferences().await?;
+        Ok(self.debrid.list_cloud(&prefs).await)
+    }
+
+    /// Deletes a torrent transfer from the specified Debrid provider's cloud queue.
+    pub async fn delete_debrid_cloud(&self, target: &str, torrent_id: &str) -> VesselResult<()> {
+        self.sync_community_debrid_providers().await;
+        self.debrid.delete_cloud(target, torrent_id).await
+    }
+
+    /// Unrestricts a completed Debrid cloud link into a playable direct HTTPS URL.
+    pub async fn unrestrict_debrid_cloud_link(
+        &self,
+        target: &str,
+        link: &str,
+    ) -> VesselResult<ResolvedHttpLink> {
+        self.sync_community_debrid_providers().await;
+        self.debrid.unrestrict_cloud_link(target, link).await
+    }
+
+    /// Enables or disables automatic IMDb stream lookup for a `Stream` plugin (e.g. Torrentio).
+    pub async fn set_stream_addon_auto_enabled(
+        &self,
+        plugin_id: &PluginId,
+        enabled: bool,
+    ) -> VesselResult<()> {
+        let mut disabled = self.list_disabled_stream_addons().await?;
+        let pid = plugin_id.as_str().to_owned();
+        if enabled {
+            disabled.retain(|x| x != &pid);
+        } else if !disabled.contains(&pid) {
+            disabled.push(pid);
+        }
+        self.storage
+            .set_json_setting("stream_addons.disabled", &disabled)
+            .await
+    }
+
+    /// Lists plugin IDs opted out of automatic IMDb stream addon aggregation.
+    pub async fn list_disabled_stream_addons(&self) -> VesselResult<Vec<String>> {
+        Ok(self
+            .storage
+            .get_json_setting::<Vec<String>>("stream_addons.disabled")
+            .await?
+            .unwrap_or_default())
+    }
+
+    /// Builds a virtual `MediaDetail` backed by Cinemeta/TMDB/AniList so stream-only addons (e.g. Torrentio)
+    /// work seamlessly even without any catalog plugin installed.
+    pub async fn get_virtual_metadata_detail(
+        &self,
+        canonical_id: &str,
+        title_hint: Option<&str>,
+        media_type_hint: Option<MediaType>,
+        preferred_lang: &str,
+    ) -> VesselResult<MediaDetail> {
+        let mut stub = MediaDetail {
+            native_id: format!("virtual::{canonical_id}"),
+            plugin_id: Some(PluginId::new("vessel.metadata")?),
+            media_type: media_type_hint.unwrap_or(MediaType::Movie),
+            is_anime: false,
+            title: title_hint
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .unwrap_or(canonical_id)
+                .to_owned(),
+            original_title: None,
+            year: None,
+            synopsis: None,
+            poster: None,
+            backdrop: None,
+            genres: Vec::new(),
+            rating: None,
+            status: None,
+            content_rating: vessel_domain::ContentRating::Sfw,
+            external_ids: ExternalIds::default(),
+            seasons: None,
+            episodes: Vec::new(),
+            relations: Vec::new(),
+        };
+        apply_canonical_override_hint(&mut stub, canonical_id);
+
+        let tmdb_key = self.secrets.get(TMDB_API_KEY_SECRET).await?;
+        let simkl_key = self.secrets.get(SIMKL_CLIENT_ID_SECRET).await?;
+        let outcome = self
+            .metadata
+            .enrich_detail_with_keys(
+                &stub,
+                preferred_lang,
+                tmdb_key.as_deref(),
+                simkl_key.as_deref(),
+                true,
+            )
+            .await?;
+
+        let mut detail = outcome.detail;
+        detail.plugin_id = Some(PluginId::new("vessel.metadata")?);
+        detail.native_id = format!("virtual::{canonical_id}");
+
+        let imdb_tag = detail.external_ids.imdb.clone().unwrap_or_default();
+        if detail.episodes.is_empty() {
+            detail.episodes.push(vessel_domain::Episode {
+                stream_id: if imdb_tag.is_empty() {
+                    format!("virtual::{canonical_id}::1::1")
+                } else {
+                    format!("virtual::{imdb_tag}::1::1")
+                },
+                season: 1,
+                episode: 1,
+                absolute_episode: None,
+                title: Some(detail.title.clone()),
+                overview: detail.synopsis.clone(),
+                thumbnail: detail.backdrop.clone().or_else(|| detail.poster.clone()),
+                air_date: None,
+                tags: Vec::new(),
+            });
+        } else {
+            for ep in &mut detail.episodes {
+                if ep.stream_id.trim().is_empty() {
+                    ep.stream_id = if imdb_tag.is_empty() {
+                        format!("virtual::{canonical_id}::{}::{}", ep.season, ep.episode)
+                    } else {
+                        format!("virtual::{imdb_tag}::{}::{}", ep.season, ep.episode)
+                    };
+                }
+            }
+        }
+        Ok(detail)
+    }
+
+    /// Combines local proxy throughput and active `PlayerBackend` telemetry for the Stats HUD.
+    pub async fn get_playback_stats(&self) -> PlaybackStats {
+        let (proxy_speed, proxy_total) = self.proxy.throughput_stats();
+        let mut stats = self.player.stats().await.unwrap_or_default();
+        if proxy_speed > 0 {
+            stats.network_speed_bps = proxy_speed;
+        }
+        if proxy_total > stats.total_bytes_transferred {
+            stats.total_bytes_transferred = proxy_total;
+        }
+        if stats.file_size_bytes.is_none() {
+            let sz = self.last_stream_size_bytes.load(Ordering::Acquire);
+            if sz > 0 {
+                stats.file_size_bytes = Some(sz);
+            }
+        }
+        stats.is_debrid_stream = self.last_stream_is_debrid.load(Ordering::Acquire);
+        stats
+    }
+
     /// Evicts warm QuickJS runtimes idle beyond TTL (`3 min`).
     pub async fn evict_idle_plugins(&self) -> usize {
         self.pool.evict_idle().await
@@ -2455,6 +2925,21 @@ impl VesselEngine {
     pub async fn shutdown(&self) {
         self.cancel_active_search().await;
         self.pool.shutdown_all().await;
+    }
+}
+
+fn infer_stream_kind_from_url(url: &str) -> StreamKind {
+    let lower = url.trim().to_ascii_lowercase();
+    if lower.contains(".m3u8") {
+        StreamKind::Hls
+    } else if lower.contains(".mkv") {
+        StreamKind::Mkv
+    } else if lower.contains(".mp4") {
+        StreamKind::Mp4
+    } else if lower.contains(".webm") {
+        StreamKind::Webm
+    } else {
+        StreamKind::Auto
     }
 }
 
@@ -3312,6 +3797,8 @@ mod tests {
                     skip_segments: Vec::new(),
                     plugin_id: None,
                     plugin_name: None,
+                    torrent: None,
+                    debrid_cache: None,
                 },
                 extra_subtitles: Vec::new(),
                 start_position_ms: None,
@@ -3999,6 +4486,207 @@ mod tests {
                 .map(|h| (&h.candidate.source_name, &h.candidate.label))
                 .collect::<Vec<_>>()
         );
+
+        engine.shutdown().await;
+    }
+
+    #[tokio::test]
+    async fn resolves_torrentio_stream_addon_via_community_debrid_and_virtual_metadata() {
+        let app = Router::new()
+            .route(
+                "/cinemeta/meta/movie/tt0903747.json",
+                get(|| async {
+                    axum::Json(serde_json::json!({
+                        "meta": {
+                            "id": "tt0903747",
+                            "type": "movie",
+                            "name": "El Camino Test",
+                            "releaseInfo": "2019",
+                            "poster": "https://cinemeta.example/poster.jpg"
+                        }
+                    }))
+                }),
+            )
+            .route(
+                "/torrentio/stream/movie/tt0903747.json",
+                get(|| async {
+                    axum::Json(serde_json::json!({
+                        "streams": [
+                            {
+                                "name": "Torrentio\n1080p",
+                                "title": "El.Camino.2019.1080p.WEB-DL.mkv\n👤 150 💾 2.5 GB ⚙️ YTS",
+                                "infoHash": "1111111111111111111111111111111111111111",
+                                "fileIdx": 0
+                            }
+                        ]
+                    }))
+                }),
+            );
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
+        let addr = listener.local_addr().expect("addr");
+        tokio::spawn(async move {
+            let _ = axum::serve(listener, app).await;
+        });
+
+        let (mut engine, player, _sink) = test_engine().await;
+        engine.set_metadata_endpoints(crate::MetaEndpoints {
+            cinemeta_base: format!("http://{addr}/cinemeta"),
+            ..crate::MetaEndpoints::default()
+        });
+
+        // 1. Install a Stream-only addon (`PluginCapability::Stream`) simulating Torrentio output.
+        let torrentio_manifest: vessel_domain::PluginManifest = serde_json::from_value(serde_json::json!({
+            "schemaVersion": 1,
+            "id": "com.stremio.torrentio.test",
+            "name": "Torrentio Test",
+            "version": "1.0.0",
+            "entry": "index.ts",
+            "capabilities": ["stream"]
+        }))
+        .unwrap();
+        let torrentio_bundle = PluginBundle::new([(
+            "index.ts",
+            r#"
+            export default {
+                async getStreams(streamId: string) {
+                    if (!streamId.includes("tt0903747")) return { streams: [], subtitles: [] };
+                    return {
+                        streams: [{
+                            url: "magnet:?xt=urn:btih:1111111111111111111111111111111111111111",
+                            kind: "torrent",
+                            quality: "1080p",
+                            label: "El.Camino.2019.1080p.WEB-DL.mkv • 👤 150 • 💾 2.5 GB",
+                            torrent: {
+                                infoHash: "1111111111111111111111111111111111111111",
+                                fileIndex: 0,
+                                seeders: 150,
+                                sizeBytes: 2684354560
+                            }
+                        }],
+                        subtitles: []
+                    };
+                }
+            };
+            "#,
+        )])
+        .unwrap();
+        engine
+            .install_package(
+                LoadedPackage {
+                    manifest: torrentio_manifest,
+                    bundle: torrentio_bundle,
+                    icon_png: None,
+                    sha256: "tor-sha".into(),
+                },
+                None,
+                "stremio_addon",
+                "mem://torrentio",
+            )
+            .await
+            .expect("install torrentio");
+
+        // 2. Install a Community Debrid plugin (`PluginCapability::Debrid`).
+        let debrid_manifest: vessel_domain::PluginManifest = serde_json::from_value(serde_json::json!({
+            "schemaVersion": 1,
+            "id": "community.seedr",
+            "name": "Community Seedr",
+            "version": "1.0.0",
+            "entry": "index.ts",
+            "capabilities": ["debrid"]
+        }))
+        .unwrap();
+        let debrid_bundle = PluginBundle::new([(
+            "index.ts",
+            r#"
+            import { definePlugin } from "vessel";
+            export default definePlugin({
+                async getDebridAccountStatus() {
+                    return { authenticated: true, username: "seedr-test", isPremium: true };
+                },
+                async checkDebridCached(hashes: string[]) {
+                    const out: Record<string, boolean> = {};
+                    for (const h of hashes) out[h] = true;
+                    return out;
+                },
+                async resolveDebridMagnet(req) {
+                    return {
+                        outcome: "ready",
+                        url: `https://cdn.seedr.example/${req.infoHash}.mkv`,
+                        filename: "El.Camino.2019.1080p.WEB-DL.mkv",
+                        sizeBytes: 2684354560
+                    };
+                }
+            });
+            "#,
+        )])
+        .unwrap();
+        engine
+            .install_package(
+                LoadedPackage {
+                    manifest: debrid_manifest,
+                    bundle: debrid_bundle,
+                    icon_png: None,
+                    sha256: "seedr-sha".into(),
+                },
+                None,
+                "local_dev",
+                "mem://seedr",
+            )
+            .await
+            .expect("install community debrid");
+
+        // 3. Open virtual Cinemeta detail without any catalog plugin -> streams auto-aggregate Torrentio + probe cache!
+        let detail = engine
+            .get_virtual_metadata_detail("imdb:tt0903747", Some("El Camino"), Some(MediaType::Movie), "en")
+            .await
+            .expect("virtual detail");
+        assert_eq!(detail.external_ids.imdb.as_deref(), Some("tt0903747"));
+
+        let media = MediaRef::new(PluginId::new("vessel.metadata").unwrap(), detail.native_id.clone()).unwrap();
+        let sr = engine
+            .streams_with_external_ids(
+                &media,
+                &detail.episodes[0].stream_id,
+                1,
+                1,
+                None,
+                true,
+                Some(&detail.external_ids),
+            )
+            .await
+            .expect("streams");
+        assert_eq!(sr.streams.len(), 1);
+        assert_eq!(sr.streams[0].kind, StreamKind::Torrent);
+        assert_eq!(
+            sr.streams[0].debrid_cache.as_ref().map(|c| c.state),
+            Some(vessel_domain::DebridCacheState::Cached)
+        );
+
+        // 4. Playing the torrent candidate automatically resolves it via Community Debrid!
+        let played_url = engine
+            .play_candidate(PlayCandidateRequest {
+                media,
+                canonical_id: Some("imdb:tt0903747".into()),
+                season: 1,
+                episode: 1,
+                absolute_episode: None,
+                media_type: MediaType::Movie,
+                candidate: sr.streams[0].clone(),
+                extra_subtitles: Vec::new(),
+                start_position_ms: Some(0),
+                title: Some("El Camino".into()),
+            })
+            .await
+            .expect("play torrent candidate");
+        assert!(played_url.contains("cdn.seedr.example/1111111111111111111111111111111111111111.mkv"));
+        {
+            let loaded = player.loaded.lock().unwrap();
+            assert_eq!(loaded.len(), 1);
+        }
+        let stats = engine.get_playback_stats().await;
+        assert!(stats.is_debrid_stream);
+        assert_eq!(stats.file_size_bytes, Some(2684354560));
 
         engine.shutdown().await;
     }

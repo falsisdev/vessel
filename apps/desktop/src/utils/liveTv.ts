@@ -25,6 +25,21 @@ export function isSubtitleOnlyPlugin(p: PluginListEntry): boolean {
   return caps.includes('subtitles') && !caps.includes('vod') && !caps.includes('live_tv') && !caps.includes('search')
 }
 
+export function isStreamOnlyPlugin(p: PluginListEntry): boolean {
+  const caps = p.manifest.capabilities ?? []
+  return caps.includes('stream') && !caps.includes('vod') && !caps.includes('live_tv') && !caps.includes('search')
+}
+
+export function isDebridPlugin(p: PluginListEntry): boolean {
+  const caps = p.manifest.capabilities ?? []
+  return caps.includes('debrid')
+}
+
+export function isNonCatalogPlugin(p: PluginListEntry): boolean {
+  const caps = p.manifest.capabilities ?? []
+  return !caps.includes('vod') && !caps.includes('live_tv') && !caps.includes('search')
+}
+
 export function resolveLiveGroupName(entry: PluginListEntry): string {
   if (entry.sourceType === 'builtin') return 'Built-in'
   if (entry.repoId?.trim()) return entry.repoId.trim()

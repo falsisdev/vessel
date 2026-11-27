@@ -211,6 +211,8 @@ pub fn channel_to_stream_candidate(
         skip_segments: Vec::new(),
         plugin_id: None,
         plugin_name: None,
+        torrent: None,
+        debrid_cache: None,
     }
 }
 

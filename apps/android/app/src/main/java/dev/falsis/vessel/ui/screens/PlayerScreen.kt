@@ -123,6 +123,7 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import dev.falsis.vessel.ui.components.VesselOutlinedTextField
 import dev.falsis.vessel.ui.components.vesselDpadInputEscape
@@ -169,6 +170,8 @@ import dev.falsis.vessel.data.GetSkipSegmentsPayload
 import dev.falsis.vessel.data.MediaDetail
 import dev.falsis.vessel.data.MediaRef
 import dev.falsis.vessel.data.PlaybackProgress
+import dev.falsis.vessel.data.PlaybackStats
+import dev.falsis.vessel.data.ResolveDebridRequest
 import dev.falsis.vessel.data.SkipSegment
 import dev.falsis.vessel.data.StreamCandidate
 import dev.falsis.vessel.data.StreamResult
@@ -178,6 +181,7 @@ import dev.falsis.vessel.data.SubtitleSearchHit
 import dev.falsis.vessel.data.SubtitleTrack
 import dev.falsis.vessel.data.UiPreferences
 import dev.falsis.vessel.data.VesselRepository
+import dev.falsis.vessel.ui.components.formatSizeBytes
 import dev.falsis.vessel.ui.i18n.VesselI18n
 import dev.falsis.vessel.ui.isLiveMediaIdentifier
 import dev.falsis.vessel.ui.theme.LocalVesselPalette
@@ -265,10 +269,13 @@ fun PlayerScreen(
     var isLocked by remember { mutableStateOf(false) }
     var isLandscape by remember { mutableStateOf(true) }
     var controlsVisible by remember { mutableStateOf(true) }
+    var showStatsHud by remember { mutableStateOf(false) }
+    var playbackStats by remember { mutableStateOf<PlaybackStats?>(null) }
     var interactionNonce by remember { mutableIntStateOf(0) }
     var resizeMode by remember { mutableIntStateOf(AspectRatioFrameLayout.RESIZE_MODE_FIT) }
     var activeDrawer by remember { mutableStateOf<PlayerDrawer?>(null) }
     var playbackSpeed by remember { mutableFloatStateOf(1.0f) }
+    var longPressSpeedActive by remember { mutableStateOf(false) }
     var playerVolume by remember { mutableFloatStateOf(1.0f) }
     var isMuted by remember { mutableStateOf(false) }
 
@@ -431,6 +438,13 @@ fun PlayerScreen(
             .setWakeMode(C.WAKE_MODE_NETWORK)
             .build()
             .apply { playWhenReady = true }
+    }
+
+    LaunchedEffect(isLive, isLocked, activeDrawer) {
+        if (longPressSpeedActive && (isLive || isLocked || activeDrawer != null)) {
+            longPressSpeedActive = false
+            exoPlayer.playbackParameters = exoPlayer.playbackParameters.withSpeed(if (isLive) 1.0f else playbackSpeed)
+        }
     }
 
     fun showHud(label: String) {
@@ -709,6 +723,30 @@ fun PlayerScreen(
         exoPlayer.playbackParameters = exoPlayer.playbackParameters.withSpeed(if (isLive) 1.0f else playbackSpeed)
         exoPlayer.prepare()
         exoPlayer.playWhenReady = true
+    }
+
+    LaunchedEffect(showStatsHud, selectedIndex) {
+        if (!showStatsHud) return@LaunchedEffect
+        while (true) {
+            val backend = runCatching { repo.getPlaybackStats() }.getOrDefault(PlaybackStats())
+            val vf = exoPlayer.videoFormat
+            val af = exoPlayer.audioFormat
+            val bufSec = ((exoPlayer.bufferedPosition - exoPlayer.currentPosition).coerceAtLeast(0L)) / 1000.0
+            val cand = activeCandidate
+            playbackStats = backend.copy(
+                bufferSeconds = bufSec,
+                width = vf?.width?.takeIf { it > 0 } ?: backend.width,
+                height = vf?.height?.takeIf { it > 0 } ?: backend.height,
+                fps = vf?.frameRate?.takeIf { it > 0f }?.toDouble() ?: backend.fps,
+                videoCodec = vf?.codecs ?: vf?.sampleMimeType ?: backend.videoCodec,
+                audioCodec = af?.codecs ?: af?.sampleMimeType ?: backend.audioCodec,
+                videoBitrateBps = vf?.bitrate?.takeIf { it > 0 }?.toLong() ?: backend.videoBitrateBps,
+                audioBitrateBps = af?.bitrate?.takeIf { it > 0 }?.toLong() ?: backend.audioBitrateBps,
+                fileSizeBytes = cand?.torrent?.sizeBytes ?: backend.fileSizeBytes,
+                isDebridStream = backend.isDebridStream || cand?.torrent != null || cand?.debridCache != null,
+            )
+            delay(1000)
+        }
     }
 
     fun playEpisode(target: Episode) {
@@ -1221,10 +1259,23 @@ fun PlayerScreen(
             modifier = Modifier.fillMaxSize(),
         )
 
-        // Touch Gesture Surface (Single tap toggle HUD, Double tap -10s/+10s, Vertical swipe Brightness/Volume)
+        // Touch Gesture Surface (Single tap toggle HUD, Double tap -10s/+10s, Long press 2x, Vertical swipe Brightness/Volume)
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                .pointerInput(isLive, playbackSpeed) {
+                    awaitPointerEventScope {
+                        while (true) {
+                            val ev = awaitPointerEvent(PointerEventPass.Final)
+                            if (longPressSpeedActive && ev.changes.none { it.pressed }) {
+                                longPressSpeedActive = false
+                                exoPlayer.playbackParameters = exoPlayer.playbackParameters.withSpeed(
+                                    if (isLive) 1.0f else playbackSpeed,
+                                )
+                            }
+                        }
+                    }
+                }
                 .pointerInput(isLocked, isLive) {
                     detectTapGestures(
                         onTap = {
@@ -1253,6 +1304,11 @@ fun PlayerScreen(
                             currentPosMs = target
                             showHud(if (delta < 0) VesselI18n.tr("player.seek_back_10") else VesselI18n.tr("player.seek_fwd_10"))
                             bumpControls()
+                        },
+                        onLongPress = {
+                            if (isLocked || isLive || activeDrawer != null) return@detectTapGestures
+                            longPressSpeedActive = true
+                            exoPlayer.playbackParameters = exoPlayer.playbackParameters.withSpeed(2.0f)
                         },
                     )
                 }
@@ -1290,6 +1346,109 @@ fun PlayerScreen(
                     )
                 },
         )
+
+        // Live Player Stats HUD Overlay
+        if (showStatsHud && playbackStats != null) {
+            val st = playbackStats!!
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = Color(0xD80C0D14),
+                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.14f)),
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .systemBarsPadding()
+                    .padding(start = 16.dp, top = 74.dp),
+            ) {
+                Column(
+                    modifier = Modifier.padding(12.dp).widthIn(min = 210.dp, max = 280.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = VesselI18n.tr("stats.title", "Stream Stats"),
+                            color = palette.accent,
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        Icon(
+                            Icons.Default.Close,
+                            contentDescription = VesselI18n.tr("common.close"),
+                            tint = Color.White.copy(alpha = 0.7f),
+                            modifier = Modifier.size(14.dp).clickable { showStatsHud = false },
+                        )
+                    }
+                    Text(
+                        text = "${VesselI18n.tr("stats.speed", "Speed")}: ${formatSizeBytes(st.networkSpeedBps)}/s",
+                        color = Color.White,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontFamily = FontFamily.Monospace,
+                    )
+                    Text(
+                        text = "${VesselI18n.tr("stats.transferred", "Transferred")}: ${formatSizeBytes(st.totalBytesTransferred)}",
+                        color = Color.White.copy(alpha = 0.85f),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontFamily = FontFamily.Monospace,
+                    )
+                    st.bufferSeconds?.let { buf ->
+                        Text(
+                            text = "${VesselI18n.tr("stats.buffer", "Buffer")}: ${String.format(Locale.US, "%.1fs", buf)}",
+                            color = Color.White.copy(alpha = 0.85f),
+                            style = MaterialTheme.typography.labelSmall,
+                            fontFamily = FontFamily.Monospace,
+                        )
+                    }
+                    if (st.width != null && st.height != null) {
+                        val fpsLabel = st.fps?.let { String.format(Locale.US, " · %.0ffps", it) }.orEmpty()
+                        Text(
+                            text = "${VesselI18n.tr("stats.resolution", "Resolution")}: ${st.width}x${st.height}$fpsLabel",
+                            color = Color.White.copy(alpha = 0.85f),
+                            style = MaterialTheme.typography.labelSmall,
+                            fontFamily = FontFamily.Monospace,
+                        )
+                    }
+                    st.videoCodec?.let { vc ->
+                        val br = st.videoBitrateBps?.let { " · ${it / 1000} kbps" }.orEmpty()
+                        Text(
+                            text = "${VesselI18n.tr("stats.video", "Video")}: $vc$br",
+                            color = Color.White.copy(alpha = 0.8f),
+                            style = MaterialTheme.typography.labelSmall,
+                            fontFamily = FontFamily.Monospace,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    st.audioCodec?.let { ac ->
+                        val br = st.audioBitrateBps?.let { " · ${it / 1000} kbps" }.orEmpty()
+                        Text(
+                            text = "${VesselI18n.tr("stats.audio", "Audio")}: $ac$br",
+                            color = Color.White.copy(alpha = 0.8f),
+                            style = MaterialTheme.typography.labelSmall,
+                            fontFamily = FontFamily.Monospace,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                    st.fileSizeBytes?.takeIf { it > 0L }?.let { sz ->
+                        Text(
+                            text = "${VesselI18n.tr("stats.size", "Size")}: ${formatSizeBytes(sz)}",
+                            color = Color.White.copy(alpha = 0.8f),
+                            style = MaterialTheme.typography.labelSmall,
+                            fontFamily = FontFamily.Monospace,
+                        )
+                    }
+                    Text(
+                        text = "${VesselI18n.tr("stats.source", "Transport")}: ${if (st.isDebridStream) "Debrid" else if (lastLoadWasProxied) "Proxy" else "Direct"}",
+                        color = palette.accent,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontFamily = FontFamily.Monospace,
+                    )
+                }
+            }
+        }
 
         // In-App Styled Subtitle Overlay (Desktop PlayerView .cs-subtitle-overlay parity)
         if (activeExternalLines.isNotEmpty() && !isLive) {
@@ -1373,7 +1532,7 @@ fun PlayerScreen(
 
         // Gesture Feedback Pill
         AnimatedVisibility(
-            visible = gestureHudLabel != null,
+            visible = longPressSpeedActive || gestureHudLabel != null,
             enter = fadeIn(),
             exit = fadeOut(),
             modifier = Modifier
@@ -1387,7 +1546,7 @@ fun PlayerScreen(
                 border = BorderStroke(1.dp, Color.White.copy(alpha = 0.18f)),
             ) {
                 Text(
-                    text = gestureHudLabel.orEmpty(),
+                    text = if (longPressSpeedActive) "2x »" else gestureHudLabel.orEmpty(),
                     color = Color.White,
                     fontWeight = FontWeight.Bold,
                     style = MaterialTheme.typography.labelLarge,
@@ -1666,11 +1825,16 @@ fun PlayerScreen(
                                 streamsCount = activeStreamResult.streams.size,
                                 audioCount = audioTracks.size,
                                 activeDrawer = activeDrawer,
+                                showStatsHud = showStatsHud,
                                 isLandscape = isLandscape,
                                 onGoToDetails = onGoToDetails,
                                 onLock = {
                                     isLocked = true
                                     activeDrawer = null
+                                },
+                                onToggleStats = {
+                                    showStatsHud = !showStatsHud
+                                    bumpControls()
                                 },
                                 onToggleDrawer = { d ->
                                     activeDrawer = if (activeDrawer == d) null else d
@@ -1690,11 +1854,16 @@ fun PlayerScreen(
                             streamsCount = activeStreamResult.streams.size,
                             audioCount = audioTracks.size,
                             activeDrawer = activeDrawer,
+                            showStatsHud = showStatsHud,
                             isLandscape = isLandscape,
                             onGoToDetails = onGoToDetails,
                             onLock = {
                                 isLocked = true
                                 activeDrawer = null
+                            },
+                            onToggleStats = {
+                                showStatsHud = !showStatsHud
+                                bumpControls()
                             },
                             onToggleDrawer = { d ->
                                 activeDrawer = if (activeDrawer == d) null else d
@@ -2283,10 +2452,53 @@ fun PlayerScreen(
                                             active = isCur,
                                             accentColor = palette.accent,
                                             onClick = {
-                                                currentStartPosMs = if (isLive) 0L else exoPlayer.currentPosition.coerceAtLeast(0L)
-                                                selectedIndex = idx
-                                                activeDrawer = null
-                                                bumpControls()
+                                                val isTorrent = cand.kind.equals("torrent", ignoreCase = true) ||
+                                                    cand.torrent != null ||
+                                                    cand.url.startsWith("magnet:", ignoreCase = true)
+                                                val pos = if (isLive) 0L else exoPlayer.currentPosition.coerceAtLeast(0L)
+                                                if (!isTorrent) {
+                                                    currentStartPosMs = pos
+                                                    selectedIndex = idx
+                                                    activeDrawer = null
+                                                    bumpControls()
+                                                } else {
+                                                    scope.launch {
+                                                        runCatching {
+                                                            repo.resolveTorrentCandidate(
+                                                                ResolveDebridRequest(
+                                                                    url = cand.url,
+                                                                    torrent = cand.torrent,
+                                                                    preferredTarget = cand.debridCache?.takeIf { it.state == "cached" }?.target,
+                                                                    allowUncachedQueue = false,
+                                                                    season = if (activeDetail.type == "movie") null else currentEpisode.season,
+                                                                    episode = if (activeDetail.type == "movie") null else currentEpisode.episode,
+                                                                ),
+                                                            )
+                                                        }.onSuccess { res ->
+                                                            if (res.status == "ready" && res.url != null) {
+                                                                val updated = activeStreamResult.streams.mapIndexed { i, s ->
+                                                                    if (i == idx) {
+                                                                        s.copy(
+                                                                            url = res.url,
+                                                                            kind = "auto",
+                                                                            headers = res.headers,
+                                                                            flags = if (res.headers.isNotEmpty()) (s.flags + "requires_proxy").distinct() else s.flags,
+                                                                        )
+                                                                    } else s
+                                                                }
+                                                                activeStreamResult = activeStreamResult.copy(streams = updated)
+                                                                currentStartPosMs = pos
+                                                                selectedIndex = idx
+                                                                activeDrawer = null
+                                                                bumpControls()
+                                                            } else {
+                                                                repo.notify(res.message ?: "${res.providerLabel ?: "Debrid"}: ${res.status}")
+                                                            }
+                                                        }.onFailure {
+                                                            repo.notifyError(it, "Failed to switch torrent source")
+                                                        }
+                                                    }
+                                                }
                                             },
                                         ) {
                                             Row(
@@ -2296,13 +2508,30 @@ fun PlayerScreen(
                                             ) {
                                                 Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
                                                     Text(cand.label, color = Color.White, fontWeight = FontWeight.SemiBold)
-                                                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                                    FlowRow(
+                                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                                                    ) {
                                                         (cand.pluginName ?: cand.pluginId)?.takeIf { it.isNotBlank() }?.let { src ->
                                                             DrawerTagBadge(src, accent = true, accentColor = palette.accent)
                                                         }
                                                         DrawerTagBadge(cand.kind.uppercase(Locale.US), accent = false, accentColor = palette.accent)
                                                         cand.quality?.takeIf { it.isNotBlank() }?.let {
                                                             DrawerTagBadge(it, accent = true, accentColor = palette.accent)
+                                                        }
+                                                        cand.debridCache?.let { c ->
+                                                            val tag = when (c.state) {
+                                                                "cached" -> "⚡ ${c.label}"
+                                                                "uncached" -> "☁️ ${c.label}"
+                                                                else -> c.label
+                                                            }
+                                                            DrawerTagBadge(tag, accent = c.state == "cached", accentColor = palette.accent)
+                                                        }
+                                                        cand.torrent?.sizeBytes?.takeIf { it > 0L }?.let { sz ->
+                                                            DrawerTagBadge(formatSizeBytes(sz), accent = false, accentColor = palette.accent)
+                                                        }
+                                                        cand.torrent?.seeders?.let { s ->
+                                                            DrawerTagBadge("👤 $s", accent = false, accentColor = palette.accent)
                                                         }
                                                         cand.language?.takeIf { it.isNotBlank() }?.let {
                                                             DrawerTagBadge(it.uppercase(Locale.US), accent = false, accentColor = palette.accent)
@@ -3098,9 +3327,11 @@ private fun TopActionPillsRow(
     streamsCount: Int,
     audioCount: Int,
     activeDrawer: PlayerDrawer?,
+    showStatsHud: Boolean,
     isLandscape: Boolean,
     onGoToDetails: () -> Unit,
     onLock: () -> Unit,
+    onToggleStats: () -> Unit,
     onToggleDrawer: (PlayerDrawer) -> Unit,
     onToggleOrientation: () -> Unit,
     modifier: Modifier = Modifier,
@@ -3159,6 +3390,12 @@ private fun TopActionPillsRow(
             label = VesselI18n.tr("nav.settings", "Ayarlar"),
             active = activeDrawer == PlayerDrawer.SETTINGS,
             onClick = { onToggleDrawer(PlayerDrawer.SETTINGS) },
+        )
+        PlayerHudPill(
+            icon = null,
+            label = VesselI18n.tr("stats.title", "Stats"),
+            active = showStatsHud,
+            onClick = onToggleStats,
         )
         PlayerHudPill(
             icon = { Icon(Icons.Default.ScreenRotation, contentDescription = null, tint = Color.White, modifier = Modifier.size(13.dp)) },

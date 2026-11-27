@@ -112,6 +112,18 @@ export const vesselApi = {
   cancelSearch: () => call<void>('cancel_search'),
   getDetailsWithEnrichment: (pluginId: string, nativeId: string, preferredLang = 'en') =>
     call<MediaDetail>('get_details_with_enrichment', { pluginId, nativeId, preferredLang }),
+  getVirtualMetadataDetail: (
+    canonicalId: string,
+    titleHint?: string,
+    mediaTypeHint?: MediaType,
+    preferredLang = 'en',
+  ) =>
+    call<MediaDetail>('get_virtual_metadata_detail', {
+      canonicalId,
+      titleHint: titleHint ?? null,
+      mediaTypeHint: mediaTypeHint ?? null,
+      preferredLang,
+    }),
   getStreams: (pluginId: string, episodeId: string) =>
     call<StreamResult>('get_streams', { pluginId, episodeId }),
   getStreamsWithLinked: (payload: {
@@ -122,7 +134,42 @@ export const vesselApi = {
     episode: number
     absoluteEpisode?: number
     isMovie: boolean
+    externalIds?: ExternalIds
   }) => call<StreamResult>('get_streams_with_linked', payload),
+  getDebridOverview: () => call<import('@/types/vessel').DebridOverview>('get_debrid_overview'),
+  setDebridPreferences: (prefs: import('@/types/vessel').DebridPreferences) =>
+    call<import('@/types/vessel').DebridPreferences>('set_debrid_preferences', { prefs }),
+  saveDebridApiKey: (provider: string, apiKey: string) =>
+    call<void>('save_debrid_api_key', { provider, apiKey }),
+  removeDebridCredentials: (provider: string) =>
+    call<void>('remove_debrid_credentials', { provider }),
+  startRealDebridDeviceAuth: () =>
+    call<import('@/types/vessel').RealDebridDeviceAuthStart>('start_real_debrid_device_auth'),
+  pollRealDebridDeviceAuth: (deviceCode: string) =>
+    call<import('@/types/vessel').RealDebridDeviceAuthPoll>('poll_real_debrid_device_auth', {
+      deviceCode,
+    }),
+  probeTorrentCache: (candidates: StreamCandidate[]) =>
+    call<StreamCandidate[]>('probe_torrent_cache', { candidates }),
+  resolveTorrentCandidate: (request: {
+    url: string
+    torrent?: import('@/types/vessel').TorrentMeta
+    preferredTarget?: string
+    allowUncachedQueue?: boolean
+    season?: number
+    episode?: number
+  }) => call<import('@/types/vessel').DebridResolution>('resolve_torrent_candidate', { request }),
+  listDebridCloud: () => call<import('@/types/vessel').DebridCloudItem[]>('list_debrid_cloud'),
+  deleteDebridCloud: (target: string, torrentId: string) =>
+    call<void>('delete_debrid_cloud', { target, torrentId }),
+  unrestrictDebridCloudLink: (target: string, link: string) =>
+    call<{ url: string; headers?: Record<string, string>; filename?: string; sizeBytes?: number }>(
+      'unrestrict_debrid_cloud_link',
+      { target, link },
+    ),
+  setStreamAddonAutoEnabled: (pluginId: string, enabled: boolean) =>
+    call<void>('set_stream_addon_auto_enabled', { pluginId, enabled }),
+  getPlaybackStats: () => call<import('@/types/vessel').PlaybackStats>('get_playback_stats'),
   searchPluginSync: (pluginId: string, query: string, page = 1) =>
     call<{ items: import('@/types/vessel').MediaSummary[]; hasMore: boolean }>('search_plugin_sync', {
       pluginId,

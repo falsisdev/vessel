@@ -11,10 +11,13 @@ use vessel_player_mpv::embedded::{EmbeddedFitMode, MpvEmbeddedPlayer};
 
 use crate::embedded_player::EmbeddedPlayerHost;
 use vessel_domain::{
+    DebridAccountStatus, DebridCloudItem, DebridPreferences, DebridProviderKind, DebridResolution,
     ExternalIds, HomeSection, LibraryItem, LibraryStatus, LinkedMediaSource, MediaDetail, MediaRef,
-    MediaType, PlaybackProgress, PluginId, PluginManifest, RepoIndex, SearchPage, SecretStore,
-    SkipSegment, StreamCandidate, StreamResult, SubtitleQuery, SubtitleTrack, ThemeColors,
-    ThemeSpec, UiPreferences, VesselPaths, VesselResult,
+    MediaType, PlaybackProgress, PlaybackStats, PluginId, PluginManifest,
+    RealDebridDeviceAuthPoll, RealDebridDeviceAuthStart, RepoIndex, ResolveDebridRequest,
+    ResolvedHttpLink, SearchPage, SecretStore, SkipSegment, StreamCandidate, StreamResult,
+    SubtitleQuery, SubtitleTrack, ThemeColors, ThemeSpec, UiPreferences, VesselError, VesselPaths,
+    VesselResult,
 };
 use vessel_engine::{
     DownloadRequest, EpgNowNext, IptvKind, IptvProfile, LocalPlaybackBundle,
@@ -810,22 +813,192 @@ pub async fn get_streams_with_linked(
     episode: u32,
     absolute_episode: Option<u32>,
     is_movie: bool,
+    external_ids: Option<ExternalIds>,
 ) -> Result<StreamResult, String> {
     let pid = map_err(PluginId::new(plugin_id))?;
     let media = map_err(MediaRef::new(pid, native_id))?;
     map_err(
         state
             .engine
-            .streams_with_linked(
+            .streams_with_external_ids(
                 &media,
                 &episode_id,
                 season,
                 episode,
                 absolute_episode,
                 is_movie,
+                external_ids.as_ref(),
             )
             .await,
     )
+}
+
+#[tauri::command]
+pub async fn get_virtual_metadata_detail(
+    state: State<'_, AppState>,
+    canonical_id: String,
+    title_hint: Option<String>,
+    media_type_hint: Option<MediaType>,
+    preferred_lang: Option<String>,
+) -> Result<MediaDetail, String> {
+    let lang = preferred_lang.unwrap_or_else(|| "en".into());
+    map_err(
+        state
+            .engine
+            .get_virtual_metadata_detail(
+                &canonical_id,
+                title_hint.as_deref(),
+                media_type_hint,
+                &lang,
+            )
+            .await,
+    )
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DebridOverviewDto {
+    pub preferences: DebridPreferences,
+    pub accounts: Vec<DebridAccountStatus>,
+    pub disabled_stream_addons: Vec<String>,
+}
+
+#[tauri::command]
+pub async fn get_debrid_overview(state: State<'_, AppState>) -> Result<DebridOverviewDto, String> {
+    let preferences = map_err(state.engine.get_debrid_preferences().await)?;
+    let accounts = map_err(state.engine.get_debrid_accounts_status().await)?;
+    let disabled_stream_addons = map_err(state.engine.list_disabled_stream_addons().await)?;
+    Ok(DebridOverviewDto {
+        preferences,
+        accounts,
+        disabled_stream_addons,
+    })
+}
+
+#[tauri::command]
+pub async fn set_debrid_preferences(
+    state: State<'_, AppState>,
+    prefs: DebridPreferences,
+) -> Result<DebridPreferences, String> {
+    map_err(state.engine.set_debrid_preferences(prefs).await)
+}
+
+#[tauri::command]
+pub async fn save_debrid_api_key(
+    state: State<'_, AppState>,
+    provider: String,
+    api_key: String,
+) -> Result<(), String> {
+    let kind = DebridProviderKind::parse_id(&provider).ok_or_else(|| {
+        VesselError::InvalidInput(format!("unknown Debrid provider '{provider}'")).to_string()
+    })?;
+    map_err(state.engine.save_debrid_api_key(kind, &api_key).await)
+}
+
+#[tauri::command]
+pub async fn remove_debrid_credentials(
+    state: State<'_, AppState>,
+    provider: String,
+) -> Result<(), String> {
+    let kind = DebridProviderKind::parse_id(&provider).ok_or_else(|| {
+        VesselError::InvalidInput(format!("unknown Debrid provider '{provider}'")).to_string()
+    })?;
+    map_err(state.engine.remove_debrid_credentials(kind).await)
+}
+
+#[tauri::command]
+pub async fn start_real_debrid_device_auth(
+    state: State<'_, AppState>,
+) -> Result<RealDebridDeviceAuthStart, String> {
+    map_err(state.engine.start_real_debrid_device_auth().await)
+}
+
+#[tauri::command]
+pub async fn poll_real_debrid_device_auth(
+    state: State<'_, AppState>,
+    device_code: String,
+) -> Result<RealDebridDeviceAuthPoll, String> {
+    map_err(state.engine.poll_real_debrid_device_auth(&device_code).await)
+}
+
+#[tauri::command]
+pub async fn probe_torrent_cache(
+    state: State<'_, AppState>,
+    candidates: Vec<StreamCandidate>,
+) -> Result<Vec<StreamCandidate>, String> {
+    map_err(state.engine.probe_torrent_cache(candidates).await)
+}
+
+#[tauri::command]
+pub async fn resolve_torrent_candidate(
+    state: State<'_, AppState>,
+    request: ResolveDebridRequest,
+) -> Result<DebridResolution, String> {
+    map_err(state.engine.resolve_torrent_candidate(request).await)
+}
+
+#[tauri::command]
+pub async fn list_debrid_cloud(state: State<'_, AppState>) -> Result<Vec<DebridCloudItem>, String> {
+    map_err(state.engine.list_debrid_cloud().await)
+}
+
+#[tauri::command]
+pub async fn delete_debrid_cloud(
+    state: State<'_, AppState>,
+    target: String,
+    torrent_id: String,
+) -> Result<(), String> {
+    map_err(state.engine.delete_debrid_cloud(&target, &torrent_id).await)
+}
+
+#[tauri::command]
+pub async fn unrestrict_debrid_cloud_link(
+    state: State<'_, AppState>,
+    target: String,
+    link: String,
+) -> Result<ResolvedHttpLink, String> {
+    map_err(
+        state
+            .engine
+            .unrestrict_debrid_cloud_link(&target, &link)
+            .await,
+    )
+}
+
+#[tauri::command]
+pub async fn set_stream_addon_auto_enabled(
+    state: State<'_, AppState>,
+    plugin_id: String,
+    enabled: bool,
+) -> Result<(), String> {
+    let pid = map_err(PluginId::new(plugin_id))?;
+    map_err(
+        state
+            .engine
+            .set_stream_addon_auto_enabled(&pid, enabled)
+            .await,
+    )
+}
+
+#[tauri::command]
+pub async fn get_playback_stats(state: State<'_, AppState>) -> Result<PlaybackStats, String> {
+    let mut stats = state.engine.get_playback_stats().await;
+    if let Some(mpv_stats) = state.embedded_host.player.playback_stats() {
+        if stats.network_speed_bps == 0 {
+            stats.network_speed_bps = mpv_stats.network_speed_bps;
+        }
+        stats.buffer_seconds = mpv_stats.buffer_seconds.or(stats.buffer_seconds);
+        stats.cache_speed_bps = mpv_stats.cache_speed_bps.or(stats.cache_speed_bps);
+        stats.video_bitrate_bps = mpv_stats.video_bitrate_bps.or(stats.video_bitrate_bps);
+        stats.audio_bitrate_bps = mpv_stats.audio_bitrate_bps.or(stats.audio_bitrate_bps);
+        stats.width = mpv_stats.width.or(stats.width);
+        stats.height = mpv_stats.height.or(stats.height);
+        stats.fps = mpv_stats.fps.or(stats.fps);
+        stats.video_codec = mpv_stats.video_codec.or(stats.video_codec);
+        stats.audio_codec = mpv_stats.audio_codec.or(stats.audio_codec);
+        stats.file_size_bytes = mpv_stats.file_size_bytes.or(stats.file_size_bytes);
+    }
+    Ok(stats)
 }
 
 #[tauri::command]

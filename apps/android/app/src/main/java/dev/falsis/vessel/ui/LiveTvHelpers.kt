@@ -17,10 +17,13 @@ fun isLiveTvPlugin(p: PluginListEntry): Boolean {
         "_spor" in hay
 }
 
-fun isSubtitleOnlyPlugin(p: PluginListEntry): Boolean {
+fun isNonCatalogPlugin(p: PluginListEntry): Boolean {
     val caps = p.manifest.capabilities
-    return "subtitles" in caps && "vod" !in caps && "live_tv" !in caps && "search" !in caps
+    return ("subtitles" in caps || "stream" in caps || "debrid" in caps) &&
+        "vod" !in caps && "live_tv" !in caps && "search" !in caps
 }
+
+fun isSubtitleOnlyPlugin(p: PluginListEntry): Boolean = isNonCatalogPlugin(p)
 
 fun resolveLiveGroupName(entry: PluginListEntry): String {
     if (entry.sourceType == "builtin") return "Built-in"

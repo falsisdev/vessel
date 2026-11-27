@@ -10,10 +10,11 @@ use serde::{Deserialize, Serialize};
 use tokio::runtime::{Builder, Runtime};
 use tokio::task::JoinSet;
 use vessel_domain::{
-    EngineEvent, EventSink, ExternalIds, HomeSection, LibraryItem, LibraryStatus,
-    LinkedMediaSource, PlaybackProgress, PlaybackRequest, PlayerBackend, PluginId, PluginManifest,
-    RepoIndex, SecretStore, SkipSegment, StreamCandidate, SubtitleQuery, SubtitleTrack,
-    ThemeColors, ThemeSpec, UiPreferences, VesselError, VesselPaths, VesselResult,
+    DebridPreferences, DebridProviderKind, EngineEvent, EventSink, ExternalIds, HomeSection,
+    LibraryItem, LibraryStatus, LinkedMediaSource, MediaType, PlaybackProgress, PlaybackRequest,
+    PlayerBackend, PluginId, PluginManifest, RepoIndex, ResolveDebridRequest, SecretStore,
+    SkipSegment, StreamCandidate, SubtitleQuery, SubtitleTrack, ThemeColors, ThemeSpec,
+    UiPreferences, VesselError, VesselPaths, VesselResult,
 };
 use vessel_engine::{
     DownloadRequest, IptvKind, IptvProfile, MetadataProviderFilter, PlayCandidateRequest,
@@ -875,6 +876,177 @@ impl VesselMobileCore {
             is_movie,
         ))?;
         to_json(&res)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn get_streams_with_external_ids_json(
+        &self,
+        plugin_id: String,
+        native_id: String,
+        episode_id: String,
+        season: u32,
+        episode: u32,
+        absolute_episode: Option<u32>,
+        is_movie: bool,
+        external_ids_json: Option<String>,
+    ) -> Result<String, FfiError> {
+        let pid = PluginId::new(plugin_id)?;
+        let media = vessel_domain::MediaRef::new(pid, native_id)?;
+        let ext_ids: Option<ExternalIds> = match external_ids_json {
+            Some(ref s) if !s.trim().is_empty() && s.trim() != "null" => {
+                Some(from_json(s, "ExternalIds")?)
+            }
+            _ => None,
+        };
+        let res = self
+            .runtime
+            .block_on(self.engine.streams_with_external_ids(
+                &media,
+                &episode_id,
+                season,
+                episode,
+                absolute_episode,
+                is_movie,
+                ext_ids.as_ref(),
+            ))?;
+        to_json(&res)
+    }
+
+    pub fn get_virtual_metadata_detail_json(
+        &self,
+        canonical_id: String,
+        title_hint: Option<String>,
+        media_type_hint: Option<String>,
+        preferred_lang: Option<String>,
+    ) -> Result<String, FfiError> {
+        let mtype = match media_type_hint.as_deref() {
+            Some("series") => Some(MediaType::Series),
+            Some("live") => Some(MediaType::Live),
+            Some("movie") => Some(MediaType::Movie),
+            _ => None,
+        };
+        let lang = preferred_lang.unwrap_or_else(|| "en".into());
+        let detail = self.runtime.block_on(self.engine.get_virtual_metadata_detail(
+            &canonical_id,
+            title_hint.as_deref(),
+            mtype,
+            &lang,
+        ))?;
+        to_json(&detail)
+    }
+
+    pub fn get_debrid_overview_json(&self) -> Result<String, FfiError> {
+        let prefs = self
+            .runtime
+            .block_on(self.engine.get_debrid_preferences())?;
+        let accounts = self
+            .runtime
+            .block_on(self.engine.get_debrid_accounts_status())?;
+        let disabled_stream_addons = self
+            .runtime
+            .block_on(self.engine.list_disabled_stream_addons())?;
+        to_json(&serde_json::json!({
+            "preferences": prefs,
+            "accounts": accounts,
+            "disabledStreamAddons": disabled_stream_addons,
+        }))
+    }
+
+    pub fn set_debrid_preferences_json(&self, prefs_json: String) -> Result<String, FfiError> {
+        let prefs: DebridPreferences = from_json(&prefs_json, "DebridPreferences")?;
+        let saved = self
+            .runtime
+            .block_on(self.engine.set_debrid_preferences(prefs))?;
+        to_json(&saved)
+    }
+
+    pub fn save_debrid_api_key(&self, provider: String, api_key: String) -> Result<(), FfiError> {
+        let kind = DebridProviderKind::parse_id(&provider).ok_or_else(|| {
+            VesselError::InvalidInput(format!("unknown Debrid provider '{provider}'"))
+        })?;
+        self.runtime
+            .block_on(self.engine.save_debrid_api_key(kind, &api_key))?;
+        Ok(())
+    }
+
+    pub fn remove_debrid_credentials(&self, provider: String) -> Result<(), FfiError> {
+        let kind = DebridProviderKind::parse_id(&provider).ok_or_else(|| {
+            VesselError::InvalidInput(format!("unknown Debrid provider '{provider}'"))
+        })?;
+        self.runtime
+            .block_on(self.engine.remove_debrid_credentials(kind))?;
+        Ok(())
+    }
+
+    pub fn start_real_debrid_device_auth_json(&self) -> Result<String, FfiError> {
+        let start = self
+            .runtime
+            .block_on(self.engine.start_real_debrid_device_auth())?;
+        to_json(&start)
+    }
+
+    pub fn poll_real_debrid_device_auth_json(
+        &self,
+        device_code: String,
+    ) -> Result<String, FfiError> {
+        let poll = self
+            .runtime
+            .block_on(self.engine.poll_real_debrid_device_auth(&device_code))?;
+        to_json(&poll)
+    }
+
+    pub fn probe_torrent_cache_json(&self, candidates_json: String) -> Result<String, FfiError> {
+        let candidates: Vec<StreamCandidate> = from_json(&candidates_json, "Vec<StreamCandidate>")?;
+        let probed = self
+            .runtime
+            .block_on(self.engine.probe_torrent_cache(candidates))?;
+        to_json(&probed)
+    }
+
+    pub fn resolve_torrent_candidate_json(&self, request_json: String) -> Result<String, FfiError> {
+        let req: ResolveDebridRequest = from_json(&request_json, "ResolveDebridRequest")?;
+        let res = self
+            .runtime
+            .block_on(self.engine.resolve_torrent_candidate(req))?;
+        to_json(&res)
+    }
+
+    pub fn list_debrid_cloud_json(&self) -> Result<String, FfiError> {
+        let items = self.runtime.block_on(self.engine.list_debrid_cloud())?;
+        to_json(&items)
+    }
+
+    pub fn delete_debrid_cloud(&self, target: String, torrent_id: String) -> Result<(), FfiError> {
+        self.runtime
+            .block_on(self.engine.delete_debrid_cloud(&target, &torrent_id))?;
+        Ok(())
+    }
+
+    pub fn unrestrict_debrid_cloud_link_json(
+        &self,
+        target: String,
+        link: String,
+    ) -> Result<String, FfiError> {
+        let resolved = self
+            .runtime
+            .block_on(self.engine.unrestrict_debrid_cloud_link(&target, &link))?;
+        to_json(&resolved)
+    }
+
+    pub fn set_stream_addon_auto_enabled(
+        &self,
+        plugin_id: String,
+        enabled: bool,
+    ) -> Result<(), FfiError> {
+        let pid = PluginId::new(plugin_id)?;
+        self.runtime
+            .block_on(self.engine.set_stream_addon_auto_enabled(&pid, enabled))?;
+        Ok(())
+    }
+
+    pub fn get_playback_stats_json(&self) -> Result<String, FfiError> {
+        let stats = self.runtime.block_on(self.engine.get_playback_stats());
+        to_json(&stats)
     }
 
     pub fn search_plugin_sync_json(

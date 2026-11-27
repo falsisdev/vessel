@@ -610,6 +610,95 @@ class VesselRepository private constructor(private val appContext: Context) {
         )
     }
 
+    suspend fun getVirtualMetadataDetail(
+        canonicalId: String,
+        titleHint: String? = null,
+        mediaTypeHint: String? = null,
+        preferredLang: String? = _locale.value,
+    ): MediaDetail = withContext(Dispatchers.IO) {
+        json.decodeFromString(
+            requireCore().getVirtualMetadataDetailJson(canonicalId, titleHint, mediaTypeHint, preferredLang),
+        )
+    }
+
+    suspend fun getStreamsWithExternalIds(
+        pluginId: String,
+        nativeId: String,
+        episodeId: String,
+        season: Int,
+        episode: Int,
+        absoluteEpisode: Int? = null,
+        isMovie: Boolean = false,
+        externalIds: ExternalIds? = null,
+    ): StreamResult = withContext(Dispatchers.IO) {
+        val extJson = externalIds?.let { json.encodeToString(it) }
+        json.decodeFromString(
+            requireCore().getStreamsWithExternalIdsJson(
+                pluginId,
+                nativeId,
+                episodeId,
+                season.toUInt(),
+                episode.toUInt(),
+                absoluteEpisode?.toUInt(),
+                isMovie,
+                extJson,
+            ),
+        )
+    }
+
+    suspend fun getDebridOverview(): DebridOverview = withContext(Dispatchers.IO) {
+        json.decodeFromString(requireCore().getDebridOverviewJson())
+    }
+
+    suspend fun setDebridPreferences(prefs: DebridPreferences): DebridPreferences = withContext(Dispatchers.IO) {
+        json.decodeFromString(requireCore().setDebridPreferencesJson(json.encodeToString(prefs)))
+    }
+
+    suspend fun saveDebridApiKey(provider: String, apiKey: String) = withContext(Dispatchers.IO) {
+        requireCore().saveDebridApiKey(provider, apiKey)
+    }
+
+    suspend fun removeDebridCredentials(provider: String) = withContext(Dispatchers.IO) {
+        requireCore().removeDebridCredentials(provider)
+    }
+
+    suspend fun startRealDebridDeviceAuth(): RealDebridDeviceAuthStart = withContext(Dispatchers.IO) {
+        json.decodeFromString(requireCore().startRealDebridDeviceAuthJson())
+    }
+
+    suspend fun pollRealDebridDeviceAuth(deviceCode: String): RealDebridDeviceAuthPoll = withContext(Dispatchers.IO) {
+        json.decodeFromString(requireCore().pollRealDebridDeviceAuthJson(deviceCode))
+    }
+
+    suspend fun probeTorrentCache(candidates: List<StreamCandidate>): List<StreamCandidate> = withContext(Dispatchers.IO) {
+        json.decodeFromString(requireCore().probeTorrentCacheJson(json.encodeToString(candidates)))
+    }
+
+    suspend fun resolveTorrentCandidate(request: ResolveDebridRequest): DebridResolution = withContext(Dispatchers.IO) {
+        json.decodeFromString(requireCore().resolveTorrentCandidateJson(json.encodeToString(request)))
+    }
+
+    suspend fun listDebridCloud(): List<DebridCloudItem> = withContext(Dispatchers.IO) {
+        json.decodeFromString(requireCore().listDebridCloudJson())
+    }
+
+    suspend fun deleteDebridCloud(target: String, torrentId: String) = withContext(Dispatchers.IO) {
+        requireCore().deleteDebridCloud(target, torrentId)
+    }
+
+    suspend fun unrestrictDebridCloudLink(target: String, link: String): ResolvedHttpLink = withContext(Dispatchers.IO) {
+        json.decodeFromString(requireCore().unrestrictDebridCloudLinkJson(target, link))
+    }
+
+    suspend fun setStreamAddonAutoEnabled(pluginId: String, enabled: Boolean) = withContext(Dispatchers.IO) {
+        requireCore().setStreamAddonAutoEnabled(pluginId, enabled)
+    }
+
+    suspend fun getPlaybackStats(): PlaybackStats = withContext(Dispatchers.IO) {
+        val c = core ?: return@withContext PlaybackStats()
+        json.decodeFromString(c.getPlaybackStatsJson())
+    }
+
     suspend fun saveUiPreferences(prefs: UiPreferences) = withContext(Dispatchers.IO) {
         val normalizedAspect = when (prefs.cards.aspectRatio) {
             "portrait_3x4" -> "portrait_3x4"

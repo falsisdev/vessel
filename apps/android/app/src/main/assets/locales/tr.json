@@ -92,7 +92,9 @@
     "filter_anime": "Anime",
     "all_plugins": "Tüm Eklentiler",
     "recent_searches": "Son Aramalar",
-    "clear_history": "Geçmişi Temizle"
+    "clear_history": "Geçmişi Temizle",
+    "global_catalog": "Genel Katalog (Cinemeta / TMDB)",
+    "global_catalog_desc": "Katalog eklentisi olmadan doğrudan IMDb ve TMDB üzerinden arayıp Torrentio/Debrid ile izleyin."
   },
   "details": {
     "episodes": "Bölümler",
@@ -428,5 +430,49 @@
   },
   "media": {
     "quick_status": "Hızlı İzleme Durumu"
+  },
+  "debrid": {
+    "title": "Debrid & Torrentler",
+    "subtitle": "Real-Debrid, TorBox, AllDebrid, Premiumize, Debrid-Link ve topluluk Debrid eklentilerini yapılandırın.",
+    "priority_hint": "Sağlayıcılar yukarıdan aşağıya öncelik sırasıyla denenir.",
+    "api_key_placeholder": "API anahtarını yapıştırın...",
+    "save_key": "Anahtarı Kaydet",
+    "disconnect": "Bağlantıyı Kes",
+    "connect_device": "Cihaz Koduyla Bağlan",
+    "device_auth_prompt": "{url} adresini açıp şu kodu girin:",
+    "device_auth_waiting": "Onay bekleniyor...",
+    "connected": "Bağlı",
+    "not_configured": "Yapılandırılmadı",
+    "premium": "Premium",
+    "free": "Ücretsiz",
+    "only_cached": "Yalnızca önbellekteki (Cached) torrentleri göster",
+    "only_cached_desc": "Anlık önbellek kontrolünde hazır olmayan (uncached) torrentleri listeden gizler.",
+    "auto_fallback": "Bulunamazsa sıradaki Debrid sağlayıcısına geç",
+    "auto_fallback_desc": "Bir torrent ilk sağlayıcıda hazır değilse veya hata verirse sıradaki hesabı otomatik dener.",
+    "cloud_title": "Debrid Bulut İndirmeleri",
+    "cloud_refresh": "Yenile",
+    "cloud_empty": "Debrid bulut hesabınızda aktif veya yakın tarihli aktarım yok.",
+    "cloud_auto_poll": "Canlı Takip (2 sn)",
+    "cached_badge": "Önbellekte",
+    "uncached_badge": "Bulutta Değil",
+    "uncached_title": "Torrent Önbellekte Hazır Değil",
+    "uncached_desc": "Bu torrent henüz {provider} önbelleğinde değil. Debrid bulutuna indirilmesini başlatıp ilerlemeyi takip etmek ister misiniz?",
+    "queue_cloud": "Buluta İndir",
+    "no_provider_title": "Debrid Hesabı Gerekli",
+    "no_provider_desc": "Torrent/magnet akışlarını oynatmak için Ayarlar > Debrid bölümünden bir hesap bağlayın (Saf P2P motoru v0.6.0'da gelecek).",
+    "open_debrid_settings": "Debrid Ayarlarını Aç",
+    "auto_stream_addon": "Otomatik IMDb Akışı",
+    "configure_addon": "Yapılandır"
+  },
+  "stats": {
+    "title": "Yayın İstatistikleri",
+    "speed": "Ağ Hızı",
+    "transferred": "Aktarılan",
+    "buffer": "Tampon",
+    "resolution": "Çözünürlük",
+    "video": "Video",
+    "audio": "Ses",
+    "size": "Dosya Boyutu",
+    "source": "Aktarım"
   }
 }

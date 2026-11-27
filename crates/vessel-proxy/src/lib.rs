@@ -8,8 +8,9 @@ use std::fmt::Write as _;
 use std::io::SeekFrom;
 use std::net::SocketAddr;
 use std::path::{Component, Path as FsPath, PathBuf};
-use std::sync::{Arc, RwLock};
-use std::time::Duration;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex, RwLock};
+use std::time::{Duration, Instant};
 
 use axum::body::Body;
 use axum::extract::{Path, Query, State};
@@ -169,6 +170,61 @@ impl LocalDirStore {
     }
 }
 
+#[derive(Debug)]
+struct ProxyThroughput {
+    total_bytes: AtomicU64,
+    window: Mutex<(Instant, u64, u64)>,
+}
+
+impl Default for ProxyThroughput {
+    fn default() -> Self {
+        Self {
+            total_bytes: AtomicU64::new(0),
+            window: Mutex::new((Instant::now(), 0, 0)),
+        }
+    }
+}
+
+impl ProxyThroughput {
+    fn record(&self, bytes: u64) {
+        if bytes == 0 {
+            return;
+        }
+        self.total_bytes.fetch_add(bytes, Ordering::Relaxed);
+        if let Ok(mut guard) = self.window.lock() {
+            let now = Instant::now();
+            guard.1 = guard.1.saturating_add(bytes);
+            let elapsed = now.duration_since(guard.0);
+            if elapsed >= Duration::from_secs(1) {
+                let bps = ((guard.1 as f64) / elapsed.as_secs_f64()) as u64;
+                guard.0 = now;
+                guard.1 = 0;
+                guard.2 = bps;
+            }
+        }
+    }
+
+    fn snapshot(&self) -> (u64, u64) {
+        let total = self.total_bytes.load(Ordering::Relaxed);
+        let speed = if let Ok(mut guard) = self.window.lock() {
+            let now = Instant::now();
+            let elapsed = now.duration_since(guard.0);
+            if elapsed >= Duration::from_secs(3) {
+                guard.0 = now;
+                guard.1 = 0;
+                guard.2 = 0;
+            } else if elapsed >= Duration::from_millis(400) && guard.1 > 0 {
+                let live = ((guard.1 as f64) / elapsed.as_secs_f64()) as u64;
+                return (live, total);
+            }
+            guard.2
+        } else {
+            0
+        };
+        (speed, total)
+    }
+}
+
 #[derive(Clone)]
 struct AppState {
     base_url: String,
@@ -176,6 +232,7 @@ struct AppState {
     local_dirs: Arc<LocalDirStore>,
     signer: Arc<HmacSigner>,
     client: reqwest::Client,
+    throughput: Arc<ProxyThroughput>,
 }
 
 async fn health_handler() -> Json<HealthResponse> {
@@ -561,11 +618,14 @@ async fn stream_upstream_target(
             }
         }
         let (client_read, mut server_write) = tokio::io::duplex(64 * 1024);
+        let throughput = Arc::clone(&state.throughput);
         tokio::spawn(async move {
+            throughput.record(first.len() as u64);
             if server_write.write_all(&first).await.is_err() {
                 return;
             }
             while let Ok(Some(chunk)) = upstream_resp.chunk().await {
+                throughput.record(chunk.len() as u64);
                 if server_write.write_all(&chunk).await.is_err() {
                     break;
                 }
@@ -585,8 +645,18 @@ async fn stream_upstream_target(
         }
     }
 
-    let stream = upstream_resp.bytes_stream();
-    match builder.body(Body::from_stream(stream)) {
+    let (client_read, mut server_write) = tokio::io::duplex(64 * 1024);
+    let throughput = Arc::clone(&state.throughput);
+    tokio::spawn(async move {
+        while let Ok(Some(chunk)) = upstream_resp.chunk().await {
+            throughput.record(chunk.len() as u64);
+            if server_write.write_all(&chunk).await.is_err() {
+                break;
+            }
+        }
+        let _ = server_write.shutdown().await;
+    });
+    match builder.body(Body::from_stream(ReaderStream::new(client_read))) {
         Ok(resp) => resp,
         Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
@@ -622,6 +692,7 @@ pub struct ProxyServer {
     local_dirs: Arc<LocalDirStore>,
     signer: Arc<HmacSigner>,
     client: reqwest::Client,
+    throughput: Arc<ProxyThroughput>,
     shutdown_tx: Option<oneshot::Sender<()>>,
 }
 
@@ -631,6 +702,7 @@ impl ProxyServer {
         let signer = Arc::new(HmacSigner::generate()?);
         let sessions = Arc::new(ProxySessionStore::default());
         let local_dirs = Arc::new(LocalDirStore::default());
+        let throughput = Arc::new(ProxyThroughput::default());
         let client = vessel_domain::http_client_builder()
             .connect_timeout(Duration::from_secs(10))
             .pool_idle_timeout(Duration::from_secs(30))
@@ -651,6 +723,7 @@ impl ProxyServer {
             local_dirs: Arc::clone(&local_dirs),
             signer: Arc::clone(&signer),
             client: client.clone(),
+            throughput: Arc::clone(&throughput),
         };
 
         let router = Router::new()
@@ -677,8 +750,14 @@ impl ProxyServer {
             local_dirs,
             signer,
             client,
+            throughput,
             shutdown_tx: Some(shutdown_tx),
         })
+    }
+
+    /// Returns `(current_speed_bps, total_bytes_transferred)` observed by the local proxy.
+    pub fn throughput_stats(&self) -> (u64, u64) {
+        self.throughput.snapshot()
     }
 
     /// Registers a local bundle directory and returns its base URL prefix (`http://127.0.0.1:<port>/local/<token>`).
@@ -1080,6 +1159,8 @@ mod tests {
             skip_segments: Vec::new(),
             plugin_id: None,
             plugin_name: None,
+            torrent: None,
+            debrid_cache: None,
         }
     }
 

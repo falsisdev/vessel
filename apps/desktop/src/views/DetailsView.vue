@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onActivated, onMounted, ref, shallowRef, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import {
   AlertTriangle,
   AlignJustify,
@@ -8,6 +8,7 @@ import {
   BookmarkPlus,
   Check,
   CheckCircle2,
+  Cloud,
   Download,
   Layers,
   LayoutGrid,
@@ -23,8 +24,10 @@ import {
   Trash2,
   Wrench,
   X,
+  Zap,
 } from 'lucide-vue-next'
 import { vesselApi } from '@/api/vessel'
+import { formatBytes } from '@/composables/useAppUpdater'
 import { useI18n } from '@/composables/useI18n'
 import { useLibraryState } from '@/composables/useLibraryState'
 import { usePlayerSession } from '@/composables/usePlayerSession'
@@ -53,6 +56,7 @@ const props = defineProps<{
   nativeId: string
 }>()
 
+const route = useRoute()
 const router = useRouter()
 const { t, currentLang } = useI18n()
 const { getMediaStatus, setMediaStatus, refreshLibraryState } = useLibraryState()
@@ -115,6 +119,21 @@ const resolverError = shallowRef<string>('')
 const streamChoices = ref<StreamCandidate[]>([])
 const episodeSubtitles = ref<SubtitleTrack[]>([])
 const episodeSkipSegments = ref<SkipSegment[]>([])
+const resolvingTorrentKey = shallowRef('')
+const debridPrompt = ref<
+  | {
+      kind: 'needs_confirmation'
+      ep: Episode
+      candidate: StreamCandidate
+      action: 'play' | 'download'
+      providerLabel: string
+      target: string
+      progressPct: number
+    }
+  | { kind: 'no_provider'; message: string }
+  | null
+>(null)
+const queueingDebridCloud = shallowRef(false)
 
 function cleanSynopsis(raw?: string): string {
   if (!raw) return ''
@@ -241,9 +260,24 @@ async function redirectLiveToPlayer(res: MediaDetail): Promise<void> {
 async function loadDetails(): Promise<void> {
   loading.value = true
   try {
+    const isVirtualMeta = props.pluginId === 'vessel.metadata' || props.nativeId.startsWith('virtual::')
+    const titleHint = typeof route.query.title === 'string' ? route.query.title : undefined
+    const mediaTypeHint =
+      route.query.mediaType === 'series' || route.query.mediaType === 'movie'
+        ? route.query.mediaType
+        : undefined
+    const detailPromise = isVirtualMeta
+      ? vesselApi.getVirtualMetadataDetail(
+          props.nativeId.replace(/^virtual::/, ''),
+          titleHint,
+          mediaTypeHint,
+          currentLang.value,
+        )
+      : vesselApi.getDetailsWithEnrichment(props.pluginId, props.nativeId, currentLang.value)
+
     const [res, linked, pluginsList] = await Promise.all([
-      vesselApi.getDetailsWithEnrichment(props.pluginId, props.nativeId, currentLang.value),
-      vesselApi.getLinkedSources(props.pluginId, props.nativeId).catch(() => []),
+      detailPromise,
+      isVirtualMeta ? Promise.resolve([]) : vesselApi.getLinkedSources(props.pluginId, props.nativeId).catch(() => []),
       availablePlugins.value.length ? Promise.resolve(availablePlugins.value) : vesselApi.listPlugins().catch(() => []),
       refreshResumeState(),
       refreshLibraryState(),
@@ -508,6 +542,7 @@ async function openSourceResolver(ep: Episode): Promise<void> {
       episode: ep.episode,
       absoluteEpisode: ep.absoluteEpisode,
       isMovie: detail.value?.type === 'movie',
+      externalIds: detail.value?.externalIds,
     })
     if (resolverEpisode.value?.streamId !== ep.streamId) return
     streamChoices.value = res.streams
@@ -535,18 +570,129 @@ function closeSourceResolver(): void {
   episodeSkipSegments.value = []
 }
 
+function isTorrentCandidate(cand: StreamCandidate): boolean {
+  return cand.kind === 'torrent' || cand.url.trim().toLowerCase().startsWith('magnet:?')
+}
+
+function inferResolvedKind(url: string): StreamCandidate['kind'] {
+  const lower = url.toLowerCase()
+  if (lower.includes('.m3u8')) return 'hls'
+  if (lower.includes('.mkv')) return 'mkv'
+  if (lower.includes('.mp4')) return 'mp4'
+  if (lower.includes('.webm')) return 'webm'
+  return 'auto'
+}
+
+async function resolveTorrentForAction(
+  ep: Episode,
+  candidate: StreamCandidate,
+  action: 'play' | 'download',
+): Promise<StreamCandidate | null> {
+  if (!isTorrentCandidate(candidate)) return candidate
+  resolvingTorrentKey.value = `${candidate.url}:${candidate.label}`
+  try {
+    const res = await vesselApi.resolveTorrentCandidate({
+      url: candidate.url,
+      torrent: candidate.torrent,
+      preferredTarget: candidate.debridCache?.target,
+      allowUncachedQueue: false,
+      season: ep.season,
+      episode: ep.episode,
+    })
+    if (res.status === 'ready') {
+      return {
+        ...candidate,
+        url: res.url,
+        kind: inferResolvedKind(res.url),
+        headers: res.headers ?? {},
+        torrent: candidate.torrent
+          ? { ...candidate.torrent, sizeBytes: res.sizeBytes ?? candidate.torrent.sizeBytes }
+          : undefined,
+      }
+    }
+    if (res.status === 'needs_confirmation') {
+      debridPrompt.value = {
+        kind: 'needs_confirmation',
+        ep,
+        candidate,
+        action,
+        providerLabel: res.providerLabel,
+        target: res.target,
+        progressPct: res.progressPct,
+      }
+      return null
+    }
+    debridPrompt.value = {
+      kind: 'no_provider',
+      message: res.message,
+    }
+    return null
+  } catch (err) {
+    pushToast('error', String(err))
+    return null
+  } finally {
+    resolvingTorrentKey.value = ''
+  }
+}
+
+async function confirmDebridCloudQueue(): Promise<void> {
+  if (!debridPrompt.value || debridPrompt.value.kind !== 'needs_confirmation') return
+  const prompt = debridPrompt.value
+  queueingDebridCloud.value = true
+  try {
+    const res = await vesselApi.resolveTorrentCandidate({
+      url: prompt.candidate.url,
+      torrent: prompt.candidate.torrent,
+      preferredTarget: prompt.target,
+      allowUncachedQueue: true,
+      season: prompt.ep.season,
+      episode: prompt.ep.episode,
+    })
+    if (res.status === 'ready') {
+      debridPrompt.value = null
+      const resolvedCand: StreamCandidate = {
+        ...prompt.candidate,
+        url: res.url,
+        kind: inferResolvedKind(res.url),
+        headers: res.headers ?? {},
+      }
+      if (prompt.action === 'download') {
+        await downloadCandidate(prompt.ep, resolvedCand)
+      } else {
+        await startStream(prompt.ep, resolvedCand)
+      }
+      return
+    }
+    if (res.status === 'needs_confirmation') {
+      pushToast(
+        'info',
+        `${res.providerLabel}: ${res.cloudStatus.toUpperCase()} (${Math.round(res.progressPct)}%). Track progress in Settings > Debrid.`,
+      )
+      debridPrompt.value = null
+    }
+  } catch (err) {
+    pushToast('error', String(err))
+  } finally {
+    queueingDebridCloud.value = false
+  }
+}
+
 async function startStream(ep: Episode, candidate: StreamCandidate): Promise<void> {
   if (!detail.value) return
-  const candidateIndex = Math.max(
-    0,
-    streamChoices.value.findIndex((item) => item.url === candidate.url && item.label === candidate.label),
-  )
+  const resolvedCandidate = await resolveTorrentForAction(ep, candidate, 'play')
+  if (!resolvedCandidate) return
+  const rawIndex = streamChoices.value.findIndex((item) => item.url === candidate.url && item.label === candidate.label)
+  const candidateIndex = Math.max(0, rawIndex)
+  const nextStreams = streamChoices.value.length ? [...streamChoices.value] : [resolvedCandidate]
+  if (rawIndex >= 0) {
+    nextStreams[rawIndex] = resolvedCandidate
+  }
   setSession({
     pluginId: props.pluginId,
     nativeId: props.nativeId,
     detail: detail.value,
     episode: ep,
-    streams: streamChoices.value.length ? [...streamChoices.value] : [candidate],
+    streams: nextStreams,
     subtitles: [...episodeSubtitles.value],
     skipSegments: [...episodeSkipSegments.value],
     activeStreamIndex: candidateIndex,
@@ -567,6 +713,8 @@ async function startStream(ep: Episode, candidate: StreamCandidate): Promise<voi
 
 async function downloadCandidate(ep: Episode, candidate: StreamCandidate): Promise<void> {
   if (!detail.value) return
+  const resolvedCandidate = await resolveTorrentForAction(ep, candidate, 'download')
+  if (!resolvedCandidate) return
   const isMovie = detail.value.type === 'movie'
   try {
     await vesselApi.enqueueDownload({
@@ -575,11 +723,11 @@ async function downloadCandidate(ep: Episode, candidate: StreamCandidate): Promi
       title: isMovie ? detail.value.title : `${detail.value.title} — S${ep.season}E${ep.episode}`,
       season: isMovie ? undefined : ep.season,
       episode: isMovie ? undefined : ep.episode,
-      streamLabel: candidate.label,
-      kind: candidate.kind === 'hls' ? 'hls' : 'direct',
-      sourceUrl: candidate.url,
-      headers: candidate.headers,
-      subtitles: [...candidate.subtitles, ...episodeSubtitles.value],
+      streamLabel: resolvedCandidate.label,
+      kind: resolvedCandidate.kind === 'hls' ? 'hls' : 'direct',
+      sourceUrl: resolvedCandidate.url,
+      headers: resolvedCandidate.headers,
+      subtitles: [...resolvedCandidate.subtitles, ...episodeSubtitles.value],
     })
     pushToast(
       'info',
@@ -1316,6 +1464,30 @@ onActivated(() => {
                         </span>
                         <span class="v-badge v-badge-accent">{{ cand.kind.toUpperCase() }}</span>
                         <span v-if="cand.quality" class="v-badge">{{ cand.quality }}</span>
+                        <span
+                          v-if="cand.debridCache?.state === 'cached'"
+                          class="v-badge v-badge-success"
+                        >
+                          <Zap :size="11" aria-hidden="true" /> {{ cand.debridCache.label }} {{ t('debrid.cached_badge') }}
+                        </span>
+                        <span
+                          v-else-if="cand.debridCache?.state === 'uncached'"
+                          class="v-badge v-badge-warn"
+                        >
+                          <Cloud :size="11" aria-hidden="true" /> {{ t('debrid.uncached_badge') }}
+                        </span>
+                        <span v-if="cand.torrent?.sizeBytes" class="v-badge">
+                          {{ formatBytes(cand.torrent.sizeBytes) }}
+                        </span>
+                        <span v-if="cand.torrent?.seeders !== undefined" class="v-badge">
+                          👤 {{ cand.torrent.seeders }}
+                        </span>
+                        <span v-if="cand.torrent?.trackerSource" class="v-badge">
+                          {{ cand.torrent.trackerSource }}
+                        </span>
+                        <span v-if="cand.torrent?.hdr" class="v-badge v-badge-warn">
+                          {{ cand.torrent.hdr }}
+                        </span>
                         <span v-if="cand.audioType" class="v-badge v-badge-warn">
                           {{ cand.audioType.toUpperCase() }}
                         </span>
@@ -1341,6 +1513,64 @@ onActivated(() => {
                     <Download :size="15" aria-hidden="true" />
                   </button>
                 </div>
+              </div>
+            </div>
+          </div>
+        </Transition>
+      </Teleport>
+
+      <!-- Debrid Confirmation / Missing Provider Modal -->
+      <Teleport to="body">
+        <Transition name="modal-pop">
+          <div
+            v-if="debridPrompt"
+            class="stream-backdrop"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Debrid confirmation"
+          >
+            <div class="v-card fix-modal">
+              <div class="picker-head">
+                <h3 class="picker-title">
+                  {{
+                    debridPrompt.kind === 'needs_confirmation'
+                      ? t('debrid.uncached_title')
+                      : t('debrid.no_provider_title')
+                  }}
+                </h3>
+                <button type="button" class="v-btn v-btn-icon" @click="debridPrompt = null">
+                  <X :size="16" />
+                </button>
+              </div>
+              <p class="v-muted" style="margin: 0.5rem 0 1rem">
+                {{
+                  debridPrompt.kind === 'needs_confirmation'
+                    ? t('debrid.uncached_desc', { provider: debridPrompt.providerLabel })
+                    : debridPrompt.message
+                }}
+              </p>
+              <div class="fix-actions">
+                <button type="button" class="v-btn" @click="debridPrompt = null">
+                  {{ t('common.cancel') }}
+                </button>
+                <button
+                  v-if="debridPrompt.kind === 'needs_confirmation'"
+                  type="button"
+                  class="v-btn v-btn-primary"
+                  :disabled="queueingDebridCloud"
+                  @click="confirmDebridCloudQueue"
+                >
+                  <Loader2 v-if="queueingDebridCloud" :size="14" class="spin" />
+                  {{ t('debrid.queue_cloud') }}
+                </button>
+                <button
+                  v-else
+                  type="button"
+                  class="v-btn v-btn-primary"
+                  @click="debridPrompt = null; closeSourceResolver(); router.push({ name: 'settings' })"
+                >
+                  {{ t('debrid.open_debrid_settings') }}
+                </button>
               </div>
             </div>
           </div>

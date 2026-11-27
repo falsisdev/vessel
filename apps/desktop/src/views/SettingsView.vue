@@ -2,6 +2,7 @@
 import { computed, onMounted, shallowRef } from 'vue'
 import { Download, ExternalLink, FolderOpen, Palette, RefreshCw, RotateCcw, Shield, Sliders, Sparkles, Upload } from 'lucide-vue-next'
 import { isTauriRuntime, vesselApi } from '@/api/vessel'
+import DebridSettingsSection from '@/components/settings/DebridSettingsSection.vue'
 import { formatBytes, useAppUpdater } from '@/composables/useAppUpdater'
 import { useI18n } from '@/composables/useI18n'
 import { useTheme } from '@/composables/useTheme'
@@ -635,6 +636,8 @@ async function handleImportBackup(mode: 'smart_merge' | 'reset_and_import'): Pro
         <span>Proxy: <code>{{ engineInfo.proxyBaseUrl }}</code></span>
       </div>
     </div>
+
+    <DebridSettingsSection />
 
     <div class="v-card section-card">
       <div class="section-title-row">

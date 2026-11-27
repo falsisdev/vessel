@@ -61,6 +61,7 @@ import dev.falsis.vessel.data.LibraryItem
 import dev.falsis.vessel.data.MediaDetail
 import dev.falsis.vessel.data.MediaRef
 import dev.falsis.vessel.data.MediaSummary
+import dev.falsis.vessel.data.MetadataSearchHit
 import dev.falsis.vessel.data.StreamResult
 import dev.falsis.vessel.data.VesselRepository
 import dev.falsis.vessel.ui.components.MediaPosterCard
@@ -76,6 +77,7 @@ import dev.falsis.vessel.ui.components.vesselTopSafeInset
 import dev.falsis.vessel.ui.i18n.VesselI18n
 import dev.falsis.vessel.ui.isLiveMediaSummary
 import dev.falsis.vessel.ui.isLiveTvPlugin
+import dev.falsis.vessel.ui.isNonCatalogPlugin
 import dev.falsis.vessel.ui.theme.LocalVesselPalette
 import kotlinx.coroutines.launch
 
@@ -93,7 +95,7 @@ fun SearchScreen(
     val plugins by repo.plugins.collectAsState()
     val prefs by repo.uiPreferences.collectAsState()
     val enabledPlugins = remember(plugins) {
-        plugins.filter { it.enabled && !dev.falsis.vessel.ui.isSubtitleOnlyPlugin(it) }
+        plugins.filter { it.enabled && !isNonCatalogPlugin(it) }
     }
     val pluginMap = remember(plugins) { plugins.associateBy { it.manifest.id } }
     val pluginNameMap = remember(plugins) { plugins.associate { it.manifest.id to it.manifest.name } }
@@ -105,7 +107,9 @@ fun SearchScreen(
     var showPluginMenu by remember { mutableStateOf(false) }
     var activeSearchId by remember { mutableStateOf<String?>(null) }
     var searching by remember { mutableStateOf(false) }
+    var searchingGlobal by remember { mutableStateOf(false) }
     var results by remember { mutableStateOf<List<Pair<String, MediaSummary>>>(emptyList()) }
+    var globalHits by remember { mutableStateOf<List<MetadataSearchHit>>(emptyList()) }
     var libraryStatusMap by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
 
     LaunchedEffect(Unit) {
@@ -156,24 +160,57 @@ fun SearchScreen(
         if (overrideQuery != null) query = q
         recordSearchHistory(q)
         results = emptyList()
-        searching = true
+        globalHits = emptyList()
+        searching = enabledPlugins.isNotEmpty()
+        searchingGlobal = selectedPluginId == null
         scope.launch {
             runCatching {
                 repo.cancelSearch()
-                activeSearchId = repo.searchStreams(
-                    query = q,
-                    pluginIds = selectedPluginId?.let { listOf(it) },
-                )
+                if (enabledPlugins.isNotEmpty()) {
+                    activeSearchId = repo.searchStreams(
+                        query = q,
+                        pluginIds = selectedPluginId?.let { listOf(it) },
+                    )
+                } else {
+                    searching = false
+                }
             }.onFailure {
                 searching = false
                 repo.notifyError(it, "Search failed")
+            }
+        }
+        if (selectedPluginId == null) {
+            scope.launch {
+                runCatching { repo.searchMetadata(q, "all") }
+                    .onSuccess { globalHits = it.hits }
+                searchingGlobal = false
             }
         }
     }
 
     fun stopSearch() {
         searching = false
+        searchingGlobal = false
         scope.launch { repo.cancelSearch() }
+    }
+
+    val filteredGlobalHits = remember(globalHits, selectedType, selectedPluginId) {
+        if (selectedPluginId != null) {
+            emptyList()
+        } else {
+            globalHits.filter { hit ->
+                val isAnime = hit.mediaType == "anime" ||
+                    hit.externalIds.anilist != null ||
+                    hit.externalIds.mal != null ||
+                    hit.externalIds.kitsu != null
+                when (selectedType) {
+                    "movie" -> hit.mediaType == "movie"
+                    "series" -> hit.mediaType != "movie" && !isAnime
+                    "anime" -> isAnime
+                    else -> true
+                }
+            }
+        }
     }
 
     val groupedBuckets = remember(results, selectedType, selectedPluginId) {
@@ -206,7 +243,7 @@ fun SearchScreen(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(VesselI18n.tr("search.title"), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-            if (searching) {
+            if (searching || searchingGlobal) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Surface(shape = RoundedCornerShape(999.dp), color = palette.accent.copy(alpha = 0.16f)) {
                         Row(
@@ -235,6 +272,7 @@ fun SearchScreen(
             onSearch = { triggerSearch() },
             onClear = {
                 results = emptyList()
+                globalHits = emptyList()
                 stopSearch()
             },
             modifier = Modifier.fillMaxWidth(),
@@ -300,7 +338,7 @@ fun SearchScreen(
             }
         }
 
-        if (searching) {
+        if (searching || searchingGlobal) {
             LinearProgressIndicator(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -311,7 +349,7 @@ fun SearchScreen(
         }
 
         AnimatedContent(
-            targetState = groupedBuckets.isEmpty() && !searching,
+            targetState = groupedBuckets.isEmpty() && filteredGlobalHits.isEmpty() && !searching && !searchingGlobal,
             transitionSpec = { fadeIn(tween(200)).togetherWith(fadeOut(tween(150))) },
             label = "search_results_transition",
             modifier = Modifier.fillMaxSize(),
@@ -402,6 +440,54 @@ fun SearchScreen(
                     verticalArrangement = Arrangement.spacedBy(14.dp),
                     modifier = Modifier.fillMaxSize(),
                 ) {
+                    if (filteredGlobalHits.isNotEmpty()) {
+                        item(key = "hdr:vessel.metadata", span = { GridItemSpan(maxLineSpan) }) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                Text(
+                                    text = VesselI18n.tr("search.global_catalog", "Global Catalog (Cinemeta / TMDB)"),
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                )
+                                Surface(color = palette.bgSurface, shape = RoundedCornerShape(999.dp)) {
+                                    Text(
+                                        text = "${filteredGlobalHits.size}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = palette.textMuted,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                    )
+                                }
+                            }
+                        }
+                        items(filteredGlobalHits, key = { "global:${it.canonicalId}" }) { hit ->
+                            val hitAnime = hit.mediaType == "anime" ||
+                                hit.externalIds.anilist != null ||
+                                hit.externalIds.mal != null ||
+                                hit.externalIds.kitsu != null
+                            val summary = MediaSummary(
+                                pluginId = "vessel.metadata",
+                                nativeId = hit.canonicalId,
+                                title = hit.title,
+                                poster = hit.poster,
+                                year = hit.year,
+                                type = if (hit.mediaType == "movie") "movie" else "series",
+                                isAnime = hitAnime,
+                            )
+                            MediaPosterCard(
+                                item = summary,
+                                cards = prefs.cards,
+                                currentStatus = libraryStatusMap["vessel.metadata:${hit.canonicalId}"],
+                                fillGridWidth = true,
+                                onClick = { onOpenDetails("vessel.metadata", hit.canonicalId) },
+                            )
+                        }
+                    }
+
                     groupedBuckets.forEach { (pluginId, bucketItems) ->
                         item(key = "hdr:$pluginId", span = { GridItemSpan(maxLineSpan) }) {
                             Row(

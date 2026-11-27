@@ -10,7 +10,7 @@ use crate::event::EngineEvent;
 use crate::ids::{ExternalIds, MediaRef, PluginId};
 use crate::media::{Episode, MediaDetail, MediaSummary, MediaType, PlaybackProgress};
 use crate::plugin::PluginManifest;
-use crate::stream::{StreamResult, SubtitleFormat, SubtitleSource, SubtitleTrack};
+use crate::stream::{PlaybackStats, StreamResult, SubtitleFormat, SubtitleSource, SubtitleTrack};
 
 /// Visual card layout hint for a home feed shelf.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -237,6 +237,9 @@ pub trait PlayerBackend: Send + Sync {
     async fn pause(&self) -> VesselResult<()>;
     async fn seek(&self, position_ms: u64) -> VesselResult<()>;
     async fn stop(&self) -> VesselResult<()>;
+    async fn stats(&self) -> Option<PlaybackStats> {
+        None
+    }
 }
 
 /// Non-blocking sink streaming core events to any UI adapter.

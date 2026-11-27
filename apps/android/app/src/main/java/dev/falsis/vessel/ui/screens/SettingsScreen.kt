@@ -74,6 +74,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.falsis.vessel.BuildConfig
 import dev.falsis.vessel.data.VesselRepository
+import dev.falsis.vessel.ui.components.DebridSettingsSection
 import dev.falsis.vessel.ui.components.VesselButton
 import dev.falsis.vessel.ui.components.VesselFilterChip
 import dev.falsis.vessel.ui.components.VesselOutlinedButton
@@ -841,6 +842,11 @@ fun SettingsScreen(
                     }
                 }
             }
+        }
+
+        // Debrid & Torrents
+        item {
+            DebridSettingsSection(repo = repo)
         }
 
         // Backup & Restore (Desktop SettingsView parity)

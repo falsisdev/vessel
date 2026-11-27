@@ -9,13 +9,13 @@ import { useLibraryState } from '@/composables/useLibraryState'
 import { usePlayerSession } from '@/composables/usePlayerSession'
 import { useUiPreferences } from '@/composables/useUiPreferences'
 import { pushToast, useVesselEvents } from '@/composables/useVesselEvents'
-import { isLiveMediaSummary, isLiveTvPlugin, isSubtitleOnlyPlugin } from '@/utils/liveTv'
-import type { MediaSummary, PluginListEntry } from '@/types/vessel'
+import { isLiveMediaSummary, isLiveTvPlugin, isNonCatalogPlugin } from '@/utils/liveTv'
+import type { MediaSummary, MetadataSearchHit, PluginListEntry } from '@/types/vessel'
 
 defineOptions({ name: 'SearchView' })
 
 const router = useRouter()
-const { t } = useI18n()
+const { t, currentLang } = useI18n()
 const { uiPreferences, savePreferences } = useUiPreferences()
 const { refreshLibraryState } = useLibraryState()
 const { setSession } = usePlayerSession()
@@ -27,6 +27,8 @@ const mediaTypeFilter = shallowRef('')
 const selectedPluginId = shallowRef('')
 const plugins = ref<PluginListEntry[]>([])
 const launchingLiveKey = shallowRef('')
+const metadataHits = ref<MetadataSearchHit[]>([])
+const searchingMetadata = shallowRef(false)
 
 const hasActiveSearch = computed(
   () =>
@@ -41,11 +43,13 @@ function resetToInitialSearch(): void {
   query.value = ''
   mediaTypeFilter.value = ''
   selectedPluginId.value = ''
+  metadataHits.value = []
   resetSearch()
 }
 
 function handleSearchInputEvent(): void {
   if (!query.value.trim()) {
+    metadataHits.value = []
     resetSearch()
   }
 }
@@ -81,7 +85,7 @@ function applyHistorySearch(term: string): void {
 }
 
 const enabledPlugins = computed(() =>
-  plugins.value.filter((p) => p.enabled && !isSubtitleOnlyPlugin(p)),
+  plugins.value.filter((p) => p.enabled && !isNonCatalogPlugin(p)),
 )
 const pluginMap = computed(() => {
   const m = new Map<string, PluginListEntry>()
@@ -150,13 +154,67 @@ async function runSearch(): Promise<void> {
   const trimmed = query.value.trim()
   if (!trimmed) return
   recordSearchHistory(trimmed)
+  metadataHits.value = []
   try {
     const filters = mediaTypeFilter.value ? { mediaType: mediaTypeFilter.value } : undefined
     const targetPlugins = selectedPluginId.value ? [selectedPluginId.value] : undefined
-    await startSearch(trimmed, filters, targetPlugins)
+    const metaPromise =
+      !selectedPluginId.value && isTauriRuntime()
+        ? ((searchingMetadata.value = true),
+          vesselApi
+            .searchMetadata(trimmed, 'all', currentLang.value)
+            .then((res) => {
+              metadataHits.value = res.hits
+            })
+            .catch(() => {})
+            .finally(() => {
+              searchingMetadata.value = false
+            }))
+        : Promise.resolve()
+    await Promise.all([startSearch(trimmed, filters, targetPlugins), metaPromise])
   } catch (err) {
     pushToast('error', String(err))
   }
+}
+
+const filteredMetadataHits = computed<MediaSummary[]>(() => {
+  const filter = mediaTypeFilter.value
+  return metadataHits.value
+    .filter((h) => {
+      const mtype = (h.mediaType ?? 'movie').toLowerCase()
+      const isAnime = h.provider.toLowerCase().includes('anilist') || h.provider.toLowerCase().includes('mal') || h.provider.toLowerCase().includes('kitsu')
+      if (filter === 'movie') return mtype === 'movie'
+      if (filter === 'anime') return isAnime
+      if (filter === 'series') return mtype !== 'movie' && !isAnime
+      return true
+    })
+    .slice(0, 18)
+    .map((h) => ({
+      nativeId: `virtual::${h.canonicalId}`,
+      pluginId: 'vessel.metadata',
+      type: (h.mediaType?.toLowerCase() === 'series' ? 'series' : 'movie') as 'movie' | 'series',
+      isAnime:
+        h.provider.toLowerCase().includes('anilist') ||
+        h.provider.toLowerCase().includes('mal') ||
+        h.provider.toLowerCase().includes('kitsu'),
+      title: h.title,
+      year: h.year,
+      poster: h.poster,
+    }))
+})
+
+function openGlobalMetadataHit(pluginId: string, nativeId: string): void {
+  const hit = metadataHits.value.find((h) => `virtual::${h.canonicalId}` === nativeId)
+  void router.push({
+    name: 'details',
+    params: { pluginId, nativeId },
+    query: hit
+      ? {
+          title: hit.title,
+          mediaType: hit.mediaType?.toLowerCase() === 'series' ? 'series' : 'movie',
+        }
+      : undefined,
+  })
 }
 
 onMounted(() => {
@@ -343,7 +401,7 @@ function cardItemFor(pluginId: string, item: MediaSummary): MediaSummary {
       </div>
     </div>
 
-    <div v-if="isSearching && !bucketEntries.length" class="v-grid">
+    <div v-if="(isSearching || searchingMetadata) && !bucketEntries.length && !filteredMetadataHits.length" class="v-grid">
       <div v-for="n in 8" :key="n" class="search-skeleton-card">
         <div class="v-skeleton search-skeleton" />
         <div class="v-skeleton search-skeleton-line" />
@@ -351,7 +409,7 @@ function cardItemFor(pluginId: string, item: MediaSummary): MediaSummary {
       </div>
     </div>
 
-    <div v-else-if="!bucketEntries.length" class="v-card v-muted">
+    <div v-else-if="!bucketEntries.length && !filteredMetadataHits.length" class="v-card v-muted">
       {{ t('search.empty') }}
     </div>
 
@@ -367,6 +425,22 @@ function cardItemFor(pluginId: string, item: MediaSummary): MediaSummary {
           :item="cardItemFor(pluginId, item)"
           :cards="uiPreferences.cards"
           @open="handleCardOpen"
+        />
+      </div>
+    </div>
+
+    <div v-if="filteredMetadataHits.length" class="bucket">
+      <div class="bucket-head">
+        <h2 class="bucket-title">{{ t('search.global_catalog') }}</h2>
+        <span class="v-badge v-badge-accent">{{ filteredMetadataHits.length }}</span>
+      </div>
+      <div class="v-grid">
+        <MediaCard
+          v-for="item in filteredMetadataHits"
+          :key="item.nativeId"
+          :item="item"
+          :cards="uiPreferences.cards"
+          @open="openGlobalMetadataHit"
         />
       </div>
     </div>

@@ -3,12 +3,12 @@ export type ContentRating = 'sfw' | 'nsfw'
 export type LibraryStatus = 'watching' | 'plan_to_watch' | 'completed' | 'on_hold' | 'dropped'
 export type DownloadStatus = 'queued' | 'downloading' | 'paused' | 'completed' | 'failed'
 export type DownloadKind = 'direct' | 'hls'
-export type StreamKind = 'hls' | 'dash' | 'mpeg_ts' | 'mp4' | 'mkv' | 'webm' | 'auto' | 'embed'
+export type StreamKind = 'hls' | 'dash' | 'mpeg_ts' | 'mp4' | 'mkv' | 'webm' | 'auto' | 'embed' | 'torrent'
 export type StreamFlag = 'subtitled' | 'dubbed' | 'multi_audio' | 'hdr' | 'direct' | 'requires_proxy'
 export type AudioType = 'sub' | 'dub' | 'original'
 export type SubtitleFormat = 'srt' | 'ass' | 'ssa' | 'vtt'
 export type SkipSegmentType = 'intro' | 'recap' | 'credits' | 'preview'
-export type PluginCapability = 'vod' | 'search' | 'live_tv' | 'subtitles' | 'extractor'
+export type PluginCapability = 'vod' | 'search' | 'live_tv' | 'subtitles' | 'extractor' | 'stream' | 'debrid'
 export type SettingFieldType = 'text' | 'secret' | 'toggle' | 'select'
 export type IptvKind = 'xtream' | 'm3u'
 export type BackupImportMode = 'smart_merge' | 'reset_and_import'
@@ -163,6 +163,133 @@ export interface SkipSegment {
   confidence?: number
 }
 
+export type DebridProviderKind = 'real_debrid' | 'tor_box' | 'all_debrid' | 'premiumize' | 'debrid_link'
+export type DebridCacheState = 'cached' | 'uncached' | 'unknown'
+export type DebridCloudStatus = 'queued' | 'downloading' | 'uploading' | 'ready' | 'error'
+
+export interface DebridCacheInfo {
+  target: string
+  label: string
+  state: DebridCacheState
+}
+
+export interface TorrentMeta {
+  infoHash?: string
+  fileIndex?: number
+  filename?: string
+  season?: number
+  episode?: number
+  seeders?: number
+  sizeBytes?: number
+  trackerSource?: string
+  codecs?: string[]
+  hdr?: string
+  trackers?: string[]
+}
+
+export interface DebridAccountStatus {
+  target: string
+  label: string
+  isBuiltin: boolean
+  supportsBulkCacheCheck: boolean
+  enabled: boolean
+  authenticated: boolean
+  username?: string
+  email?: string
+  isPremium: boolean
+  expiresAt?: string
+  pointsOrQuota?: string
+  error?: string
+}
+
+export interface DebridCloudItem {
+  id: string
+  target: string
+  providerLabel: string
+  filename: string
+  infoHash?: string
+  sizeBytes?: number
+  downloadedBytes?: number
+  status: DebridCloudStatus
+  progressPct: number
+  speedBps?: number
+  seeders?: number
+  etaSeconds?: number
+  links: string[]
+  addedAt?: string
+}
+
+export interface DebridPreferences {
+  priorityOrder: string[]
+  onlyCached: boolean
+  autoFallback: boolean
+}
+
+export interface DebridOverview {
+  preferences: DebridPreferences
+  accounts: DebridAccountStatus[]
+  disabledStreamAddons: string[]
+}
+
+export interface RealDebridDeviceAuthStart {
+  deviceCode: string
+  userCode: string
+  verificationUrl: string
+  directVerificationUrl?: string
+  intervalSeconds: number
+  expiresInSeconds: number
+}
+
+export interface RealDebridDeviceAuthPoll {
+  authorized: boolean
+  pending: boolean
+  username?: string
+  error?: string
+}
+
+export type DebridResolution =
+  | {
+      status: 'ready'
+      target: string
+      providerLabel: string
+      url: string
+      headers: Record<string, string>
+      filename?: string
+      sizeBytes?: number
+      expiresAt?: string
+    }
+  | {
+      status: 'needs_confirmation'
+      target: string
+      providerLabel: string
+      infoHash: string
+      cloudStatus: DebridCloudStatus
+      progressPct: number
+      speedBps?: number
+      seeders?: number
+      torrentId?: string
+    }
+  | {
+      status: 'no_provider_configured'
+      message: string
+    }
+
+export interface PlaybackStats {
+  networkSpeedBps: number
+  totalBytesTransferred: number
+  bufferSeconds?: number
+  cacheSpeedBps?: number
+  videoBitrateBps?: number
+  audioBitrateBps?: number
+  width?: number
+  height?: number
+  fps?: number
+  videoCodec?: string
+  audioCodec?: string
+  fileSizeBytes?: number
+  isDebridStream: boolean
+}
+
 export interface StreamCandidate {
   url: string
   kind: StreamKind
@@ -179,6 +306,8 @@ export interface StreamCandidate {
   skipSegments?: SkipSegment[]
   pluginId?: string
   pluginName?: string
+  torrent?: TorrentMeta
+  debridCache?: DebridCacheInfo
 }
 
 export type MetadataProviderFilter =
@@ -309,6 +438,7 @@ export interface PluginManifest {
   allowAnyHttps?: boolean
   isAdult?: boolean
   settingsSchema: PluginSettingField[]
+  configureUrl?: string
 }
 
 export interface PluginListEntry {

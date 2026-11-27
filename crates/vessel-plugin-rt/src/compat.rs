@@ -176,8 +176,41 @@ fn map_content_types(raw_types: Option<&Vec<Value>>) -> Vec<ContentCategory> {
 fn map_capabilities(
     resources: Option<&Vec<Value>>,
     content_types: &[ContentCategory],
+    has_catalogs: bool,
 ) -> Vec<PluginCapability> {
-    let mut caps = vec![PluginCapability::Vod, PluginCapability::Search];
+    let mut caps = Vec::new();
+    let has_catalog_resource = resources.is_some_and(|res| {
+        res.iter().any(|entry| {
+            entry
+                .as_str()
+                .or_else(|| entry.get("name").and_then(Value::as_str))
+                == Some("catalog")
+        })
+    });
+    let has_stream_resource = resources.is_some_and(|res| {
+        res.iter().any(|entry| {
+            entry
+                .as_str()
+                .or_else(|| entry.get("name").and_then(Value::as_str))
+                == Some("stream")
+        })
+    });
+    let has_meta_resource = resources.is_some_and(|res| {
+        res.iter().any(|entry| {
+            entry
+                .as_str()
+                .or_else(|| entry.get("name").and_then(Value::as_str))
+                == Some("meta")
+        })
+    });
+
+    if has_catalogs || has_catalog_resource || has_meta_resource || !has_stream_resource {
+        push_unique(&mut caps, PluginCapability::Vod);
+        push_unique(&mut caps, PluginCapability::Search);
+    }
+    if has_stream_resource {
+        push_unique(&mut caps, PluginCapability::Stream);
+    }
     if content_types.contains(&ContentCategory::Live) {
         push_unique(&mut caps, PluginCapability::LiveTv);
     }
@@ -190,6 +223,9 @@ fn map_capabilities(
                 push_unique(&mut caps, PluginCapability::Subtitles);
             }
         }
+    }
+    if caps.is_empty() {
+        push_unique(&mut caps, PluginCapability::Vod);
     }
     caps
 }
@@ -327,6 +363,7 @@ pub fn parse_external_manifest(
             let capabilities = map_capabilities(
                 sc.get("resources").and_then(Value::as_array),
                 &content_types,
+                true,
             );
             let languages = sc
                 .get("contentLanguage")
@@ -399,8 +436,12 @@ pub fn parse_external_manifest(
             .and_then(Value::as_bool)
             == Some(true)
         {
+            let base = manifest_url
+                .rsplit_once('/')
+                .map(|(dir, _)| dir.trim_end_matches('/'))
+                .unwrap_or(manifest_url);
             return Err(VesselError::InvalidInput(format!(
-                "Stremio addon at '{manifest_url}' requires private external configuration and cannot be imported cleanly without hidden credentials."
+                "Stremio addon at '{manifest_url}' requires configuration first. Open '{base}/configure' in your browser, configure it, and paste the generated manifest.json URL."
             )));
         }
 
@@ -456,6 +497,7 @@ pub fn build_nuvio_scraper_package(
     let capabilities = map_capabilities(
         sc.get("resources").and_then(Value::as_array),
         &content_types,
+        true,
     );
     let languages = sc
         .get("contentLanguage")
@@ -496,6 +538,7 @@ pub fn build_nuvio_scraper_package(
         is_adult: sc.get("isAdult").and_then(Value::as_bool).unwrap_or(false),
         files: vec![shim_filename.into()],
         settings_schema: Vec::new(),
+        configure_url: None,
     };
     manifest.validate()?;
 
@@ -584,10 +627,25 @@ pub fn build_stremio_addon_package(
         .unwrap_or_else(|| manifest_url.trim_end_matches('/').to_owned());
 
     let content_types = map_content_types(manifest_val.get("types").and_then(Value::as_array));
+    let has_catalogs = manifest_val
+        .get("catalogs")
+        .and_then(Value::as_array)
+        .is_some_and(|arr| !arr.is_empty());
     let capabilities = map_capabilities(
         manifest_val.get("resources").and_then(Value::as_array),
         &content_types,
+        has_catalogs,
     );
+    let configure_url = if manifest_val
+        .get("behaviorHints")
+        .and_then(|h| h.get("configurable"))
+        .and_then(Value::as_bool)
+        == Some(true)
+    {
+        Some(format!("{base_url}/configure"))
+    } else {
+        None
+    };
     let domains =
         extract_literal_https_domains("", &[manifest_url, "https://v3-cinemeta.strem.io"]);
 
@@ -619,6 +677,7 @@ pub fn build_stremio_addon_package(
             .unwrap_or(false),
         files: Vec::new(),
         settings_schema: Vec::new(),
+        configure_url,
     };
     manifest.validate()?;
 
@@ -1074,13 +1133,83 @@ function mapType(rawType) {{
 }}
 
 function inferStremioKind(s, rawUrl) {{
+    if (!s.url && s.infoHash) return "torrent";
     const u = String(rawUrl || "").toLowerCase();
+    if (u.startsWith("magnet:?")) return "torrent";
     if (!s.url && s.externalUrl) return "embed";
     if (u.includes(".m3u8")) return "hls";
     if (u.endsWith(".ts") || u.includes(".ts?")) return "mpeg_ts";
     if (u.includes(".mkv")) return "mkv";
     if (u.includes(".mp4")) return "mp4";
     return "auto";
+}}
+
+function parseHumanSizeBytes(text) {{
+    const m = String(text || "").match(/💾\s*([\d.,]+)\s*(TB|GB|MB|KB)/i)
+        || String(text || "").match(/\b([\d.,]+)\s*(TB|GB|MB)\b/i);
+    if (!m) return undefined;
+    const num = parseFloat(m[1].replace(",", "."));
+    if (!Number.isFinite(num) || num <= 0) return undefined;
+    const unit = m[2].toUpperCase();
+    const mult = unit === "TB" ? 1099511627776 : unit === "GB" ? 1073741824 : unit === "MB" ? 1048576 : 1024;
+    return Math.round(num * mult);
+}}
+
+function parseTorrentMetaFromStremio(s) {{
+    const combined = [s.name, s.title, s.description].filter(Boolean).join("\n");
+    const lines = combined.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    const seedMatch = combined.match(/👤\s*(\d+)/);
+    const trackerMatch = combined.match(/⚙️\s*([^\n👤💾]+)/);
+    const qualityMatch = combined.match(/\b(2160p|4K|1080p|720p|480p)\b/i);
+    const hdrMatch = combined.match(/\b(Dolby\s*Vision|DV|HDR10\+|HDR10|HDR)\b/i);
+    const codecs = [];
+    for (const pat of [/\bREMUX\b/i, /\bBluRay\b/i, /\bWEB-DL\b/i, /\bHEVC\b/i, /\bx265\b/i, /\bAV1\b/i, /\bH\.?264\b/i, /\bAtmos\b/i, /\bTrueHD\b/i, /\bDTS-HD\b/i, /\bEAC3\b/i]) {{
+        const cm = combined.match(pat);
+        if (cm) codecs.push(cm[0]);
+    }}
+    const trackers = Array.isArray(s.sources)
+        ? s.sources.map((x) => String(x || "").trim()).filter((x) => x.startsWith("tracker:") || x.startsWith("udp:") || x.startsWith("http"))
+        : [];
+    const infoHash = s.infoHash ? String(s.infoHash).trim().toLowerCase() : undefined;
+    const sizeBytes = (s.behaviorHints && Number.isFinite(Number(s.behaviorHints.videoSize)))
+        ? Number(s.behaviorHints.videoSize)
+        : parseHumanSizeBytes(combined);
+    const filename = (s.behaviorHints && s.behaviorHints.filename)
+        ? String(s.behaviorHints.filename)
+        : (lines.find((l) => !l.startsWith("👤") && !l.startsWith("Torrentio")) || undefined);
+    return {{
+        quality: qualityMatch ? (qualityMatch[1].toUpperCase() === "4K" ? "2160p" : qualityMatch[1]) : undefined,
+        torrent: infoHash || trackers.length > 0 || seedMatch || sizeBytes ? {{
+            infoHash,
+            fileIndex: Number.isInteger(s.fileIdx) ? s.fileIdx : undefined,
+            filename,
+            seeders: seedMatch ? parseInt(seedMatch[1], 10) : undefined,
+            sizeBytes,
+            trackerSource: trackerMatch ? trackerMatch[1].trim() : undefined,
+            codecs,
+            hdr: hdrMatch ? hdrMatch[1] : undefined,
+            trackers,
+        }} : undefined,
+    }};
+}}
+
+function buildStremioMagnetUrl(s, torrent) {{
+    if (s.url) return String(s.url);
+    if (s.infoHash) {{
+        const hash = String(s.infoHash).trim().toLowerCase();
+        let magnet = `magnet:?xt=urn:btih:${{hash}}`;
+        if (torrent && torrent.filename) {{
+            magnet += `&dn=${{encodeURIComponent(torrent.filename)}}`;
+        }}
+        if (torrent && Array.isArray(torrent.trackers)) {{
+            for (const tr of torrent.trackers) {{
+                const clean = tr.startsWith("tracker:") ? tr.slice(8) : tr;
+                if (clean) magnet += `&tr=${{encodeURIComponent(clean)}}`;
+            }}
+        }}
+        return magnet;
+    }}
+    return String(s.externalUrl || "");
 }}
 
 function inferSubtitleFormat(url) {{
@@ -1250,6 +1379,7 @@ export default definePlugin({{
                 tags: [],
             }});
         }}
+        const imdbMatch = String(rawId || "").match(/^(tt\d+)/i);
         return {{
             nativeId: compositeId,
             type: mapType(meta.type || stype),
@@ -1259,7 +1389,7 @@ export default definePlugin({{
             poster: meta.poster ? String(meta.poster) : undefined,
             backdrop: meta.background ? String(meta.background) : undefined,
             genres: Array.isArray(meta.genres) ? meta.genres.map(String) : [],
-            externalIds: {{}},
+            externalIds: imdbMatch ? {{ imdb: imdbMatch[1] }} : {{}},
             episodes,
         }};
     }},
@@ -1272,9 +1402,10 @@ export default definePlugin({{
         }}
         const list = data && Array.isArray(data.streams) ? data.streams : [];
         const streams = list
-            .filter((s) => s && (s.url || s.externalUrl))
+            .filter((s) => s && (s.url || s.externalUrl || s.infoHash))
             .map((s) => {{
-                const streamUrl = s.url || s.externalUrl;
+                const parsedMeta = parseTorrentMetaFromStremio(s);
+                const streamUrl = buildStremioMagnetUrl(s, parsedMeta.torrent);
                 const subs = Array.isArray(s.subtitles)
                     ? s.subtitles.filter((sub) => sub && sub.url).map((sub) => ({{
                         source: {{ kind: "url", url: String(sub.url), headers: {{}} }},
@@ -1283,15 +1414,18 @@ export default definePlugin({{
                         format: inferSubtitleFormat(sub.url),
                     }}))
                     : [];
+                const kind = inferStremioKind(s, streamUrl);
                 return {{
                     url: String(streamUrl),
-                    kind: inferStremioKind(s, streamUrl),
-                    label: String(s.name || s.title || streamUrl),
+                    kind,
+                    quality: parsedMeta.quality,
+                    label: String(s.title || s.description || s.name || streamUrl).replace(/\s*\n\s*/g, " • "),
                     flags: [],
                     headers: sanitizeHeaders(
                         (s.behaviorHints && s.behaviorHints.proxyHeaders && s.behaviorHints.proxyHeaders.request) || s.headers,
                     ),
                     subtitles: subs,
+                    torrent: kind === "torrent" ? parsedMeta.torrent : undefined,
                 }};
             }});
         return {{ streams, subtitles: [] }};
@@ -1836,5 +1970,116 @@ mod tests {
                 Err(e) => println!("RES_ERR {:21} | {}", entry.id.as_str(), e),
             }
         }
+    }
+
+    #[tokio::test]
+    async fn parses_and_executes_stream_only_stremio_torrentio_addon() {
+        use axum::Json;
+        use vessel_domain::{PluginCapability, StreamKind};
+
+        let app = Router::new()
+            .route(
+                "/providers=1337x/stream/series/{id}",
+                get(|| async {
+                    Json(serde_json::json!({
+                        "streams": [
+                            {
+                                "name": "Torrentio\n4K DV",
+                                "title": "Show.S01E03.2160p.WEB-DL.DV.HEVC.Atmos.mkv\n👤 312 💾 14.2 GB ⚙️ 1337x",
+                                "infoHash": "ABCDEF0123456789ABCDEF0123456789ABCDEF01",
+                                "fileIdx": 2,
+                                "sources": ["tracker:udp://tracker.opentrackr.org:1337/announce"],
+                                "behaviorHints": {
+                                    "filename": "Show.S01E03.2160p.WEB-DL.DV.HEVC.Atmos.mkv",
+                                    "videoSize": 15247133900u64
+                                }
+                            },
+                            {
+                                "name": "Torrentio+\nRD+ 1080p",
+                                "title": "Show.S01E03.1080p.mkv\n👤 90 💾 2.5 GB ⚙️ YTS",
+                                "url": "https://torrentio.example/rd/video.mkv"
+                            }
+                        ]
+                    }))
+                }),
+            );
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
+        let addr = listener.local_addr().expect("addr");
+        tokio::spawn(async move {
+            let _ = axum::serve(listener, app).await;
+        });
+
+        let manifest_json = serde_json::json!({
+            "id": "com.stremio.torrentio.addon",
+            "version": "0.0.15",
+            "name": "Torrentio",
+            "resources": ["stream"],
+            "types": ["movie", "series"],
+            "catalogs": [],
+            "behaviorHints": { "configurable": true }
+        });
+
+        let manifest_url = format!("http://{addr}/providers=1337x/manifest.json");
+        let ext = parse_external_manifest(manifest_json.to_string().as_bytes(), &manifest_url)
+            .expect("parse torrentio")
+            .expect("stremio kind");
+        let pkg = match ext {
+            ExternalManifestKind::StremioAddon(pkg) => *pkg,
+            _ => panic!("expected StremioAddon"),
+        };
+
+        assert_eq!(pkg.manifest.capabilities, vec![PluginCapability::Stream]);
+        assert_eq!(
+            pkg.manifest.configure_url.as_deref(),
+            Some(format!("http://{addr}/providers=1337x/configure").as_str())
+        );
+
+        let policy = DomainPolicy::new(pkg.manifest.id.clone(), vec!["127.0.0.1".into()], false)
+            .with_loopback_for_tests();
+        let host = Arc::new(
+            HostServices::new(
+                pkg.manifest.id.clone(),
+                Arc::new(policy),
+                Arc::new(NoopStorage),
+                None,
+                Arc::new(TsCompileCache::default()),
+            )
+            .expect("host"),
+        );
+
+        let provider = QuickJsContentProvider::load(
+            pkg.manifest,
+            Arc::new(pkg.bundle),
+            host,
+            SandboxLimits::default(),
+        )
+        .await
+        .expect("load torrentio");
+
+        let res = provider
+            .streams("series::tt0903747:1:3")
+            .await
+            .expect("torrentio streams");
+        assert_eq!(res.streams.len(), 2);
+
+        let tor = &res.streams[0];
+        assert_eq!(tor.kind, StreamKind::Torrent);
+        assert!(tor.url.starts_with("magnet:?xt=urn:btih:abcdef0123456789abcdef0123456789abcdef01"));
+        assert_eq!(tor.quality.as_deref(), Some("2160p"));
+        let meta = tor.torrent.as_ref().expect("torrent meta");
+        assert_eq!(meta.info_hash.as_deref(), Some("abcdef0123456789abcdef0123456789abcdef01"));
+        assert_eq!(meta.file_index, Some(2));
+        assert_eq!(meta.seeders, Some(312));
+        assert_eq!(meta.size_bytes, Some(15247133900));
+        assert_eq!(meta.tracker_source.as_deref(), Some("1337x"));
+        assert!(meta.codecs.iter().any(|c| c.eq_ignore_ascii_case("HEVC")));
+        assert_eq!(meta.hdr.as_deref(), Some("DV"));
+
+        let direct = &res.streams[1];
+        assert_eq!(direct.kind, StreamKind::Mkv);
+        assert_eq!(direct.url, "https://torrentio.example/rd/video.mkv");
+
+        provider.shutdown().await;
     }
 }

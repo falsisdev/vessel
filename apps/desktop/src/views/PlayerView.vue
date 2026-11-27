@@ -5,6 +5,7 @@ import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import Hls from 'hls.js'
 import mpegts from 'mpegts.js'
 import {
+  Activity,
   ArrowLeft,
   AudioLines,
   Captions,
@@ -32,6 +33,7 @@ import {
   X,
 } from 'lucide-vue-next'
 import { vesselApi } from '@/api/vessel'
+import { formatBytes } from '@/composables/useAppUpdater'
 import { useI18n } from '@/composables/useI18n'
 import { usePlayerSession } from '@/composables/usePlayerSession'
 import { useUiPreferences } from '@/composables/useUiPreferences'
@@ -42,6 +44,7 @@ import type {
   EmbeddedPlayerState,
   EmbeddedTrackInfo,
   Episode,
+  PlaybackStats,
   PluginListEntry,
   SkipSegment,
   StreamCandidate,
@@ -148,6 +151,7 @@ const extSubSearchedOnce = ref(false)
 const pendingSeekSeconds = ref<number | null>(null)
 const playableSrc = ref<string>('')
 const gestureLabel = ref<string>('')
+const holdSpeedBoostActive = ref(false)
 const audioTracks = ref<AudioTrackOption[]>([])
 const muxedWebSubtitleTracks = ref<MuxedSubtitleOption[]>([])
 const activeMuxedWebSubKey = ref<string | null>(null)
@@ -162,6 +166,10 @@ let hideTimer: number | null = null
 let progressTimer: number | null = null
 let subSaveTimer: number | null = null
 let gestureTimer: number | null = null
+let holdSpeedTimer: number | null = null
+let holdSpeedOriginX = 0
+let holdSpeedOriginY = 0
+let suppressNextStageClick = false
 let touchSeekTimer: number | null = null
 let touchSeekDelta = 0
 let lastPinchAt = 0
@@ -1329,15 +1337,65 @@ function setVolumeLevel(val: number): void {
   scheduleHideControls()
 }
 
-function setSpeed(rate: number): void {
-  const el = videoRef.value
-  playbackRate.value = rate
+function applyRuntimeSpeed(rate: number): void {
   if (isEmbeddedMpv.value) {
     void vesselApi.embeddedMpvSetSpeed(rate).catch(() => {})
-  } else if (el) {
-    el.playbackRate = rate
+  } else if (videoRef.value) {
+    videoRef.value.playbackRate = rate
   }
+}
+
+function setSpeed(rate: number): void {
+  playbackRate.value = rate
+  applyRuntimeSpeed(rate)
   scheduleHideControls()
+}
+
+function startHoldSpeedBoost(ev: PointerEvent): void {
+  if (ev.pointerType === 'mouse' && ev.button !== 0) return
+  if (isLocked.value || isLive.value || activeDrawer.value) return
+  if (holdSpeedTimer !== null) {
+    window.clearTimeout(holdSpeedTimer)
+    holdSpeedTimer = null
+  }
+  holdSpeedOriginX = ev.clientX
+  holdSpeedOriginY = ev.clientY
+  holdSpeedTimer = window.setTimeout(() => {
+    holdSpeedTimer = null
+    if (isLocked.value || isLive.value || activeDrawer.value) return
+    holdSpeedBoostActive.value = true
+    suppressNextStageClick = true
+    applyRuntimeSpeed(2)
+  }, 260)
+}
+
+function moveHoldSpeedBoost(ev: PointerEvent): void {
+  if (holdSpeedTimer === null) return
+  if (Math.hypot(ev.clientX - holdSpeedOriginX, ev.clientY - holdSpeedOriginY) > 12) {
+    window.clearTimeout(holdSpeedTimer)
+    holdSpeedTimer = null
+  }
+}
+
+function endHoldSpeedBoost(): void {
+  if (holdSpeedTimer !== null) {
+    window.clearTimeout(holdSpeedTimer)
+    holdSpeedTimer = null
+  }
+  if (!holdSpeedBoostActive.value) return
+  holdSpeedBoostActive.value = false
+  applyRuntimeSpeed(isLive.value ? 1 : playbackRate.value)
+  window.setTimeout(() => {
+    suppressNextStageClick = false
+  }, 80)
+}
+
+function handleStageClick(): void {
+  if (suppressNextStageClick) {
+    suppressNextStageClick = false
+    return
+  }
+  togglePlay()
 }
 
 function cycleFitMode(): void {
@@ -1750,6 +1808,10 @@ function handleKeydown(ev: KeyboardEvent): void {
       ev.preventDefault()
       void toggleFullscreen()
       break
+    case 'i':
+      ev.preventDefault()
+      toggleStatsHud()
+      break
   }
 }
 
@@ -1768,7 +1830,15 @@ async function ensureSessionLoaded(): Promise<void> {
   loadingInitial.value = true
   playbackError.value = ''
   try {
-    const loadedDetail = await vesselApi.getDetailsWithEnrichment(props.pluginId, props.nativeId, 'en')
+    const isVirtualMeta = props.pluginId === 'vessel.metadata' || props.nativeId.startsWith('virtual::')
+    const loadedDetail = isVirtualMeta
+      ? await vesselApi.getVirtualMetadataDetail(
+          props.nativeId.replace(/^virtual::/, ''),
+          undefined,
+          undefined,
+          currentLang.value,
+        )
+      : await vesselApi.getDetailsWithEnrichment(props.pluginId, props.nativeId, 'en')
     const queryStreamId = typeof route.query.streamId === 'string' ? route.query.streamId : ''
     const ep =
       loadedDetail.episodes.find((item) => item.streamId === queryStreamId) ??
@@ -1777,7 +1847,16 @@ async function ensureSessionLoaded(): Promise<void> {
       playbackError.value = 'No playable episodes available for this title.'
       return
     }
-    const res = await vesselApi.getStreams(props.pluginId, ep.streamId)
+    const res = await vesselApi.getStreamsWithLinked({
+      pluginId: props.pluginId,
+      nativeId: props.nativeId,
+      episodeId: ep.streamId,
+      season: ep.season,
+      episode: ep.episode,
+      absoluteEpisode: ep.absoluteEpisode,
+      isMovie: loadedDetail.type === 'movie',
+      externalIds: loadedDetail.externalIds,
+    })
     if (!res.streams.length) {
       playbackError.value = `No playable streams found for Episode ${ep.episode}.`
       return
@@ -2034,23 +2113,58 @@ watch(
     duration.value = 0
     playableSrc.value = ''
     if (!stream) return
+    let effectiveStream = stream
+    if (stream.kind === 'torrent' || stream.url.trim().toLowerCase().startsWith('magnet:?')) {
+      try {
+        const debridRes = await vesselApi.resolveTorrentCandidate({
+          url: stream.url,
+          torrent: stream.torrent,
+          preferredTarget: stream.debridCache?.target,
+          allowUncachedQueue: false,
+          season: currentEpisode.value?.season,
+          episode: currentEpisode.value?.episode,
+        })
+        if (seq !== attachSeq) return
+        if (debridRes.status !== 'ready') {
+          isBuffering.value = false
+          playbackError.value =
+            debridRes.status === 'no_provider_configured'
+              ? debridRes.message
+              : `${debridRes.providerLabel}: Torrent not cached (${Math.round(debridRes.progressPct)}%). Queue it in Details or Settings > Debrid.`
+          return
+        }
+        effectiveStream = {
+          ...stream,
+          url: debridRes.url,
+          headers: debridRes.headers ?? {},
+        }
+      } catch (err) {
+        if (seq !== attachSeq) return
+        isBuffering.value = false
+        playbackError.value = String(err)
+        return
+      }
+    }
     const isLocalOffline =
-      stream.url.startsWith('http://127.0.0.1:') && stream.url.includes('/local/')
+      effectiveStream.url.startsWith('http://127.0.0.1:') && effectiveStream.url.includes('/local/')
     const [resolved, startSec] = await Promise.all([
       isLocalOffline
-        ? Promise.resolve(stream.url)
-        : vesselApi.preparePlaybackUrl(stream).catch(() => stream.url),
+        ? Promise.resolve(effectiveStream.url)
+        : vesselApi.preparePlaybackUrl(effectiveStream).catch(() => effectiveStream.url),
       resolveDesiredStartSeconds(currentEpisode.value),
     ])
     if (seq !== attachSeq) return
     playableSrc.value = resolved
-    await attachMediaSource(resolved, stream, false, startSec)
+    await attachMediaSource(resolved, effectiveStream, false, startSec)
   },
   { immediate: true },
 )
 
 onMounted(async () => {
   window.addEventListener('keydown', handleKeydown)
+  window.addEventListener('pointerup', endHoldSpeedBoost)
+  window.addEventListener('pointercancel', endHoldSpeedBoost)
+  window.addEventListener('blur', endHoldSpeedBoost)
   document.addEventListener('fullscreenchange', onFullscreenChange)
   void vesselApi
     .embeddedMpvCapabilities()
@@ -2104,6 +2218,42 @@ onMounted(async () => {
   scheduleHideControls()
 })
 
+const showStatsHud = shallowRef(false)
+const statsSnapshot = ref<PlaybackStats | null>(null)
+let statsTimer: number | null = null
+
+async function refreshStatsSnapshot(): Promise<void> {
+  try {
+    const s = await vesselApi.getPlaybackStats()
+    const el = videoRef.value
+    if (el && !isEmbeddedMpv.value) {
+      if (!s.width && el.videoWidth > 0) s.width = el.videoWidth
+      if (!s.height && el.videoHeight > 0) s.height = el.videoHeight
+      if (s.bufferSeconds === undefined && el.buffered.length > 0) {
+        const end = el.buffered.end(el.buffered.length - 1)
+        s.bufferSeconds = Math.max(0, end - el.currentTime)
+      }
+    }
+    statsSnapshot.value = s
+  } catch {
+    // Non-fatal
+  }
+}
+
+function toggleStatsHud(): void {
+  showStatsHud.value = !showStatsHud.value
+  if (statsTimer !== null) {
+    window.clearInterval(statsTimer)
+    statsTimer = null
+  }
+  if (showStatsHud.value) {
+    void refreshStatsSnapshot()
+    statsTimer = window.setInterval(() => {
+      void refreshStatsSnapshot()
+    }, 1000)
+  }
+}
+
 onUnmounted(() => {
   void persistWatchProgress()
   unlistenEmbedded?.()
@@ -2111,11 +2261,16 @@ onUnmounted(() => {
   void stopEmbeddedMpv(true)
   destroyMediaEngines()
   window.removeEventListener('keydown', handleKeydown)
+  window.removeEventListener('pointerup', endHoldSpeedBoost)
+  window.removeEventListener('pointercancel', endHoldSpeedBoost)
+  window.removeEventListener('blur', endHoldSpeedBoost)
   document.removeEventListener('fullscreenchange', onFullscreenChange)
   if (hideTimer !== null) window.clearTimeout(hideTimer)
   if (progressTimer !== null) window.clearInterval(progressTimer)
+  if (statsTimer !== null) window.clearInterval(statsTimer)
   if (subSaveTimer !== null) window.clearTimeout(subSaveTimer)
   if (gestureTimer !== null) window.clearTimeout(gestureTimer)
+  if (holdSpeedTimer !== null) window.clearTimeout(holdSpeedTimer)
   if (touchSeekTimer !== null) window.clearTimeout(touchSeekTimer)
   if (document.fullscreenElement) {
     void document.exitFullscreen().catch(() => {})
@@ -2139,7 +2294,9 @@ onUnmounted(() => {
     <div
       v-if="isEmbeddedMpv"
       class="cs-embedded-stage-hit"
-      @click="togglePlay"
+      @pointerdown="startHoldSpeedBoost"
+      @pointermove="moveHoldSpeedBoost"
+      @click="handleStageClick"
       @dblclick="toggleFullscreen"
     />
 
@@ -2151,7 +2308,9 @@ onUnmounted(() => {
       :class="`fit-${fitMode}`"
       preload="auto"
       playsinline
-      @click="togglePlay"
+      @pointerdown="startHoldSpeedBoost"
+      @pointermove="moveHoldSpeedBoost"
+      @click="handleStageClick"
       @dblclick="toggleFullscreen"
       @play="userExplicitPause = false; playbackError = ''; isPlaying = true; isBuffering = false; scheduleHideControls()"
       @playing="onPlaying"
@@ -2167,8 +2326,44 @@ onUnmounted(() => {
 
     <!-- Touchpad Gesture Feedback Pill -->
     <Transition name="fade-fast">
-      <div v-if="gestureLabel" class="cs-gesture-pill" aria-live="polite">
-        {{ gestureLabel }}
+      <div v-if="holdSpeedBoostActive || gestureLabel" class="cs-gesture-pill" aria-live="polite">
+        {{ holdSpeedBoostActive ? '2x »' : gestureLabel }}
+      </div>
+    </Transition>
+
+    <!-- Live Stream & Debrid Stats HUD -->
+    <Transition name="fade-fast">
+      <div v-if="showStatsHud && statsSnapshot" class="cs-stats-hud" @click.stop>
+        <div class="cs-stats-head">
+          <strong>{{ t('stats.title') }}</strong>
+          <button type="button" class="cs-stats-close" @click="toggleStatsHud">
+            <X :size="13" />
+          </button>
+        </div>
+        <div class="cs-stats-grid">
+          <span class="v-muted">{{ t('stats.source') }}</span>
+          <span>{{ statsSnapshot.isDebridStream ? 'Debrid HTTP' : 'Direct / Proxy' }}</span>
+          <span class="v-muted">{{ t('stats.speed') }}</span>
+          <span>{{ statsSnapshot.networkSpeedBps > 0 ? `${formatBytes(statsSnapshot.networkSpeedBps)}/s` : '—' }}</span>
+          <span class="v-muted">{{ t('stats.transferred') }}</span>
+          <span>{{ statsSnapshot.totalBytesTransferred > 0 ? formatBytes(statsSnapshot.totalBytesTransferred) : '—' }}</span>
+          <span class="v-muted">{{ t('stats.buffer') }}</span>
+          <span>{{ statsSnapshot.bufferSeconds !== undefined ? `${statsSnapshot.bufferSeconds.toFixed(1)}s` : '—' }}</span>
+          <span v-if="statsSnapshot.width && statsSnapshot.height" class="v-muted">{{ t('stats.resolution') }}</span>
+          <span v-if="statsSnapshot.width && statsSnapshot.height">
+            {{ statsSnapshot.width }}×{{ statsSnapshot.height }}<template v-if="statsSnapshot.fps"> @ {{ statsSnapshot.fps.toFixed(1) }}fps</template>
+          </span>
+          <span v-if="statsSnapshot.videoCodec || statsSnapshot.videoBitrateBps" class="v-muted">{{ t('stats.video') }}</span>
+          <span v-if="statsSnapshot.videoCodec || statsSnapshot.videoBitrateBps">
+            {{ statsSnapshot.videoCodec || '—' }}<template v-if="statsSnapshot.videoBitrateBps"> · {{ (statsSnapshot.videoBitrateBps / 1_000_000).toFixed(2) }} Mbps</template>
+          </span>
+          <span v-if="statsSnapshot.audioCodec || statsSnapshot.audioBitrateBps" class="v-muted">{{ t('stats.audio') }}</span>
+          <span v-if="statsSnapshot.audioCodec || statsSnapshot.audioBitrateBps">
+            {{ statsSnapshot.audioCodec || '—' }}<template v-if="statsSnapshot.audioBitrateBps"> · {{ Math.round(statsSnapshot.audioBitrateBps / 1000) }} kbps</template>
+          </span>
+          <span v-if="statsSnapshot.fileSizeBytes" class="v-muted">{{ t('stats.size') }}</span>
+          <span v-if="statsSnapshot.fileSizeBytes">{{ formatBytes(statsSnapshot.fileSizeBytes) }}</span>
+        </div>
       </div>
     </Transition>
 
@@ -2386,6 +2581,16 @@ onUnmounted(() => {
             >
               <Settings :size="15" aria-hidden="true" />
               <span>Settings</span>
+            </button>
+            <button
+              type="button"
+              class="cs-pill-btn"
+              :class="{ active: showStatsHud }"
+              :title="t('stats.title')"
+              @click="toggleStatsHud"
+            >
+              <Activity :size="15" aria-hidden="true" />
+              <span>Stats</span>
             </button>
             <button
               type="button"
@@ -4174,5 +4379,45 @@ onUnmounted(() => {
   gap: 0.35rem;
   max-height: 260px;
   overflow-y: auto;
+}
+
+.cs-stats-hud {
+  position: absolute;
+  top: 4.25rem;
+  left: 1.25rem;
+  z-index: 25;
+  min-width: 245px;
+  max-width: 310px;
+  padding: 0.7rem 0.85rem;
+  border-radius: 12px;
+  background: rgba(12, 14, 22, 0.82);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #f4f4f8;
+  font-size: 0.78rem;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+}
+
+.cs-stats-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.45rem;
+  font-size: 0.82rem;
+}
+
+.cs-stats-close {
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+  padding: 2px;
+}
+
+.cs-stats-grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.28rem 0.75rem;
+  align-items: center;
 }
 </style>

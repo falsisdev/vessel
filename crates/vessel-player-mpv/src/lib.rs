@@ -17,6 +17,7 @@ use serde_json::Value;
 use tokio::io::AsyncReadExt;
 use tokio::process::{Child, Command};
 use tokio::sync::Mutex;
+use vessel_domain::PlaybackStats;
 use vessel_domain::{
     EventSink, PlaybackRequest, PlayerBackend, SubtitleFormat, SubtitleSource, SubtitleTrack,
     VesselError, VesselResult,
@@ -697,6 +698,51 @@ impl PlayerBackend for MpvWindowBackend {
         self.clear_temp_subtitles().await;
         res?;
         Ok(())
+    }
+
+    async fn stats(&self) -> Option<PlaybackStats> {
+        let read_f64 = |prop: &'static str| async move {
+            self.send_command(&[Value::from("get_property"), Value::from(prop)])
+                .await
+                .ok()
+                .and_then(|v| v.as_f64())
+                .filter(|v| v.is_finite() && *v >= 0.0)
+        };
+        let read_str = |prop: &'static str| async move {
+            self.send_command(&[Value::from("get_property"), Value::from(prop)])
+                .await
+                .ok()
+                .and_then(|v| v.as_str().map(str::to_owned))
+        };
+
+        let (buf, cache_spd, vbr, abr, w, h, fps, vc, ac, fsz) = tokio::join!(
+            read_f64("demuxer-cache-duration"),
+            read_f64("cache-speed"),
+            read_f64("video-bitrate"),
+            read_f64("audio-bitrate"),
+            read_f64("video-params/w"),
+            read_f64("video-params/h"),
+            read_f64("estimated-vf-fps"),
+            read_str("video-codec"),
+            read_str("audio-codec"),
+            read_f64("file-size"),
+        );
+
+        Some(PlaybackStats {
+            network_speed_bps: cache_spd.map(|v| v as u64).unwrap_or(0),
+            total_bytes_transferred: 0,
+            buffer_seconds: buf,
+            cache_speed_bps: cache_spd.map(|v| v as u64),
+            video_bitrate_bps: vbr.map(|v| v as u64),
+            audio_bitrate_bps: abr.map(|v| v as u64),
+            width: w.map(|v| v as u32),
+            height: h.map(|v| v as u32),
+            fps,
+            video_codec: vc,
+            audio_codec: ac,
+            file_size_bytes: fsz.map(|v| v as u64),
+            is_debrid_stream: false,
+        })
     }
 }
 

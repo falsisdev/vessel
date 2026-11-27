@@ -16,6 +16,8 @@ pub enum PluginCapability {
     LiveTv,
     Subtitles,
     Extractor,
+    Stream,
+    Debrid,
 }
 
 /// Catalog/discovery category advertised by a plugin for UI filtering and metadata routing.
@@ -107,6 +109,8 @@ pub struct PluginManifest {
     pub files: Vec<String>,
     #[serde(default)]
     pub settings_schema: Vec<PluginSettingField>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub configure_url: Option<String>,
 }
 
 impl PluginManifest {

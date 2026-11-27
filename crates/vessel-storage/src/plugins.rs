@@ -469,6 +469,7 @@ mod tests {
                 is_adult: false,
                 files: Vec::new(),
                 settings_schema: Vec::new(),
+                configure_url: None,
             },
             repo_id: None,
             source_type: "local_dev".into(),

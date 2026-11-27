@@ -1,17 +1,18 @@
 //! `QuickJsContentProvider` bridging a sandboxed plugin module to `vessel_domain::ContentProvider`.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 use std::time::Duration;
 
 use async_trait::async_trait;
 use rquickjs::{CatchResultExt, Function, Module, Object, Promise, Value};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde::de::DeserializeOwned;
 use vessel_domain::{
-    ContentProvider, Episode, HomeFeed, MediaDetail, PluginId, PluginManifest, ResolvedSubtitle,
-    SearchPage, StreamResult, SubtitleCandidate, SubtitleProvider, SubtitleQuery, VesselError,
-    VesselResult,
+    ContentProvider, DebridAccountStatus, DebridCloudItem, DebridProvider, DebridResolveOutcome,
+    Episode, HomeFeed, MediaDetail, PluginId, PluginManifest, ResolvedHttpLink, ResolvedSubtitle,
+    SearchPage, StreamResult, SubtitleCandidate, SubtitleProvider, SubtitleQuery, TorrentTarget,
+    VesselError, VesselResult, extract_info_hash,
 };
 
 use crate::module_loader::{PluginBundle, PluginLoader, PluginResolver};
@@ -38,6 +39,7 @@ pub struct QuickJsContentProvider {
     sandbox: PluginSandbox,
     host: Arc<HostServices>,
     supports_subtitle_search: bool,
+    supports_debrid_bulk_check: bool,
 }
 
 impl std::fmt::Debug for QuickJsContentProvider {
@@ -74,7 +76,7 @@ impl QuickJsContentProvider {
             )
             .await;
 
-        let supports_subtitle_search = sandbox
+        let (supports_subtitle_search, supports_debrid_bulk_check) = sandbox
             .run_in_context(limits.execution_timeout, async |ctx| {
                 install_sdk(&ctx, Arc::clone(&host))
                     .catch(&ctx)
@@ -114,8 +116,12 @@ impl QuickJsContentProvider {
                     .eval("typeof globalThis.__vessel_provider?.searchSubtitles === 'function'")
                     .catch(&ctx)
                     .map_err(|err| err.to_string())?;
+                let has_debrid_bulk: bool = ctx
+                    .eval("typeof globalThis.__vessel_provider?.checkDebridCached === 'function'")
+                    .catch(&ctx)
+                    .map_err(|err| err.to_string())?;
 
-                Ok(has_search_subtitles)
+                Ok((has_search_subtitles, has_debrid_bulk))
             })
             .await?;
 
@@ -135,6 +141,7 @@ impl QuickJsContentProvider {
             sandbox,
             host,
             supports_subtitle_search,
+            supports_debrid_bulk_check,
         })
     }
 
@@ -151,6 +158,11 @@ impl QuickJsContentProvider {
     /// Returns `true` when the loaded module exports a callable `searchSubtitles` method.
     pub fn supports_subtitle_search(&self) -> bool {
         self.supports_subtitle_search
+    }
+
+    /// Returns `true` when the loaded module exports a callable `checkDebridCached` method.
+    pub fn supports_debrid_bulk_check(&self) -> bool {
+        self.supports_debrid_bulk_check
     }
 
     /// Gracefully shuts down the underlying QuickJS runtime.
@@ -307,6 +319,185 @@ impl SubtitleProvider for QuickJsContentProvider {
             .execution_timeout
             .max(STREAM_EXECUTION_TIMEOUT);
         self.call_json("resolveSubtitle", &(subtitle_id,), timeout)
+            .await
+    }
+}
+
+/// Community `.plugin.vessel` Debrid provider wrapper bridging QuickJS exports to `DebridProvider`.
+#[derive(Clone)]
+pub struct QuickJsDebridProvider {
+    target_id: String,
+    inner: Arc<QuickJsContentProvider>,
+}
+
+impl QuickJsDebridProvider {
+    pub fn new(inner: Arc<QuickJsContentProvider>) -> Self {
+        let target_id = format!("plugin:{}", ContentProvider::manifest(&*inner).id.as_str());
+        Self { target_id, inner }
+    }
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct JsDebridResolveArgs<'a> {
+    magnet_or_hash: &'a str,
+    info_hash: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    file_index: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    filename: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    season: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    episode: Option<u32>,
+    allow_uncached_queue: bool,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct JsDebridAccountStatus {
+    #[serde(default = "default_true_bool")]
+    enabled: bool,
+    #[serde(default)]
+    authenticated: bool,
+    #[serde(default)]
+    username: Option<String>,
+    #[serde(default)]
+    email: Option<String>,
+    #[serde(default)]
+    is_premium: bool,
+    #[serde(default)]
+    expires_at: Option<String>,
+    #[serde(default)]
+    points_or_quota: Option<String>,
+    #[serde(default)]
+    error: Option<String>,
+}
+
+fn default_true_bool() -> bool {
+    true
+}
+
+#[async_trait]
+impl DebridProvider for QuickJsDebridProvider {
+    fn target_id(&self) -> &str {
+        &self.target_id
+    }
+
+    fn display_name(&self) -> &str {
+        &ContentProvider::manifest(&*self.inner).name
+    }
+
+    fn is_builtin(&self) -> bool {
+        false
+    }
+
+    fn supports_bulk_cache_check(&self) -> bool {
+        self.inner.supports_debrid_bulk_check()
+    }
+
+    async fn account_status(&self) -> VesselResult<DebridAccountStatus> {
+        let timeout = self.inner.sandbox().limits().execution_timeout;
+        let raw: JsDebridAccountStatus = self
+            .inner
+            .call_json("getDebridAccountStatus", &(), timeout)
+            .await?;
+        Ok(DebridAccountStatus {
+            target: self.target_id.clone(),
+            label: self.display_name().to_owned(),
+            is_builtin: false,
+            supports_bulk_cache_check: self.supports_bulk_cache_check(),
+            enabled: raw.enabled,
+            authenticated: raw.authenticated,
+            username: raw.username,
+            email: raw.email,
+            is_premium: raw.is_premium,
+            expires_at: raw.expires_at,
+            points_or_quota: raw.points_or_quota,
+            error: raw.error,
+        })
+    }
+
+    async fn check_cached(&self, hashes: &[String]) -> VesselResult<HashMap<String, bool>> {
+        if !self.supports_bulk_cache_check() || hashes.is_empty() {
+            return Ok(HashMap::new());
+        }
+        let timeout = self.inner.sandbox().limits().execution_timeout;
+        let map: HashMap<String, bool> = self
+            .inner
+            .call_json("checkDebridCached", &(hashes,), timeout)
+            .await?;
+        Ok(map
+            .into_iter()
+            .map(|(k, v)| (k.to_ascii_lowercase(), v))
+            .collect())
+    }
+
+    async fn resolve_magnet(
+        &self,
+        magnet_or_hash: &str,
+        target: &TorrentTarget,
+        allow_uncached_queue: bool,
+    ) -> VesselResult<DebridResolveOutcome> {
+        let timeout = self
+            .inner
+            .sandbox()
+            .limits()
+            .execution_timeout
+            .max(STREAM_EXECUTION_TIMEOUT);
+        let info_hash = target
+            .info_hash
+            .clone()
+            .or_else(|| extract_info_hash(magnet_or_hash))
+            .unwrap_or_default();
+        let req = JsDebridResolveArgs {
+            magnet_or_hash,
+            info_hash,
+            file_index: target.file_index,
+            filename: target.filename.as_deref(),
+            season: target.season,
+            episode: target.episode,
+            allow_uncached_queue,
+        };
+        self.inner
+            .call_json("resolveDebridMagnet", &(req,), timeout)
+            .await
+    }
+
+    async fn list_cloud(&self) -> VesselResult<Vec<DebridCloudItem>> {
+        let timeout = self.inner.sandbox().limits().execution_timeout;
+        let mut items: Vec<DebridCloudItem> = self
+            .inner
+            .call_json("listDebridCloud", &(), timeout)
+            .await
+            .unwrap_or_default();
+        for item in &mut items {
+            item.target = self.target_id.clone();
+            if item.provider_label.trim().is_empty() {
+                item.provider_label = self.display_name().to_owned();
+            }
+        }
+        Ok(items)
+    }
+
+    async fn delete_cloud(&self, torrent_id: &str) -> VesselResult<()> {
+        let timeout = self.inner.sandbox().limits().execution_timeout;
+        let _: serde_json::Value = self
+            .inner
+            .call_json("deleteDebridCloud", &(torrent_id,), timeout)
+            .await?;
+        Ok(())
+    }
+
+    async fn unrestrict_link(&self, link: &str) -> VesselResult<ResolvedHttpLink> {
+        let timeout = self
+            .inner
+            .sandbox()
+            .limits()
+            .execution_timeout
+            .max(STREAM_EXECUTION_TIMEOUT);
+        self.inner
+            .call_json("unrestrictDebridLink", &(link,), timeout)
             .await
     }
 }
@@ -810,5 +1001,104 @@ mod tests {
         }
 
         provider.shutdown().await;
+    }
+
+    #[tokio::test]
+    async fn executes_community_debrid_plugin_via_quickjs_debrid_provider() {
+        use super::QuickJsDebridProvider;
+        use vessel_domain::{DebridProvider, DebridResolveOutcome, TorrentTarget};
+
+        let plugin_id = PluginId::new("community.pikpak").expect("id");
+        let manifest: PluginManifest = serde_json::from_value(serde_json::json!({
+            "schemaVersion": 1,
+            "id": "community.pikpak",
+            "name": "Community PikPak",
+            "version": "1.0.0",
+            "entry": "index.ts",
+            "capabilities": ["debrid"]
+        }))
+        .expect("manifest");
+
+        let bundle = Arc::new(
+            PluginBundle::new(vec![(
+                "index.ts".to_owned(),
+                r#"
+                import { definePlugin } from "vessel";
+                export default definePlugin({
+                    async getDebridAccountStatus() {
+                        return { authenticated: true, username: "pikpak-user", isPremium: true };
+                    },
+                    async checkDebridCached(hashes: string[]) {
+                        const out: Record<string, boolean> = {};
+                        for (const h of hashes) out[h] = h.startsWith("aaaa");
+                        return out;
+                    },
+                    async resolveDebridMagnet(req) {
+                        return {
+                            outcome: "ready",
+                            url: `https://cdn.pikpak.example/${req.infoHash}/${req.fileIndex ?? 0}.mkv`,
+                            filename: "Episode.mkv",
+                            sizeBytes: 1024
+                        };
+                    }
+                });
+                "#
+                .to_owned(),
+            )])
+            .expect("bundle"),
+        );
+
+        let policy = Arc::new(DomainPolicy::new(plugin_id.clone(), Vec::new(), false));
+        let host = Arc::new(
+            HostServices::new(
+                plugin_id,
+                policy,
+                Arc::new(InMemoryTestStorage::default()),
+                None,
+                Arc::new(TsCompileCache::new()),
+            )
+            .expect("host"),
+        );
+
+        let inner = Arc::new(
+            QuickJsContentProvider::load(manifest, bundle, host, SandboxLimits::default())
+                .await
+                .expect("load"),
+        );
+        let debrid = QuickJsDebridProvider::new(Arc::clone(&inner));
+        assert!(!debrid.is_builtin());
+        assert!(debrid.supports_bulk_cache_check());
+        let status = debrid.account_status().await.expect("status");
+        assert!(status.authenticated);
+        assert_eq!(status.username.as_deref(), Some("pikpak-user"));
+
+        let cached = debrid
+            .check_cached(&["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".into(), "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".into()])
+            .await
+            .expect("check_cached");
+        assert_eq!(cached.get("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa").copied(), Some(true));
+        assert_eq!(cached.get("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb").copied(), Some(false));
+
+        let resolved = debrid
+            .resolve_magnet(
+                "magnet:?xt=urn:btih:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                &TorrentTarget {
+                    info_hash: Some("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".into()),
+                    file_index: Some(2),
+                    ..Default::default()
+                },
+                false,
+            )
+            .await
+            .expect("resolve");
+        assert!(matches!(
+            resolved,
+            DebridResolveOutcome::Ready(ref link)
+                if link.url == "https://cdn.pikpak.example/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/2.mkv"
+        ));
+
+        if let Ok(owned) = Arc::try_unwrap(inner) {
+            owned.shutdown().await;
+        }
     }
 }
