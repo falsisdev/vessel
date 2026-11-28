@@ -91,6 +91,21 @@ export function useI18n() {
       availableLocales.value = bundled
       return
     }
+    try {
+      const persisted = await vesselApi.getAppSetting('app_setting:locale')
+      if (persisted) {
+        const clean = JSON.parse(persisted) as string
+        if (clean && clean !== currentLang.value) {
+          currentLang.value = clean
+          applyDocumentLang(clean)
+          if (typeof localStorage !== 'undefined') {
+            localStorage.setItem('vessel_locale', clean)
+          }
+        }
+      }
+    } catch {
+      // Non-fatal
+    }
     const extra = await vesselApi.listCustomLocales()
     availableLocales.value = Array.from(new Set([...bundled, ...extra]))
   }
@@ -100,6 +115,9 @@ export function useI18n() {
     applyDocumentLang(lang)
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem('vessel_locale', lang)
+    }
+    if (isTauriRuntime()) {
+      void vesselApi.setAppSetting('app_setting:locale', JSON.stringify(lang)).catch(() => {})
     }
     const bundled = BUNDLED_LOCALES[lang] ?? null
     if (!isTauriRuntime()) {

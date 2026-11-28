@@ -19,6 +19,9 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -124,12 +127,27 @@ class VesselRepository private constructor(private val appContext: Context) {
     private val prefsStore by lazy {
         appContext.getSharedPreferences("vessel_mobile_prefs", Context.MODE_PRIVATE)
     }
+    private val uiPrefsMutex = Mutex()
+    private val appSettingMutex = Mutex()
+    private var uiPrefsLoaded = false
+    private val _lastVisitedTab = MutableStateFlow("home")
+    val lastVisitedTab: StateFlow<String> = _lastVisitedTab.asStateFlow()
+    private val liveStreamPrefsLock = Any()
+    private var liveStreamPrefsMap: MutableMap<String, LiveChannelStreamPref> = mutableMapOf()
 
     suspend fun initialize(): Unit = withContext(Dispatchers.IO) {
         if (core != null) return@withContext
         val savedLocale = prefsStore.getString("locale", "en") ?: "en"
         _autoCheckUpdates.value = prefsStore.getBoolean("auto_check_updates", true)
         _skippedUpdateVersion.value = prefsStore.getString("skipped_update_version", null)
+        _lastVisitedTab.value = prefsStore.getString("last_visited_tab", "home") ?: "home"
+        prefsStore.getString("live_channel_preferred_streams", null)?.let { raw ->
+            runCatching {
+                synchronized(liveStreamPrefsLock) {
+                    liveStreamPrefsMap = json.decodeFromString<Map<String, LiveChannelStreamPref>>(raw).toMutableMap()
+                }
+            }
+        }
         _locale.value = savedLocale
         VesselI18n.init(appContext, savedLocale)
 
@@ -236,8 +254,71 @@ class VesselRepository private constructor(private val appContext: Context) {
     private fun requireCore(): VesselMobileCore =
         core ?: throw IllegalStateException(_initError.value ?: "Vessel native core unavailable")
 
+    private fun syncAppSettingToSqliteAsync(key: String, encodedJson: String) {
+        scope.launch {
+            appSettingMutex.withLock {
+                runCatching { core?.setAppSettingJson(key, encodedJson) }
+            }
+        }
+    }
+
     suspend fun refreshCoreState() = withContext(Dispatchers.IO) {
         val c = core ?: return@withContext
+        val sqlLocale = runCatching {
+            c.getAppSettingJson("app_setting:locale")?.let { json.decodeFromString<String>(it) }
+        }.getOrNull()?.takeIf { it.isNotBlank() }
+        if (sqlLocale != null) {
+            _locale.value = sqlLocale
+            prefsStore.edit().putString("locale", sqlLocale).apply()
+        } else if (prefsStore.contains("locale")) {
+            runCatching { c.setAppSettingJson("app_setting:locale", json.encodeToString(_locale.value)) }
+        }
+
+        val sqlAutoUpdate = runCatching {
+            c.getAppSettingJson("app_setting:auto_check_updates")?.let { json.decodeFromString<Boolean>(it) }
+        }.getOrNull()
+        if (sqlAutoUpdate != null) {
+            _autoCheckUpdates.value = sqlAutoUpdate
+            prefsStore.edit().putBoolean("auto_check_updates", sqlAutoUpdate).apply()
+        } else if (prefsStore.contains("auto_check_updates")) {
+            runCatching { c.setAppSettingJson("app_setting:auto_check_updates", json.encodeToString(_autoCheckUpdates.value)) }
+        }
+
+        val sqlSkipped = runCatching {
+            c.getAppSettingJson("app_setting:skipped_update_version")?.let { json.decodeFromString<String?>(it) }
+        }.getOrNull()
+        if (!sqlSkipped.isNullOrBlank()) {
+            _skippedUpdateVersion.value = sqlSkipped
+            prefsStore.edit().putString("skipped_update_version", sqlSkipped).apply()
+        } else if (!_skippedUpdateVersion.value.isNullOrBlank()) {
+            runCatching { c.setAppSettingJson("app_setting:skipped_update_version", json.encodeToString(_skippedUpdateVersion.value)) }
+        }
+
+        val sqlLastTab = runCatching {
+            c.getAppSettingJson("app_setting:last_visited_tab")?.let { json.decodeFromString<String>(it) }
+        }.getOrNull()?.takeIf { it.isNotBlank() }
+        if (sqlLastTab != null) {
+            _lastVisitedTab.value = sqlLastTab
+            prefsStore.edit().putString("last_visited_tab", sqlLastTab).apply()
+        }
+
+        runCatching {
+            c.getAppSettingJson("live_channel_preferred_streams")?.let { raw ->
+                val decoded = json.decodeFromString<Map<String, LiveChannelStreamPref>>(raw)
+                synchronized(liveStreamPrefsLock) {
+                    val merged = liveStreamPrefsMap.toMutableMap()
+                    decoded.forEach { (k, v) ->
+                        val prev = merged[k]
+                        if (prev == null || v.updatedAtEpochMs >= prev.updatedAtEpochMs) {
+                            merged[k] = v
+                        }
+                    }
+                    liveStreamPrefsMap = merged
+                    prefsStore.edit().putString("live_channel_preferred_streams", json.encodeToString(merged)).apply()
+                }
+            }
+        }
+
         runCatching {
             val info = json.decodeFromString<EngineInfo>(c.getEngineInfoJson())
             _engineInfo.value = info
@@ -250,11 +331,24 @@ class VesselRepository private constructor(private val appContext: Context) {
                 rawList.filterNotTo(this) { it.id == DYNAMIC_MATERIAL_THEME_ID }
             }
             _themes.value = list
-            val savedThemeId = prefsStore.getString("theme_id", "catppuccin-mocha")
+            val sqlThemeId = runCatching {
+                c.getAppSettingJson("app_setting:theme_id")?.let { json.decodeFromString<String>(it) }
+            }.getOrNull()?.takeIf { it.isNotBlank() }
+            val savedThemeId = sqlThemeId ?: prefsStore.getString("theme_id", "catppuccin-mocha")
+            if (sqlThemeId != null) {
+                prefsStore.edit().putString("theme_id", sqlThemeId).apply()
+            } else if (savedThemeId != null && prefsStore.contains("theme_id")) {
+                runCatching { c.setAppSettingJson("app_setting:theme_id", json.encodeToString(savedThemeId)) }
+            }
             _activeTheme.value = list.firstOrNull { it.id == savedThemeId } ?: list.firstOrNull() ?: ThemeSpec()
         }
-        runCatching {
-            _uiPreferences.value = json.decodeFromString<UiPreferences>(c.getUiPreferencesJson())
+        uiPrefsMutex.withLock {
+            runCatching {
+                _uiPreferences.value = json.decodeFromString<UiPreferences>(c.getUiPreferencesJson())
+                uiPrefsLoaded = true
+            }.onFailure { err ->
+                notifyError(err, "Failed to read saved UI preferences")
+            }
         }
         runCatching {
             _plugins.value = json.decodeFromString<List<PluginListEntry>>(c.listPluginsJson())
@@ -264,12 +358,86 @@ class VesselRepository private constructor(private val appContext: Context) {
     fun setLocale(code: String) {
         _locale.value = code
         prefsStore.edit().putString("locale", code).apply()
+        syncAppSettingToSqliteAsync("app_setting:locale", json.encodeToString(code))
         VesselI18n.init(appContext, code, _engineInfo.value?.localesDir)
     }
 
     fun selectTheme(themeId: String) {
         prefsStore.edit().putString("theme_id", themeId).apply()
+        syncAppSettingToSqliteAsync("app_setting:theme_id", json.encodeToString(themeId))
         _activeTheme.value = _themes.value.firstOrNull { it.id == themeId } ?: ThemeSpec()
+    }
+
+    fun setLastVisitedTab(tabKey: String) {
+        val clean = tabKey.trim().ifBlank { "home" }
+        _lastVisitedTab.value = clean
+        prefsStore.edit().putString("last_visited_tab", clean).apply()
+        syncAppSettingToSqliteAsync("app_setting:last_visited_tab", json.encodeToString(clean))
+    }
+
+    private fun buildLiveChannelMemoryKey(pluginId: String, nativeId: String?, streamId: String?): String {
+        val id = (streamId?.takeIf { it.isNotBlank() } ?: nativeId.orEmpty()).trim()
+        return "$pluginId::$id"
+    }
+
+    fun getPreferredLiveStreamIndex(
+        pluginId: String,
+        nativeId: String?,
+        streamId: String?,
+        streams: List<StreamCandidate>,
+    ): Int {
+        if (streams.isEmpty()) return 0
+        val fallbackIdx = streams.indexOfFirst { it.isDefault }.takeIf { it >= 0 } ?: 0
+        val key = buildLiveChannelMemoryKey(pluginId, nativeId, streamId)
+        val altKey = if (!nativeId.isNullOrBlank() && !streamId.isNullOrBlank() && nativeId != streamId) {
+            buildLiveChannelMemoryKey(pluginId, nativeId, nativeId)
+        } else null
+        val pref = synchronized(liveStreamPrefsLock) {
+            liveStreamPrefsMap[key] ?: altKey?.let { liveStreamPrefsMap[it] }
+        } ?: return fallbackIdx
+
+        if (pref.url.isNotBlank()) {
+            val byUrl = streams.indexOfFirst { it.url == pref.url }
+            if (byUrl >= 0) return byUrl
+        }
+        val prefLabel = pref.label?.trim()?.lowercase()
+        if (!prefLabel.isNullOrBlank()) {
+            val byLabel = streams.indexOfFirst { it.label.trim().lowercase() == prefLabel }
+            if (byLabel >= 0) return byLabel
+        }
+        if (pref.index in streams.indices) return pref.index
+        return fallbackIdx
+    }
+
+    fun savePreferredLiveStream(
+        pluginId: String,
+        nativeId: String?,
+        streamId: String?,
+        candidate: StreamCandidate?,
+        index: Int,
+    ) {
+        if (candidate == null) return
+        val key = buildLiveChannelMemoryKey(pluginId, nativeId, streamId)
+        val entry = LiveChannelStreamPref(
+            url = candidate.url,
+            label = candidate.label,
+            index = index,
+            updatedAtEpochMs = System.currentTimeMillis(),
+        )
+        val encoded = synchronized(liveStreamPrefsLock) {
+            liveStreamPrefsMap[key] = entry
+            if (liveStreamPrefsMap.size > 350) {
+                val trimmed = liveStreamPrefsMap.entries
+                    .sortedByDescending { it.value.updatedAtEpochMs }
+                    .take(300)
+                    .associate { it.key to it.value }
+                    .toMutableMap()
+                liveStreamPrefsMap = trimmed
+            }
+            json.encodeToString(liveStreamPrefsMap.toMap())
+        }
+        prefsStore.edit().putString("live_channel_preferred_streams", encoded).apply()
+        syncAppSettingToSqliteAsync("live_channel_preferred_streams", encoded)
     }
 
     suspend fun getHomeFeeds(pluginIds: List<String>? = null): List<HomeShelfResult> = withContext(Dispatchers.IO) {
@@ -712,7 +880,30 @@ class VesselRepository private constructor(private val appContext: Context) {
         json.decodeFromString(c.getPlaybackStatsJson())
     }
 
+    suspend fun updateUiPreferences(transform: (UiPreferences) -> UiPreferences) = withContext(Dispatchers.IO) {
+        uiPrefsMutex.withLock {
+            val c = core
+            val base = if (!uiPrefsLoaded && c != null) {
+                runCatching { json.decodeFromString<UiPreferences>(c.getUiPreferencesJson()) }
+                    .getOrNull()
+                    ?.also {
+                        _uiPreferences.value = it
+                        uiPrefsLoaded = true
+                    } ?: _uiPreferences.value
+            } else {
+                _uiPreferences.value
+            }
+            saveUiPreferencesLocked(transform(base))
+        }
+    }
+
     suspend fun saveUiPreferences(prefs: UiPreferences) = withContext(Dispatchers.IO) {
+        uiPrefsMutex.withLock {
+            saveUiPreferencesLocked(prefs)
+        }
+    }
+
+    private fun saveUiPreferencesLocked(prefs: UiPreferences) {
         val normalizedAspect = when (prefs.cards.aspectRatio) {
             "portrait_3x4" -> "portrait_3x4"
             "portrait_4x5" -> "portrait_4x5"
@@ -722,8 +913,15 @@ class VesselRepository private constructor(private val appContext: Context) {
             "cinema_21x9" -> "cinema_21x9"
             else -> "poster_2x3"
         }
-        val cleanPrefs = prefs.copy(cards = prefs.cards.copy(aspectRatio = normalizedAspect))
+        val normalizedScale = prefs.cards.scalePercent.coerceIn(70, 150)
+        val cleanPrefs = prefs.copy(
+            cards = prefs.cards.copy(
+                aspectRatio = normalizedAspect,
+                scalePercent = normalizedScale,
+            ),
+        )
         _uiPreferences.value = cleanPrefs
+        uiPrefsLoaded = true
         runCatching {
             requireCore().setUiPreferencesJson(json.encodeToString(cleanPrefs))
         }.onFailure { err ->
@@ -736,11 +934,13 @@ class VesselRepository private constructor(private val appContext: Context) {
     fun setAutoCheckUpdates(enabled: Boolean) {
         _autoCheckUpdates.value = enabled
         prefsStore.edit().putBoolean("auto_check_updates", enabled).apply()
+        syncAppSettingToSqliteAsync("app_setting:auto_check_updates", json.encodeToString(enabled))
     }
 
     fun skipUpdateVersion(version: String) {
         _skippedUpdateVersion.value = version
         prefsStore.edit().putString("skipped_update_version", version).apply()
+        syncAppSettingToSqliteAsync("app_setting:skipped_update_version", json.encodeToString(version))
         _showUpdateDialog.value = false
     }
 

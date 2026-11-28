@@ -2,9 +2,18 @@
 
 use std::collections::BTreeMap;
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::{VesselError, VesselResult};
+
+fn deserialize_or_default<'de, D, T>(deserializer: D) -> Result<T, D::Error>
+where
+    D: Deserializer<'de>,
+    T: Default + Deserialize<'de>,
+{
+    let val = serde_json::Value::deserialize(deserializer)?;
+    Ok(T::deserialize(val).unwrap_or_default())
+}
 
 /// Eleven core color tokens shared across desktop CSS variables and Android Compose.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -137,15 +146,27 @@ pub enum MobileNavLayout {
     FloatingBottom,
 }
 
-/// Android TV navigation bar style (independent of mobile & desktop layouts).
+/// Android TV & Tablet navigation bar style (independent of mobile & desktop layouts).
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TvNavLayout {
-    #[default]
     ExpandedSidebar,
+    #[default]
     CollapsedRail,
     PinnedSidebar,
     TopNavbar,
+}
+
+/// Preferred initial tab when launching Vessel.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum StartupTab {
+    #[default]
+    Home,
+    Search,
+    Library,
+    LiveTv,
+    LastVisited,
 }
 
 /// Android form-factor override mode (`auto` detects hardware TV / Tablet / Phone).
@@ -163,13 +184,21 @@ pub enum AndroidDeviceMode {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct ShellPreferences {
+    #[serde(deserialize_with = "deserialize_or_default")]
     pub layout: NavLayout,
+    #[serde(deserialize_with = "deserialize_or_default")]
     pub mobile_nav_layout: MobileNavLayout,
+    #[serde(deserialize_with = "deserialize_or_default")]
     pub tv_nav_layout: TvNavLayout,
+    #[serde(deserialize_with = "deserialize_or_default")]
     pub android_device_mode: AndroidDeviceMode,
+    #[serde(deserialize_with = "deserialize_or_default")]
+    pub start_tab: StartupTab,
     pub visible_modules: Vec<NavModule>,
+    #[serde(deserialize_with = "deserialize_or_default")]
     pub density: UiDensity,
     pub font_scale_percent: u16,
+    #[serde(deserialize_with = "deserialize_or_default")]
     pub corner_style: CornerStyle,
     pub reduced_motion: bool,
 }
@@ -181,6 +210,7 @@ impl Default for ShellPreferences {
             mobile_nav_layout: MobileNavLayout::default(),
             tv_nav_layout: TvNavLayout::default(),
             android_device_mode: AndroidDeviceMode::default(),
+            start_tab: StartupTab::default(),
             visible_modules: vec![
                 NavModule::Home,
                 NavModule::Search,
@@ -218,12 +248,27 @@ pub enum HeroBannerMode {
     Hidden,
 }
 
+/// Visual layout preset for Home content catalog sections.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum HomeSectionViewMode {
+    #[default]
+    Rail,
+    Grid,
+    CompactList,
+}
+
 /// Home screen rails and section visibility preferences.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct HomePreferences {
+    #[serde(deserialize_with = "deserialize_or_default")]
     pub preset: HomePreset,
+    #[serde(deserialize_with = "deserialize_or_default")]
     pub hero_banner: HeroBannerMode,
+    pub hero_auto_play_trailer: bool,
+    #[serde(deserialize_with = "deserialize_or_default")]
+    pub section_view_mode: HomeSectionViewMode,
     pub show_continue_watching: bool,
     pub continue_watching_limit: u16,
     pub show_recent_iptv: bool,
@@ -238,6 +283,8 @@ impl Default for HomePreferences {
         Self {
             preset: HomePreset::default(),
             hero_banner: HeroBannerMode::default(),
+            hero_auto_play_trailer: true,
+            section_view_mode: HomeSectionViewMode::default(),
             show_continue_watching: true,
             continue_watching_limit: 12,
             show_recent_iptv: true,
@@ -273,7 +320,9 @@ pub enum CardAspectRatio {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct CardPreferences {
+    #[serde(deserialize_with = "deserialize_or_default")]
     pub aspect_ratio: CardAspectRatio,
+    pub scale_percent: u16,
     pub columns: Option<u8>,
     pub show_plugin_badge: bool,
     pub show_rating: bool,
@@ -289,6 +338,7 @@ impl Default for CardPreferences {
     fn default() -> Self {
         Self {
             aspect_ratio: CardAspectRatio::default(),
+            scale_percent: 100,
             columns: None,
             show_plugin_badge: true,
             show_rating: true,
@@ -317,10 +367,12 @@ pub enum EpisodeListLayout {
 #[serde(default, rename_all = "camelCase")]
 pub struct DetailsPreferences {
     pub show_backdrop: bool,
+    pub auto_play_trailer: bool,
     pub backdrop_dim_percent: u8,
     pub show_external_id_badges: bool,
     pub show_fix_match: bool,
     pub show_switch_source: bool,
+    #[serde(deserialize_with = "deserialize_or_default")]
     pub episode_layout: EpisodeListLayout,
     pub hide_episode_thumbnails: bool,
     pub hide_episode_overviews: bool,
@@ -330,6 +382,7 @@ impl Default for DetailsPreferences {
     fn default() -> Self {
         Self {
             show_backdrop: true,
+            auto_play_trailer: true,
             backdrop_dim_percent: 65,
             show_external_id_badges: true,
             show_fix_match: true,
@@ -364,7 +417,9 @@ pub enum AndroidPlayerEngine {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct PlaybackPreferences {
+    #[serde(deserialize_with = "deserialize_or_default")]
     pub click_behavior: PlayClickBehavior,
+    #[serde(deserialize_with = "deserialize_or_default")]
     pub android_player_engine: AndroidPlayerEngine,
     pub show_live_control_bar: bool,
     pub auto_next_delay_secs: u16,
@@ -404,6 +459,7 @@ pub struct SubtitlePreferences {
     pub font_family: String,
     pub text_color: String,
     pub background_opacity: u8,
+    #[serde(deserialize_with = "deserialize_or_default")]
     pub outline_style: SubtitleOutlineStyle,
     pub bottom_offset_px: u16,
     pub bold: bool,
@@ -488,17 +544,23 @@ pub struct LiveTvPreferences {
     pub plugin_order: Vec<String>,
     pub section_order_by_plugin: BTreeMap<String, Vec<String>>,
     pub favorite_channels: Vec<FavoriteLiveChannel>,
+    #[serde(deserialize_with = "deserialize_or_default")]
     pub view_mode: LiveTvViewMode,
+    #[serde(deserialize_with = "deserialize_or_default")]
     pub density: UiDensity,
     pub columns: Option<u8>,
     pub show_logos: bool,
     pub show_categories: bool,
+    #[serde(deserialize_with = "deserialize_or_default")]
     pub logo_style: LiveTvLogoStyle,
+    #[serde(deserialize_with = "deserialize_or_default")]
     pub card_aspect: LiveTvCardAspect,
     pub show_channel_numbers: bool,
     pub show_favorites_bar: bool,
     pub show_section_headers: bool,
     pub show_action_buttons: bool,
+    pub favorites_only: bool,
+    pub plugin_favorites_only: bool,
     pub title_lines: u8,
 }
 
@@ -519,6 +581,8 @@ impl Default for LiveTvPreferences {
             show_favorites_bar: true,
             show_section_headers: true,
             show_action_buttons: true,
+            favorites_only: false,
+            plugin_favorites_only: false,
             title_lines: 1,
         }
     }
@@ -537,6 +601,67 @@ pub struct UiPreferences {
     pub advanced: AdvancedUiPreferences,
     pub live_tv: LiveTvPreferences,
     pub search_history: Vec<String>,
+}
+
+impl UiPreferences {
+    /// Parses `UiPreferences` resiliently from JSON so invalid or unknown fields inside
+    /// a single subsection cannot wipe unrelated user settings across upgrades.
+    /// Malformed JSON syntax still returns `Err`.
+    pub fn from_json_tolerant(raw: &str) -> Result<Self, serde_json::Error> {
+        let value: serde_json::Value = serde_json::from_str(raw)?;
+        if let Ok(full) = serde_json::from_value::<Self>(value.clone()) {
+            return Ok(full);
+        }
+        let mut prefs = Self::default();
+        if let Some(obj) = value.as_object() {
+            if let Some(v) = obj.get("shell")
+                && let Ok(parsed) = serde_json::from_value::<ShellPreferences>(v.clone())
+            {
+                prefs.shell = parsed;
+            }
+            if let Some(v) = obj.get("home")
+                && let Ok(parsed) = serde_json::from_value::<HomePreferences>(v.clone())
+            {
+                prefs.home = parsed;
+            }
+            if let Some(v) = obj.get("cards")
+                && let Ok(parsed) = serde_json::from_value::<CardPreferences>(v.clone())
+            {
+                prefs.cards = parsed;
+            }
+            if let Some(v) = obj.get("details")
+                && let Ok(parsed) = serde_json::from_value::<DetailsPreferences>(v.clone())
+            {
+                prefs.details = parsed;
+            }
+            if let Some(v) = obj.get("playback")
+                && let Ok(parsed) = serde_json::from_value::<PlaybackPreferences>(v.clone())
+            {
+                prefs.playback = parsed;
+            }
+            if let Some(v) = obj.get("subtitles")
+                && let Ok(parsed) = serde_json::from_value::<SubtitlePreferences>(v.clone())
+            {
+                prefs.subtitles = parsed;
+            }
+            if let Some(v) = obj.get("advanced")
+                && let Ok(parsed) = serde_json::from_value::<AdvancedUiPreferences>(v.clone())
+            {
+                prefs.advanced = parsed;
+            }
+            if let Some(v) = obj.get("liveTv")
+                && let Ok(parsed) = serde_json::from_value::<LiveTvPreferences>(v.clone())
+            {
+                prefs.live_tv = parsed;
+            }
+            if let Some(v) = obj.get("searchHistory")
+                && let Ok(parsed) = serde_json::from_value::<Vec<String>>(v.clone())
+            {
+                prefs.search_history = parsed;
+            }
+        }
+        Ok(prefs)
+    }
 }
 
 #[cfg(test)]
@@ -585,12 +710,29 @@ mod tests {
         assert!(prefs.live_tv.show_logos);
         assert!(prefs.live_tv.show_categories);
         assert_eq!(prefs.live_tv.view_mode, super::LiveTvViewMode::Grid);
-        assert_eq!(prefs.shell.tv_nav_layout, super::TvNavLayout::ExpandedSidebar);
+        assert_eq!(prefs.shell.tv_nav_layout, super::TvNavLayout::CollapsedRail);
+        assert_eq!(prefs.shell.start_tab, super::StartupTab::Home);
+        assert!(prefs.home.hero_auto_play_trailer);
+        assert_eq!(prefs.home.section_view_mode, super::HomeSectionViewMode::Rail);
+        assert_eq!(prefs.cards.scale_percent, 100);
+        assert!(prefs.details.auto_play_trailer);
         assert!(prefs.home.catalog_order.is_empty());
         assert!(prefs.live_tv.show_favorites_bar);
         assert!(prefs.live_tv.show_section_headers);
         assert!(prefs.live_tv.show_channel_numbers);
         assert_eq!(prefs.live_tv.title_lines, 1);
+
+        let unknown_enum = r#"{
+            "shell": { "tvNavLayout": "future_layout", "startTab": "future_tab", "fontScalePercent": 115 },
+            "cards": { "aspectRatio": "future_ratio", "scalePercent": 125 }
+        }"#;
+        let resilient: UiPreferences =
+            serde_json::from_str(unknown_enum).expect("unknown enum must fall back safely");
+        assert_eq!(resilient.shell.tv_nav_layout, super::TvNavLayout::CollapsedRail);
+        assert_eq!(resilient.shell.start_tab, super::StartupTab::Home);
+        assert_eq!(resilient.shell.font_scale_percent, 115);
+        assert_eq!(resilient.cards.aspect_ratio, super::CardAspectRatio::Poster2x3);
+        assert_eq!(resilient.cards.scale_percent, 125);
     }
 
     #[test]

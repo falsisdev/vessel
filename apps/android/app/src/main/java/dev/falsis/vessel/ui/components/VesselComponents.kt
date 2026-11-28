@@ -748,6 +748,12 @@ fun cardAspectRatioValue(aspectRatio: String): Float = when (aspectRatio) {
 fun isLandscapeCardRatio(aspectRatio: String): Boolean =
     cardAspectRatioValue(aspectRatio) >= (4f / 3f - 0.01f)
 
+fun scaledAdaptiveCardMinSize(cards: CardPreferences): Dp {
+    val base = if (isLandscapeCardRatio(cards.aspectRatio)) 168.dp else 110.dp
+    val scale = cards.scalePercent.coerceIn(70, 150) / 100f
+    return base * scale
+}
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun MediaPosterCard(
@@ -764,13 +770,14 @@ fun MediaPosterCard(
     var showMenu by remember { mutableStateOf(false) }
     val targetAspect = cardAspectRatioValue(cards.aspectRatio)
     val isLandscape = targetAspect >= (4f / 3f - 0.01f)
+    val cardScale = cards.scalePercent.coerceIn(70, 150) / 100f
     val rowWidth = when (cards.aspectRatio) {
         "cinema_21x9" -> 220.dp
         "wide_16x9", "wide16x9" -> 196.dp
         "classic_4x3" -> 168.dp
         "square" -> 136.dp
         else -> 124.dp
-    }
+    } * cardScale
     val posterAspect by animateFloatAsState(
         targetValue = targetAspect,
         animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
@@ -1001,6 +1008,7 @@ fun ContinueWatchingCard(
     onGoToDetails: () -> Unit,
     onEdit: () -> Unit,
     onRemove: () -> Unit,
+    cardScalePercent: Int = 100,
     modifier: Modifier = Modifier,
 ) {
     val palette = LocalVesselPalette.current
@@ -1029,7 +1037,8 @@ fun ContinueWatchingCard(
         }
     }
 
-    Box(modifier = modifier.width(if (isTv) 164.dp else 228.dp)) {
+    val cwScale = cardScalePercent.coerceIn(70, 150) / 100f
+    Box(modifier = modifier.width((if (isTv) 164.dp else 228.dp) * cwScale)) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()

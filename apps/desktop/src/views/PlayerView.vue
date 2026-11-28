@@ -40,6 +40,7 @@ import { useUiPreferences } from '@/composables/useUiPreferences'
 import { useVesselEvents } from '@/composables/useVesselEvents'
 import { parseSubtitles, type SubtitleCue } from '@/utils/subtitleParser'
 import { isLiveMediaIdentifier } from '@/utils/liveTv'
+import { resolvePreferredLiveStreamIndex, savePreferredLiveStream } from '@/utils/liveStreamMemory'
 import type {
   EmbeddedPlayerState,
   EmbeddedTrackInfo,
@@ -1483,6 +1484,15 @@ function switchSource(index: number): void {
   }
   playbackError.value = ''
   setActiveStreamIndex(index)
+  if (isLive.value && detail.value && currentEpisode.value) {
+    void savePreferredLiveStream(
+      props.pluginId,
+      detail.value.nativeId,
+      currentEpisode.value.streamId,
+      streams.value[index],
+      index,
+    )
+  }
   activeDrawer.value = null
   scheduleHideControls()
 }
@@ -1525,6 +1535,12 @@ async function switchEpisode(ep: Episode): Promise<void> {
     }
     pendingSeekSeconds.value = 0
     if (isLive.value && activeSession.value && detail.value) {
+      const preferredIdx = await resolvePreferredLiveStreamIndex(
+        props.pluginId,
+        detail.value.nativeId,
+        ep.streamId,
+        res.streams,
+      )
       setSession({
         ...activeSession.value,
         detail: {
@@ -1537,7 +1553,7 @@ async function switchEpisode(ep: Episode): Promise<void> {
         streams: res.streams,
         subtitles: res.subtitles,
         skipSegments: res.skipSegments,
-        activeStreamIndex: 0,
+        activeStreamIndex: preferredIdx,
         startPositionMs: 0,
       })
       showGestureHud(ep.title ?? detail.value.title)

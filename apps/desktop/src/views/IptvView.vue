@@ -23,6 +23,7 @@ import { usePlayerSession } from '@/composables/usePlayerSession'
 import { useUiPreferences } from '@/composables/useUiPreferences'
 import { pushToast } from '@/composables/useVesselEvents'
 import { isLiveTvPlugin, resolveLiveGroupName } from '@/utils/liveTv'
+import { resolvePreferredLiveStreamIndex } from '@/utils/liveStreamMemory'
 import type {
   EpgNowNext,
   Episode,
@@ -52,7 +53,6 @@ const pluginLiveSections = ref<HomeSection[]>([])
 const selectedSectionId = shallowRef('')
 const loadingPluginLive = shallowRef(false)
 const pluginChannelFilter = shallowRef('')
-const pluginFavoritesOnly = shallowRef(false)
 const launchingChannelId = shallowRef('')
 const failedPluginLogos = ref<Record<string, boolean>>({})
 const showReorderPanel = shallowRef(false)
@@ -67,7 +67,6 @@ const activeProfileId = shallowRef<string>('')
 const groups = ref<string[]>([])
 const selectedGroup = shallowRef<string>('')
 const searchQuery = shallowRef('')
-const favoritesOnly = shallowRef(false)
 const channels = ref<StoredIptvChannel[]>([])
 const favoriteIptvChannels = ref<StoredIptvChannel[]>([])
 const selectedChannel = ref<StoredIptvChannel | null>(null)
@@ -76,6 +75,18 @@ const syncingProfileId = shallowRef<string>('')
 const failedLogos = ref<Record<number, boolean>>({})
 
 const livePrefs = computed(() => uiPreferences.value.liveTv)
+const pluginFavoritesOnly = computed<boolean>({
+  get: () => Boolean(livePrefs.value.pluginFavoritesOnly),
+  set: (v) => {
+    void patchLivePrefs({ pluginFavoritesOnly: v })
+  },
+})
+const favoritesOnly = computed<boolean>({
+  get: () => Boolean(livePrefs.value.favoritesOnly),
+  set: (v) => {
+    void patchLivePrefs({ favoritesOnly: v })
+  },
+})
 const pluginFavorites = computed(() => livePrefs.value.favoriteChannels ?? [])
 
 const liveGridStyle = computed(() => {
@@ -505,6 +516,12 @@ async function playPluginLiveItem(
       pushToast('warn', `No playable live streams returned for ${item.title}`)
       return
     }
+    const preferredIdx = await resolvePreferredLiveStreamIndex(
+      pluginId,
+      item.nativeId,
+      ep.streamId,
+      streamRes.streams,
+    )
     setSession({
       pluginId,
       nativeId: item.nativeId,
@@ -519,12 +536,12 @@ async function playPluginLiveItem(
       episode: ep,
       streams: streamRes.streams,
       subtitles: streamRes.subtitles ?? [],
-      activeStreamIndex: 0,
+      activeStreamIndex: preferredIdx,
     })
     await router.push({
       name: 'player',
       params: { pluginId, nativeId: item.nativeId },
-      query: { streamId: ep.streamId },
+      query: { streamId: ep.streamId, streamIndex: String(preferredIdx) },
     })
   } catch (err) {
     pushToast('error', String(err))
@@ -736,6 +753,12 @@ async function playChannel(ch: StoredIptvChannel): Promise<void> {
     channelStreams[ch.streamId] = activeCandidates[0]
   }
 
+  const preferredIdx = await resolvePreferredLiveStreamIndex(
+    'iptv',
+    ch.streamId,
+    ch.streamId,
+    activeCandidates,
+  )
   setSession({
     pluginId: 'iptv',
     nativeId: ch.streamId,
@@ -755,14 +778,14 @@ async function playChannel(ch: StoredIptvChannel): Promise<void> {
     episode: activeEp,
     streams: activeCandidates,
     subtitles: [],
-    activeStreamIndex: 0,
+    activeStreamIndex: preferredIdx,
     channelStreams,
   })
 
   await router.push({
     name: 'player',
     params: { pluginId: 'iptv', nativeId: ch.streamId },
-    query: { streamId: ch.streamId },
+    query: { streamId: ch.streamId, streamIndex: String(preferredIdx) },
   })
 }
 

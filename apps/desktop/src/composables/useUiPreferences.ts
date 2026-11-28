@@ -8,7 +8,8 @@ export function defaultUiPreferences(): UiPreferences {
     shell: {
       layout: 'expanded_sidebar',
       mobileNavLayout: 'standard',
-      tvNavLayout: 'expanded_sidebar',
+      tvNavLayout: 'collapsed_rail',
+      startTab: 'home',
       visibleModules: ['home', 'search', 'library', 'live_tv', 'downloads', 'extensions'],
       density: 'comfortable',
       fontScalePercent: 100,
@@ -18,6 +19,8 @@ export function defaultUiPreferences(): UiPreferences {
     home: {
       preset: 'default',
       heroBanner: 'full',
+      heroAutoPlayTrailer: true,
+      sectionViewMode: 'rail',
       showContinueWatching: true,
       continueWatchingLimit: 12,
       showRecentIptv: true,
@@ -28,6 +31,7 @@ export function defaultUiPreferences(): UiPreferences {
     },
     cards: {
       aspectRatio: 'poster_2x3',
+      scalePercent: 100,
       columns: undefined,
       showPluginBadge: true,
       showRating: true,
@@ -40,6 +44,7 @@ export function defaultUiPreferences(): UiPreferences {
     },
     details: {
       showBackdrop: true,
+      autoPlayTrailer: true,
       backdropDimPercent: 65,
       showExternalIdBadges: true,
       showFixMatch: true,
@@ -83,6 +88,8 @@ export function defaultUiPreferences(): UiPreferences {
       showFavoritesBar: true,
       showSectionHeaders: true,
       showActionButtons: true,
+      favoritesOnly: false,
+      pluginFavoritesOnly: false,
       titleLines: 1,
     },
   }
@@ -96,7 +103,9 @@ let watcherBound = false
 function applyRootPreferences(prefs: UiPreferences): void {
   if (typeof document === 'undefined') return
   const scale = Math.min(135, Math.max(85, prefs.shell.fontScalePercent || 100)) / 100
+  const cardScale = Math.min(150, Math.max(70, prefs.cards.scalePercent || 100)) / 100
   document.documentElement.style.setProperty('--vessel-font-scale', String(scale))
+  document.documentElement.style.setProperty('--vessel-card-scale', String(cardScale))
   applyCustomCss(prefs.advanced.customCssEnabled, prefs.advanced.customCss)
 }
 
@@ -157,6 +166,9 @@ export function useUiPreferences() {
               loaded.liveTv?.showSectionHeaders ?? defaults.liveTv.showSectionHeaders,
             showActionButtons:
               loaded.liveTv?.showActionButtons ?? defaults.liveTv.showActionButtons,
+            favoritesOnly: loaded.liveTv?.favoritesOnly ?? defaults.liveTv.favoritesOnly,
+            pluginFavoritesOnly:
+              loaded.liveTv?.pluginFavoritesOnly ?? defaults.liveTv.pluginFavoritesOnly,
             titleLines: loaded.liveTv?.titleLines ?? defaults.liveTv.titleLines,
           },
         }

@@ -50,7 +50,7 @@ import dev.falsis.vessel.data.VesselRepository
 import dev.falsis.vessel.ui.components.MediaPosterCard
 import dev.falsis.vessel.ui.components.VesselFilterChip
 import dev.falsis.vessel.ui.components.VesselSearchField
-import dev.falsis.vessel.ui.components.isLandscapeCardRatio
+import dev.falsis.vessel.ui.components.scaledAdaptiveCardMinSize
 import dev.falsis.vessel.ui.components.vesselFocusBorder
 import dev.falsis.vessel.ui.components.vesselTopSafeInset
 import dev.falsis.vessel.ui.i18n.VesselI18n
@@ -80,8 +80,6 @@ fun LibraryScreen(
         val q = searchText.trim().lowercase()
         if (q.isEmpty()) itemsList else itemsList.filter { it.title.lowercase().contains(q) }
     }
-
-    val isWideCard = isLandscapeCardRatio(prefs.cards.aspectRatio)
 
     Column(
         modifier = Modifier
@@ -151,7 +149,7 @@ fun LibraryScreen(
                 }
             } else {
                 LazyVerticalGrid(
-                    columns = GridCells.Adaptive(minSize = if (isWideCard) 168.dp else 110.dp),
+                    columns = GridCells.Adaptive(minSize = scaledAdaptiveCardMinSize(prefs.cards)),
                     contentPadding = PaddingValues(top = 2.dp, bottom = 24.dp + LocalVesselFloatingNavInset.current),
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp),

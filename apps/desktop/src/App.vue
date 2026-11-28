@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, shallowRef } from 'vue'
+import { computed, onMounted, onUnmounted, shallowRef, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { isTauriRuntime, vesselApi } from '@/api/vessel'
 import AppNav from '@/components/layout/AppNav.vue'
 import DomainPermissionModal from '@/components/overlays/DomainPermissionModal.vue'
 import NowPlayingBar from '@/components/overlays/NowPlayingBar.vue'
@@ -57,12 +58,58 @@ onMounted(async () => {
     loadPreferences(),
     loadUpdatePreferences(),
   ])
+  if (route.name === 'home') {
+    const startPref = uiPreferences.value.shell.startTab ?? 'home'
+    let targetRoute: 'home' | 'search' | 'library' | 'iptv' = 'home'
+    if (startPref === 'search' || startPref === 'library') {
+      targetRoute = startPref
+    } else if (startPref === 'live_tv') {
+      targetRoute = 'iptv'
+    } else if (startPref === 'last_visited') {
+      let savedTab: string | null = null
+      if (isTauriRuntime()) {
+        try {
+          const raw = await vesselApi.getAppSetting('app_setting:last_visited_tab')
+          if (raw) savedTab = JSON.parse(raw) as string
+        } catch {
+          // Non-fatal
+        }
+      }
+      if (!savedTab && typeof localStorage !== 'undefined') {
+        savedTab = localStorage.getItem('vessel_last_visited_tab')
+      }
+      if (savedTab === 'search' || savedTab === 'library') targetRoute = savedTab
+      else if (savedTab === 'live_tv' || savedTab === 'iptv') targetRoute = 'iptv'
+    }
+    if (targetRoute !== 'home') {
+      void router.replace({ name: targetRoute })
+    }
+  }
   if (autoCheckEnabled.value) {
     updateCheckTimer = window.setTimeout(() => {
       void checkForUpdates(true)
     }, 2500)
   }
 })
+
+watch(
+  () => route.name,
+  (name) => {
+    const tabKey =
+      name === 'home' || name === 'search' || name === 'library'
+        ? name
+        : name === 'iptv'
+          ? 'live_tv'
+          : null
+    if (!tabKey) return
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('vessel_last_visited_tab', tabKey)
+    }
+    if (isTauriRuntime()) {
+      void vesselApi.setAppSetting('app_setting:last_visited_tab', JSON.stringify(tabKey)).catch(() => {})
+    }
+  },
+)
 
 onUnmounted(() => {
   if (updateCheckTimer !== null) {

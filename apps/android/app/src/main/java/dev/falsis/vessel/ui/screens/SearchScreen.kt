@@ -76,7 +76,7 @@ import dev.falsis.vessel.ui.components.VesselTextButton
 import dev.falsis.vessel.ui.components.vesselFocusBorder
 import dev.falsis.vessel.ui.theme.LocalVesselFloatingNavInset
 import dev.falsis.vessel.ui.theme.LocalVesselUiTokens
-import dev.falsis.vessel.ui.components.isLandscapeCardRatio
+import dev.falsis.vessel.ui.components.scaledAdaptiveCardMinSize
 import dev.falsis.vessel.ui.components.vesselTopSafeInset
 import dev.falsis.vessel.ui.i18n.VesselI18n
 import dev.falsis.vessel.ui.isLiveMediaSummary
@@ -119,7 +119,7 @@ fun SearchScreen(
     state: SearchSessionState = remember { SearchSessionState() },
     searchScope: CoroutineScope = rememberCoroutineScope(),
     onOpenDetails: (pluginId: String, nativeId: String) -> Unit,
-    onPlayLiveStream: (pluginId: String, detail: MediaDetail, episode: Episode, streams: StreamResult) -> Unit = { _, _, _, _ -> },
+    onPlayLiveStream: (pluginId: String, detail: MediaDetail, episode: Episode, streams: StreamResult, initialStreamIndex: Int) -> Unit = { _, _, _, _, _ -> },
 ) {
     val palette = LocalVesselPalette.current
     val scope = rememberCoroutineScope()
@@ -251,8 +251,6 @@ fun SearchScreen(
         }
         filtered.groupBy { it.first }.toList()
     }
-
-    val isWideCard = isLandscapeCardRatio(prefs.cards.aspectRatio)
 
     Column(
         modifier = Modifier
@@ -492,7 +490,7 @@ fun SearchScreen(
             } else {
                 LazyVerticalGrid(
                     state = state.gridState,
-                    columns = GridCells.Adaptive(minSize = if (isWideCard) 168.dp else 110.dp),
+                    columns = GridCells.Adaptive(minSize = scaledAdaptiveCardMinSize(prefs.cards)),
                     contentPadding = PaddingValues(top = 2.dp, bottom = 24.dp + LocalVesselFloatingNavInset.current),
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp),
@@ -609,6 +607,7 @@ fun SearchScreen(
                                                         ),
                                                         ep,
                                                         sr,
+                                                        repo.getPreferredLiveStreamIndex(pid, detail.nativeId, ep.streamId, sr.streams),
                                                     )
                                                 }
                                             }.onFailure {

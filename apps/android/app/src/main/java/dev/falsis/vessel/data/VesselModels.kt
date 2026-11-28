@@ -67,6 +67,7 @@ data class MediaDetail(
     val synopsis: String? = null,
     val poster: String? = null,
     val backdrop: String? = null,
+    val trailerUrl: String? = null,
     val genres: List<String> = emptyList(),
     val rating: Float? = null,
     val status: String? = null,
@@ -421,6 +422,8 @@ data class ThemeSpec(
 @Serializable
 data class HomePreferences(
     val heroBanner: String = "full",
+    val heroAutoPlayTrailer: Boolean = true,
+    val sectionViewMode: String = "rail",
     val showContinueWatching: Boolean = true,
     val continueWatchingLimit: Int = 12,
     val showRecentIptv: Boolean = true,
@@ -433,6 +436,7 @@ data class HomePreferences(
 @Serializable
 data class CardPreferences(
     val aspectRatio: String = "poster_2x3",
+    val scalePercent: Int = 100,
     val showPluginBadge: Boolean = true,
     val showRating: Boolean = true,
     val showYear: Boolean = true,
@@ -442,6 +446,8 @@ data class CardPreferences(
 @Serializable
 data class DetailsPreferences(
     val showBackdrop: Boolean = true,
+    val autoPlayTrailer: Boolean = true,
+    val episodeLayout: String = "grid_cards",
     val hideEpisodeThumbnails: Boolean = false,
     val hideEpisodeOverviews: Boolean = false,
 )
@@ -490,6 +496,8 @@ data class LiveTvPreferences(
     val showFavoritesBar: Boolean = true,
     val showSectionHeaders: Boolean = true,
     val showActionButtons: Boolean = true,
+    val favoritesOnly: Boolean = false,
+    val pluginFavoritesOnly: Boolean = false,
     val titleLines: Int = 1,
 )
 
@@ -497,12 +505,21 @@ data class LiveTvPreferences(
 data class ShellPreferences(
     val layout: String = "expanded_sidebar",
     val mobileNavLayout: String = "standard",
-    val tvNavLayout: String = "expanded_sidebar",
+    val tvNavLayout: String = "collapsed_rail",
+    val startTab: String = "home",
     val androidDeviceMode: String = "auto",
     val density: String = "comfortable",
     val fontScalePercent: Int = 100,
     val cornerStyle: String = "rounded",
     val reducedMotion: Boolean = false,
+)
+
+@Serializable
+data class LiveChannelStreamPref(
+    val url: String = "",
+    val label: String? = null,
+    val index: Int = 0,
+    val updatedAtEpochMs: Long = 0L,
 )
 
 @Serializable

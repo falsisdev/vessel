@@ -627,6 +627,16 @@ impl VesselMobileCore {
         Ok(())
     }
 
+    pub fn get_app_setting_json(&self, key: String) -> Result<Option<String>, FfiError> {
+        Ok(self.runtime.block_on(self.engine.get_app_setting(&key))?)
+    }
+
+    pub fn set_app_setting_json(&self, key: String, value_json: String) -> Result<(), FfiError> {
+        self.runtime
+            .block_on(self.engine.set_app_setting(&key, &value_json))?;
+        Ok(())
+    }
+
     pub fn list_themes_json(&self) -> Result<String, FfiError> {
         let mut themes = builtin_themes();
         let themes_dir = self.paths.themes_dir();

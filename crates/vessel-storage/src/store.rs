@@ -101,10 +101,12 @@ impl SqliteStorage {
 
     /// Loads `UiPreferences`, returning defaults when not yet persisted.
     pub async fn get_ui_preferences(&self) -> VesselResult<UiPreferences> {
-        Ok(self
-            .get_json_setting(UI_PREFERENCES_KEY)
-            .await?
-            .unwrap_or_default())
+        let Some(raw) = self.get_setting_raw(UI_PREFERENCES_KEY).await? else {
+            return Ok(UiPreferences::default());
+        };
+        UiPreferences::from_json_tolerant(&raw).map_err(|err| {
+            VesselError::Storage(format!("decode json setting '{UI_PREFERENCES_KEY}': {err}"))
+        })
     }
 
     /// Persists `UiPreferences` under `UI_PREFERENCES_KEY`.

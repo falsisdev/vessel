@@ -14,11 +14,9 @@ http-client = ["dep:reqwest"]
 async-trait.workspace = true
 reqwest = { workspace = true, optional = true }
 serde.workspace = true
+serde_json.workspace = true
 thiserror.workspace = true
 
 [target.'cfg(target_os = "android")'.dependencies]
 rustls = { version = "0.23", default-features = false, features = ["aws_lc_rs", "std", "tls12"] }
 webpki-roots = "1.0"
-
-[dev-dependencies]
-serde_json.workspace = true

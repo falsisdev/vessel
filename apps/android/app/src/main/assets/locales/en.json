@@ -45,7 +45,9 @@
     "copy": "Copy",
     "copied": "Copied",
     "portrait": "Portrait",
-    "landscape": "Landscape"
+    "landscape": "Landscape",
+    "previous": "Previous",
+    "next": "Next"
   },
   "home": {
     "title": "Home",
@@ -83,7 +85,11 @@
     "cw_duration_min": "Total Duration (min)",
     "cw_mark_done": "Mark Finished / Next",
     "go_to_details": "Go to Details",
-    "engine_setup_required": "Native Engine Setup Required"
+    "engine_setup_required": "Native Engine Setup Required",
+    "section_view_mode": "Section view",
+    "view_rail": "Rail",
+    "view_grid": "Grid",
+    "view_compact_list": "List"
   },
   "search": {
     "title": "Search",
@@ -133,7 +139,10 @@
     "linked_sources_badge": "extra source(s)",
     "match_search_placeholder": "Search title across TMDB, IMDb, Simkl, AniList, MAL, Kitsu…",
     "match_no_hits": "No matching results found. Try another keyword or enter an external ID manually below.",
-    "match_manual_toggle": "Or enter external ID manually"
+    "match_manual_toggle": "Or enter external ID manually",
+    "layout_grid": "Grid",
+    "layout_detailed": "Detailed",
+    "layout_compact": "Compact"
   },
   "library": {
     "title": "Library",
@@ -297,6 +306,13 @@
     "engine_exoplayer": "Media3 ExoPlayer",
     "show_plugin_badge": "Show Plugin Source on Cards",
     "show_rating_chip": "Show Rating Chip",
+    "card_size": "Card Size",
+    "hero_trailer": "Play Background Trailer in Hero Spotlight",
+    "details_trailer": "Play Background Trailer on Details Page",
+    "home_section_view": "Home Section Layout",
+    "episode_layout": "Episode List View",
+    "startup_tab": "Startup Tab",
+    "start_tab_last_visited": "Last Visited Tab",
     "spoiler_free": "Spoiler-Free Episode Overviews",
     "custom_css": "Enable Custom CSS Injection",
     "subtitles_title": "Subtitle Customization",

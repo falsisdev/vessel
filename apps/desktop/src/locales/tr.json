@@ -45,7 +45,9 @@
     "copy": "Kopyala",
     "copied": "Kopyalandı",
     "portrait": "Dikey",
-    "landscape": "Yatay"
+    "landscape": "Yatay",
+    "previous": "Önceki",
+    "next": "Sonraki"
   },
   "home": {
     "title": "Ana Sayfa",
@@ -83,7 +85,11 @@
     "cw_duration_min": "Toplam Süre (dk)",
     "cw_mark_done": "Bitti İşaretle / Sonraki",
     "go_to_details": "İçeriğe Git",
-    "engine_setup_required": "Yerel Motor Kurulumu Gerekli"
+    "engine_setup_required": "Yerel Motor Kurulumu Gerekli",
+    "section_view_mode": "Bölüm görünümü",
+    "view_rail": "Şerit",
+    "view_grid": "Izgara",
+    "view_compact_list": "Liste"
   },
   "search": {
     "title": "Ara",
@@ -133,7 +139,10 @@
     "linked_sources_badge": "ek kaynak",
     "match_search_placeholder": "Başlık ara (TMDB, IMDb, Simkl, AniList, MAL, Kitsu)…",
     "match_no_hits": "Eşleşen sonuç bulunamadı. Farklı bir başlık deneyin veya aşağıdan manuel ID girin.",
-    "match_manual_toggle": "Veya harici ID'yi elle girin"
+    "match_manual_toggle": "Veya harici ID'yi elle girin",
+    "layout_grid": "Izgara",
+    "layout_detailed": "Detaylı",
+    "layout_compact": "Kompakt"
   },
   "library": {
     "title": "Kütüphane",
@@ -293,6 +302,13 @@
     "play_ask": "Her Zaman Kaynak Sor",
     "show_plugin_badge": "Kartlarda Eklenti Kaynağını Göster",
     "show_rating_chip": "Puan Rozetini Göster",
+    "card_size": "Kart Boyutu",
+    "hero_trailer": "Hero Vitrininde Sessiz Fragman Oynat",
+    "details_trailer": "İçerik Sayfasında Arka Planda Sessiz Fragman Oynat",
+    "home_section_view": "Ana Sayfa Bölüm Görünümü",
+    "episode_layout": "Bölüm Listesi Görünümü",
+    "startup_tab": "Başlangıç Sekmesi",
+    "start_tab_last_visited": "Son Ziyaret Edilen Sekme",
     "spoiler_free": "Spoiler Korumalı Bölüm Özetleri",
     "custom_css": "Özel CSS Enjeksiyonunu Etkinleştir",
     "subtitles_title": "Altyazı Özelleştirme",

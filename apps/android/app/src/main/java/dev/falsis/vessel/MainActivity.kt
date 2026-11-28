@@ -79,6 +79,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -236,7 +238,41 @@ fun VesselAndroidApp(
     }
 
     var selectedTab by remember { mutableIntStateOf(0) }
+    val lastVisitedTab by repo.lastVisitedTab.collectAsState()
+    var startupTabApplied by remember { mutableStateOf(false) }
+    val homeHeroEntryFocus = remember { FocusRequester() }
     var overlayStack by remember { mutableStateOf<List<OverlayRoute>>(emptyList()) }
+
+    LaunchedEffect(isReady) {
+        if (isReady && !startupTabApplied) {
+            startupTabApplied = true
+            val targetKey = when (prefs.shell.startTab) {
+                "last_visited" -> lastVisitedTab
+                else -> prefs.shell.startTab
+            }
+            val targetTab = when (targetKey) {
+                "search" -> TopTab.SEARCH
+                "library" -> TopTab.LIBRARY
+                "live_tv", "iptv" -> TopTab.LIVE_TV
+                else -> TopTab.HOME
+            }
+            selectedTab = targetTab.ordinal
+        }
+    }
+
+    LaunchedEffect(selectedTab, startupTabApplied) {
+        if (!startupTabApplied) return@LaunchedEffect
+        val key = when (TopTab.entries.getOrNull(selectedTab)) {
+            TopTab.HOME -> "home"
+            TopTab.SEARCH -> "search"
+            TopTab.LIBRARY -> "library"
+            TopTab.LIVE_TV -> "live_tv"
+            else -> null
+        }
+        if (key != null) {
+            repo.setLastVisitedTab(key)
+        }
+    }
     val searchSessionState = remember { SearchSessionState() }
     val liveTvSessionState = remember { LiveTvSessionState() }
     var splashAnimDone by remember { mutableStateOf(false) }
@@ -348,6 +384,7 @@ fun VesselAndroidApp(
                                     repo = repo,
                                     pluginId = activeOverlay.pluginId,
                                     nativeId = activeOverlay.nativeId,
+                                    isActive = activeOverlay == overlay,
                                     onBack = { popOverlay() },
                                     onOpenDebridSettings = {
                                         overlayStack = emptyList()
@@ -366,14 +403,14 @@ fun VesselAndroidApp(
                                             ),
                                         )
                                     },
-                                    onPlayLiveReplace = { detail, ep, streams ->
+                                    onPlayLiveReplace = { detail, ep, streams, idx ->
                                         overlayStack = overlayStack.dropLast(1) + OverlayRoute.Player(
                                             pluginId = activeOverlay.pluginId,
                                             nativeId = activeOverlay.nativeId,
                                             detail = detail,
                                             episode = ep,
                                             streamResult = streams,
-                                            streamIndex = 0,
+                                            streamIndex = idx,
                                             positionMs = 0L,
                                         )
                                     },
@@ -426,6 +463,8 @@ fun VesselAndroidApp(
                                                 when (TopTab.entries[tabIdx]) {
                                                     TopTab.HOME -> HomeScreen(
                                                         repo = repo,
+                                                        isActive = overlayStack.isEmpty() && TopTab.entries[selectedTab] == TopTab.HOME,
+                                                        heroEntryFocusRequester = homeHeroEntryFocus,
                                                         onOpenDetails = { pid, nid -> pushOverlay(OverlayRoute.Details(pid, nid)) },
                                                         onResumeEntry = { entry ->
                                                             scope.launch {
@@ -475,8 +514,8 @@ fun VesselAndroidApp(
                                                         state = searchSessionState,
                                                         searchScope = scope,
                                                         onOpenDetails = { pid, nid -> pushOverlay(OverlayRoute.Details(pid, nid)) },
-                                                        onPlayLiveStream = { pid, detail, ep, sr ->
-                                                            pushOverlay(OverlayRoute.Player(pid, detail.nativeId, detail, ep, sr, 0, 0L))
+                                                        onPlayLiveStream = { pid, detail, ep, sr, idx ->
+                                                            pushOverlay(OverlayRoute.Player(pid, detail.nativeId, detail, ep, sr, idx, 0L))
                                                         },
                                                     )
                                                     TopTab.LIBRARY -> LibraryScreen(
@@ -498,8 +537,8 @@ fun VesselAndroidApp(
                                                             )
                                                             pushOverlay(OverlayRoute.Player("iptv", url, liveDetail, liveEp, liveStreams, 0, 0L))
                                                         },
-                                                        onPlayLiveStream = { pid, detail, ep, sr, channelStreams ->
-                                                            pushOverlay(OverlayRoute.Player(pid, detail.nativeId, detail, ep, sr, 0, 0L, channelStreams))
+                                                        onPlayLiveStream = { pid, detail, ep, sr, channelStreams, streamIdx ->
+                                                            pushOverlay(OverlayRoute.Player(pid, detail.nativeId, detail, ep, sr, streamIdx, 0L, channelStreams))
                                                         },
                                                         onOpenDetails = { pid, nid -> pushOverlay(OverlayRoute.Details(pid, nid)) },
                                                     )
@@ -622,6 +661,11 @@ fun VesselAndroidApp(
                                                                         .height(46.dp)
                                                                         .clip(RoundedCornerShape(12.dp))
                                                                         .background(pillColor)
+                                                                        .focusProperties {
+                                                                            if (selectedTab == TopTab.HOME.ordinal) {
+                                                                                right = homeHeroEntryFocus
+                                                                            }
+                                                                        }
                                                                         .vesselFocusBorder(RoundedCornerShape(12.dp))
                                                                         .clickable { selectedTab = idx }
                                                                         .padding(horizontal = if (showLabels) 12.dp else 0.dp),

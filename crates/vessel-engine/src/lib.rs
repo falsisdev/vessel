@@ -455,6 +455,28 @@ impl VesselEngine {
         self.storage.set_ui_preferences(prefs).await
     }
 
+    /// Reads an auxiliary app-level setting from SQLite `settings` (e.g. `app_setting:*`).
+    pub async fn get_app_setting(&self, key: &str) -> VesselResult<Option<String>> {
+        let trimmed = key.trim();
+        if trimmed.is_empty() {
+            return Err(VesselError::InvalidInput(
+                "setting key cannot be empty".into(),
+            ));
+        }
+        self.storage.get_setting_raw(trimmed).await
+    }
+
+    /// Persists an auxiliary app-level setting into SQLite `settings` so it survives upgrades and backups.
+    pub async fn set_app_setting(&self, key: &str, value_json: &str) -> VesselResult<()> {
+        let trimmed = key.trim();
+        if trimmed.is_empty() || trimmed == "ui_preferences" {
+            return Err(VesselError::InvalidInput(
+                "invalid app setting key".into(),
+            ));
+        }
+        self.storage.set_setting_raw(trimmed, value_json).await
+    }
+
     /// Lists library items optionally filtered by `LibraryStatus`.
     pub async fn list_library(
         &self,
@@ -1540,7 +1562,7 @@ impl VesselEngine {
             for lang in [
                 "en", "tr", "es", "de", "fr", "it", "ru", "ja", "pt", "zh", "ar", "fa",
             ] {
-                let key = format!("meta3:{}:{}:{lang}", m.plugin_id.as_str(), m.native_id);
+                let key = format!("meta4:{}:{}:{lang}", m.plugin_id.as_str(), m.native_id);
                 if let Ok(Some(json_str)) = self.storage.get_metadata_cache(&key).await
                     && let Ok(canon) = serde_json::from_str::<CanonicalMetadata>(&json_str)
                 {
@@ -1876,7 +1898,7 @@ async fn run_enrichment_and_emit(
     }
 
     let cache_key = format!(
-        "meta3:{}:{}:{}",
+        "meta4:{}:{}:{}",
         plugin_id.as_str(),
         raw.native_id,
         preferred_lang.to_ascii_lowercase()

@@ -73,6 +73,20 @@ export function useTheme() {
 
   async function refreshThemes(): Promise<void> {
     if (isTauriRuntime()) {
+      try {
+        const persisted = await vesselApi.getAppSetting('app_setting:theme_id')
+        if (persisted) {
+          const clean = JSON.parse(persisted) as string
+          if (clean) {
+            activeThemeId.value = clean
+            if (typeof localStorage !== 'undefined') {
+              localStorage.setItem('vessel_theme_id', clean)
+            }
+          }
+        }
+      } catch {
+        // Non-fatal
+      }
       themes.value = await vesselApi.listThemes()
     }
     applyThemeCssVars(activeTheme.value)
@@ -82,6 +96,9 @@ export function useTheme() {
     activeThemeId.value = id
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem('vessel_theme_id', id)
+    }
+    if (isTauriRuntime()) {
+      void vesselApi.setAppSetting('app_setting:theme_id', JSON.stringify(id)).catch(() => {})
     }
     applyThemeCssVars(activeTheme.value)
   }

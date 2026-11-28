@@ -111,6 +111,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -659,7 +660,11 @@ fun PlayerScreen(
                 backdrop = target.thumbnail ?: activeDetail.backdrop,
             )
             activeStreamResult = StreamResult(streams = directChannelCands)
-            selectedIndex = directChannelCands.indexOfFirst { it.isDefault }.takeIf { it >= 0 } ?: 0
+            selectedIndex = if (isLive) {
+                repo.getPreferredLiveStreamIndex(pluginId, activeDetail.nativeId, target.streamId, directChannelCands)
+            } else {
+                directChannelCands.indexOfFirst { it.isDefault }.takeIf { it >= 0 } ?: 0
+            }
             currentStartPosMs = 0L
             forceHlsRetry = false
             forceProxyRetry = false
@@ -694,7 +699,11 @@ fun PlayerScreen(
                             showHud(target.title?.takeIf { it.isNotBlank() } ?: activeDetail.title)
                         }
                         activeStreamResult = sr
-                        selectedIndex = sr.streams.indexOfFirst { it.isDefault }.takeIf { it >= 0 } ?: 0
+                        selectedIndex = if (isLive) {
+                            repo.getPreferredLiveStreamIndex(pluginId, activeDetail.nativeId, target.streamId, sr.streams)
+                        } else {
+                            sr.streams.indexOfFirst { it.isDefault }.takeIf { it >= 0 } ?: 0
+                        }
                         currentStartPosMs = 0L
                         forceHlsRetry = false
                         forceProxyRetry = false
@@ -931,6 +940,10 @@ fun PlayerScreen(
     val scrubberFocus = remember { FocusRequester() }
     val bottomPlayPauseFocus = remember { FocusRequester() }
     val errorRetryFocus = remember { FocusRequester() }
+    val skipIntroFocusRequester = remember { FocusRequester() }
+    val skipCloseFocusRequester = remember { FocusRequester() }
+    var skipIntroHasFocus by remember { mutableStateOf(false) }
+    var skipCloseHasFocus by remember { mutableStateOf(false) }
 
     LaunchedEffect(activeDrawer) {
         if (activeDrawer == null) {
@@ -939,7 +952,7 @@ fun PlayerScreen(
         }
     }
 
-    LaunchedEffect(controlsVisible, isLocked, activeDrawer, playbackError, subtitleTranscriptOpen) {
+    LaunchedEffect(controlsVisible, isLocked, activeDrawer, playbackError, subtitleTranscriptOpen, activeSkip, isTv) {
         if (playbackError != null) {
             kotlinx.coroutines.delay(60)
             runCatching { errorRetryFocus.requestFocus() }
@@ -948,7 +961,10 @@ fun PlayerScreen(
             runCatching { drawerFirstFocusRequester.requestFocus() }
                 .onFailure { runCatching { drawerCloseFocusRequester.requestFocus() } }
         } else if (activeDrawer == null) {
-            if (!controlsVisible || isLocked) {
+            if (!controlsVisible && !isLocked && isTv && activeSkip != null) {
+                kotlinx.coroutines.delay(80)
+                runCatching { skipIntroFocusRequester.requestFocus() }
+            } else if (!controlsVisible || isLocked) {
                 runCatching { playerRootFocusRequester.requestFocus() }
             } else {
                 kotlinx.coroutines.delay(50)
@@ -1065,6 +1081,14 @@ fun PlayerScreen(
                     }
                 }
                 if (!controlsVisible) {
+                    if (isTv && activeSkip != null && (skipIntroHasFocus || skipCloseHasFocus)) {
+                        when (ev.key) {
+                            Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> return@onPreviewKeyEvent false
+                            Key.DirectionRight -> if (skipIntroHasFocus) return@onPreviewKeyEvent false
+                            Key.DirectionLeft -> if (skipCloseHasFocus) return@onPreviewKeyEvent false
+                            else -> {}
+                        }
+                    }
                     return@onPreviewKeyEvent when (ev.key) {
                         Key.DirectionLeft -> {
                             if (isLive && episodes.size > 1) {
@@ -2252,7 +2276,15 @@ fun PlayerScreen(
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
                             modifier = Modifier
                                 .clip(RoundedCornerShape(topStart = 999.dp, bottomStart = 999.dp))
-                                .vesselFocusBorder(RoundedCornerShape(topStart = 999.dp, bottomStart = 999.dp))
+                                .focusRequester(skipIntroFocusRequester)
+                                .onFocusChanged { skipIntroHasFocus = it.isFocused || it.hasFocus }
+                                .focusProperties {
+                                    right = skipCloseFocusRequester
+                                    if (controlsVisible) {
+                                        down = if (!isLive && nextEpisode != null) bottomPlayPauseFocus else if (!isLive) scrubberFocus else playPauseFocusRequester
+                                    }
+                                }
+                                .vesselFocusBorder(RoundedCornerShape(topStart = 999.dp, bottomStart = 999.dp), width = 2.dp)
                                 .clickable {
                                     dismissedSkipKeys = dismissedSkipKeys + segKey
                                     if (jumpToNext) {
@@ -2289,7 +2321,15 @@ fun PlayerScreen(
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(topEnd = 999.dp, bottomEnd = 999.dp))
-                                .vesselFocusBorder(RoundedCornerShape(topEnd = 999.dp, bottomEnd = 999.dp))
+                                .focusRequester(skipCloseFocusRequester)
+                                .onFocusChanged { skipCloseHasFocus = it.isFocused || it.hasFocus }
+                                .focusProperties {
+                                    left = skipIntroFocusRequester
+                                    if (controlsVisible) {
+                                        down = if (!isLive && nextEpisode != null) bottomPlayPauseFocus else if (!isLive) scrubberFocus else playPauseFocusRequester
+                                    }
+                                }
+                                .vesselFocusBorder(RoundedCornerShape(topEnd = 999.dp, bottomEnd = 999.dp), width = 2.dp)
                                 .clickable { dismissedSkipKeys = dismissedSkipKeys + segKey }
                                 .padding(start = 8.dp, end = 11.dp, top = 7.dp, bottom = 7.dp),
                             contentAlignment = Alignment.Center,
@@ -2562,6 +2602,9 @@ fun PlayerScreen(
                                                 if (!isTorrent) {
                                                     currentStartPosMs = pos
                                                     selectedIndex = idx
+                                                    if (isLive) {
+                                                        repo.savePreferredLiveStream(pluginId, activeDetail.nativeId, currentEpisode.streamId, cand, idx)
+                                                    }
                                                     activeDrawer = null
                                                     bumpControls()
                                                 } else {

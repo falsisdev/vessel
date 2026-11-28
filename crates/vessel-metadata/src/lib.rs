@@ -196,6 +196,7 @@ mod tests {
                                 "genres": ["Action", "Comedy"],
                                 "coverImage": { "extraLarge": "https://cdn.anilist.example/918.jpg" },
                                 "bannerImage": "https://cdn.anilist.example/918-banner.jpg",
+                                "trailer": { "id": "dQw4w9WgXcQ", "site": "youtube" },
                                 "episodes": 201
                             }
                         }
@@ -233,7 +234,12 @@ mod tests {
                         "first_air_date": "2008-01-20",
                         "genres": [{"name": "Drama"}, {"name": "Crime"}],
                         "seasons": [{"season_number": 1, "episode_count": 7}],
-                        "external_ids": {"imdb_id": "tt0903747", "tvdb_id": 81189}
+                        "external_ids": {"imdb_id": "tt0903747", "tvdb_id": 81189},
+                        "videos": {
+                            "results": [
+                                {"site": "YouTube", "type": "Trailer", "official": true, "key": "HhesaQXLuRY"}
+                            ]
+                        }
                     }))
                 }),
             )
@@ -260,7 +266,8 @@ mod tests {
                             "description": "A team travels through a wormhole.",
                             "poster": "https://cinemeta.example/interstellar.jpg",
                             "imdbRating": "8.7",
-                            "genres": ["Sci-Fi", "Drama"]
+                            "genres": ["Sci-Fi", "Drama"],
+                            "trailers": [{ "source": "zSWdZVtXT7E", "type": "Trailer" }]
                         }
                     }))
                 }),
@@ -291,6 +298,7 @@ mod tests {
             synopsis: None,
             poster: None,
             backdrop: None,
+            trailer_url: None,
             genres: Vec::new(),
             rating: None,
             status: None,
@@ -338,6 +346,10 @@ mod tests {
         assert_eq!(anime_canon.canonical_id, "anilist:918");
         assert_eq!(anime_out.detail.external_ids.mal, Some(918));
         assert_eq!(
+            anime_out.detail.trailer_url.as_deref(),
+            Some("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
+        );
+        assert_eq!(
             anime_out.detail.episodes[0].stream_id,
             "immutable-stream-id"
         );
@@ -367,6 +379,10 @@ mod tests {
             bb_out.detail.external_ids.imdb.as_deref(),
             Some("tt0903747")
         );
+        assert_eq!(
+            bb_out.detail.trailer_url.as_deref(),
+            Some("https://www.youtube.com/watch?v=HhesaQXLuRY")
+        );
 
         // 5. Keyless movie falls back cleanly to Cinemeta JSON.
         let movie_raw = MediaDetail {
@@ -384,6 +400,10 @@ mod tests {
         assert_eq!(
             movie_out.detail.poster.as_deref(),
             Some("https://cinemeta.example/interstellar.jpg")
+        );
+        assert_eq!(
+            movie_out.detail.trailer_url.as_deref(),
+            Some("https://www.youtube.com/watch?v=zSWdZVtXT7E")
         );
     }
 }

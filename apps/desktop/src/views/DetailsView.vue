@@ -34,6 +34,8 @@ import { usePlayerSession } from '@/composables/usePlayerSession'
 import { useUiPreferences } from '@/composables/useUiPreferences'
 import { pushToast, useVesselEvents } from '@/composables/useVesselEvents'
 import { isLiveMediaIdentifier, isLiveTvPlugin } from '@/utils/liveTv'
+import { resolvePreferredLiveStreamIndex } from '@/utils/liveStreamMemory'
+import { extractYouTubeVideoId, youtubeAmbientEmbedUrl } from '@/utils/trailer'
 import type {
   ContinueWatchingEntry,
   Episode,
@@ -182,6 +184,16 @@ watch(lastEnrichedDetail, (enriched) => {
   }
 })
 
+const detailsTrailerReady = shallowRef(false)
+const detailsTrailerEmbedUrl = computed(() => {
+  if (uiPreferences.value.details.autoPlayTrailer === false || !detail.value) return ''
+  const id = extractYouTubeVideoId(detail.value.trailerUrl)
+  return id ? youtubeAmbientEmbedUrl(id) : ''
+})
+watch(detailsTrailerEmbedUrl, () => {
+  detailsTrailerReady.value = false
+})
+
 async function setEpisodeLayout(layout: EpisodeListLayout): Promise<void> {
   const next = {
     ...uiPreferences.value,
@@ -241,6 +253,12 @@ async function redirectLiveToPlayer(res: MediaDetail): Promise<void> {
     router.back()
     return
   }
+  const preferredIdx = await resolvePreferredLiveStreamIndex(
+    props.pluginId,
+    props.nativeId,
+    ep.streamId,
+    streamRes.streams,
+  )
   setSession({
     pluginId: props.pluginId,
     nativeId: props.nativeId,
@@ -248,12 +266,12 @@ async function redirectLiveToPlayer(res: MediaDetail): Promise<void> {
     episode: ep,
     streams: streamRes.streams,
     subtitles: streamRes.subtitles ?? [],
-    activeStreamIndex: 0,
+    activeStreamIndex: preferredIdx,
   })
   await router.replace({
     name: 'player',
     params: { pluginId: props.pluginId, nativeId: props.nativeId },
-    query: { streamId: ep.streamId },
+    query: { streamId: ep.streamId, streamIndex: String(preferredIdx) },
   })
 }
 
@@ -786,17 +804,31 @@ onActivated(() => {
     <div v-else-if="detail" key="details-loaded" class="details-loaded-shell">
       <!-- Dissolving Full-Bleed Atmospheric Backdrop extending past Hero -->
       <div
-        v-if="uiPreferences.details.showBackdrop && (detail.backdrop || detail.poster)"
+        v-if="(uiPreferences.details.showBackdrop && (detail.backdrop || detail.poster)) || detailsTrailerEmbedUrl"
         class="hero-backdrop-layer"
         aria-hidden="true"
       >
         <img
+          v-if="uiPreferences.details.showBackdrop && (detail.backdrop || detail.poster)"
           :src="detail.backdrop || detail.poster"
           :alt="detail.title"
           width="1440"
           height="680"
           fetchpriority="high"
           class="hero-backdrop"
+        />
+        <iframe
+          v-if="detailsTrailerEmbedUrl"
+          :key="detailsTrailerEmbedUrl"
+          :src="detailsTrailerEmbedUrl"
+          title="Trailer"
+          tabindex="-1"
+          aria-hidden="true"
+          allow="autoplay; encrypted-media"
+          referrerpolicy="strict-origin-when-cross-origin"
+          class="hero-backdrop-trailer"
+          :class="{ 'is-ready': detailsTrailerReady }"
+          @load="detailsTrailerReady = true"
         />
         <div
           class="hero-scrim"
@@ -1726,6 +1758,23 @@ onActivated(() => {
   transform: scale(1.04);
   filter: saturate(1.1);
   pointer-events: none;
+}
+
+.hero-backdrop-trailer {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: max(100%, 177.78vh);
+  height: max(100%, 56.25vw);
+  transform: translate(-50%, -50%) scale(1.06);
+  border: 0;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.65s ease;
+}
+
+.hero-backdrop-trailer.is-ready {
+  opacity: 0.92;
 }
 
 .hero-scrim {

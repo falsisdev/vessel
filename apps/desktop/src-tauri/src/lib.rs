@@ -105,6 +105,8 @@ pub fn run() {
             commands::set_simkl_client_id,
             commands::get_ui_preferences,
             commands::set_ui_preferences,
+            commands::get_app_setting,
+            commands::set_app_setting,
             commands::list_themes,
             commands::import_theme_json,
             commands::list_custom_locales,

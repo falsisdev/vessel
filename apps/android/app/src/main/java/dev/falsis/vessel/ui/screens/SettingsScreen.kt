@@ -120,7 +120,10 @@ fun SettingsScreen(
     var showThemeMenu by remember { mutableStateOf(false) }
     var showLocaleMenu by remember { mutableStateOf(false) }
     var showNavLayoutMenu by remember { mutableStateOf(false) }
+    var showStartTabMenu by remember { mutableStateOf(false) }
     var showHeroModeMenu by remember { mutableStateOf(false) }
+    var showSectionViewMenu by remember { mutableStateOf(false) }
+    var showEpisodeLayoutMenu by remember { mutableStateOf(false) }
     var showPlayClickMenu by remember { mutableStateOf(false) }
     var showPlayerEngineMenu by remember { mutableStateOf(false) }
     var showAspectMenu by remember { mutableStateOf(false) }
@@ -367,7 +370,7 @@ fun SettingsScreen(
                                     "top_navbar" to VesselI18n.tr("settings.tv_layout_top"),
                                 )
                                 val tvNavLabel = tvOptions.firstOrNull { it.first == prefs.shell.tvNavLayout }?.second
-                                    ?: VesselI18n.tr("settings.tv_layout_expanded")
+                                    ?: VesselI18n.tr("settings.tv_layout_collapsed")
                                 VesselOutlinedButton(onClick = { showNavLayoutMenu = true }, height = tokens.compactButtonHeight) {
                                     Text(tvNavLabel, style = MaterialTheme.typography.labelMedium)
                                 }
@@ -412,6 +415,43 @@ fun SettingsScreen(
                                             },
                                         )
                                     }
+                                }
+                            }
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text(VesselI18n.tr("settings.startup_tab", "Startup tab"), modifier = Modifier.weight(1f))
+                        Box {
+                            val startTabOptions = listOf(
+                                "home" to VesselI18n.tr("nav.home"),
+                                "search" to VesselI18n.tr("nav.search"),
+                                "library" to VesselI18n.tr("nav.library"),
+                                "live_tv" to VesselI18n.tr("nav.live_tv"),
+                                "last_visited" to VesselI18n.tr("settings.start_tab_last_visited", "Last visited tab"),
+                            )
+                            val startLabel = startTabOptions.firstOrNull { it.first == prefs.shell.startTab }?.second
+                                ?: VesselI18n.tr("nav.home")
+                            VesselOutlinedButton(onClick = { showStartTabMenu = true }, height = tokens.compactButtonHeight) {
+                                Text(startLabel, style = MaterialTheme.typography.labelMedium)
+                            }
+                            DropdownMenu(expanded = showStartTabMenu, onDismissRequest = { showStartTabMenu = false }) {
+                                startTabOptions.forEach { (tabKey, txt) ->
+                                    DropdownMenuItem(
+                                        text = { Text(txt) },
+                                        onClick = {
+                                            showStartTabMenu = false
+                                            scope.launch {
+                                                repo.saveUiPreferences(
+                                                    prefs.copy(shell = prefs.shell.copy(startTab = tabKey)),
+                                                )
+                                            }
+                                        },
+                                    )
                                 }
                             }
                         }
@@ -528,6 +568,96 @@ fun SettingsScreen(
                                         onClick = {
                                             showHeroModeMenu = false
                                             scope.launch { repo.saveUiPreferences(prefs.copy(home = prefs.home.copy(heroBanner = mode))) }
+                                        },
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text(VesselI18n.tr("settings.hero_trailer", "Play trailer in Hero spotlight"), modifier = Modifier.weight(1f))
+                        Switch(
+                            checked = prefs.home.heroAutoPlayTrailer,
+                            onCheckedChange = { v ->
+                                scope.launch { repo.saveUiPreferences(prefs.copy(home = prefs.home.copy(heroAutoPlayTrailer = v))) }
+                            },
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text(VesselI18n.tr("settings.details_trailer", "Play background trailer on Details"), modifier = Modifier.weight(1f))
+                        Switch(
+                            checked = prefs.details.autoPlayTrailer,
+                            onCheckedChange = { v ->
+                                scope.launch { repo.saveUiPreferences(prefs.copy(details = prefs.details.copy(autoPlayTrailer = v))) }
+                            },
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text(VesselI18n.tr("settings.home_section_view", "Home section layout"), modifier = Modifier.weight(1f))
+                        Box {
+                            val sectionViewOptions = listOf(
+                                "rail" to VesselI18n.tr("home.view_rail", "Rail"),
+                                "grid" to VesselI18n.tr("home.view_grid", "Grid"),
+                                "compact_list" to VesselI18n.tr("home.view_compact_list", "List"),
+                            )
+                            val sectionViewLabel = sectionViewOptions.firstOrNull { it.first == prefs.home.sectionViewMode }?.second
+                                ?: VesselI18n.tr("home.view_rail", "Rail")
+                            VesselOutlinedButton(onClick = { showSectionViewMenu = true }, height = tokens.compactButtonHeight) {
+                                Text(sectionViewLabel, style = MaterialTheme.typography.labelMedium)
+                            }
+                            DropdownMenu(expanded = showSectionViewMenu, onDismissRequest = { showSectionViewMenu = false }) {
+                                sectionViewOptions.forEach { (key, txt) ->
+                                    DropdownMenuItem(
+                                        text = { Text(txt) },
+                                        onClick = {
+                                            showSectionViewMenu = false
+                                            scope.launch { repo.saveUiPreferences(prefs.copy(home = prefs.home.copy(sectionViewMode = key))) }
+                                        },
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text(VesselI18n.tr("settings.episode_layout", "Episode list view"), modifier = Modifier.weight(1f))
+                        Box {
+                            val epLayoutOptions = listOf(
+                                "grid_cards" to VesselI18n.tr("details.layout_grid", "Grid"),
+                                "detailed_list" to VesselI18n.tr("details.layout_detailed", "Detailed"),
+                                "compact_rows" to VesselI18n.tr("details.layout_compact", "Compact"),
+                            )
+                            val epLayoutLabel = epLayoutOptions.firstOrNull { it.first == prefs.details.episodeLayout }?.second
+                                ?: VesselI18n.tr("details.layout_grid", "Grid")
+                            VesselOutlinedButton(onClick = { showEpisodeLayoutMenu = true }, height = tokens.compactButtonHeight) {
+                                Text(epLayoutLabel, style = MaterialTheme.typography.labelMedium)
+                            }
+                            DropdownMenu(expanded = showEpisodeLayoutMenu, onDismissRequest = { showEpisodeLayoutMenu = false }) {
+                                epLayoutOptions.forEach { (key, txt) ->
+                                    DropdownMenuItem(
+                                        text = { Text(txt) },
+                                        onClick = {
+                                            showEpisodeLayoutMenu = false
+                                            scope.launch { repo.saveUiPreferences(prefs.copy(details = prefs.details.copy(episodeLayout = key))) }
                                         },
                                     )
                                 }
@@ -684,6 +814,47 @@ fun SettingsScreen(
                                 }
                             }
                         }
+                    }
+
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Text(
+                                "${VesselI18n.tr("settings.card_size", "Card size")}: ${prefs.cards.scalePercent.coerceIn(70, 150)}%",
+                                modifier = Modifier.weight(1f),
+                            )
+                            if (prefs.cards.scalePercent != 100) {
+                                VesselTextButton(
+                                    onClick = {
+                                        scope.launch {
+                                            repo.saveUiPreferences(
+                                                prefs.copy(cards = prefs.cards.copy(scalePercent = 100)),
+                                            )
+                                        }
+                                    },
+                                ) {
+                                    Text("100%")
+                                }
+                            }
+                        }
+                        Slider(
+                            value = prefs.cards.scalePercent.coerceIn(70, 150).toFloat(),
+                            onValueChange = { raw ->
+                                val snapped = ((raw / 5f).toInt() * 5).coerceIn(70, 150)
+                                if (snapped != prefs.cards.scalePercent) {
+                                    scope.launch {
+                                        repo.saveUiPreferences(
+                                            prefs.copy(cards = prefs.cards.copy(scalePercent = snapped)),
+                                        )
+                                    }
+                                }
+                            },
+                            valueRange = 70f..150f,
+                            steps = 15,
+                        )
                     }
 
                     HorizontalDivider(color = palette.border.copy(alpha = 0.35f))

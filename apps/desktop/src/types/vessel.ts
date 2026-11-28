@@ -26,6 +26,8 @@ export type UiDensity = 'compact' | 'comfortable' | 'spacious'
 export type CornerStyle = 'sharp' | 'rounded' | 'pill'
 export type HomePreset = 'default' | 'minimal_focus' | 'anime_first' | 'iptv_hub'
 export type HeroBannerMode = 'full' | 'compact' | 'hidden'
+export type HomeSectionViewMode = 'rail' | 'grid' | 'compact_list'
+export type StartupTab = 'home' | 'search' | 'library' | 'live_tv' | 'last_visited'
 export type CardAspectRatio =
   | 'poster_2x3'
   | 'portrait_3x4'
@@ -89,6 +91,7 @@ export interface MediaDetail {
   synopsis?: string
   poster?: string
   backdrop?: string
+  trailerUrl?: string
   genres: string[]
   rating?: number
   status?: string
@@ -626,6 +629,7 @@ export interface UiPreferences {
     layout: NavLayout
     mobileNavLayout?: 'standard' | 'floating_bottom'
     tvNavLayout?: 'expanded_sidebar' | 'collapsed_rail' | 'pinned_sidebar' | 'top_navbar'
+    startTab?: StartupTab
     visibleModules: NavModule[]
     density: UiDensity
     fontScalePercent: number
@@ -635,6 +639,8 @@ export interface UiPreferences {
   home: {
     preset: HomePreset
     heroBanner: HeroBannerMode
+    heroAutoPlayTrailer?: boolean
+    sectionViewMode?: HomeSectionViewMode
     showContinueWatching: boolean
     continueWatchingLimit: number
     showRecentIptv: boolean
@@ -645,6 +651,7 @@ export interface UiPreferences {
   }
   cards: {
     aspectRatio: CardAspectRatio
+    scalePercent?: number
     columns?: number
     showPluginBadge: boolean
     showRating: boolean
@@ -657,6 +664,7 @@ export interface UiPreferences {
   }
   details: {
     showBackdrop: boolean
+    autoPlayTrailer?: boolean
     backdropDimPercent: number
     showExternalIdBadges: boolean
     showFixMatch: boolean
@@ -700,6 +708,8 @@ export interface UiPreferences {
     showFavoritesBar: boolean
     showSectionHeaders: boolean
     showActionButtons: boolean
+    favoritesOnly?: boolean
+    pluginFavoritesOnly?: boolean
     titleLines: number
   }
   searchHistory?: string[]

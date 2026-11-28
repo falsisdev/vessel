@@ -437,6 +437,23 @@ pub async fn set_ui_preferences(
 }
 
 #[tauri::command]
+pub async fn get_app_setting(
+    state: State<'_, AppState>,
+    key: String,
+) -> Result<Option<String>, String> {
+    map_err(state.engine.get_app_setting(&key).await)
+}
+
+#[tauri::command]
+pub async fn set_app_setting(
+    state: State<'_, AppState>,
+    key: String,
+    value: String,
+) -> Result<(), String> {
+    map_err(state.engine.set_app_setting(&key, &value).await)
+}
+
+#[tauri::command]
 pub async fn list_themes(state: State<'_, AppState>) -> Result<Vec<ThemeSpec>, String> {
     let mut themes = builtin_themes();
     let themes_dir = state.paths.themes_dir();

@@ -450,7 +450,7 @@ textarea {
 .v-grid {
   display: grid;
   gap: var(--vessel-gap);
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(calc(180px * var(--vessel-card-scale, 1)), 1fr));
 }
 
 .v-skeleton {

@@ -134,6 +134,8 @@ pub struct MediaDetail {
     pub poster: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub backdrop: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trailer_url: Option<String>,
     #[serde(default)]
     pub genres: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]

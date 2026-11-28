@@ -25,6 +25,8 @@ pub struct CanonicalMetadata {
     pub poster: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub backdrop: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trailer_url: Option<String>,
     #[serde(default)]
     pub genres: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -109,6 +111,11 @@ pub fn merge_detail_with_override(
     if let Some(ref ext_backdrop) = enriched.backdrop {
         merged.backdrop = Some(ext_backdrop.clone());
     }
+    if let Some(ref ext_trailer) = enriched.trailer_url
+        && !ext_trailer.trim().is_empty()
+    {
+        merged.trailer_url = Some(ext_trailer.clone());
+    }
     if !enriched.genres.is_empty() {
         merged.genres = enriched.genres.clone();
     }
@@ -191,6 +198,7 @@ mod tests {
             synopsis: Some("Edo döneminde samuray komedisi.".into()),
             poster: Some("https://plugin.example/lowres.jpg".into()),
             backdrop: None,
+            trailer_url: None,
             genres: Vec::new(),
             rating: None,
             status: None,
@@ -225,6 +233,7 @@ mod tests {
             synopsis_lang: Some("en".into()),
             poster: Some("https://anilist.example/4k.jpg".into()),
             backdrop: Some("https://anilist.example/banner.jpg".into()),
+            trailer_url: Some("https://www.youtube.com/watch?v=918".into()),
             genres: vec!["Comedy".into(), "Action".into()],
             rating: Some(8.9),
             season_spans: Vec::new(),

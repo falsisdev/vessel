@@ -143,7 +143,8 @@ fun LiveTvScreen(
         episode: Episode,
         streams: StreamResult,
         channelStreams: Map<String, List<StreamCandidate>>,
-    ) -> Unit = { _, d, _, _, _ ->
+        initialStreamIndex: Int,
+    ) -> Unit = { _, d, _, _, _, _ ->
         onPlayUrl(d.title, d.nativeId)
     },
     onOpenDetails: (pluginId: String, nativeId: String) -> Unit,
@@ -164,7 +165,7 @@ fun LiveTvScreen(
     var channels by state::channels
     var favoriteIptvChannels by state::favoriteIptvChannels
     var query by state::query
-    var favoritesOnly by state::favoritesOnly
+    val favoritesOnly = livePrefs.favoritesOnly
     var syncingProfileId by remember { mutableStateOf<String?>(null) }
     var confirmDeleteProfileId by remember { mutableStateOf<String?>(null) }
     var selectedEpgChannel by remember { mutableStateOf<StoredIptvChannel?>(null) }
@@ -179,7 +180,7 @@ fun LiveTvScreen(
     var pluginLiveSections by state::pluginLiveSections
     var selectedSectionId by state::selectedSectionId
     var pluginChannelFilter by state::pluginChannelFilter
-    var pluginFavoritesOnly by state::pluginFavoritesOnly
+    val pluginFavoritesOnly = livePrefs.pluginFavoritesOnly
     var loadingPluginLive by remember { mutableStateOf(false) }
     var launchingChannelId by remember { mutableStateOf<String?>(null) }
     var showReorderDialog by remember { mutableStateOf(false) }
@@ -347,6 +348,7 @@ fun LiveTvScreen(
                         ep,
                         sr,
                         emptyMap(),
+                        repo.getPreferredLiveStreamIndex(pid, detail.nativeId, ep.streamId, sr.streams),
                     )
                 }
             }.onFailure {
@@ -483,6 +485,7 @@ fun LiveTvScreen(
                 activeEp,
                 StreamResult(streams = activeCandidates),
                 channelStreamsMap,
+                repo.getPreferredLiveStreamIndex("iptv", liveDetail.nativeId, activeEp.streamId, activeCandidates),
             )
         }
     }
@@ -754,7 +757,13 @@ fun LiveTvScreen(
                 ) {
                     VesselFilterChip(
                         selected = favoritesOnly,
-                        onClick = { favoritesOnly = !favoritesOnly },
+                        onClick = {
+                            scope.launch {
+                                repo.updateUiPreferences { cur ->
+                                    cur.copy(liveTv = cur.liveTv.copy(favoritesOnly = !cur.liveTv.favoritesOnly))
+                                }
+                            }
+                        },
                         label = VesselI18n.tr("iptv.favorites_only"),
                     )
                     activeProfileId?.let { pid ->
@@ -1215,7 +1224,13 @@ fun LiveTvScreen(
                             modifier = Modifier.weight(1f),
                         )
                         VesselCompactIconButton(
-                            onClick = { pluginFavoritesOnly = !pluginFavoritesOnly },
+                            onClick = {
+                                scope.launch {
+                                    repo.updateUiPreferences { cur ->
+                                        cur.copy(liveTv = cur.liveTv.copy(pluginFavoritesOnly = !cur.liveTv.pluginFavoritesOnly))
+                                    }
+                                }
+                            },
                             size = 36.dp,
                             containerColor = if (pluginFavoritesOnly) palette.warning.copy(alpha = 0.2f) else palette.bgSurface,
                             borderColor = if (pluginFavoritesOnly) palette.warning else palette.border.copy(alpha = 0.6f),

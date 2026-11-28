@@ -16,6 +16,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -46,12 +47,16 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.ViewList
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DragIndicator
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
@@ -59,6 +64,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.ViewCarousel
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.AlertDialog
@@ -100,6 +106,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -130,6 +137,7 @@ import dev.falsis.vessel.data.StreamResult
 import dev.falsis.vessel.data.VesselRepository
 import dev.falsis.vessel.ui.components.ContinueWatchingCard
 import dev.falsis.vessel.ui.components.MediaPosterCard
+import dev.falsis.vessel.ui.components.TrailerBackgroundLayer
 import dev.falsis.vessel.ui.components.VesselButton
 import dev.falsis.vessel.ui.components.VesselCompactIconButton
 import dev.falsis.vessel.ui.components.VesselFilterChip
@@ -137,6 +145,8 @@ import dev.falsis.vessel.ui.components.VesselLogoMark
 import dev.falsis.vessel.ui.components.VesselOutlinedButton
 import dev.falsis.vessel.ui.components.VesselOutlinedTextField
 import dev.falsis.vessel.ui.components.VesselTextButton
+import dev.falsis.vessel.ui.components.isLandscapeCardRatio
+import dev.falsis.vessel.ui.components.scaledAdaptiveCardMinSize
 import dev.falsis.vessel.ui.components.vesselDpadInputEscape
 import dev.falsis.vessel.ui.components.vesselFocusBorder
 import dev.falsis.vessel.ui.i18n.VesselI18n
@@ -231,6 +241,8 @@ private fun pickDefaultStarterPlugins(homeEligible: List<dev.falsis.vessel.data.
 @Composable
 fun HomeScreen(
     repo: VesselRepository,
+    isActive: Boolean = true,
+    heroEntryFocusRequester: FocusRequester? = null,
     onOpenDetails: (pluginId: String, nativeId: String) -> Unit,
     onResumeEntry: (ContinueWatchingEntry) -> Unit,
     onPlayHero: (
@@ -484,10 +496,14 @@ fun HomeScreen(
             val heroHeight = if (prefs.home.heroBanner == "compact") 280.dp else 400.dp
             item(key = "spotlight-hero") {
                 val isTv = LocalIsTvDevice.current
+                val heroTopTokens = LocalVesselUiTokens.current
+                val heroPrevFocus = heroEntryFocusRequester ?: remember { FocusRequester() }
+                val heroNextFocus = remember { FocusRequester() }
                 val feedsBtnFocus = remember { FocusRequester() }
                 val refreshBtnFocus = remember { FocusRequester() }
                 val heroWatchFocus = remember { FocusRequester() }
                 val heroInfoFocus = remember { FocusRequester() }
+                var heroNavHasFocus by remember { mutableStateOf(false) }
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -506,9 +522,17 @@ fun HomeScreen(
                         )
 
                         // Key ONLY on settledPage & poolCount so starting animateScrollToPage does NOT cancel itself via isScrollInProgress.
-                        LaunchedEffect(poolCount, pagerState.settledPage) {
-                            if (!loopEnabled) return@LaunchedEffect
-                            delay(5300)
+                        LaunchedEffect(poolCount, pagerState.settledPage, heroNavHasFocus, prefs.home.heroAutoPlayTrailer, isActive) {
+                            if (!loopEnabled || !isActive || heroNavHasFocus) return@LaunchedEffect
+                            val activeLogical = ((pagerState.settledPage % poolCount) + poolCount) % poolCount
+                            val activeHero = spotlightPool.getOrNull(activeLogical)
+                            val activeDetail = activeHero?.let { heroDetails["${it.pluginId}:${it.summary.nativeId}"] }
+                            val waitMs = if (prefs.home.heroAutoPlayTrailer && !activeDetail?.trailerUrl.isNullOrBlank()) {
+                                12500L
+                            } else {
+                                5300L
+                            }
+                            delay(waitMs)
                             while (pagerState.isScrollInProgress) {
                                 delay(150)
                             }
@@ -618,6 +642,13 @@ fun HomeScreen(
                                             ),
                                     )
                                 }
+
+                                TrailerBackgroundLayer(
+                                    trailerUrl = detail?.trailerUrl,
+                                    enabled = prefs.home.heroAutoPlayTrailer,
+                                    active = isActive && isActiveSlide && !pagerState.isScrollInProgress && !showFeedsModal && editingCwEntry == null,
+                                    modifier = Modifier.fillMaxSize(),
+                                )
 
                                 // Subtle top scrim for floating status / action controls
                                 Box(
@@ -748,7 +779,7 @@ fun HomeScreen(
                                             modifier = Modifier
                                                 .then(if (isCurrentHeroPage) Modifier.focusRequester(heroWatchFocus) else Modifier)
                                                 .focusProperties {
-                                                    up = feedsBtnFocus
+                                                    up = if (loopEnabled) heroPrevFocus else feedsBtnFocus
                                                     if (isCurrentHeroPage) {
                                                         right = heroInfoFocus
                                                     }
@@ -779,7 +810,7 @@ fun HomeScreen(
                                                 .clip(RoundedCornerShape(homeTokens.cornerRadius))
                                                 .then(if (isCurrentHeroPage) Modifier.focusRequester(heroInfoFocus) else Modifier)
                                                 .focusProperties {
-                                                    up = feedsBtnFocus
+                                                    up = if (loopEnabled) heroNextFocus else feedsBtnFocus
                                                     if (isCurrentHeroPage) {
                                                         left = heroWatchFocus
                                                     }
@@ -847,6 +878,73 @@ fun HomeScreen(
                                     )
                                 }
                             }
+                            // Floating top-left Prev/Next Hero arrows (especially for TV D-Pad navigation)
+                            Row(
+                                modifier = Modifier
+                                    .align(Alignment.TopStart)
+                                    .windowInsetsPadding(WindowInsets.statusBarsIgnoringVisibility.union(WindowInsets.displayCutout))
+                                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                VesselCompactIconButton(
+                                    onClick = {
+                                        scope.launch {
+                                            val prev = (pagerState.currentPage - 1).coerceAtLeast(0)
+                                            pagerState.animateScrollToPage(
+                                                prev,
+                                                animationSpec = tween(520, easing = FastOutSlowInEasing),
+                                            )
+                                        }
+                                    },
+                                    size = heroTopTokens.smallIconButtonSize,
+                                    containerColor = Color.Black.copy(alpha = 0.52f),
+                                    borderColor = Color.White.copy(alpha = 0.22f),
+                                    modifier = Modifier
+                                        .focusRequester(heroPrevFocus)
+                                        .onFocusChanged { heroNavHasFocus = it.isFocused || it.hasFocus }
+                                        .focusProperties {
+                                            right = heroNextFocus
+                                            down = heroWatchFocus
+                                        },
+                                ) {
+                                    Icon(
+                                        Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                                        contentDescription = VesselI18n.tr("common.previous", "Previous"),
+                                        tint = Color.White,
+                                        modifier = Modifier.size(20.dp),
+                                    )
+                                }
+                                VesselCompactIconButton(
+                                    onClick = {
+                                        scope.launch {
+                                            val next = pagerState.currentPage + 1
+                                            pagerState.animateScrollToPage(
+                                                next,
+                                                animationSpec = tween(520, easing = FastOutSlowInEasing),
+                                            )
+                                        }
+                                    },
+                                    size = heroTopTokens.smallIconButtonSize,
+                                    containerColor = Color.Black.copy(alpha = 0.52f),
+                                    borderColor = Color.White.copy(alpha = 0.22f),
+                                    modifier = Modifier
+                                        .focusRequester(heroNextFocus)
+                                        .onFocusChanged { heroNavHasFocus = it.isFocused || it.hasFocus }
+                                        .focusProperties {
+                                            left = heroPrevFocus
+                                            right = feedsBtnFocus
+                                            down = heroWatchFocus
+                                        },
+                                ) {
+                                    Icon(
+                                        Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                        contentDescription = VesselI18n.tr("common.next", "Next"),
+                                        tint = Color.White,
+                                        modifier = Modifier.size(20.dp),
+                                    )
+                                }
+                            }
                         }
                     } else if (loading) {
                         Box(
@@ -890,7 +988,6 @@ fun HomeScreen(
                     }
 
                     // Floating compact Source & Refresh controls over top-right of Hero with safe top cutout inset
-                    val heroTopTokens = LocalVesselUiTokens.current
                     Row(
                         modifier = Modifier
                             .align(Alignment.TopEnd)
@@ -908,6 +1005,9 @@ fun HomeScreen(
                                 .clip(RoundedCornerShape(999.dp))
                                 .focusRequester(feedsBtnFocus)
                                 .focusProperties {
+                                    if (spotlightPool.size > 1) {
+                                        left = heroNextFocus
+                                    }
                                     right = refreshBtnFocus
                                     if (spotlightPool.isNotEmpty()) {
                                         down = heroWatchFocus
@@ -1003,6 +1103,7 @@ fun HomeScreen(
                         items(visibleContinueWatching, key = { "${it.progress.media.pluginId}:${it.progress.media.nativeId}" }) { entry ->
                             ContinueWatchingCard(
                                 entry = entry,
+                                cardScalePercent = prefs.cards.scalePercent,
                                 onResume = { onResumeEntry(entry) },
                                 onGoToDetails = {
                                     onOpenDetails(entry.progress.media.pluginId, entry.progress.media.nativeId)
@@ -1082,6 +1183,72 @@ fun HomeScreen(
                     }
                 }
             }
+            if (orderedCatalogs.isNotEmpty()) {
+                item(key = "home-section-view-bar") {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = VesselI18n.tr("home.section_view_mode", "Section view"),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = palette.textMuted,
+                            modifier = Modifier.padding(end = 8.dp),
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            listOf(
+                                Triple("rail", Icons.Default.ViewCarousel, VesselI18n.tr("home.view_rail", "Rail")),
+                                Triple("grid", Icons.Default.GridView, VesselI18n.tr("home.view_grid", "Grid")),
+                                Triple("compact_list", Icons.AutoMirrored.Filled.ViewList, VesselI18n.tr("home.view_compact_list", "List")),
+                            ).forEach { (mode, iconVec, label) ->
+                                val selected = prefs.home.sectionViewMode == mode
+                                Surface(
+                                    shape = RoundedCornerShape(999.dp),
+                                    color = if (selected) palette.accent.copy(alpha = 0.22f) else palette.bgSurface,
+                                    border = BorderStroke(
+                                        1.dp,
+                                        if (selected) palette.accent.copy(alpha = 0.65f) else palette.border.copy(alpha = 0.55f),
+                                    ),
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(999.dp))
+                                        .vesselFocusBorder(RoundedCornerShape(999.dp))
+                                        .clickable {
+                                            if (prefs.home.sectionViewMode != mode) {
+                                                scope.launch {
+                                                    repo.saveUiPreferences(
+                                                        prefs.copy(home = prefs.home.copy(sectionViewMode = mode)),
+                                                    )
+                                                }
+                                            }
+                                        },
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                                    ) {
+                                        Icon(
+                                            imageVector = iconVec,
+                                            contentDescription = label,
+                                            tint = if (selected) palette.accent else palette.textMuted,
+                                            modifier = Modifier.size(14.dp),
+                                        )
+                                        Text(
+                                            text = label,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                            color = if (selected) palette.accent else palette.textMuted,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
             orderedCatalogs.forEach { cat ->
                 val section = cat.section
                 item(key = "cat:${cat.key}") {
@@ -1104,32 +1271,155 @@ fun HomeScreen(
                                 color = palette.textMuted,
                             )
                         }
-                        LazyRow(
-                            contentPadding = PaddingValues(horizontal = 16.dp),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        ) {
-                            items(section.items, key = { "${cat.pluginId}:${it.nativeId}" }) { item ->
-                                val pid = item.pluginId ?: cat.pluginId
-                                MediaPosterCard(
-                                    item = item,
-                                    cards = prefs.cards,
-                                    onClick = { onOpenDetails(pid, item.nativeId) },
-                                    onQuickStatus = { status ->
-                                        scope.launch {
-                                            repo.upsertLibrary(
-                                                LibraryItem(
-                                                    media = MediaRef(pid, item.nativeId),
-                                                    mediaType = item.type,
-                                                    isAnime = item.isAnime,
-                                                    title = item.title,
-                                                    posterUrl = item.poster,
-                                                    status = status,
-                                                ),
-                                            )
-                                            repo.notify("${item.title} · ${VesselI18n.tr("library.$status")}")
+                        when (prefs.home.sectionViewMode) {
+                            "grid" -> {
+                                BoxWithConstraints(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp),
+                                ) {
+                                    val minCell = scaledAdaptiveCardMinSize(prefs.cards)
+                                    val cols = ((maxWidth + 10.dp) / (minCell + 10.dp)).toInt().coerceIn(2, 6)
+                                    val rows = section.items.take(18).chunked(cols)
+                                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                        rows.forEach { rowItems ->
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                            ) {
+                                                rowItems.forEach { item ->
+                                                    val pid = item.pluginId ?: cat.pluginId
+                                                    MediaPosterCard(
+                                                        item = item,
+                                                        cards = prefs.cards,
+                                                        fillGridWidth = true,
+                                                        modifier = Modifier.weight(1f),
+                                                        onClick = { onOpenDetails(pid, item.nativeId) },
+                                                        onQuickStatus = { status ->
+                                                            scope.launch {
+                                                                repo.upsertLibrary(
+                                                                    LibraryItem(
+                                                                        media = MediaRef(pid, item.nativeId),
+                                                                        mediaType = item.type,
+                                                                        isAnime = item.isAnime,
+                                                                        title = item.title,
+                                                                        posterUrl = item.poster,
+                                                                        status = status,
+                                                                    ),
+                                                                )
+                                                                repo.notify("${item.title} · ${VesselI18n.tr("library.$status")}")
+                                                            }
+                                                        },
+                                                    )
+                                                }
+                                                repeat(cols - rowItems.size) {
+                                                    Spacer(Modifier.weight(1f))
+                                                }
+                                            }
                                         }
-                                    },
-                                )
+                                    }
+                                }
+                            }
+                            "compact_list" -> {
+                                val isWide = isLandscapeCardRatio(prefs.cards.aspectRatio)
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                    section.items.take(15).forEach { item ->
+                                        val pid = item.pluginId ?: cat.pluginId
+                                        Surface(
+                                            shape = RoundedCornerShape(10.dp),
+                                            color = palette.bgSurface,
+                                            border = BorderStroke(1.dp, palette.border.copy(alpha = 0.42f)),
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clip(RoundedCornerShape(10.dp))
+                                                .vesselFocusBorder(RoundedCornerShape(10.dp))
+                                                .clickable { onOpenDetails(pid, item.nativeId) },
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.padding(8.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                            ) {
+                                                if (!item.poster.isNullOrBlank()) {
+                                                    AsyncImage(
+                                                        model = item.poster,
+                                                        contentDescription = item.title,
+                                                        contentScale = ContentScale.Crop,
+                                                        modifier = Modifier
+                                                            .width(if (isWide) 84.dp else 46.dp)
+                                                            .height(if (isWide) 48.dp else 66.dp)
+                                                            .clip(RoundedCornerShape(7.dp))
+                                                            .background(palette.bgElevated),
+                                                    )
+                                                }
+                                                Column(
+                                                    modifier = Modifier.weight(1f),
+                                                    verticalArrangement = Arrangement.spacedBy(3.dp),
+                                                ) {
+                                                    Text(
+                                                        text = item.title,
+                                                        style = MaterialTheme.typography.bodyMedium,
+                                                        fontWeight = FontWeight.SemiBold,
+                                                        maxLines = 1,
+                                                        overflow = TextOverflow.Ellipsis,
+                                                    )
+                                                    val meta = listOfNotNull(
+                                                        if (item.isAnime) "ANIME" else item.type.uppercase(Locale.US),
+                                                        item.year?.toString(),
+                                                        item.rating?.takeIf { it > 0f }?.let { "★ ${String.format(Locale.US, "%.1f", it)}" },
+                                                    ).joinToString(" · ")
+                                                    Text(
+                                                        text = meta,
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = palette.textMuted,
+                                                        maxLines = 1,
+                                                    )
+                                                }
+                                                Icon(
+                                                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                                    contentDescription = null,
+                                                    tint = palette.textMuted,
+                                                    modifier = Modifier.size(18.dp),
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            else -> {
+                                LazyRow(
+                                    contentPadding = PaddingValues(horizontal = 16.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                ) {
+                                    items(section.items, key = { "${cat.pluginId}:${it.nativeId}" }) { item ->
+                                        val pid = item.pluginId ?: cat.pluginId
+                                        MediaPosterCard(
+                                            item = item,
+                                            cards = prefs.cards,
+                                            onClick = { onOpenDetails(pid, item.nativeId) },
+                                            onQuickStatus = { status ->
+                                                scope.launch {
+                                                    repo.upsertLibrary(
+                                                        LibraryItem(
+                                                            media = MediaRef(pid, item.nativeId),
+                                                            mediaType = item.type,
+                                                            isAnime = item.isAnime,
+                                                            title = item.title,
+                                                            posterUrl = item.poster,
+                                                            status = status,
+                                                        ),
+                                                    )
+                                                    repo.notify("${item.title} · ${VesselI18n.tr("library.$status")}")
+                                                }
+                                            },
+                                        )
+                                    }
+                                }
                             }
                         }
                     }

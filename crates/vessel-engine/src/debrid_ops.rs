@@ -177,6 +177,7 @@ impl VesselEngine {
             synopsis: None,
             poster: None,
             backdrop: None,
+            trailer_url: None,
             genres: Vec::new(),
             rating: None,
             status: None,

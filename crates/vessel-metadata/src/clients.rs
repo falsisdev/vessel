@@ -264,6 +264,24 @@ struct AniListPage {
     media: Vec<AniListMedia>,
 }
 
+fn youtube_watch_url(id_or_url: &str) -> Option<String> {
+    let trimmed = id_or_url.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
+        return Some(trimmed.to_owned());
+    }
+    if trimmed
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+        && (6..=20).contains(&trimmed.len())
+    {
+        return Some(format!("https://www.youtube.com/watch?v={trimmed}"));
+    }
+    None
+}
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct AniListMedia {
@@ -277,6 +295,13 @@ struct AniListMedia {
     cover_image: Option<AniListCover>,
     banner_image: Option<String>,
     episodes: Option<u32>,
+    trailer: Option<AniListTrailer>,
+}
+
+#[derive(Deserialize)]
+struct AniListTrailer {
+    id: Option<String>,
+    site: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -306,6 +331,7 @@ query ($id: Int!) {
     coverImage { extraLarge large }
     bannerImage
     episodes
+    trailer { id site }
   }
 }
 "#;
@@ -324,6 +350,7 @@ query ($search: String!) {
       coverImage { extraLarge large }
       bannerImage
       episodes
+      trailer { id site }
     }
   }
 }
@@ -339,6 +366,13 @@ fn anilist_to_canonical(media: AniListMedia) -> CanonicalMetadata {
         .cover_image
         .as_ref()
         .and_then(|c| c.extra_large.clone().or_else(|| c.large.clone()));
+    let trailer_url = media.trailer.and_then(|t| {
+        if t.site.as_deref().is_some_and(|s| s.eq_ignore_ascii_case("youtube")) {
+            t.id.as_deref().and_then(youtube_watch_url)
+        } else {
+            None
+        }
+    });
     let external_ids = ExternalIds {
         anilist: Some(media.id),
         mal: media.id_mal,
@@ -365,6 +399,7 @@ fn anilist_to_canonical(media: AniListMedia) -> CanonicalMetadata {
         synopsis_lang: Some("en".into()),
         poster,
         backdrop: media.banner_image,
+        trailer_url,
         genres: media.genres.unwrap_or_default(),
         rating: media.average_score.map(|s| s / 10.0),
         season_spans,
@@ -390,6 +425,23 @@ struct TmdbDetail {
     #[serde(default)]
     seasons: Vec<TmdbSeason>,
     external_ids: Option<TmdbExternalIds>,
+    videos: Option<TmdbVideoList>,
+}
+
+#[derive(Deserialize)]
+struct TmdbVideoList {
+    #[serde(default)]
+    results: Vec<TmdbVideo>,
+}
+
+#[derive(Deserialize)]
+struct TmdbVideo {
+    key: Option<String>,
+    site: Option<String>,
+    #[serde(rename = "type")]
+    kind: Option<String>,
+    official: Option<bool>,
+    iso_639_1: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -452,8 +504,15 @@ struct JikanAnime {
     episodes: Option<u32>,
     aired: Option<JikanAired>,
     images: Option<JikanImages>,
+    trailer: Option<JikanTrailer>,
     #[serde(default)]
     genres: Vec<JikanNamed>,
+}
+
+#[derive(Deserialize)]
+struct JikanTrailer {
+    youtube_id: Option<String>,
+    url: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -507,6 +566,7 @@ struct KitsuAttributes {
     episode_count: Option<u32>,
     poster_image: Option<KitsuImage>,
     cover_image: Option<KitsuImage>,
+    youtube_video_id: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -625,6 +685,23 @@ struct CinemetaMeta {
     year: Option<serde_json::Value>,
     #[serde(default)]
     videos: Vec<CinemetaVideo>,
+    #[serde(default)]
+    trailers: Vec<CinemetaTrailer>,
+    #[serde(default)]
+    trailer_streams: Vec<CinemetaTrailerStream>,
+}
+
+#[derive(Deserialize)]
+struct CinemetaTrailer {
+    source: Option<String>,
+    #[serde(rename = "type")]
+    kind: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CinemetaTrailerStream {
+    yt_id: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -744,6 +821,25 @@ fn cinemeta_to_canonical(meta: CinemetaMeta) -> CanonicalMetadata {
         .imdb_rating
         .as_deref()
         .and_then(|s| s.parse::<f32>().ok());
+    let trailer_url = meta
+        .trailers
+        .iter()
+        .filter(|t| {
+            t.kind
+                .as_deref()
+                .is_none_or(|k| k.eq_ignore_ascii_case("trailer"))
+        })
+        .find_map(|t| t.source.as_deref().and_then(youtube_watch_url))
+        .or_else(|| {
+            meta.trailers
+                .iter()
+                .find_map(|t| t.source.as_deref().and_then(youtube_watch_url))
+        })
+        .or_else(|| {
+            meta.trailer_streams
+                .iter()
+                .find_map(|s| s.yt_id.as_deref().and_then(youtube_watch_url))
+        });
 
     CanonicalMetadata {
         canonical_id: format!("imdb:{}", meta.id),
@@ -758,6 +854,7 @@ fn cinemeta_to_canonical(meta: CinemetaMeta) -> CanonicalMetadata {
         synopsis_lang: Some("en".into()),
         poster: meta.poster,
         backdrop: meta.background,
+        trailer_url,
         genres: meta.genres,
         rating,
         season_spans,
@@ -818,6 +915,8 @@ impl MetadataClients {
                 &mut meta,
             )
             .await;
+            self.fill_missing_trailer(detail.media_type, preferred_lang, tmdb_api_key, &mut meta)
+                .await;
             return Ok(Some(meta));
         }
 
@@ -832,6 +931,8 @@ impl MetadataClients {
                 &mut meta,
             )
             .await;
+            self.fill_missing_trailer(detail.media_type, preferred_lang, tmdb_api_key, &mut meta)
+                .await;
             return Ok(Some(meta));
         }
 
@@ -846,24 +947,30 @@ impl MetadataClients {
                 &mut meta,
             )
             .await;
+            self.fill_missing_trailer(detail.media_type, preferred_lang, tmdb_api_key, &mut meta)
+                .await;
             return Ok(Some(meta));
         }
 
         if let Some(simkl_id) = detail.external_ids.simkl
             && let Some(client_id) = simkl_client_id.filter(|k| !k.trim().is_empty())
-            && let Some(meta) = self
+            && let Some(mut meta) = self
                 .fetch_simkl_by_id(simkl_id, detail.media_type, client_id)
                 .await?
         {
+            self.fill_missing_trailer(detail.media_type, preferred_lang, tmdb_api_key, &mut meta)
+                .await;
             return Ok(Some(meta));
         }
 
         if let Some(tmdb_id) = detail.external_ids.tmdb
             && let Some(key) = tmdb_api_key.filter(|k| !k.trim().is_empty())
-            && let Some(meta) = self
+            && let Some(mut meta) = self
                 .fetch_tmdb_by_id(tmdb_id, detail.media_type, preferred_lang, key)
                 .await?
         {
+            self.fill_missing_trailer(detail.media_type, preferred_lang, tmdb_api_key, &mut meta)
+                .await;
             return Ok(Some(meta));
         }
 
@@ -890,11 +997,13 @@ impl MetadataClients {
                 )
                 .await;
             }
+            self.fill_missing_trailer(detail.media_type, preferred_lang, tmdb_api_key, &mut meta)
+                .await;
             return Ok(Some(meta));
         }
 
         if let Some(key) = tmdb_api_key.filter(|k| !k.trim().is_empty())
-            && let Some(meta) = self
+            && let Some(mut meta) = self
                 .search_tmdb_confident(
                     &detail.title,
                     detail.year,
@@ -904,11 +1013,42 @@ impl MetadataClients {
                 )
                 .await?
         {
+            self.fill_missing_trailer(detail.media_type, preferred_lang, tmdb_api_key, &mut meta)
+                .await;
             return Ok(Some(meta));
         }
 
         self.search_cinemeta_confident(&detail.title, detail.year, detail.media_type)
             .await
+    }
+
+    async fn fill_missing_trailer(
+        &self,
+        media_type: MediaType,
+        preferred_lang: &str,
+        tmdb_api_key: Option<&str>,
+        meta: &mut CanonicalMetadata,
+    ) {
+        if meta.trailer_url.is_some() {
+            return;
+        }
+        if let (Some(tmdb_id), Some(key)) = (
+            meta.external_ids.tmdb,
+            tmdb_api_key.filter(|k| !k.trim().is_empty()),
+        ) && let Ok(Some(tmdb_meta)) = self
+            .fetch_tmdb_by_id(tmdb_id, media_type, preferred_lang, key)
+            .await
+            && tmdb_meta.trailer_url.is_some()
+        {
+            meta.trailer_url = tmdb_meta.trailer_url;
+            return;
+        }
+        if let Some(ref imdb_id) = meta.external_ids.imdb
+            && let Ok(Some(cm_meta)) = self.fetch_cinemeta_any_type(imdb_id, media_type).await
+            && cm_meta.trailer_url.is_some()
+        {
+            meta.trailer_url = cm_meta.trailer_url;
+        }
     }
 
     async fn fetch_anilist_by_id(&self, id: u64) -> VesselResult<Option<CanonicalMetadata>> {
@@ -1115,8 +1255,9 @@ impl MetadataClients {
             MediaType::Series | MediaType::Live => "tv",
         };
         let lang = map_tmdb_lang(preferred_lang);
+        let base_lang = lang.split('-').next().unwrap_or("en");
         let url = format!(
-            "{}/{kind}/{id}?api_key={api_key}&language={lang}&append_to_response=external_ids",
+            "{}/{kind}/{id}?api_key={api_key}&language={lang}&append_to_response=external_ids,videos&include_video_language={base_lang},en,null",
             self.endpoints.tmdb_api_base
         );
         let resp = self
@@ -1215,6 +1356,53 @@ impl MetadataClients {
             .as_deref()
             .filter(|o| !o.trim().is_empty())
             .map(|_| preferred_lang.to_owned());
+        let trailer_url = detail.videos.and_then(|vlist| {
+            let mut ranked: Vec<(i32, String)> = vlist
+                .results
+                .into_iter()
+                .filter_map(|v| {
+                    if !v
+                        .site
+                        .as_deref()
+                        .is_some_and(|s| s.eq_ignore_ascii_case("youtube"))
+                    {
+                        return None;
+                    }
+                    let url = v.key.as_deref().and_then(youtube_watch_url)?;
+                    let mut score = 0;
+                    if v.kind
+                        .as_deref()
+                        .is_some_and(|k| k.eq_ignore_ascii_case("trailer"))
+                    {
+                        score += 100;
+                    } else if v
+                        .kind
+                        .as_deref()
+                        .is_some_and(|k| k.eq_ignore_ascii_case("teaser"))
+                    {
+                        score += 50;
+                    }
+                    if v.official.unwrap_or(false) {
+                        score += 20;
+                    }
+                    if v.iso_639_1
+                        .as_deref()
+                        .is_some_and(|l| l.eq_ignore_ascii_case(base_lang))
+                    {
+                        score += 10;
+                    } else if v
+                        .iso_639_1
+                        .as_deref()
+                        .is_some_and(|l| l.eq_ignore_ascii_case("en"))
+                    {
+                        score += 5;
+                    }
+                    Some((score, url))
+                })
+                .collect();
+            ranked.sort_by(|a, b| b.0.cmp(&a.0));
+            ranked.into_iter().next().map(|(_, u)| u)
+        });
 
         Ok(Some(CanonicalMetadata {
             canonical_id,
@@ -1229,6 +1417,7 @@ impl MetadataClients {
             synopsis_lang,
             poster,
             backdrop,
+            trailer_url,
             genres: detail.genres.into_iter().map(|g| g.name).collect(),
             rating: detail.vote_average,
             season_spans,
@@ -1939,6 +2128,7 @@ fn simkl_to_canonical(simkl_id: u64, d: SimklDetail) -> CanonicalMetadata {
         backdrop: d
             .fanart
             .map(|f| format!("https://simkl.in/fanart/{f}_medium.jpg")),
+        trailer_url: None,
         genres: d.genres,
         rating: d.ratings.and_then(|r| r.simkl).and_then(|s| s.rating),
         season_spans,
@@ -1970,6 +2160,12 @@ fn jikan_to_canonical(a: JikanAnime) -> CanonicalMetadata {
             }]
         })
         .unwrap_or_default();
+    let trailer_url = a.trailer.and_then(|t| {
+        t.youtube_id
+            .as_deref()
+            .and_then(youtube_watch_url)
+            .or_else(|| t.url.as_deref().and_then(youtube_watch_url))
+    });
     CanonicalMetadata {
         canonical_id: format!("mal:{}", a.mal_id),
         external_ids: ExternalIds {
@@ -1983,6 +2179,7 @@ fn jikan_to_canonical(a: JikanAnime) -> CanonicalMetadata {
         synopsis_lang: Some("en".into()),
         poster,
         backdrop: None,
+        trailer_url,
         genres: a.genres.into_iter().map(|g| g.name).collect(),
         rating: a.score,
         season_spans,
@@ -2039,6 +2236,7 @@ fn kitsu_to_canonical(item: KitsuItem) -> Option<CanonicalMetadata> {
         synopsis_lang: Some("en".into()),
         poster,
         backdrop,
+        trailer_url: attrs.youtube_video_id.as_deref().and_then(youtube_watch_url),
         genres: Vec::new(),
         rating,
         season_spans,

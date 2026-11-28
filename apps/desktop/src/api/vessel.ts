@@ -71,6 +71,8 @@ export const vesselApi = {
 
   getUiPreferences: () => call<UiPreferences>('get_ui_preferences'),
   setUiPreferences: (prefs: UiPreferences) => call<void>('set_ui_preferences', { prefs }),
+  getAppSetting: (key: string) => call<string | null>('get_app_setting', { key }),
+  setAppSetting: (key: string, value: string) => call<void>('set_app_setting', { key, value }),
 
   listThemes: () => call<ThemeSpec[]>('list_themes'),
   importThemeJson: (json: string) => call<ThemeSpec>('import_theme_json', { json }),

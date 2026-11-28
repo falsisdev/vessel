@@ -30,6 +30,7 @@ import { usePlayerSession } from '@/composables/usePlayerSession'
 import { useUiPreferences } from '@/composables/useUiPreferences'
 import { pushToast, useVesselEvents } from '@/composables/useVesselEvents'
 import { isLiveMediaIdentifier, isLiveTvPlugin, isNonCatalogPlugin, resolveLiveGroupName } from '@/utils/liveTv'
+import { extractYouTubeVideoId, youtubeAmbientEmbedUrl } from '@/utils/trailer'
 import type {
   ContinueWatchingEntry,
   Episode,
@@ -348,6 +349,16 @@ const featuredDetail = computed<MediaDetail | null>(() => {
   const item = featuredItem.value
   if (!item) return null
   return heroDetails.value[`${item.resolvedPluginId}:${item.nativeId}`] ?? null
+})
+
+const heroTrailerReady = shallowRef(false)
+const featuredTrailerEmbedUrl = computed(() => {
+  if (uiPreferences.value.home.heroAutoPlayTrailer === false) return ''
+  const id = extractYouTubeVideoId(featuredDetail.value?.trailerUrl)
+  return id ? youtubeAmbientEmbedUrl(id) : ''
+})
+watch(featuredTrailerEmbedUrl, () => {
+  heroTrailerReady.value = false
 })
 
 watch(
@@ -1120,6 +1131,19 @@ onUnmounted(() => {
                 decoding="async"
                 class="hero-art"
               />
+              <iframe
+                v-if="featuredTrailerEmbedUrl"
+                :key="featuredTrailerEmbedUrl"
+                :src="featuredTrailerEmbedUrl"
+                title="Trailer"
+                tabindex="-1"
+                aria-hidden="true"
+                allow="autoplay; encrypted-media"
+                referrerpolicy="strict-origin-when-cross-origin"
+                class="hero-trailer-frame"
+                :class="{ 'is-ready': heroTrailerReady }"
+                @load="heroTrailerReady = true"
+              />
             <div class="hero-vignette" aria-hidden="true" />
 
             <div class="hero-content">
@@ -1449,7 +1473,45 @@ onUnmounted(() => {
             </div>
           </div>
 
-          <div :id="`rail-${cat.pluginId}-${cat.section.id}`" class="rail-track">
+          <div
+            v-if="uiPreferences.home.sectionViewMode === 'grid'"
+            class="v-grid"
+          >
+            <MediaCard
+              v-for="item in cat.section.items"
+              :key="`${cat.pluginId}:${item.nativeId}`"
+              :item="item"
+              :cards="uiPreferences.cards"
+              @open="openDetails"
+            />
+          </div>
+          <div
+            v-else-if="uiPreferences.home.sectionViewMode === 'compact_list'"
+            class="home-compact-list"
+          >
+            <button
+              v-for="item in cat.section.items.slice(0, 15)"
+              :key="`${cat.pluginId}:${item.nativeId}`"
+              type="button"
+              class="home-compact-row"
+              @click="openDetails(item.pluginId ?? cat.pluginId, item.nativeId)"
+            >
+              <img
+                v-if="item.poster"
+                :src="item.poster"
+                :alt="item.title"
+                loading="lazy"
+                class="home-compact-thumb"
+              />
+              <div class="home-compact-meta">
+                <strong>{{ item.title }}</strong>
+                <span class="v-muted">
+                  {{ [item.isAnime ? 'ANIME' : item.type.toUpperCase(), item.year].filter(Boolean).join(' · ') }}
+                </span>
+              </div>
+            </button>
+          </div>
+          <div v-else :id="`rail-${cat.pluginId}-${cat.section.id}`" class="rail-track">
             <div
               v-for="item in cat.section.items"
               :key="`${cat.pluginId}:${item.nativeId}`"
@@ -1957,6 +2019,23 @@ onUnmounted(() => {
   animation: hero-ken-burns 7.2s linear forwards;
 }
 
+.hero-trailer-frame {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: max(100%, 177.78vh);
+  height: max(100%, 56.25vw);
+  transform: translate(-50%, -50%) scale(1.06);
+  border: 0;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.65s ease;
+}
+
+.hero-trailer-frame.is-ready {
+  opacity: 0.92;
+}
+
 .nuvio-hero.is-reduced-motion .hero-art.hero-ken-burns {
   animation: none;
   transform: scale(1.02);
@@ -2232,9 +2311,54 @@ onUnmounted(() => {
   padding: 0.65rem 0.35rem 1rem;
 }
 
+.home-compact-list {
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+}
+
+.home-compact-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--vessel-radius);
+  border: 1px solid var(--vessel-border);
+  background: var(--vessel-bg-surface);
+  color: var(--vessel-text-primary);
+  text-align: left;
+  cursor: pointer;
+}
+
+.home-compact-row:hover {
+  border-color: var(--vessel-accent);
+  background: var(--vessel-bg-elevated);
+}
+
+.home-compact-thumb {
+  width: 44px;
+  height: 62px;
+  object-fit: cover;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+
+.home-compact-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.home-compact-meta strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .rail-card-slot,
 .rail-skeleton-card {
-  flex: 0 0 186px;
+  flex: 0 0 calc(186px * var(--vessel-card-scale, 1));
   display: flex;
   flex-direction: column;
   gap: 0.45rem;
@@ -2258,7 +2382,7 @@ onUnmounted(() => {
 
 /* Continue Watching Landscape Cards */
 .cw-card {
-  flex: 0 0 280px;
+  flex: 0 0 calc(280px * var(--vessel-card-scale, 1));
   display: flex;
   flex-direction: column;
   gap: 0.55rem;

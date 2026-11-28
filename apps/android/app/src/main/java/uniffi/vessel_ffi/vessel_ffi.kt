@@ -973,6 +973,10 @@ internal open class UniffiVTableCallbackInterfaceNativeSecretBridge(
 
 
 
+
+
+
+
 // For large crates we prevent `MethodTooLargeException` (see #2340)
 // N.B. the name of the extension is very misleading, since it is 
 // rather `InterfaceTooLargeException`, caused by too many methods 
@@ -1015,6 +1019,8 @@ fun uniffi_vessel_ffi_checksum_method_vesselmobilecore_enqueue_download_json(
 fun uniffi_vessel_ffi_checksum_method_vesselmobilecore_export_backup_json(
 ): Short
 fun uniffi_vessel_ffi_checksum_method_vesselmobilecore_flush_tracker_queue(
+): Short
+fun uniffi_vessel_ffi_checksum_method_vesselmobilecore_get_app_setting_json(
 ): Short
 fun uniffi_vessel_ffi_checksum_method_vesselmobilecore_get_cloud_sync_status_json(
 ): Short
@@ -1127,6 +1133,8 @@ fun uniffi_vessel_ffi_checksum_method_vesselmobilecore_search_streams(
 fun uniffi_vessel_ffi_checksum_method_vesselmobilecore_search_subtitles_json(
 ): Short
 fun uniffi_vessel_ffi_checksum_method_vesselmobilecore_set_always_proxy(
+): Short
+fun uniffi_vessel_ffi_checksum_method_vesselmobilecore_set_app_setting_json(
 ): Short
 fun uniffi_vessel_ffi_checksum_method_vesselmobilecore_set_cloud_sync_auto(
 ): Short
@@ -1279,6 +1287,8 @@ fun uniffi_vessel_ffi_fn_method_vesselmobilecore_export_backup_json(`ptr`: Point
 ): RustBuffer.ByValue
 fun uniffi_vessel_ffi_fn_method_vesselmobilecore_flush_tracker_queue(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
 ): Int
+fun uniffi_vessel_ffi_fn_method_vesselmobilecore_get_app_setting_json(`ptr`: Pointer,`key`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
 fun uniffi_vessel_ffi_fn_method_vesselmobilecore_get_cloud_sync_status_json(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 fun uniffi_vessel_ffi_fn_method_vesselmobilecore_get_debrid_overview_json(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
@@ -1390,6 +1400,8 @@ fun uniffi_vessel_ffi_fn_method_vesselmobilecore_search_streams(`ptr`: Pointer,`
 fun uniffi_vessel_ffi_fn_method_vesselmobilecore_search_subtitles_json(`ptr`: Pointer,`queryJson`: RustBuffer.ByValue,`targetPlugins`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 fun uniffi_vessel_ffi_fn_method_vesselmobilecore_set_always_proxy(`ptr`: Pointer,`enabled`: Byte,uniffi_out_err: UniffiRustCallStatus, 
+): Unit
+fun uniffi_vessel_ffi_fn_method_vesselmobilecore_set_app_setting_json(`ptr`: Pointer,`key`: RustBuffer.ByValue,`valueJson`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
 fun uniffi_vessel_ffi_fn_method_vesselmobilecore_set_cloud_sync_auto(`ptr`: Pointer,`enabled`: Byte,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
@@ -1617,6 +1629,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_vessel_ffi_checksum_method_vesselmobilecore_flush_tracker_queue() != 33724.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_vessel_ffi_checksum_method_vesselmobilecore_get_app_setting_json() != 22774.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_vessel_ffi_checksum_method_vesselmobilecore_get_cloud_sync_status_json() != 951.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -1783,6 +1798,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_vessel_ffi_checksum_method_vesselmobilecore_set_always_proxy() != 13079.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_vessel_ffi_checksum_method_vesselmobilecore_set_app_setting_json() != 20171.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_vessel_ffi_checksum_method_vesselmobilecore_set_cloud_sync_auto() != 24097.toShort()) {
@@ -2316,6 +2334,8 @@ public interface VesselMobileCoreInterface {
     
     fun `flushTrackerQueue`(): kotlin.UInt
     
+    fun `getAppSettingJson`(`key`: kotlin.String): kotlin.String?
+    
     fun `getCloudSyncStatusJson`(): kotlin.String
     
     fun `getDebridOverviewJson`(): kotlin.String
@@ -2427,6 +2447,8 @@ public interface VesselMobileCoreInterface {
     fun `searchSubtitlesJson`(`queryJson`: kotlin.String, `targetPlugins`: List<kotlin.String>?): kotlin.String
     
     fun `setAlwaysProxy`(`enabled`: kotlin.Boolean)
+    
+    fun `setAppSettingJson`(`key`: kotlin.String, `valueJson`: kotlin.String)
     
     fun `setCloudSyncAuto`(`enabled`: kotlin.Boolean)
     
@@ -2735,6 +2757,19 @@ open class VesselMobileCore: Disposable, AutoCloseable, VesselMobileCoreInterfac
     uniffiRustCallWithError(FfiException) { _status ->
     UniffiLib.INSTANCE.uniffi_vessel_ffi_fn_method_vesselmobilecore_flush_tracker_queue(
         it, _status)
+}
+    }
+    )
+    }
+    
+
+    
+    @Throws(FfiException::class)override fun `getAppSettingJson`(`key`: kotlin.String): kotlin.String? {
+            return FfiConverterOptionalString.lift(
+    callWithPointer {
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_vessel_ffi_fn_method_vesselmobilecore_get_app_setting_json(
+        it, FfiConverterString.lower(`key`),_status)
 }
     }
     )
@@ -3454,6 +3489,18 @@ open class VesselMobileCore: Disposable, AutoCloseable, VesselMobileCoreInterfac
     uniffiRustCallWithError(FfiException) { _status ->
     UniffiLib.INSTANCE.uniffi_vessel_ffi_fn_method_vesselmobilecore_set_always_proxy(
         it, FfiConverterBoolean.lower(`enabled`),_status)
+}
+    }
+    
+    
+
+    
+    @Throws(FfiException::class)override fun `setAppSettingJson`(`key`: kotlin.String, `valueJson`: kotlin.String)
+        = 
+    callWithPointer {
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_vessel_ffi_fn_method_vesselmobilecore_set_app_setting_json(
+        it, FfiConverterString.lower(`key`),FfiConverterString.lower(`valueJson`),_status)
 }
     }
     

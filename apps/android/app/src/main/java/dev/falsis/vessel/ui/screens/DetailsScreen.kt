@@ -8,6 +8,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -40,12 +41,15 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.ViewAgenda
+import androidx.compose.material.icons.filled.ViewStream
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
@@ -95,6 +99,7 @@ import dev.falsis.vessel.data.StreamCandidate
 import dev.falsis.vessel.data.StreamResult
 import dev.falsis.vessel.data.VesselRepository
 import dev.falsis.vessel.ui.components.formatSizeBytes
+import dev.falsis.vessel.ui.components.TrailerBackgroundLayer
 import dev.falsis.vessel.ui.components.VesselButton
 import dev.falsis.vessel.ui.components.VesselCompactIconButton
 import dev.falsis.vessel.ui.components.VesselFilterChip
@@ -132,10 +137,11 @@ fun DetailsScreen(
     repo: VesselRepository,
     pluginId: String,
     nativeId: String,
+    isActive: Boolean = true,
     onBack: () -> Unit,
     onOpenDebridSettings: () -> Unit = {},
     onPlayStream: (detail: MediaDetail, episode: Episode, streams: StreamResult, selectedIdx: Int, resumePosMs: Long) -> Unit,
-    onPlayLiveReplace: ((detail: MediaDetail, episode: Episode, streams: StreamResult) -> Unit)? = null,
+    onPlayLiveReplace: ((detail: MediaDetail, episode: Episode, streams: StreamResult, selectedIdx: Int) -> Unit)? = null,
 ) {
     val palette = LocalVesselPalette.current
     val scope = rememberCoroutineScope()
@@ -191,10 +197,13 @@ fun DetailsScreen(
                 if (sr.streams.isEmpty()) {
                     repo.notify(VesselI18n.tr("details.no_streams"))
                     onBack()
-                } else if (onPlayLiveReplace != null) {
-                    onPlayLiveReplace(loaded.copy(type = "live"), ep, sr)
                 } else {
-                    onPlayStream(loaded.copy(type = "live"), ep, sr, 0, 0L)
+                    val preferredIdx = repo.getPreferredLiveStreamIndex(pluginId, loaded.nativeId, ep.streamId, sr.streams)
+                    if (onPlayLiveReplace != null) {
+                        onPlayLiveReplace(loaded.copy(type = "live"), ep, sr, preferredIdx)
+                    } else {
+                        onPlayStream(loaded.copy(type = "live"), ep, sr, preferredIdx, 0L)
+                    }
                 }
                 return@runCatching
             }
@@ -551,6 +560,12 @@ fun DetailsScreen(
                         modifier = Modifier.fillMaxSize(),
                     )
                 }
+                TrailerBackgroundLayer(
+                    trailerUrl = d.trailerUrl,
+                    enabled = prefs.details.autoPlayTrailer,
+                    active = isActive && !showFixMatch && !showIncludeSources && activeEpisodeForSources == null && uncachedPrompt == null && !showNoDebridDialog,
+                    modifier = Modifier.fillMaxSize(),
+                )
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -838,110 +853,384 @@ fun DetailsScreen(
             }
         }
 
-        // Season Selector
-        if (seasons.size > 1) {
+        // Season Selector + Episode Layout Switcher
+        if (seasons.size > 1 || d.episodes.size > 1) {
             item {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState())
                         .padding(horizontal = 16.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    seasons.forEach { s ->
-                        VesselFilterChip(
-                            selected = selectedSeason == s,
-                            onClick = { selectedSeason = s },
-                            label = "${VesselI18n.tr("details.season")} $s",
+                    if (seasons.size > 1) {
+                        Row(
+                            modifier = Modifier
+                                .weight(1f)
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            seasons.forEach { s ->
+                                VesselFilterChip(
+                                    selected = selectedSeason == s,
+                                    onClick = { selectedSeason = s },
+                                    label = "${VesselI18n.tr("details.season")} $s",
+                                )
+                            }
+                        }
+                    } else {
+                        Text(
+                            text = "${VesselI18n.tr("details.episodes")} (${filteredEpisodes.size})",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.weight(1f),
                         )
+                    }
+                    if (d.episodes.size > 1) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(start = 8.dp),
+                        ) {
+                            listOf(
+                                Triple("grid_cards", Icons.Default.GridView, VesselI18n.tr("details.layout_grid", "Grid")),
+                                Triple("detailed_list", Icons.Default.ViewAgenda, VesselI18n.tr("details.layout_detailed", "Detailed")),
+                                Triple("compact_rows", Icons.Default.ViewStream, VesselI18n.tr("details.layout_compact", "Compact")),
+                            ).forEach { (layoutKey, iconVec, desc) ->
+                                val isSelected = prefs.details.episodeLayout == layoutKey
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = if (isSelected) palette.accent.copy(alpha = 0.22f) else palette.bgSurface,
+                                    border = BorderStroke(
+                                        1.dp,
+                                        if (isSelected) palette.accent.copy(alpha = 0.65f) else palette.border.copy(alpha = 0.5f),
+                                    ),
+                                    modifier = Modifier
+                                        .size(32.dp)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .vesselFocusBorder(RoundedCornerShape(8.dp))
+                                        .clickable {
+                                            if (prefs.details.episodeLayout != layoutKey) {
+                                                scope.launch {
+                                                    repo.saveUiPreferences(
+                                                        prefs.copy(details = prefs.details.copy(episodeLayout = layoutKey)),
+                                                    )
+                                                }
+                                            }
+                                        },
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(
+                                            imageVector = iconVec,
+                                            contentDescription = desc,
+                                            tint = if (isSelected) palette.accent else palette.textMuted,
+                                            modifier = Modifier.size(16.dp),
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
         }
 
-        // Episodes List
-        items(filteredEpisodes, key = { it.streamId }) { ep ->
-            val prog = progressFor(ep)
-            val ratio = if (prog != null && prog.durationMs > 0) {
-                (prog.positionMs.toFloat() / prog.durationMs).coerceIn(0f, 1f)
-            } else 0f
-            val epLabel = ep.title?.takeIf { it.isNotBlank() }
-                ?: "${VesselI18n.tr("downloads.episode_label")} ${ep.episode}"
-            val isQuickBusy = quickStartingStreamId == ep.streamId
+        // Episodes List / Grid
+        when (prefs.details.episodeLayout) {
+            "grid_cards" -> {
+                item(key = "episodes-grid") {
+                    BoxWithConstraints(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp),
+                    ) {
+                        val cols = (maxWidth / 220.dp).toInt().coerceIn(1, 4)
+                        val epRows = filteredEpisodes.chunked(cols)
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            epRows.forEach { rowEps ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                ) {
+                                    rowEps.forEach { ep ->
+                                        val prog = progressFor(ep)
+                                        val ratio = if (prog != null && prog.durationMs > 0) {
+                                            (prog.positionMs.toFloat() / prog.durationMs).coerceIn(0f, 1f)
+                                        } else 0f
+                                        val epLabel = ep.title?.takeIf { it.isNotBlank() }
+                                            ?: "${VesselI18n.tr("downloads.episode_label")} ${ep.episode}"
+                                        val isQuickBusy = quickStartingStreamId == ep.streamId
 
-            Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = palette.bgSurface,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 5.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .vesselFocusBorder(RoundedCornerShape(12.dp))
-                    .clickable { handleEpisodePlayClick(ep) },
-            ) {
-                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        if (!prefs.details.hideEpisodeThumbnails) {
-                            ep.thumbnail?.let { thumb ->
-                                AsyncImage(
-                                    model = thumb,
-                                    contentDescription = null,
-                                    contentScale = ContentScale.Crop,
-                                    modifier = Modifier
-                                        .width(104.dp)
-                                        .height(60.dp)
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .background(palette.bgElevated),
-                                )
-                            }
-                        }
-                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                            Text(
-                                text = "${ep.episode}. $epLabel",
-                                fontWeight = FontWeight.SemiBold,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            if (!prefs.details.hideEpisodeOverviews) {
-                                ep.overview?.takeIf { it.isNotBlank() }?.let { ov ->
-                                    Text(
-                                        text = ov,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = palette.textMuted,
-                                        maxLines = 2,
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
+                                        Surface(
+                                            shape = RoundedCornerShape(12.dp),
+                                            color = palette.bgSurface,
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .clip(RoundedCornerShape(12.dp))
+                                                .vesselFocusBorder(RoundedCornerShape(12.dp))
+                                                .clickable { handleEpisodePlayClick(ep) },
+                                        ) {
+                                            Column {
+                                                if (!prefs.details.hideEpisodeThumbnails) {
+                                                    val thumbUrl = ep.thumbnail ?: d.backdrop ?: d.poster
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .fillMaxWidth()
+                                                            .height(108.dp)
+                                                            .background(palette.bgElevated),
+                                                    ) {
+                                                        if (!thumbUrl.isNullOrBlank()) {
+                                                            AsyncImage(
+                                                                model = thumbUrl,
+                                                                contentDescription = epLabel,
+                                                                contentScale = ContentScale.Crop,
+                                                                modifier = Modifier.fillMaxSize(),
+                                                            )
+                                                        }
+                                                        Surface(
+                                                            color = Color.Black.copy(alpha = 0.68f),
+                                                            shape = RoundedCornerShape(6.dp),
+                                                            modifier = Modifier
+                                                                .align(Alignment.TopStart)
+                                                                .padding(6.dp),
+                                                        ) {
+                                                            Text(
+                                                                text = "B${ep.episode}",
+                                                                style = MaterialTheme.typography.labelSmall,
+                                                                fontWeight = FontWeight.Bold,
+                                                                color = Color.White,
+                                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                                            )
+                                                        }
+                                                        if (ratio > 0f && prog?.completed != true) {
+                                                            LinearProgressIndicator(
+                                                                progress = { ratio },
+                                                                color = palette.accent,
+                                                                modifier = Modifier
+                                                                    .fillMaxWidth()
+                                                                    .height(3.dp)
+                                                                    .align(Alignment.BottomCenter),
+                                                            )
+                                                        }
+                                                    }
+                                                }
+                                                Column(
+                                                    modifier = Modifier.padding(10.dp),
+                                                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                                                ) {
+                                                    Row(
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                                    ) {
+                                                        Text(
+                                                            text = "${ep.episode}. $epLabel",
+                                                            style = MaterialTheme.typography.bodySmall,
+                                                            fontWeight = FontWeight.SemiBold,
+                                                            maxLines = 1,
+                                                            overflow = TextOverflow.Ellipsis,
+                                                            modifier = Modifier.weight(1f),
+                                                        )
+                                                        if (isQuickBusy) {
+                                                            CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
+                                                        } else {
+                                                            VesselCompactIconButton(onClick = { toggleEpisodeWatched(ep) }, size = 24.dp) {
+                                                                Icon(
+                                                                    imageVector = if (prog?.completed == true) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
+                                                                    contentDescription = VesselI18n.tr("details.watched_badge"),
+                                                                    tint = if (prog?.completed == true) palette.success else palette.textMuted,
+                                                                    modifier = Modifier.size(15.dp),
+                                                                )
+                                                            }
+                                                        }
+                                                    }
+                                                    if (!prefs.details.hideEpisodeOverviews) {
+                                                        ep.overview?.takeIf { it.isNotBlank() }?.let { ov ->
+                                                            Text(
+                                                                text = ov,
+                                                                style = MaterialTheme.typography.labelSmall,
+                                                                color = palette.textMuted,
+                                                                maxLines = 2,
+                                                                overflow = TextOverflow.Ellipsis,
+                                                            )
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    repeat(cols - rowEps.size) {
+                                        Spacer(Modifier.weight(1f))
+                                    }
                                 }
                             }
                         }
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            if (isQuickBusy) {
-                                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                            }
-                            VesselCompactIconButton(onClick = { toggleEpisodeWatched(ep) }, size = 30.dp) {
-                                Icon(
-                                    imageVector = if (prog?.completed == true) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
-                                    contentDescription = VesselI18n.tr("details.watched_badge"),
-                                    tint = if (prog?.completed == true) palette.success else palette.textMuted,
-                                    modifier = Modifier.size(18.dp),
+                    }
+                }
+            }
+            "compact_rows" -> {
+                items(filteredEpisodes, key = { it.streamId }) { ep ->
+                    val prog = progressFor(ep)
+                    val ratio = if (prog != null && prog.durationMs > 0) {
+                        (prog.positionMs.toFloat() / prog.durationMs).coerceIn(0f, 1f)
+                    } else 0f
+                    val epLabel = ep.title?.takeIf { it.isNotBlank() }
+                        ?: "${VesselI18n.tr("downloads.episode_label")} ${ep.episode}"
+                    val isQuickBusy = quickStartingStreamId == ep.streamId
+
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = palette.bgSurface,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 3.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .vesselFocusBorder(RoundedCornerShape(10.dp))
+                            .clickable { handleEpisodePlayClick(ep) },
+                    ) {
+                        Column {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            ) {
+                                Surface(
+                                    color = palette.bgElevated,
+                                    shape = RoundedCornerShape(6.dp),
+                                ) {
+                                    Text(
+                                        text = "${ep.episode}",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = palette.accent,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                    )
+                                }
+                                Text(
+                                    text = epLabel,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Medium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f),
                                 )
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    if (isQuickBusy) {
+                                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                                    }
+                                    VesselCompactIconButton(onClick = { toggleEpisodeWatched(ep) }, size = 28.dp) {
+                                        Icon(
+                                            imageVector = if (prog?.completed == true) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
+                                            contentDescription = VesselI18n.tr("details.watched_badge"),
+                                            tint = if (prog?.completed == true) palette.success else palette.textMuted,
+                                            modifier = Modifier.size(16.dp),
+                                        )
+                                    }
+                                    VesselCompactIconButton(onClick = { openEpisodeSources(ep) }, size = 28.dp) {
+                                        Icon(
+                                            imageVector = Icons.AutoMirrored.Filled.List,
+                                            contentDescription = VesselI18n.tr("details.select_stream"),
+                                            tint = palette.textMuted,
+                                            modifier = Modifier.size(16.dp),
+                                        )
+                                    }
+                                }
                             }
-                            VesselCompactIconButton(onClick = { openEpisodeSources(ep) }, size = 30.dp) {
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.List,
-                                    contentDescription = VesselI18n.tr("details.select_stream"),
-                                    tint = palette.textMuted,
-                                    modifier = Modifier.size(18.dp),
+                            if (ratio > 0f && prog?.completed != true) {
+                                LinearProgressIndicator(
+                                    progress = { ratio },
+                                    color = palette.accent,
+                                    modifier = Modifier.fillMaxWidth().height(2.5.dp),
                                 )
                             }
                         }
                     }
-                    if (ratio > 0f && prog?.completed != true) {
-                        LinearProgressIndicator(
-                            progress = { ratio },
-                            color = palette.accent,
-                            modifier = Modifier.fillMaxWidth().height(3.dp),
-                        )
+                }
+            }
+            else -> {
+                items(filteredEpisodes, key = { it.streamId }) { ep ->
+                    val prog = progressFor(ep)
+                    val ratio = if (prog != null && prog.durationMs > 0) {
+                        (prog.positionMs.toFloat() / prog.durationMs).coerceIn(0f, 1f)
+                    } else 0f
+                    val epLabel = ep.title?.takeIf { it.isNotBlank() }
+                        ?: "${VesselI18n.tr("downloads.episode_label")} ${ep.episode}"
+                    val isQuickBusy = quickStartingStreamId == ep.streamId
+
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = palette.bgSurface,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 5.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .vesselFocusBorder(RoundedCornerShape(12.dp))
+                            .clickable { handleEpisodePlayClick(ep) },
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                if (!prefs.details.hideEpisodeThumbnails) {
+                                    ep.thumbnail?.let { thumb ->
+                                        AsyncImage(
+                                            model = thumb,
+                                            contentDescription = null,
+                                            contentScale = ContentScale.Crop,
+                                            modifier = Modifier
+                                                .width(104.dp)
+                                                .height(60.dp)
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .background(palette.bgElevated),
+                                        )
+                                    }
+                                }
+                                Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                    Text(
+                                        text = "${ep.episode}. $epLabel",
+                                        fontWeight = FontWeight.SemiBold,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                    if (!prefs.details.hideEpisodeOverviews) {
+                                        ep.overview?.takeIf { it.isNotBlank() }?.let { ov ->
+                                            Text(
+                                                text = ov,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = palette.textMuted,
+                                                maxLines = 2,
+                                                overflow = TextOverflow.Ellipsis,
+                                            )
+                                        }
+                                    }
+                                }
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    if (isQuickBusy) {
+                                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                                    }
+                                    VesselCompactIconButton(onClick = { toggleEpisodeWatched(ep) }, size = 30.dp) {
+                                        Icon(
+                                            imageVector = if (prog?.completed == true) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
+                                            contentDescription = VesselI18n.tr("details.watched_badge"),
+                                            tint = if (prog?.completed == true) palette.success else palette.textMuted,
+                                            modifier = Modifier.size(18.dp),
+                                        )
+                                    }
+                                    VesselCompactIconButton(onClick = { openEpisodeSources(ep) }, size = 30.dp) {
+                                        Icon(
+                                            imageVector = Icons.AutoMirrored.Filled.List,
+                                            contentDescription = VesselI18n.tr("details.select_stream"),
+                                            tint = palette.textMuted,
+                                            modifier = Modifier.size(18.dp),
+                                        )
+                                    }
+                                }
+                            }
+                            if (ratio > 0f && prog?.completed != true) {
+                                LinearProgressIndicator(
+                                    progress = { ratio },
+                                    color = palette.accent,
+                                    modifier = Modifier.fillMaxWidth().height(3.dp),
+                                )
+                            }
+                        }
                     }
                 }
             }

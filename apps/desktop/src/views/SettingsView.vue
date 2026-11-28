@@ -278,6 +278,66 @@ async function handleImportBackup(mode: 'smart_merge' | 'reset_and_import'): Pro
       </div>
 
       <div class="v-setting-row">
+        <span class="setting-copy"><strong>{{ t('settings.hero_trailer') }}</strong></span>
+        <label class="v-switch">
+          <input
+            v-model="uiPreferences.home.heroAutoPlayTrailer"
+            type="checkbox"
+            class="v-switch-input"
+            @change="persistUi"
+          />
+          <span class="v-switch-track" aria-hidden="true" />
+        </label>
+      </div>
+
+      <div class="v-setting-row">
+        <span class="setting-copy"><strong>{{ t('settings.details_trailer') }}</strong></span>
+        <label class="v-switch">
+          <input
+            v-model="uiPreferences.details.autoPlayTrailer"
+            type="checkbox"
+            class="v-switch-input"
+            @change="persistUi"
+          />
+          <span class="v-switch-track" aria-hidden="true" />
+        </label>
+      </div>
+
+      <div class="v-setting-row">
+        <div class="setting-copy">
+          <strong>{{ t('settings.home_section_view') }}</strong>
+        </div>
+        <select
+          v-model="uiPreferences.home.sectionViewMode"
+          :aria-label="t('settings.home_section_view')"
+          class="v-select v-setting-control"
+          @change="persistUi"
+        >
+          <option value="rail">{{ t('home.view_rail') }}</option>
+          <option value="grid">{{ t('home.view_grid') }}</option>
+          <option value="compact_list">{{ t('home.view_compact_list') }}</option>
+        </select>
+      </div>
+
+      <div class="v-setting-row">
+        <div class="setting-copy">
+          <strong>{{ t('settings.startup_tab') }}</strong>
+        </div>
+        <select
+          v-model="uiPreferences.shell.startTab"
+          :aria-label="t('settings.startup_tab')"
+          class="v-select v-setting-control"
+          @change="persistUi"
+        >
+          <option value="home">{{ t('nav.home') }}</option>
+          <option value="search">{{ t('nav.search') }}</option>
+          <option value="library">{{ t('nav.library') }}</option>
+          <option value="live_tv">{{ t('nav.live_tv') }}</option>
+          <option value="last_visited">{{ t('settings.start_tab_last_visited') }}</option>
+        </select>
+      </div>
+
+      <div class="v-setting-row">
         <div class="setting-copy">
           <strong>{{ t('settings.nav_layout') }}</strong>
           <span class="v-muted">{{ t('settings.nav_layout_desc') }}</span>
@@ -378,6 +438,22 @@ async function handleImportBackup(mode: 'smart_merge' | 'reset_and_import'): Pro
           <option value="wide_16x9">{{ t('settings.ratio_16x9') }}</option>
           <option value="cinema_21x9">{{ t('settings.ratio_21x9') }}</option>
         </select>
+      </div>
+
+      <div class="v-setting-row">
+        <div class="setting-copy">
+          <strong>{{ t('settings.card_size') }}</strong>
+          <span class="v-muted">{{ uiPreferences.cards.scalePercent ?? 100 }}%</span>
+        </div>
+        <input
+          v-model.number="uiPreferences.cards.scalePercent"
+          type="range"
+          min="70"
+          max="150"
+          step="5"
+          class="v-setting-control sub-range"
+          @change="persistUi"
+        />
       </div>
 
       <div class="v-setting-row">

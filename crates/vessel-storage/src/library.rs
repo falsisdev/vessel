@@ -601,6 +601,7 @@ impl SqliteStorage {
                         .or_else(|| li_poster.filter(|s| !s.trim().is_empty()));
 
                     let episodes_key = format!("episodes:{plugin_raw}:{native_id}");
+                    let meta4_pattern = format!("meta4:{plugin_raw}:{native_id}:%");
                     let meta3_pattern = format!("meta3:{plugin_raw}:{native_id}:%");
                     let meta2_pattern = format!("meta2:{plugin_raw}:{native_id}:%");
                     let meta_pattern = format!("meta:{plugin_raw}:{native_id}:%");
@@ -616,6 +617,7 @@ impl SqliteStorage {
                                 OR cache_key LIKE ?3
                                 OR cache_key LIKE ?4
                                 OR cache_key LIKE ?5
+                                OR cache_key LIKE ?6
                              ORDER BY CASE WHEN cache_key = ?1 THEN 0 ELSE 1 END ASC, expires_at DESC
                              LIMIT 6",
                         )
@@ -624,6 +626,7 @@ impl SqliteStorage {
                         .query_map(
                             (
                                 &episodes_key,
+                                &meta4_pattern,
                                 &meta3_pattern,
                                 &meta2_pattern,
                                 &meta_pattern,

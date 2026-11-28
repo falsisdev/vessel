@@ -258,13 +258,14 @@ impl SqliteStorage {
                     .map_err(map_sql_err)?;
                 tx.execute("DELETE FROM metadata_overrides WHERE plugin_id = ?1", [&id])
                     .map_err(map_sql_err)?;
+                let meta4_pattern = format!("meta4:{id}:%");
                 let meta3_pattern = format!("meta3:{id}:%");
                 let meta2_pattern = format!("meta2:{id}:%");
                 let meta_pattern = format!("meta:{id}:%");
                 let detail_pattern = format!("detail:{id}:%");
                 tx.execute(
-                    "DELETE FROM metadata_cache WHERE cache_key LIKE ?1 OR cache_key LIKE ?2 OR cache_key LIKE ?3 OR cache_key LIKE ?4",
-                    (&meta3_pattern, &meta2_pattern, &meta_pattern, &detail_pattern),
+                    "DELETE FROM metadata_cache WHERE cache_key LIKE ?1 OR cache_key LIKE ?2 OR cache_key LIKE ?3 OR cache_key LIKE ?4 OR cache_key LIKE ?5",
+                    (&meta4_pattern, &meta3_pattern, &meta2_pattern, &meta_pattern, &detail_pattern),
                 )
                 .map_err(map_sql_err)?;
                 tx.execute("DELETE FROM plugins WHERE id = ?1", [&id])
