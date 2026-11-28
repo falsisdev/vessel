@@ -84,7 +84,7 @@ import dev.falsis.vessel.ui.components.vesselDpadInputEscape
 import dev.falsis.vessel.ui.components.vesselTopSafeInset
 import dev.falsis.vessel.ui.i18n.VesselI18n
 import dev.falsis.vessel.ui.theme.DYNAMIC_MATERIAL_THEME_ID
-import dev.falsis.vessel.ui.theme.LocalIsTvDevice
+import dev.falsis.vessel.ui.theme.LocalIsTvLayout
 import dev.falsis.vessel.ui.theme.LocalVesselPalette
 import dev.falsis.vessel.ui.theme.LocalVesselUiTokens
 import dev.falsis.vessel.ui.theme.parseHexColor
@@ -324,18 +324,40 @@ fun SettingsScreen(
                         Text(VesselI18n.tr("settings.ui_customization"), fontWeight = FontWeight.Bold)
                     }
 
-                    val isTv = LocalIsTvDevice.current
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(VesselI18n.tr("settings.device_mode"))
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            listOf("auto", "phone", "tablet", "tv").forEach { modeKey ->
+                                VesselFilterChip(
+                                    selected = prefs.shell.androidDeviceMode == modeKey,
+                                    onClick = {
+                                        scope.launch {
+                                            repo.saveUiPreferences(
+                                                prefs.copy(shell = prefs.shell.copy(androidDeviceMode = modeKey)),
+                                            )
+                                        }
+                                    },
+                                    label = VesselI18n.tr("settings.device_mode_$modeKey"),
+                                )
+                            }
+                        }
+                    }
+
+                    val isTvLayout = LocalIsTvLayout.current
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween,
                     ) {
                         Text(
-                            VesselI18n.tr(if (isTv) "settings.tv_nav_layout" else "settings.nav_layout"),
+                            VesselI18n.tr(if (isTvLayout) "settings.tv_nav_layout" else "settings.nav_layout"),
                             modifier = Modifier.weight(1f),
                         )
                         Box {
-                            if (isTv) {
+                            if (isTvLayout) {
                                 val tvOptions = listOf(
                                     "expanded_sidebar" to VesselI18n.tr("settings.tv_layout_expanded"),
                                     "collapsed_rail" to VesselI18n.tr("settings.tv_layout_collapsed"),

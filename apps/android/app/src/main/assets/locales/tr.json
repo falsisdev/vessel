@@ -369,7 +369,12 @@
     "tv_layout_collapsed": "Kompakt İkon Rayı",
     "tv_layout_pinned": "Sabit Geniş Kenar Çubuğu",
     "tv_layout_top": "Üst Menü Çubuğu",
-    "ui_scale": "Arayüz ve Metin Ölçeği"
+    "ui_scale": "Arayüz ve Metin Ölçeği",
+    "device_mode": "Görünüm Modu",
+    "device_mode_auto": "Otomatik",
+    "device_mode_phone": "Telefon",
+    "device_mode_tablet": "Tablet",
+    "device_mode_tv": "TV"
   },
   "subtitles": {
     "preview_title": "Altyazı Önizleme",

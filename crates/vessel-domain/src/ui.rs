@@ -148,6 +148,17 @@ pub enum TvNavLayout {
     TopNavbar,
 }
 
+/// Android form-factor override mode (`auto` detects hardware TV / Tablet / Phone).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AndroidDeviceMode {
+    #[default]
+    Auto,
+    Phone,
+    Tablet,
+    Tv,
+}
+
 /// Shell chrome, sidebar module visibility, and density preferences.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
@@ -155,6 +166,7 @@ pub struct ShellPreferences {
     pub layout: NavLayout,
     pub mobile_nav_layout: MobileNavLayout,
     pub tv_nav_layout: TvNavLayout,
+    pub android_device_mode: AndroidDeviceMode,
     pub visible_modules: Vec<NavModule>,
     pub density: UiDensity,
     pub font_scale_percent: u16,
@@ -168,6 +180,7 @@ impl Default for ShellPreferences {
             layout: NavLayout::default(),
             mobile_nav_layout: MobileNavLayout::default(),
             tv_nav_layout: TvNavLayout::default(),
+            android_device_mode: AndroidDeviceMode::default(),
             visible_modules: vec![
                 NavModule::Home,
                 NavModule::Search,

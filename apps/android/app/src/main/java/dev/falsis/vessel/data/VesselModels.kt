@@ -497,6 +497,7 @@ data class ShellPreferences(
     val layout: String = "expanded_sidebar",
     val mobileNavLayout: String = "standard",
     val tvNavLayout: String = "expanded_sidebar",
+    val androidDeviceMode: String = "auto",
     val density: String = "comfortable",
     val fontScalePercent: Int = 100,
     val cornerStyle: String = "rounded",

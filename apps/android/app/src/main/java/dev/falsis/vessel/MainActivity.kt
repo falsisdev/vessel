@@ -110,7 +110,7 @@ import dev.falsis.vessel.ui.screens.PlayerScreen
 import dev.falsis.vessel.ui.screens.SearchScreen
 import dev.falsis.vessel.ui.screens.SearchSessionState
 import dev.falsis.vessel.ui.screens.SettingsScreen
-import dev.falsis.vessel.ui.theme.LocalIsTvDevice
+import dev.falsis.vessel.ui.theme.LocalIsTvLayout
 import dev.falsis.vessel.ui.theme.LocalVesselFloatingNavInset
 import dev.falsis.vessel.ui.theme.LocalVesselPalette
 import dev.falsis.vessel.ui.theme.VesselTheme
@@ -498,8 +498,8 @@ fun VesselAndroidApp(
                                         }
                                     }
 
-                                    val isTv = LocalIsTvDevice.current
-                                    if (isTv) {
+                                    val isTvLayout = LocalIsTvLayout.current
+                                    if (isTvLayout) {
                                         val tvLayout = prefs.shell.tvNavLayout
                                         if (tvLayout == "top_navbar") {
                                             Column(modifier = Modifier.fillMaxSize()) {

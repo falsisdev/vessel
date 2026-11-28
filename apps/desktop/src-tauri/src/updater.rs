@@ -534,7 +534,19 @@ pub async fn download_and_open_update(
         .map_err(|err| format!("[VesselStorageError]: flush update file: {err}"))?;
 
     open_installer_path(&dest_path)?;
+    close_open_windows_and_exit(&app);
     Ok(dest_path.to_string_lossy().into_owned())
+}
+
+fn close_open_windows_and_exit(app: &AppHandle) {
+    for (_, window) in app.webview_windows() {
+        let _ = window.close();
+    }
+    let exit_handle = app.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+        exit_handle.exit(0);
+    });
 }
 
 #[cfg(target_os = "macos")]

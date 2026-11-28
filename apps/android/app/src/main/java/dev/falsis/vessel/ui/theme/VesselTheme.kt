@@ -23,6 +23,7 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.TextStyle
@@ -77,6 +78,7 @@ val LocalVesselPalette = staticCompositionLocalOf { DefaultPalette }
 val LocalVesselUiTokens = staticCompositionLocalOf { DefaultUiTokens }
 val LocalVesselFloatingNavInset = staticCompositionLocalOf<Dp> { 0.dp }
 val LocalIsTvDevice = staticCompositionLocalOf { false }
+val LocalIsTvLayout = staticCompositionLocalOf { false }
 
 fun parseHexColor(raw: String, fallback: Color): Color {
     val hex = raw.trim().removePrefix("#")
@@ -166,11 +168,19 @@ fun VesselTheme(
     content: @Composable () -> Unit,
 ) {
     val context = LocalContext.current
-    val isTvDevice = remember(context) {
+    val configuration = LocalConfiguration.current
+    val isHardwareTv = remember(context) {
         val uiModeManager = context.getSystemService(Context.UI_MODE_SERVICE) as? UiModeManager
         uiModeManager?.currentModeType == Configuration.UI_MODE_TYPE_TELEVISION ||
             context.packageManager.hasSystemFeature(PackageManager.FEATURE_TELEVISION) ||
             context.packageManager.hasSystemFeature(PackageManager.FEATURE_LEANBACK)
+    }
+    val isHardwareTablet = configuration.smallestScreenWidthDp >= 600
+    val (isTvDevice, isTvLayout) = when (shell.androidDeviceMode) {
+        "tv" -> true to true
+        "tablet" -> false to true
+        "phone" -> false to false
+        else -> isHardwareTv to (isHardwareTv || isHardwareTablet)
     }
     val systemDark = isSystemInDarkTheme()
     val fontScale = (shell.fontScalePercent.coerceIn(85, 130) / 100f)
@@ -275,6 +285,7 @@ fun VesselTheme(
         LocalVesselPalette provides palette,
         LocalVesselUiTokens provides uiTokens,
         LocalIsTvDevice provides isTvDevice,
+        LocalIsTvLayout provides isTvLayout,
     ) {
         MaterialTheme(
             colorScheme = colorScheme,

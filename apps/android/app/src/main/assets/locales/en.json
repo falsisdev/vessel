@@ -369,7 +369,12 @@
     "tv_layout_collapsed": "Compact Icon Rail",
     "tv_layout_pinned": "Pinned Wide Sidebar",
     "tv_layout_top": "Top Navbar",
-    "ui_scale": "UI & Text Scale"
+    "ui_scale": "UI & Text Scale",
+    "device_mode": "View Mode",
+    "device_mode_auto": "Auto",
+    "device_mode_phone": "Phone",
+    "device_mode_tablet": "Tablet",
+    "device_mode_tv": "TV"
   },
   "subtitles": {
     "preview_title": "Subtitle Preview",
