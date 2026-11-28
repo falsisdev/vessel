@@ -35,6 +35,10 @@ const downloadProgress = ref<Record<string, DownloadProgressSnapshot>>({})
 const lastEnrichedDetail = ref<{ pluginId: string; nativeId: string; detail: MediaDetail } | null>(
   null,
 )
+export const lastOAuthEvent = ref<{ provider: string; success: boolean; error?: string; seq: number } | null>(
+  null,
+)
+let oauthSeq = 1
 const toasts = ref<ToastItem[]>([])
 let unlisten: (() => void) | null = null
 const pendingHomeShelves = new Map<string, HomeShelfResult>()
@@ -151,6 +155,20 @@ function handleEngineEvent(event: EngineEvent): void {
       }
       break
     }
+    case 'oauth_completed': {
+      lastOAuthEvent.value = {
+        provider: event.provider,
+        success: event.success,
+        error: event.error,
+        seq: oauthSeq++,
+      }
+      if (event.success) {
+        pushToast('info', `${event.provider}: connected`)
+      } else if (event.error) {
+        pushToast('error', `${event.provider}: ${event.error}`)
+      }
+      break
+    }
   }
 }
 
@@ -249,6 +267,7 @@ export function useVesselEvents() {
     pendingDomain,
     downloadProgress,
     lastEnrichedDetail,
+    lastOAuthEvent,
     toasts,
     startListening,
     stopListening,

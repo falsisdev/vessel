@@ -337,6 +337,41 @@ export const vesselApi = {
   importBackupJson: (json: string, mode: BackupImportMode) =>
     call<void>('import_backup_json', { json, mode }),
 
+  saveOAuthClientConfig: (
+    provider: import('@/types/vessel').OAuthProviderKind,
+    clientId: string,
+    clientSecret?: string | null,
+  ) =>
+    call<void>('save_oauth_client_config', {
+      provider,
+      clientId,
+      clientSecret: clientSecret ?? null,
+    }),
+  startOAuthLoopback: (provider: import('@/types/vessel').OAuthProviderKind) =>
+    call<import('@/types/vessel').OAuthStartResult>('start_oauth_loopback', { provider }),
+  startOAuthDeviceCode: (provider: import('@/types/vessel').OAuthProviderKind) =>
+    call<import('@/types/vessel').OAuthDevicePrompt>('start_oauth_device_code', { provider }),
+  pollOAuthDeviceCode: (
+    provider: import('@/types/vessel').OAuthProviderKind,
+    deviceCode: string,
+  ) => call<boolean>('poll_oauth_device_code', { provider, deviceCode }),
+  listTrackerAccounts: () =>
+    call<import('@/types/vessel').TrackerAccountStatus[]>('list_tracker_accounts'),
+  setTrackerPreferences: (
+    provider: import('@/types/vessel').TrackerProviderKind,
+    autoScrobble: boolean,
+    syncLibrary: boolean,
+  ) => call<void>('set_tracker_preferences', { provider, autoScrobble, syncLibrary }),
+  disconnectTracker: (provider: import('@/types/vessel').TrackerProviderKind) =>
+    call<void>('disconnect_tracker', { provider }),
+  flushTrackerQueue: () => call<number>('flush_tracker_queue'),
+  getCloudSyncStatus: () =>
+    call<import('@/types/vessel').CloudSyncStatus>('get_cloud_sync_status'),
+  setCloudSyncAuto: (enabled: boolean) => call<void>('set_cloud_sync_auto', { enabled }),
+  syncGoogleDriveNow: () =>
+    call<import('@/types/vessel').CloudSyncResult>('sync_google_drive_now'),
+  disconnectGoogleDrive: () => call<void>('disconnect_google_drive'),
+
   getUpdatePreferences: () => call<UpdatePreferences>('get_update_preferences'),
   setAutoCheckUpdates: (enabled: boolean) => call<void>('set_auto_check_updates', { enabled }),
   skipAppUpdateVersion: (version?: string | null) =>

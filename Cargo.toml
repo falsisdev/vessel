@@ -1,9 +1,9 @@
 [workspace]
 resolver = "2"
-members = ["apps/desktop/src-tauri", "crates/vessel-debrid", "crates/vessel-domain", "crates/vessel-downloader", "crates/vessel-engine", "crates/vessel-ffi", "crates/vessel-iptv", "crates/vessel-metadata", "crates/vessel-player-mpv", "crates/vessel-plugin-rt", "crates/vessel-proxy", "crates/vessel-storage"]
+members = ["apps/desktop/src-tauri", "crates/vessel-auth", "crates/vessel-debrid", "crates/vessel-domain", "crates/vessel-downloader", "crates/vessel-engine", "crates/vessel-ffi", "crates/vessel-iptv", "crates/vessel-metadata", "crates/vessel-player-mpv", "crates/vessel-plugin-rt", "crates/vessel-proxy", "crates/vessel-storage", "crates/vessel-trackers"]
 
 [workspace.package]
-version = "0.3.6"
+version = "0.4.0"
 edition = "2024"
 rust-version = "1.89"
 license = "GPL-3.0-or-later"
@@ -23,6 +23,7 @@ encoding_rs = "0.8"
 flate2 = "1"
 getrandom = { version = "0.4", features = ["std"] }
 hmac = "0.13"
+keyring = { version = "3.6", features = ["apple-native", "windows-native", "sync-secret-service", "crypto-rust"] }
 md-5 = "0.11"
 oxc = { version = "0.159", features = ["codegen", "semantic", "transformer"] }
 quick-xml = "0.42"

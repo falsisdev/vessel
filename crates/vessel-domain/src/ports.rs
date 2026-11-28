@@ -219,12 +219,15 @@ pub trait StoragePort: Send + Sync {
     }
 }
 
-/// Sensitive credentials store (`SqliteSecretStore` in v0.1, `OsKeyringSecretStore` in v1.0).
+/// Sensitive credentials store (`OsKeyringSecretStore` on Desktop, `AndroidKeyStore` via FFI on Android).
 #[async_trait]
 pub trait SecretStore: Send + Sync {
     async fn get(&self, key: &str) -> VesselResult<Option<String>>;
     async fn set(&self, key: &str, value: &str) -> VesselResult<()>;
     async fn delete(&self, key: &str) -> VesselResult<()>;
+    async fn list_keys(&self) -> VesselResult<Vec<String>> {
+        Ok(Vec::new())
+    }
 }
 
 /// Platform-specific video playback backend (`libmpv`, `mpvkit`, `ExoPlayer`).

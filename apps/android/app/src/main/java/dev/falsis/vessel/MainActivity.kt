@@ -8,6 +8,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.lifecycle.lifecycleScope
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -188,6 +189,20 @@ class MainActivity : ComponentActivity() {
         val uri = intent?.data ?: return
         if (uri.scheme == "vessel" && uri.host == "install") {
             deepLinkSource = uri.getQueryParameter("src") ?: uri.toString()
+        } else if (uri.scheme == "vessel" && uri.host == "oauth") {
+            val rawUri = uri.toString()
+            lifecycleScope.launch {
+                val repo = VesselRepository.get(this@MainActivity)
+                runCatching { repo.completeOAuthCallbackUri(rawUri) }
+                    .onSuccess { ok ->
+                        if (ok) {
+                            repo.notify(VesselI18n.tr("sync.oauth_success"))
+                        }
+                    }
+                    .onFailure { err ->
+                        repo.notifyError(err, "OAuth authorization failed")
+                    }
+            }
         }
     }
 }

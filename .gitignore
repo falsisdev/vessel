@@ -18,6 +18,7 @@ apps/desktop/src-tauri/gen/
 
 # Android Studio / Gradle / NDK jniLibs
 apps/android/.gradle/
+apps/android/.kotlin/
 apps/android/.idea/
 apps/android/build/
 apps/android/app/build/

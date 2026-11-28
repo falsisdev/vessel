@@ -11,16 +11,17 @@ use vessel_player_mpv::embedded::{EmbeddedFitMode, MpvEmbeddedPlayer};
 
 use crate::embedded_player::EmbeddedPlayerHost;
 use vessel_domain::{
-    DebridAccountStatus, DebridCloudItem, DebridPreferences, DebridProviderKind, DebridResolution,
-    ExternalIds, HomeSection, LibraryItem, LibraryStatus, LinkedMediaSource, MediaDetail, MediaRef,
-    MediaType, PlaybackProgress, PlaybackStats, PluginId, PluginManifest,
+    CloudSyncStatus, DebridAccountStatus, DebridCloudItem, DebridPreferences, DebridProviderKind,
+    DebridResolution, ExternalIds, HomeSection, LibraryItem, LibraryStatus, LinkedMediaSource,
+    MediaDetail, MediaRef, MediaType, OAuthClientConfig, OAuthDevicePrompt, OAuthProviderKind,
+    OAuthStartResult, PlaybackProgress, PlaybackStats, PluginId, PluginManifest,
     RealDebridDeviceAuthPoll, RealDebridDeviceAuthStart, RepoIndex, ResolveDebridRequest,
-    ResolvedHttpLink, SearchPage, SecretStore, SkipSegment, StreamCandidate, StreamResult,
-    SubtitleQuery, SubtitleTrack, ThemeColors, ThemeSpec, UiPreferences, VesselError, VesselPaths,
-    VesselResult,
+    ResolvedHttpLink, SearchPage, SkipSegment, StreamCandidate, StreamResult, SubtitleQuery,
+    SubtitleTrack, ThemeColors, ThemeSpec, TrackerAccountStatus, TrackerProviderKind,
+    UiPreferences, VesselError, VesselPaths, VesselResult,
 };
 use vessel_engine::{
-    DownloadRequest, EpgNowNext, IptvKind, IptvProfile, LocalPlaybackBundle,
+    CloudSyncResult, DownloadRequest, EpgNowNext, IptvKind, IptvProfile, LocalPlaybackBundle,
     MetadataProviderFilter, MetadataSearchResponse, PlayCandidateRequest, SIMKL_CLIENT_ID_SECRET,
     SkipQuery, SubtitlePluginInfo, SubtitleSearchOutcome, TMDB_API_KEY_SECRET, VesselEngine,
 };
@@ -1657,6 +1658,119 @@ pub async fn import_backup_json(
     mode: BackupImportMode,
 ) -> Result<(), String> {
     map_err(state.engine.import_backup_json(&json, mode).await)
+}
+
+#[tauri::command]
+pub async fn save_oauth_client_config(
+    state: State<'_, AppState>,
+    provider: OAuthProviderKind,
+    client_id: String,
+    client_secret: Option<String>,
+) -> Result<(), String> {
+    map_err(
+        state
+            .engine
+            .save_oauth_client_config(
+                provider,
+                OAuthClientConfig {
+                    client_id,
+                    client_secret,
+                },
+            )
+            .await,
+    )
+}
+
+#[tauri::command]
+pub async fn start_oauth_loopback(
+    state: State<'_, AppState>,
+    provider: OAuthProviderKind,
+) -> Result<OAuthStartResult, String> {
+    map_err(state.engine.start_oauth_loopback_session(provider).await)
+}
+
+#[tauri::command]
+pub async fn start_oauth_device_code(
+    state: State<'_, AppState>,
+    provider: OAuthProviderKind,
+) -> Result<OAuthDevicePrompt, String> {
+    map_err(state.engine.start_oauth_device_code(provider).await)
+}
+
+#[tauri::command]
+pub async fn poll_oauth_device_code(
+    state: State<'_, AppState>,
+    provider: OAuthProviderKind,
+    device_code: String,
+) -> Result<bool, String> {
+    map_err(
+        state
+            .engine
+            .poll_oauth_device_code(provider, &device_code)
+            .await,
+    )
+}
+
+#[tauri::command]
+pub async fn list_tracker_accounts(
+    state: State<'_, AppState>,
+) -> Result<Vec<TrackerAccountStatus>, String> {
+    map_err(state.engine.list_tracker_accounts().await)
+}
+
+#[tauri::command]
+pub async fn set_tracker_preferences(
+    state: State<'_, AppState>,
+    provider: TrackerProviderKind,
+    auto_scrobble: bool,
+    sync_library: bool,
+) -> Result<(), String> {
+    map_err(
+        state
+            .engine
+            .set_tracker_preferences(provider, auto_scrobble, sync_library)
+            .await,
+    )
+}
+
+#[tauri::command]
+pub async fn disconnect_tracker(
+    state: State<'_, AppState>,
+    provider: TrackerProviderKind,
+) -> Result<(), String> {
+    map_err(state.engine.disconnect_tracker(provider).await)
+}
+
+#[tauri::command]
+pub async fn flush_tracker_queue(state: State<'_, AppState>) -> Result<usize, String> {
+    map_err(state.engine.flush_tracker_queue().await)
+}
+
+#[tauri::command]
+pub async fn get_cloud_sync_status(
+    state: State<'_, AppState>,
+) -> Result<CloudSyncStatus, String> {
+    map_err(state.engine.get_cloud_sync_status().await)
+}
+
+#[tauri::command]
+pub async fn set_cloud_sync_auto(
+    state: State<'_, AppState>,
+    enabled: bool,
+) -> Result<(), String> {
+    map_err(state.engine.set_cloud_sync_auto(enabled).await)
+}
+
+#[tauri::command]
+pub async fn sync_google_drive_now(
+    state: State<'_, AppState>,
+) -> Result<CloudSyncResult, String> {
+    map_err(state.engine.sync_google_drive_now().await)
+}
+
+#[tauri::command]
+pub async fn disconnect_google_drive(state: State<'_, AppState>) -> Result<(), String> {
+    map_err(state.engine.disconnect_google_drive().await)
 }
 
 #[tauri::command]

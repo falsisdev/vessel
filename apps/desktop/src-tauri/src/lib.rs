@@ -11,6 +11,7 @@ use tauri::Manager;
 use vessel_domain::{EventSink, PlayerBackend, VesselPaths};
 use vessel_engine::VesselEngine;
 use vessel_player_mpv::{MpvConfig, MpvWindowBackend};
+use vessel_storage::{StorageActor, open_desktop_secret_store};
 
 use commands::AppState;
 use embedded_player::EmbeddedPlayerHost;
@@ -41,7 +42,17 @@ pub fn run() {
             ));
 
             let engine = tauri::async_runtime::block_on(async {
-                let eng = VesselEngine::open(&paths, player, event_sink, false).await?;
+                let actor = StorageActor::open_with_paths(&paths).await?;
+                let secrets = open_desktop_secret_store(actor.clone()).await;
+                let eng = VesselEngine::open_with_actor_and_secrets(
+                    &paths,
+                    actor,
+                    secrets,
+                    player,
+                    event_sink,
+                    false,
+                )
+                .await?;
                 if let Ok(Some(always_proxy)) =
                     eng.storage().get_json_setting::<bool>("always_proxy").await
                 {
@@ -190,6 +201,18 @@ pub fn run() {
             commands::pick_download_directory,
             commands::export_backup_json,
             commands::import_backup_json,
+            commands::save_oauth_client_config,
+            commands::start_oauth_loopback,
+            commands::start_oauth_device_code,
+            commands::poll_oauth_device_code,
+            commands::list_tracker_accounts,
+            commands::set_tracker_preferences,
+            commands::disconnect_tracker,
+            commands::flush_tracker_queue,
+            commands::get_cloud_sync_status,
+            commands::set_cloud_sync_auto,
+            commands::sync_google_drive_now,
+            commands::disconnect_google_drive,
             commands::open_external_url,
             updater::get_update_preferences,
             updater::set_auto_check_updates,

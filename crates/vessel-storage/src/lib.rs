@@ -4,11 +4,15 @@ pub mod actor;
 pub mod backup;
 pub mod downloads;
 pub mod iptv;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub mod keyring_store;
 pub mod library;
 pub mod metadata;
 pub mod plugins;
 pub mod secret;
 pub mod store;
+pub mod sync;
+pub mod trackers;
 
 use std::path::Path;
 
@@ -22,11 +26,18 @@ pub use iptv::{
     NewIptvChannel, StoredEpgNowNext, StoredEpgProgram, StoredIptvChannel, StoredIptvKind,
     StoredIptvProfile,
 };
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub use keyring_store::{DEFAULT_KEYRING_SERVICE, OsKeyringSecretStore, open_desktop_secret_store};
 pub use library::ContinueWatchingEntry;
 pub use metadata::MetadataOverride;
 pub use plugins::StoredPlugin;
-pub use secret::SqliteSecretStore;
+pub use secret::{MigratingSecretStore, SqliteSecretStore};
 pub use store::{SqliteStorage, UI_PREFERENCES_KEY};
+pub use sync::{
+    CLOUD_SYNC_SCHEMA_VERSION, CloudSyncSnapshot, SyncLibraryRecord, SyncMergeStats,
+    SyncOverrideRecord, SyncProgressRecord,
+};
+pub use trackers::{QueuedTrackerAction, StoredTrackerAccount};
 
 const MIGRATION_001_INIT: &str = include_str!("../migrations/001_init.sql");
 const MIGRATION_002_PROGRESS_META: &str = include_str!("../migrations/002_progress_meta.sql");
@@ -34,6 +45,8 @@ const MIGRATION_003_DOWNLOADS_AND_PROGRESS: &str =
     include_str!("../migrations/003_downloads_and_progress.sql");
 const MIGRATION_004_PLUGIN_SOURCE_URL: &str =
     include_str!("../migrations/004_plugin_source_url.sql");
+const MIGRATION_005_SYNC_AND_TRACKERS: &str =
+    include_str!("../migrations/005_sync_and_trackers.sql");
 
 /// Versioned SQL migrations embedded at compile time.
 const MIGRATIONS: &[(i64, &str)] = &[
@@ -41,6 +54,7 @@ const MIGRATIONS: &[(i64, &str)] = &[
     (2, MIGRATION_002_PROGRESS_META),
     (3, MIGRATION_003_DOWNLOADS_AND_PROGRESS),
     (4, MIGRATION_004_PLUGIN_SOURCE_URL),
+    (5, MIGRATION_005_SYNC_AND_TRACKERS),
 ];
 
 /// Converts a SQLite driver error into a domain `VesselError::Storage`.
@@ -192,7 +206,7 @@ mod tests {
     #[test]
     fn applies_initial_migration_and_supports_fts5_triggers() {
         let db = StorageDb::open_in_memory().expect("open in-memory storage");
-        assert_eq!(db.schema_version().expect("read schema version"), 4);
+        assert_eq!(db.schema_version().expect("read schema version"), 5);
 
         let conn = &db.conn;
         conn.execute(
@@ -238,7 +252,7 @@ mod tests {
         let paths = VesselPaths::new(&temp.0).expect("valid VesselPaths");
 
         let db = StorageDb::open_with_paths(&paths).expect("open StorageDb");
-        assert_eq!(db.schema_version().expect("version"), 4);
+        assert_eq!(db.schema_version().expect("version"), 5);
         for dir in paths.required_dirs() {
             assert!(dir.is_dir(), "expected dir {} to exist", dir.display());
         }
@@ -258,6 +272,6 @@ mod tests {
         drop(db);
 
         let reopened = StorageDb::open_with_paths(&paths).expect("reopen StorageDb idempotently");
-        assert_eq!(reopened.schema_version().expect("version after reopen"), 4);
+        assert_eq!(reopened.schema_version().expect("version after reopen"), 5);
     }
 }

@@ -143,24 +143,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
-import androidx.media3.common.AudioAttributes
-import androidx.media3.common.C
-import androidx.media3.common.MediaItem
-import androidx.media3.common.MimeTypes
-import androidx.media3.common.ParserException
-import androidx.media3.common.PlaybackException
-import androidx.media3.common.Player
-import androidx.media3.common.TrackGroup
-import androidx.media3.common.TrackSelectionOverride
-import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
-import androidx.media3.datasource.DefaultHttpDataSource
-import androidx.media3.exoplayer.DefaultRenderersFactory
-import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
-import androidx.media3.exoplayer.source.UnrecognizedInputFormatException
-import androidx.media3.extractor.DefaultExtractorsFactory
-import androidx.media3.extractor.ts.DefaultTsPayloadReaderFactory
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.PlayerView
@@ -184,6 +167,10 @@ import dev.falsis.vessel.data.VesselRepository
 import dev.falsis.vessel.ui.components.formatSizeBytes
 import dev.falsis.vessel.ui.i18n.VesselI18n
 import dev.falsis.vessel.ui.isLiveMediaIdentifier
+import dev.falsis.vessel.ui.screens.player.ExoPlayerController
+import dev.falsis.vessel.ui.screens.player.MpvKitController
+import dev.falsis.vessel.ui.screens.player.PlayerBackendEngine
+import dev.falsis.vessel.ui.screens.player.VesselPlayerController
 import dev.falsis.vessel.ui.theme.LocalIsTvDevice
 import dev.falsis.vessel.ui.theme.LocalVesselPalette
 import dev.falsis.vessel.ui.theme.parseHexColor
@@ -202,23 +189,6 @@ private const val DEFAULT_PLAYER_USER_AGENT =
 private val DrawerSurfaceColor = Color(0xF010101A)
 private val HudControlBg = Color(0xA612121C)
 private val HudBorderColor = Color(0x24FFFFFF)
-
-private enum class PlayerDrawer {
-    EPISODES,
-    SOURCES,
-    AUDIO,
-    SUBTITLES,
-    SETTINGS,
-}
-
-private data class TrackOption(
-    val id: String,
-    val label: String,
-    val meta: String,
-    val selected: Boolean,
-    val group: TrackGroup,
-    val trackIndex: Int,
-)
 
 @kotlin.OptIn(ExperimentalLayoutApi::class)
 @OptIn(UnstableApi::class)
@@ -295,8 +265,6 @@ fun PlayerScreen(
     }
     var lastLoadWasProxied by remember { mutableStateOf(false) }
 
-    var audioTracks by remember { mutableStateOf<List<TrackOption>>(emptyList()) }
-    var embeddedSubTracks by remember { mutableStateOf<List<TrackOption>>(emptyList()) }
     var embeddedSubsDisabled by remember { mutableStateOf(true) }
 
     // External parsed subtitles (full Desktop SubtitleParser + Sync Delay + Styling parity)
@@ -420,42 +388,28 @@ fun PlayerScreen(
         }
     }
 
-    val httpFactory = remember {
-        DefaultHttpDataSource.Factory()
-            .setAllowCrossProtocolRedirects(true)
-            .setConnectTimeoutMs(15_000)
-            .setReadTimeoutMs(25_000)
-            .setUserAgent(DEFAULT_PLAYER_USER_AGENT)
+    val desiredEngine = remember(prefs.playback.androidPlayerEngine, isLive) {
+        when (prefs.playback.androidPlayerEngine) {
+            "exoplayer" -> PlayerBackendEngine.EXOPLAYER
+            "mpvkit" -> PlayerBackendEngine.MPVKIT
+            else -> if (isLive) PlayerBackendEngine.EXOPLAYER else PlayerBackendEngine.MPVKIT
+        }
     }
 
-    val exoPlayer = remember {
-        val extractorsFactory = DefaultExtractorsFactory()
-            .setTsExtractorFlags(
-                DefaultTsPayloadReaderFactory.FLAG_ALLOW_NON_IDR_KEYFRAMES or
-                    DefaultTsPayloadReaderFactory.FLAG_DETECT_ACCESS_UNITS,
-            )
-            .setTsExtractorTimestampSearchBytes(4000 * 188)
-        val renderersFactory = DefaultRenderersFactory(context)
-            .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON)
-        ExoPlayer.Builder(context, renderersFactory)
-            .setMediaSourceFactory(DefaultMediaSourceFactory(httpFactory, extractorsFactory))
-            .setAudioAttributes(
-                AudioAttributes.Builder()
-                    .setUsage(C.USAGE_MEDIA)
-                    .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
-                    .build(),
-                true,
-            )
-            .setHandleAudioBecomingNoisy(true)
-            .setWakeMode(C.WAKE_MODE_NETWORK)
-            .build()
-            .apply { playWhenReady = true }
+    val controller: VesselPlayerController = remember(desiredEngine) {
+        when (desiredEngine) {
+            PlayerBackendEngine.MPVKIT -> MpvKitController(context.applicationContext)
+            PlayerBackendEngine.EXOPLAYER -> ExoPlayerController(context.applicationContext)
+        }
     }
+    val controllerState by controller.state.collectAsState()
+    val audioTracks by controller.audioTracks.collectAsState()
+    val embeddedSubTracks by controller.subtitleTracks.collectAsState()
 
     LaunchedEffect(isLive, isLocked, activeDrawer) {
         if (longPressSpeedActive && (isLive || isLocked || activeDrawer != null)) {
             longPressSpeedActive = false
-            exoPlayer.playbackParameters = exoPlayer.playbackParameters.withSpeed(if (isLive) 1.0f else playbackSpeed)
+            controller.setSpeed(if (isLive) 1.0f else playbackSpeed)
         }
     }
 
@@ -483,62 +437,10 @@ fun PlayerScreen(
         interactionNonce++
     }
 
-    fun syncTracks(tracks: Tracks) {
-        val nextAudio = mutableListOf<TrackOption>()
-        val nextSubs = mutableListOf<TrackOption>()
-        var audioOrdinal = 1
-        var subOrdinal = 1
-        for (group in tracks.groups) {
-            if (group.type == C.TRACK_TYPE_AUDIO) {
-                for (i in 0 until group.length) {
-                    if (!group.isTrackSupported(i)) continue
-                    val fmt = group.getTrackFormat(i)
-                    val lang = fmt.language?.takeIf { it != "und" }?.uppercase(Locale.US)
-                    val title = fmt.label?.takeIf { it.isNotBlank() }
-                        ?: lang?.let { "Audio $audioOrdinal ($it)" }
-                        ?: "Audio $audioOrdinal"
-                    val metaParts = buildList {
-                        if (lang != null) add(lang)
-                        if (fmt.channelCount > 0) add("${fmt.channelCount}ch")
-                        if (fmt.bitrate > 0) add("${fmt.bitrate / 1000}kbps")
-                    }
-                    nextAudio += TrackOption(
-                        id = "a-${nextAudio.size}-${fmt.id ?: i}",
-                        label = title,
-                        meta = metaParts.joinToString(" · "),
-                        selected = group.isTrackSelected(i),
-                        group = group.mediaTrackGroup,
-                        trackIndex = i,
-                    )
-                    audioOrdinal++
-                }
-            } else if (group.type == C.TRACK_TYPE_TEXT) {
-                for (i in 0 until group.length) {
-                    if (!group.isTrackSupported(i)) continue
-                    val fmt = group.getTrackFormat(i)
-                    val lang = fmt.language?.takeIf { it != "und" }?.uppercase(Locale.US)
-                    val title = fmt.label?.takeIf { it.isNotBlank() }
-                        ?: lang?.let { "Subtitle $subOrdinal ($it)" }
-                        ?: "Subtitle $subOrdinal"
-                    nextSubs += TrackOption(
-                        id = "s-${nextSubs.size}-${fmt.id ?: i}",
-                        label = title,
-                        meta = listOfNotNull(
-                            lang,
-                            fmt.sampleMimeType?.substringAfterLast('/')?.uppercase(Locale.US),
-                            "Embedded",
-                        ).joinToString(" · "),
-                        selected = group.isTrackSelected(i),
-                        group = group.mediaTrackGroup,
-                        trackIndex = i,
-                    )
-                    subOrdinal++
-                }
-            }
+    LaunchedEffect(embeddedSubTracks, activeExternalSubIndex) {
+        if (activeExternalSubIndex == -1 && controller is MpvKitController && embeddedSubTracks.any { it.selected }) {
+            embeddedSubsDisabled = false
         }
-        audioTracks = nextAudio
-        embeddedSubTracks = nextSubs
-        embeddedSubsDisabled = exoPlayer.trackSelectionParameters.disabledTrackTypes.contains(C.TRACK_TYPE_TEXT)
     }
 
     suspend fun refreshSkipSegments(knownDurationMs: Long) {
@@ -630,10 +532,7 @@ fun PlayerScreen(
             return@LaunchedEffect
         }
         // Disable embedded text rendering while custom external cue overlay is active
-        exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters
-            .buildUpon()
-            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
-            .build()
+        controller.selectSubtitleTrack(null)
         embeddedSubsDisabled = true
 
         val track = availableExternalSubs[activeExternalSubIndex]
@@ -692,68 +591,56 @@ fun PlayerScreen(
 
         // Only attach upstream headers directly when bypassing the local proxy;
         // when proxied, the Rust loopback proxy injects them cleanly upstream.
-        if (!lastLoadWasProxied && cand.headers.isNotEmpty()) {
-            val ua = cand.headers.entries.firstOrNull { it.key.equals("user-agent", ignoreCase = true) }?.value
-                ?: DEFAULT_PLAYER_USER_AGENT
-            val filtered = cand.headers.filterKeys { !it.equals("user-agent", ignoreCase = true) }
-            httpFactory.setUserAgent(ua)
-            httpFactory.setDefaultRequestProperties(filtered)
-        } else {
-            httpFactory.setUserAgent(DEFAULT_PLAYER_USER_AGENT)
-            httpFactory.setDefaultRequestProperties(emptyMap())
-        }
-
+        val effectiveHeaders = if (!lastLoadWasProxied) cand.headers else emptyMap()
         val lowerRaw = cand.url.lowercase(Locale.US)
         val lowerResolved = resolvedUrl.lowercase(Locale.US)
-        val mimeType = when {
-            forceHls ||
-                cand.kind.equals("hls", ignoreCase = true) ||
-                lowerRaw.contains(".m3u8") ||
-                lowerResolved.contains(".m3u8") -> MimeTypes.APPLICATION_M3U8
-            cand.kind.equals("dash", ignoreCase = true) ||
-                lowerRaw.contains(".mpd") ||
-                lowerResolved.contains(".mpd") -> MimeTypes.APPLICATION_MPD
-            else -> null
-        }
+        val isHls = forceHls ||
+            cand.kind.equals("hls", ignoreCase = true) ||
+            lowerRaw.contains(".m3u8") ||
+            lowerResolved.contains(".m3u8")
+        val isDash = cand.kind.equals("dash", ignoreCase = true) ||
+            lowerRaw.contains(".mpd") ||
+            lowerResolved.contains(".mpd")
 
-        val itemBuilder = MediaItem.Builder().setUri(resolvedUrl)
-        if (mimeType != null) {
-            itemBuilder.setMimeType(mimeType)
-        }
-
-        // Disable ExoPlayer's built-in text tracks initially if external cues are preferred
-        exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters
-            .buildUpon()
-            .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, activeExternalSubIndex >= 0 || embeddedSubsDisabled)
-            .build()
-
-        if (!isLive && startPosMs > 2000L) {
-            exoPlayer.setMediaItem(itemBuilder.build(), startPosMs)
+        if (controller is ExoPlayerController) {
+            controller.loadWithOptions(
+                url = resolvedUrl,
+                headers = effectiveHeaders,
+                startPositionMs = startPosMs,
+                isLive = isLive,
+                forceHlsMime = isHls,
+                forceDashMime = isDash,
+                disableEmbeddedText = activeExternalSubIndex >= 0 || embeddedSubsDisabled,
+            )
         } else {
-            exoPlayer.setMediaItem(itemBuilder.build())
+            controller.load(
+                url = resolvedUrl,
+                headers = effectiveHeaders,
+                startPositionMs = startPosMs,
+                isLive = isLive,
+            )
         }
-        exoPlayer.playbackParameters = exoPlayer.playbackParameters.withSpeed(if (isLive) 1.0f else playbackSpeed)
-        exoPlayer.prepare()
-        exoPlayer.playWhenReady = true
+        controller.setSpeed(if (isLive) 1.0f else playbackSpeed)
+        controller.setVolume(if (isMuted) 0f else playerVolume)
     }
 
     LaunchedEffect(showStatsHud, selectedIndex) {
         if (!showStatsHud) return@LaunchedEffect
         while (true) {
             val backend = runCatching { repo.getPlaybackStats() }.getOrDefault(PlaybackStats())
-            val vf = exoPlayer.videoFormat
-            val af = exoPlayer.audioFormat
-            val bufSec = ((exoPlayer.bufferedPosition - exoPlayer.currentPosition).coerceAtLeast(0L)) / 1000.0
+            val snap = controller.stats.value
+            val resParts = snap.resolution?.split('x')
+            val w = resParts?.getOrNull(0)?.toIntOrNull()
+            val h = resParts?.getOrNull(1)?.toIntOrNull()
             val cand = activeCandidate
             playbackStats = backend.copy(
-                bufferSeconds = bufSec,
-                width = vf?.width?.takeIf { it > 0 } ?: backend.width,
-                height = vf?.height?.takeIf { it > 0 } ?: backend.height,
-                fps = vf?.frameRate?.takeIf { it > 0f }?.toDouble() ?: backend.fps,
-                videoCodec = vf?.codecs ?: vf?.sampleMimeType ?: backend.videoCodec,
-                audioCodec = af?.codecs ?: af?.sampleMimeType ?: backend.audioCodec,
-                videoBitrateBps = vf?.bitrate?.takeIf { it > 0 }?.toLong() ?: backend.videoBitrateBps,
-                audioBitrateBps = af?.bitrate?.takeIf { it > 0 }?.toLong() ?: backend.audioBitrateBps,
+                bufferSeconds = snap.bufferSeconds ?: backend.bufferSeconds,
+                width = w ?: backend.width,
+                height = h ?: backend.height,
+                videoCodec = snap.videoCodec ?: backend.videoCodec,
+                audioCodec = snap.audioCodec ?: backend.audioCodec,
+                videoBitrateBps = snap.videoBitrateBps ?: backend.videoBitrateBps,
+                audioBitrateBps = snap.audioBitrateBps ?: backend.audioBitrateBps,
                 fileSizeBytes = cand?.torrent?.sizeBytes ?: backend.fileSizeBytes,
                 isDebridStream = backend.isDebridStream || cand?.torrent != null || cand?.debridCache != null,
             )
@@ -826,87 +713,60 @@ fun PlayerScreen(
         }
     }
 
-    DisposableEffect(exoPlayer) {
-        val listener = object : Player.Listener {
-            override fun onPlaybackStateChanged(playbackState: Int) {
-                isBuffering = playbackState == Player.STATE_BUFFERING
-                if (playbackState == Player.STATE_READY) {
-                    playbackError = null
-                    val dur = exoPlayer.duration.coerceAtLeast(0L)
-                    totalDurMs = dur
-                    if (dur > 10_000L && (lastSkipFetchDurationMs <= 0L || abs(dur - lastSkipFetchDurationMs) > 30_000L)) {
-                        scope.launch { refreshSkipSegments(dur) }
-                    }
-                }
-            }
-
-            override fun onIsPlayingChanged(playing: Boolean) {
-                isPlaying = playing
-                if (playing) {
-                    playbackError = null
-                    isBuffering = false
-                }
-            }
-
-            override fun onTracksChanged(tracks: Tracks) {
-                syncTracks(tracks)
-            }
-
-            override fun onPlayerError(error: PlaybackException) {
-                if (error.errorCode == PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW) {
-                    isBuffering = true
-                    playbackError = null
-                    exoPlayer.seekToDefaultPosition()
-                    exoPlayer.prepare()
-                    exoPlayer.playWhenReady = true
-                    return
-                }
-
-                val cand = activeStreamResult.streams.getOrNull(selectedIndex)
-                    ?: activeStreamResult.streams.firstOrNull()
-                val unrecognized =
-                    error.errorCode == PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED ||
-                        error.errorCode == PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED ||
-                        generateSequence<Throwable>(error) { it.cause }
-                            .any { it is UnrecognizedInputFormatException || it is ParserException }
-
-                if (unrecognized && !forceHlsRetry && cand != null) {
-                    forceHlsRetry = true
-                    isBuffering = true
-                    val resumeMs = if (isLive) 0L else exoPlayer.currentPosition.coerceAtLeast(0L)
-                    scope.launch { loadCandidate(cand, resumeMs, forceHls = true, forceProxy = forceProxyRetry) }
-                    return
-                }
-
-                if (!lastLoadWasProxied && !forceProxyRetry && cand != null) {
-                    forceProxyRetry = true
-                    forceHlsRetry = false
-                    isBuffering = true
-                    val resumeMs = if (isLive) 0L else exoPlayer.currentPosition.coerceAtLeast(0L)
-                    scope.launch { loadCandidate(cand, resumeMs, forceHls = false, forceProxy = true) }
-                    return
-                }
-
-                if (selectedIndex + 1 < activeStreamResult.streams.size) {
-                    forceHlsRetry = false
-                    forceProxyRetry = false
-                    isBuffering = true
-                    currentStartPosMs = if (isLive) 0L else exoPlayer.currentPosition.coerceAtLeast(0L)
-                    selectedIndex += 1
-                    return
-                }
-
-                isBuffering = false
-                isPlaying = false
-                controlsVisible = true
-                playbackError = error.localizedMessage ?: VesselI18n.tr("player.error_failed")
+    LaunchedEffect(controllerState) {
+        isPlaying = controllerState.isPlaying
+        isBuffering = controllerState.isBuffering
+        val dur = controllerState.durationMs
+        if (dur > 0L) {
+            totalDurMs = dur
+            if (dur > 10_000L && (lastSkipFetchDurationMs <= 0L || abs(dur - lastSkipFetchDurationMs) > 30_000L)) {
+                scope.launch { refreshSkipSegments(dur) }
             }
         }
-        exoPlayer.addListener(listener)
-        onDispose { exoPlayer.removeListener(listener) }
+        if (!isScrubbing) {
+            currentPosMs = controllerState.positionMs
+        }
+        bufferedPosMs = controllerState.bufferedPositionMs
     }
 
-    LaunchedEffect(activeCandidate, currentEpisode) {
+    LaunchedEffect(controllerState.error, controllerState.unrecognizedFormat, selectedIndex) {
+        val err = controllerState.error ?: return@LaunchedEffect
+        val cand = activeStreamResult.streams.getOrNull(selectedIndex)
+            ?: activeStreamResult.streams.firstOrNull()
+
+        if (controllerState.unrecognizedFormat && !forceHlsRetry && cand != null) {
+            forceHlsRetry = true
+            isBuffering = true
+            val resumeMs = if (isLive) 0L else controllerState.positionMs.coerceAtLeast(0L)
+            loadCandidate(cand, resumeMs, forceHls = true, forceProxy = forceProxyRetry)
+            return@LaunchedEffect
+        }
+
+        if (!lastLoadWasProxied && !forceProxyRetry && cand != null) {
+            forceProxyRetry = true
+            forceHlsRetry = false
+            isBuffering = true
+            val resumeMs = if (isLive) 0L else controllerState.positionMs.coerceAtLeast(0L)
+            loadCandidate(cand, resumeMs, forceHls = false, forceProxy = true)
+            return@LaunchedEffect
+        }
+
+        if (selectedIndex + 1 < activeStreamResult.streams.size) {
+            forceHlsRetry = false
+            forceProxyRetry = false
+            isBuffering = true
+            currentStartPosMs = if (isLive) 0L else controllerState.positionMs.coerceAtLeast(0L)
+            selectedIndex += 1
+            return@LaunchedEffect
+        }
+
+        isBuffering = false
+        isPlaying = false
+        controlsVisible = true
+        playbackError = err
+    }
+
+    LaunchedEffect(activeCandidate, currentEpisode, controller) {
         val cand = activeCandidate ?: return@LaunchedEffect
         forceHlsRetry = false
         forceProxyRetry = false
@@ -943,25 +803,24 @@ fun PlayerScreen(
         }
     }
 
-    LaunchedEffect(exoPlayer, currentEpisode) {
+    LaunchedEffect(controller, currentEpisode) {
         var tick = 0
         while (true) {
-            if (!isScrubbing) {
-                currentPosMs = exoPlayer.currentPosition.coerceAtLeast(0L)
-            }
-            bufferedPosMs = exoPlayer.bufferedPosition.coerceAtLeast(0L)
-            val dur = exoPlayer.duration.coerceAtLeast(0L)
-            if (dur > 0L) {
-                totalDurMs = dur
-                if (dur > 10_000L && (lastSkipFetchDurationMs <= 0L || abs(dur - lastSkipFetchDurationMs) > 30_000L)) {
-                    scope.launch { refreshSkipSegments(dur) }
-                }
-            }
+            val st = controller.state.value
+            val dur = st.durationMs.coerceAtLeast(0L)
             tick++
-            if (tick % 10 == 0 && isPlaying) {
-                persistProgress(exoPlayer.currentPosition.coerceAtLeast(0L), dur)
+            if (tick % 10 == 0 && st.isPlaying) {
+                persistProgress(st.positionMs.coerceAtLeast(0L), dur)
             }
             delay(250L)
+        }
+    }
+
+    DisposableEffect(controller) {
+        onDispose {
+            val st = controller.state.value
+            scope.launch { persistProgress(st.positionMs.coerceAtLeast(0L), st.durationMs.coerceAtLeast(0L)) }
+            controller.release()
         }
     }
 
@@ -976,13 +835,9 @@ fun PlayerScreen(
         activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
 
         onDispose {
-            val pos = exoPlayer.currentPosition.coerceAtLeast(0L)
-            val dur = exoPlayer.duration.coerceAtLeast(0L)
-            scope.launch { persistProgress(pos, dur) }
             insetsController?.hide(WindowInsetsCompat.Type.systemBars())
             win?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-            exoPlayer.release()
         }
     }
 
@@ -1054,15 +909,15 @@ fun PlayerScreen(
     }
 
     fun togglePlayPause() {
-        if (isPlaying) exoPlayer.pause() else exoPlayer.play()
+        if (isPlaying) controller.pause() else controller.play()
         bumpControls()
     }
 
     fun seekByMs(deltaMs: Long) {
         if (isLive) return
         val cap = totalDurMs.takeIf { it > 0L } ?: Long.MAX_VALUE
-        val target = (exoPlayer.currentPosition + deltaMs).coerceIn(0L, cap)
-        exoPlayer.seekTo(target)
+        val target = (controller.state.value.positionMs + deltaMs).coerceIn(0L, cap)
+        controller.seekTo(target)
         currentPosMs = target
         showHud(if (deltaMs < 0) VesselI18n.tr("player.seek_back_10") else VesselI18n.tr("player.seek_fwd_10"))
     }
@@ -1140,6 +995,7 @@ fun PlayerScreen(
             else -> AspectRatioFrameLayout.RESIZE_MODE_FIT
         }
         resizeMode = nextMode
+        controller.setResizeMode(nextMode)
         val nextLabel = when (nextMode) {
             AspectRatioFrameLayout.RESIZE_MODE_ZOOM -> VesselI18n.tr("player.fit_fill")
             AspectRatioFrameLayout.RESIZE_MODE_FILL -> VesselI18n.tr("player.fit_stretch")
@@ -1293,57 +1149,68 @@ fun PlayerScreen(
                 }
             },
     ) {
-        // Video Surface + Embedded SubtitleView (for muxed HLS/MKV tracks)
-        AndroidView(
-            factory = { ctx ->
-                PlayerView(ctx).apply {
-                    player = exoPlayer
-                    useController = false
-                    this.resizeMode = resizeMode
-                    setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER)
-                    isFocusable = false
-                    isFocusableInTouchMode = false
-                    descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
-                    layoutParams = FrameLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                    )
-                }
-            },
-            update = { pv ->
-                pv.player = exoPlayer
-                pv.useController = false
-                pv.resizeMode = resizeMode
-                pv.subtitleView?.let { sv ->
-                    val sub = prefs.subtitles
-                    val fg = parseHexColor(sub.textColor, Color.White).toArgb()
-                    val bgAlpha = (sub.backgroundOpacity.coerceIn(0, 100) * 255) / 100
-                    val bg = if (sub.outlineStyle == "none") {
-                        android.graphics.Color.TRANSPARENT
-                    } else {
-                        android.graphics.Color.argb(bgAlpha, 8, 10, 16)
-                    }
-                    val edge = when (sub.outlineStyle) {
-                        "shadow" -> CaptionStyleCompat.EDGE_TYPE_DROP_SHADOW
-                        "none" -> CaptionStyleCompat.EDGE_TYPE_NONE
-                        else -> CaptionStyleCompat.EDGE_TYPE_OUTLINE
-                    }
-                    sv.setStyle(
-                        CaptionStyleCompat(
-                            fg,
-                            bg,
-                            android.graphics.Color.TRANSPARENT,
-                            edge,
-                            android.graphics.Color.BLACK,
-                            if (sub.bold) Typeface.DEFAULT_BOLD else Typeface.DEFAULT,
-                        ),
-                    )
-                    sv.setFractionalTextSize((sub.fontSizePx / 520f).coerceIn(0.035f, 0.11f))
-                    sv.setBottomPaddingFraction((sub.bottomOffsetPx / 720f).coerceIn(0.02f, 0.30f))
-                }
-            },
-            modifier = Modifier.fillMaxSize(),
-        )
+        // Video Surface + Embedded SubtitleView (ExoPlayer or libmpv/libass)
+        when (controller) {
+            is ExoPlayerController -> {
+                AndroidView(
+                    factory = { ctx ->
+                        PlayerView(ctx).apply {
+                            controller.attachPlayerView(this)
+                            useController = false
+                            this.resizeMode = resizeMode
+                            setShowBuffering(PlayerView.SHOW_BUFFERING_NEVER)
+                            isFocusable = false
+                            isFocusableInTouchMode = false
+                            descendantFocusability = ViewGroup.FOCUS_BLOCK_DESCENDANTS
+                            layoutParams = FrameLayout.LayoutParams(
+                                ViewGroup.LayoutParams.MATCH_PARENT,
+                                ViewGroup.LayoutParams.MATCH_PARENT,
+                            )
+                        }
+                    },
+                    update = { pv ->
+                        controller.attachPlayerView(pv)
+                        pv.useController = false
+                        pv.resizeMode = resizeMode
+                        pv.subtitleView?.let { sv ->
+                            val sub = prefs.subtitles
+                            val fg = parseHexColor(sub.textColor, Color.White).toArgb()
+                            val bgAlpha = (sub.backgroundOpacity.coerceIn(0, 100) * 255) / 100
+                            val bg = if (sub.outlineStyle == "none") {
+                                android.graphics.Color.TRANSPARENT
+                            } else {
+                                android.graphics.Color.argb(bgAlpha, 8, 10, 16)
+                            }
+                            val edge = when (sub.outlineStyle) {
+                                "shadow" -> CaptionStyleCompat.EDGE_TYPE_DROP_SHADOW
+                                "none" -> CaptionStyleCompat.EDGE_TYPE_NONE
+                                else -> CaptionStyleCompat.EDGE_TYPE_OUTLINE
+                            }
+                            sv.setStyle(
+                                CaptionStyleCompat(
+                                    fg,
+                                    bg,
+                                    android.graphics.Color.TRANSPARENT,
+                                    edge,
+                                    android.graphics.Color.BLACK,
+                                    if (sub.bold) Typeface.DEFAULT_BOLD else Typeface.DEFAULT,
+                                ),
+                            )
+                            sv.setFractionalTextSize((sub.fontSizePx / 520f).coerceIn(0.035f, 0.11f))
+                            sv.setBottomPaddingFraction((sub.bottomOffsetPx / 720f).coerceIn(0.02f, 0.30f))
+                        }
+                    },
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+            is MpvKitController -> {
+                AndroidView(
+                    factory = { ctx -> controller.getOrCreateView(ctx) },
+                    update = { controller.setResizeMode(resizeMode) },
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+        }
 
         // Touch Gesture Surface (Single tap toggle HUD, Double tap -10s/+10s, Long press 2x, Vertical swipe Brightness/Volume)
         Box(
@@ -1355,9 +1222,7 @@ fun PlayerScreen(
                             val ev = awaitPointerEvent(PointerEventPass.Final)
                             if (longPressSpeedActive && ev.changes.none { it.pressed }) {
                                 longPressSpeedActive = false
-                                exoPlayer.playbackParameters = exoPlayer.playbackParameters.withSpeed(
-                                    if (isLive) 1.0f else playbackSpeed,
-                                )
+                                controller.setSpeed(if (isLive) 1.0f else playbackSpeed)
                             }
                         }
                     }
@@ -1382,11 +1247,11 @@ fun PlayerScreen(
                             if (isLocked || isLive) return@detectTapGestures
                             val width = size.width.toFloat().coerceAtLeast(1f)
                             val delta = if (offset.x < width * 0.45f) -10_000L else 10_000L
-                            val target = (exoPlayer.currentPosition + delta).coerceIn(
+                            val target = (controller.state.value.positionMs + delta).coerceIn(
                                 0L,
                                 totalDurMs.takeIf { it > 0L } ?: Long.MAX_VALUE,
                             )
-                            exoPlayer.seekTo(target)
+                            controller.seekTo(target)
                             currentPosMs = target
                             showHud(if (delta < 0) VesselI18n.tr("player.seek_back_10") else VesselI18n.tr("player.seek_fwd_10"))
                             bumpControls()
@@ -1394,7 +1259,7 @@ fun PlayerScreen(
                         onLongPress = {
                             if (isLocked || isLive || activeDrawer != null) return@detectTapGestures
                             longPressSpeedActive = true
-                            exoPlayer.playbackParameters = exoPlayer.playbackParameters.withSpeed(2.0f)
+                            controller.setSpeed(2.0f)
                         },
                     )
                 }
@@ -2043,8 +1908,8 @@ fun PlayerScreen(
                         if (!isLive) {
                             HudCircleIconButton(
                                 onClick = {
-                                    val target = (exoPlayer.currentPosition - 10_000L).coerceAtLeast(0L)
-                                    exoPlayer.seekTo(target)
+                                    val target = (controller.state.value.positionMs - 10_000L).coerceAtLeast(0L)
+                                    controller.seekTo(target)
                                     currentPosMs = target
                                     bumpControls()
                                 },
@@ -2093,8 +1958,8 @@ fun PlayerScreen(
                             HudCircleIconButton(
                                 onClick = {
                                     val cap = totalDurMs.takeIf { it > 0L } ?: Long.MAX_VALUE
-                                    val target = (exoPlayer.currentPosition + 10_000L).coerceAtMost(cap)
-                                    exoPlayer.seekTo(target)
+                                    val target = (controller.state.value.positionMs + 10_000L).coerceAtMost(cap)
+                                    controller.seekTo(target)
                                     currentPosMs = target
                                     bumpControls()
                                 },
@@ -2162,7 +2027,7 @@ fun PlayerScreen(
                                     bumpControls()
                                 },
                                 onScrubCommit = { pos ->
-                                    exoPlayer.seekTo(pos)
+                                    controller.seekTo(pos)
                                     currentPosMs = pos
                                     isScrubbing = false
                                     bumpControls()
@@ -2266,7 +2131,7 @@ fun PlayerScreen(
                             HudCircleIconButton(
                                 onClick = {
                                     isMuted = !isMuted
-                                    exoPlayer.volume = if (isMuted) 0f else playerVolume
+                                    controller.setVolume(if (isMuted) 0f else playerVolume)
                                     bumpControls()
                                 },
                                 size = 36.dp,
@@ -2285,7 +2150,7 @@ fun PlayerScreen(
                                     onValueChange = { v ->
                                         playerVolume = v.coerceIn(0f, 1f)
                                         isMuted = playerVolume == 0f
-                                        exoPlayer.volume = playerVolume
+                                        controller.setVolume(playerVolume)
                                         bumpControls()
                                     },
                                     valueRange = 0f..1f,
@@ -2399,7 +2264,7 @@ fun PlayerScreen(
                                             (durMs - 500L).coerceAtLeast(0L)
                                         }
                                         if (targetMs > 0L) {
-                                            exoPlayer.seekTo(targetMs)
+                                            controller.seekTo(targetMs)
                                             currentPosMs = targetMs
                                             showHud(skipLabel)
                                         }
@@ -2693,7 +2558,7 @@ fun PlayerScreen(
                                                 val isTorrent = cand.kind.equals("torrent", ignoreCase = true) ||
                                                     cand.torrent != null ||
                                                     cand.url.startsWith("magnet:", ignoreCase = true)
-                                                val pos = if (isLive) 0L else exoPlayer.currentPosition.coerceAtLeast(0L)
+                                                val pos = if (isLive) 0L else controller.state.value.positionMs.coerceAtLeast(0L)
                                                 if (!isTorrent) {
                                                     currentStartPosMs = pos
                                                     selectedIndex = idx
@@ -2800,10 +2665,7 @@ fun PlayerScreen(
                                             accentColor = palette.accent,
                                             modifier = itemMod,
                                             onClick = {
-                                                exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters
-                                                    .buildUpon()
-                                                    .setOverrideForType(TrackSelectionOverride(trk.group, trk.trackIndex))
-                                                    .build()
+                                                controller.selectAudioTrack(trk.id)
                                                 activeDrawer = null
                                                 showHud("${VesselI18n.tr("player.audio", "Ses")}: ${trk.label}")
                                             },
@@ -3200,10 +3062,7 @@ fun PlayerScreen(
                                         accentColor = palette.accent,
                                         onClick = {
                                             activeExternalSubIndex = -1
-                                            exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters
-                                                .buildUpon()
-                                                .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
-                                                .build()
+                                            controller.selectSubtitleTrack(null)
                                             embeddedSubsDisabled = true
                                         },
                                     ) {
@@ -3247,11 +3106,7 @@ fun PlayerScreen(
                                             accentColor = palette.accent,
                                             onClick = {
                                                 activeExternalSubIndex = -1
-                                                exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters
-                                                    .buildUpon()
-                                                    .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
-                                                    .setOverrideForType(TrackSelectionOverride(trk.group, trk.trackIndex))
-                                                    .build()
+                                                controller.selectSubtitleTrack(trk.id)
                                                 embeddedSubsDisabled = false
                                                 activeDrawer = null
                                             },
@@ -3535,7 +3390,7 @@ fun PlayerScreen(
                                                         modifier = chipMod,
                                                         onClick = {
                                                             playbackSpeed = spd
-                                                            exoPlayer.setPlaybackSpeed(spd)
+                                                            controller.setSpeed(spd)
                                                             bumpControls()
                                                         },
                                                     )
@@ -3569,6 +3424,7 @@ fun PlayerScreen(
                                                     modifier = chipMod,
                                                     onClick = {
                                                         resizeMode = mode
+                                                        controller.setResizeMode(mode)
                                                         showHud(label)
                                                         bumpControls()
                                                     },
@@ -3588,476 +3444,3 @@ fun PlayerScreen(
     }
 }
 
-@Composable
-private fun TopActionPillsRow(
-    pluginId: String,
-    isLive: Boolean,
-    isTv: Boolean,
-    episodesCount: Int,
-    streamsCount: Int,
-    audioCount: Int,
-    activeDrawer: PlayerDrawer?,
-    showStatsHud: Boolean,
-    isLandscape: Boolean,
-    sourcesPillFocus: FocusRequester,
-    backBtnFocus: FocusRequester,
-    centerFocus: FocusRequester,
-    onGoToDetails: () -> Unit,
-    onLock: () -> Unit,
-    onToggleStats: () -> Unit,
-    onToggleDrawer: (PlayerDrawer) -> Unit,
-    onToggleOrientation: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val pillNavModifier = Modifier.focusProperties {
-        up = backBtnFocus
-        down = centerFocus
-    }
-    Row(
-        modifier = modifier,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        if (!isLive) {
-            PlayerHudPill(
-                icon = { Icon(Icons.Default.Info, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp)) },
-                label = VesselI18n.tr("player.go_to_details"),
-                active = false,
-                modifier = pillNavModifier,
-                onClick = onGoToDetails,
-            )
-        }
-        if (!isTv) {
-            PlayerHudPill(
-                icon = { Icon(Icons.Default.LockOpen, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp)) },
-                label = VesselI18n.tr("player.lock", "Kilitle"),
-                active = false,
-                modifier = pillNavModifier,
-                onClick = onLock,
-            )
-        }
-        if (!isLive || episodesCount > 1) {
-            PlayerHudPill(
-                icon = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp)) },
-                label = if (isLive) "${VesselI18n.tr("iptv.channels", "Kanallar")} ($episodesCount)" else "${VesselI18n.tr("details.episodes", "Bölümler")} ($episodesCount)",
-                active = activeDrawer == PlayerDrawer.EPISODES,
-                modifier = pillNavModifier,
-                onClick = { onToggleDrawer(PlayerDrawer.EPISODES) },
-            )
-        }
-        PlayerHudPill(
-            icon = { Icon(Icons.Default.Layers, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp)) },
-            label = "${VesselI18n.tr("details.sources", "Kaynaklar")} ($streamsCount)",
-            active = activeDrawer == PlayerDrawer.SOURCES,
-            modifier = pillNavModifier.focusRequester(sourcesPillFocus),
-            onClick = { onToggleDrawer(PlayerDrawer.SOURCES) },
-        )
-        if (!isLive) {
-            PlayerHudPill(
-                icon = { Icon(Icons.Default.Audiotrack, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp)) },
-                label = if (audioCount > 1) "${VesselI18n.tr("player.audio", "Ses")} ($audioCount)" else VesselI18n.tr("player.audio", "Ses"),
-                active = activeDrawer == PlayerDrawer.AUDIO,
-                modifier = pillNavModifier,
-                onClick = { onToggleDrawer(PlayerDrawer.AUDIO) },
-            )
-        }
-        if (!isLive) {
-            PlayerHudPill(
-                icon = { Icon(Icons.Default.ClosedCaption, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp)) },
-                label = VesselI18n.tr("settings.tab_subtitles", "Altyazı"),
-                active = activeDrawer == PlayerDrawer.SUBTITLES,
-                modifier = pillNavModifier,
-                onClick = { onToggleDrawer(PlayerDrawer.SUBTITLES) },
-            )
-        }
-        PlayerHudPill(
-            icon = { Icon(Icons.Default.Settings, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp)) },
-            label = VesselI18n.tr("nav.settings", "Ayarlar"),
-            active = activeDrawer == PlayerDrawer.SETTINGS,
-            modifier = pillNavModifier,
-            onClick = { onToggleDrawer(PlayerDrawer.SETTINGS) },
-        )
-        PlayerHudPill(
-            icon = null,
-            label = VesselI18n.tr("stats.title", "Stats"),
-            active = showStatsHud,
-            modifier = pillNavModifier,
-            onClick = onToggleStats,
-        )
-        if (!isTv) {
-            PlayerHudPill(
-                icon = { Icon(Icons.Default.ScreenRotation, contentDescription = null, tint = Color.White, modifier = Modifier.size(13.dp)) },
-                label = if (isLandscape) VesselI18n.tr("common.portrait") else VesselI18n.tr("common.landscape"),
-                active = isLandscape,
-                modifier = pillNavModifier,
-                onClick = onToggleOrientation,
-            )
-        }
-    }
-}
-
-@Composable
-private fun DesktopScrubberBar(
-    currentMs: Long,
-    bufferedMs: Long,
-    durationMs: Long,
-    skipSegments: List<SkipSegment>,
-    accentColor: Color,
-    isScrubbing: Boolean,
-    onScrubChange: (Long) -> Unit,
-    onScrubCommit: (Long) -> Unit,
-    onTogglePlayPause: () -> Unit = {},
-    scrubberModifier: Modifier = Modifier,
-    modifier: Modifier = Modifier,
-) {
-    val safeDur = durationMs.coerceAtLeast(1L)
-    var dragMs by remember { mutableLongStateOf(currentMs) }
-
-    BoxWithConstraints(
-        modifier = modifier.height(34.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        val density = LocalDensity.current
-        val trackWidthPx = with(density) { maxWidth.toPx().coerceAtLeast(1f) }
-
-        fun xToMs(x: Float): Long {
-            val frac = (x / trackWidthPx).coerceIn(0f, 1f)
-            return (frac * safeDur).toLong()
-        }
-
-        if (isScrubbing && durationMs > 0L) {
-            val posFrac = (currentMs.toFloat() / safeDur.toFloat()).coerceIn(0f, 1f)
-            val offsetDp = with(density) { (trackWidthPx * posFrac).toDp() }
-            Surface(
-                shape = RoundedCornerShape(6.dp),
-                color = Color(0xEB0F0F18),
-                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.16f)),
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .offset(
-                        x = (offsetDp - 24.dp).coerceIn(0.dp, (maxWidth - 56.dp).coerceAtLeast(0.dp)),
-                        y = (-26).dp,
-                    ),
-            ) {
-                Text(
-                    text = formatClockMs(currentMs),
-                    color = Color.White,
-                    style = MaterialTheme.typography.labelSmall,
-                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
-                )
-            }
-        }
-        Canvas(
-            modifier = scrubberModifier
-                .fillMaxWidth()
-                .height(28.dp)
-                .clip(RoundedCornerShape(8.dp))
-                .vesselFocusBorder(RoundedCornerShape(8.dp))
-                .focusable()
-                .onPreviewKeyEvent { ev ->
-                    if (ev.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                    when (ev.key) {
-                        Key.DirectionLeft -> {
-                            if (safeDur > 1L) {
-                                onScrubCommit((currentMs - 10_000L).coerceAtLeast(0L))
-                                true
-                            } else false
-                        }
-                        Key.DirectionRight -> {
-                            if (safeDur > 1L) {
-                                onScrubCommit((currentMs + 10_000L).coerceAtMost(durationMs.coerceAtLeast(currentMs)))
-                                true
-                            } else false
-                        }
-                        Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> {
-                            onTogglePlayPause()
-                            true
-                        }
-                        else -> false
-                    }
-                }
-                .pointerInput(safeDur) {
-                    detectTapGestures { offset ->
-                        val target = xToMs(offset.x)
-                        onScrubCommit(target)
-                    }
-                }
-                .pointerInput(safeDur) {
-                    detectHorizontalDragGestures(
-                        onDragStart = { offset ->
-                            dragMs = xToMs(offset.x)
-                            onScrubChange(dragMs)
-                        },
-                        onHorizontalDrag = { change, _ ->
-                            change.consume()
-                            dragMs = xToMs(change.position.x)
-                            onScrubChange(dragMs)
-                        },
-                        onDragEnd = { onScrubCommit(dragMs) },
-                        onDragCancel = { onScrubCommit(dragMs) },
-                    )
-                },
-        ) {
-            val barHeight = if (isScrubbing) 8.dp.toPx() else 6.dp.toPx()
-            val barTop = (size.height - barHeight) / 2f
-            val radius = CornerRadius(barHeight / 2f, barHeight / 2f)
-
-            // Base track
-            drawRoundRect(
-                color = Color.White.copy(alpha = 0.22f),
-                topLeft = Offset(0f, barTop),
-                size = Size(size.width, barHeight),
-                cornerRadius = radius,
-            )
-
-            // Buffered fraction
-            val bufFrac = (bufferedMs.toFloat() / safeDur.toFloat()).coerceIn(0f, 1f)
-            if (bufFrac > 0f) {
-                drawRoundRect(
-                    color = Color.White.copy(alpha = 0.32f),
-                    topLeft = Offset(0f, barTop),
-                    size = Size(size.width * bufFrac, barHeight),
-                    cornerRadius = radius,
-                )
-            }
-
-            // Skip segments colored markers (Desktop .cs-seg-marker colors)
-            if (durationMs > 10_000L) {
-                for (seg in skipSegments) {
-                    val startFrac = (seg.startMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f)
-                    val endMs = (seg.endMs ?: durationMs).coerceAtMost(durationMs)
-                    val endFrac = (endMs.toFloat() / durationMs.toFloat()).coerceIn(startFrac, 1f)
-                    val segColor = when (seg.type.lowercase(Locale.US)) {
-                        "recap" -> Color(0xFFF9E2AF)
-                        "credits" -> Color(0xFF89B4FA)
-                        "preview" -> Color(0xFFA6E3A1)
-                        else -> Color(0xFFCBA6F7)
-                    }
-                    drawRoundRect(
-                        color = segColor.copy(alpha = 0.78f),
-                        topLeft = Offset(size.width * startFrac, barTop),
-                        size = Size((size.width * (endFrac - startFrac)).coerceAtLeast(6f), barHeight),
-                        cornerRadius = radius,
-                    )
-                }
-            }
-
-            // Active progress fill + white thumb
-            val posFrac = (currentMs.toFloat() / safeDur.toFloat()).coerceIn(0f, 1f)
-            val fillWidth = size.width * posFrac
-            if (fillWidth > 0f) {
-                drawRoundRect(
-                    color = accentColor,
-                    topLeft = Offset(0f, barTop),
-                    size = Size(fillWidth, barHeight),
-                    cornerRadius = radius,
-                )
-            }
-            val thumbRadius = if (isScrubbing) 8.dp.toPx() else 7.dp.toPx()
-            drawCircle(
-                color = Color.White,
-                radius = thumbRadius,
-                center = Offset(fillWidth.coerceIn(thumbRadius, size.width - thumbRadius), size.height / 2f),
-            )
-        }
-    }
-}
-
-private fun Modifier.tvStepSliderKeys(
-    current: Int,
-    step: Int,
-    range: IntRange,
-    onStep: (Int) -> Unit,
-): Modifier = this
-    .vesselFocusBorder(RoundedCornerShape(8.dp))
-    .onPreviewKeyEvent { ev ->
-        if (ev.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-        when (ev.key) {
-            Key.DirectionLeft -> {
-                onStep((current - step).coerceIn(range.first, range.last))
-                true
-            }
-            Key.DirectionRight -> {
-                onStep((current + step).coerceIn(range.first, range.last))
-                true
-            }
-            else -> false
-        }
-    }
-
-@Composable
-private fun HudCircleIconButton(
-    onClick: () -> Unit,
-    enabled: Boolean = true,
-    size: androidx.compose.ui.unit.Dp = 34.dp,
-    modifier: Modifier = Modifier,
-    content: @Composable () -> Unit,
-) {
-    Surface(
-        shape = CircleShape,
-        color = HudControlBg,
-        border = BorderStroke(1.dp, HudBorderColor),
-        modifier = modifier
-            .size(size)
-            .clip(CircleShape)
-            .vesselFocusBorder(CircleShape)
-            .clickable(enabled = enabled, onClick = onClick),
-    ) {
-        Box(contentAlignment = Alignment.Center) {
-            content()
-        }
-    }
-}
-
-@Composable
-private fun PlayerHudPill(
-    icon: (@Composable () -> Unit)?,
-    label: String,
-    active: Boolean,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit,
-) {
-    val palette = LocalVesselPalette.current
-    Surface(
-        shape = RoundedCornerShape(999.dp),
-        color = if (active) palette.accent.copy(alpha = 0.26f) else HudControlBg,
-        border = BorderStroke(
-            width = 1.dp,
-            color = if (active) palette.accent.copy(alpha = 0.65f) else HudBorderColor,
-        ),
-        modifier = modifier
-            .clip(RoundedCornerShape(999.dp))
-            .vesselFocusBorder(RoundedCornerShape(999.dp))
-            .clickable(onClick = onClick),
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-            modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
-        ) {
-            icon?.invoke()
-            Text(
-                text = label,
-                color = Color.White,
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-            )
-        }
-    }
-}
-
-@Composable
-private fun DrawerItemCard(
-    active: Boolean,
-    accentColor: Color,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit,
-    content: @Composable () -> Unit,
-) {
-    Surface(
-        shape = RoundedCornerShape(10.dp),
-        color = if (active) accentColor.copy(alpha = 0.18f) else Color.White.copy(alpha = 0.04f),
-        border = BorderStroke(
-            width = 1.dp,
-            color = if (active) accentColor.copy(alpha = 0.55f) else Color.White.copy(alpha = 0.08f),
-        ),
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
-            .vesselFocusBorder(RoundedCornerShape(10.dp))
-            .clickable(onClick = onClick),
-    ) {
-        Box(modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp)) {
-            content()
-        }
-    }
-}
-
-@Composable
-private fun DrawerTagBadge(
-    text: String,
-    accent: Boolean,
-    accentColor: Color,
-) {
-    Surface(
-        shape = RoundedCornerShape(6.dp),
-        color = if (accent) accentColor.copy(alpha = 0.26f) else Color.White.copy(alpha = 0.10f),
-    ) {
-        Text(
-            text = text,
-            color = if (accent) accentColor.copy(alpha = 0.95f) else Color.White.copy(alpha = 0.85f),
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.5.dp),
-        )
-    }
-}
-
-@Composable
-private fun DrawerSettingBlock(
-    title: String,
-    content: @Composable () -> Unit,
-) {
-    Surface(
-        shape = RoundedCornerShape(10.dp),
-        color = Color.White.copy(alpha = 0.04f),
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Column(
-            modifier = Modifier.padding(9.dp),
-            verticalArrangement = Arrangement.spacedBy(5.dp),
-        ) {
-            Text(
-                text = title,
-                color = Color.White.copy(alpha = 0.78f),
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.Bold,
-            )
-            content()
-        }
-    }
-}
-
-@Composable
-private fun DrawerChipButton(
-    label: String,
-    active: Boolean,
-    accentColor: Color,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit,
-) {
-    Surface(
-        shape = RoundedCornerShape(999.dp),
-        color = if (active) accentColor else Color.White.copy(alpha = 0.06f),
-        border = BorderStroke(
-            width = 1.dp,
-            color = if (active) Color.Transparent else Color.White.copy(alpha = 0.14f),
-        ),
-        modifier = modifier
-            .clip(RoundedCornerShape(999.dp))
-            .vesselFocusBorder(RoundedCornerShape(999.dp))
-            .clickable(onClick = onClick),
-    ) {
-        Text(
-            text = label,
-            color = if (active) Color(0xFF0B0B12) else Color.White,
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.padding(horizontal = 11.dp, vertical = 5.5.dp),
-        )
-    }
-}
-
-private fun formatClockMs(ms: Long): String {
-    val totalSec = (ms / 1000L).coerceAtLeast(0L)
-    val hrs = totalSec / 3600L
-    val mins = (totalSec % 3600L) / 60L
-    val secs = totalSec % 60L
-    return if (hrs > 0L) {
-        String.format(Locale.US, "%d:%02d:%02d", hrs, mins, secs)
-    } else {
-        String.format(Locale.US, "%d:%02d", mins, secs)
-    }
-}

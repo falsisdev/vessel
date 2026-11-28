@@ -1,11 +1,17 @@
 //! Pure-Rust core orchestrator (`VesselEngine`) binding plugins, storage, proxy, and playback.
 
 pub mod builtins;
+mod debrid_ops;
+mod download_ops;
+pub mod drive_sync;
+mod iptv_ops;
+mod plugins_ops;
 pub mod pool;
+pub mod sync_ops;
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt::Write as _;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
@@ -13,33 +19,27 @@ use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
 use tokio::task::{JoinHandle, JoinSet};
 use tokio_util::sync::CancellationToken;
+use vessel_auth::OAuthManager;
 use vessel_debrid::DebridManager;
 use vessel_domain::{
-    ContentProvider, DebridAccountStatus, DebridCloudItem, DebridPreferences, DebridProvider,
-    DebridProviderKind, DebridResolution, DomainGrantSource, DownloadStatus, EngineEvent,
-    EventSink, ExternalIds, HomeFeed, LibraryItem, LibraryStatus, LinkedMediaSource, LogLevel,
-    MediaDetail, MediaRef, MediaType, PlaybackProgress, PlaybackRequest, PlaybackStats,
-    PlayerBackend, PluginCapability, PluginId, RealDebridDeviceAuthPoll, RealDebridDeviceAuthStart,
-    RepoPluginEntry, ResolveDebridRequest, ResolvedHttpLink, SearchPage, SecretStore, SkipSegment,
-    StoragePort, StreamCandidate, StreamKind, StreamResult, SubtitleCandidate, SubtitleFormat,
-    SubtitleProvider, SubtitleQuery, SubtitleSource, SubtitleTrack, UiPreferences, VesselError,
-    VesselPaths, VesselResult,
+    ContentProvider, DebridResolution, EngineEvent, EventSink, ExternalIds, HomeFeed, LibraryItem,
+    LibraryStatus, LinkedMediaSource, LogLevel, MediaDetail, MediaRef, MediaType,
+    PlaybackProgress, PlaybackRequest, PlaybackStats, PlayerBackend, PluginCapability, PluginId,
+    ResolveDebridRequest, SearchPage, SecretStore, SkipSegment, StoragePort, StreamCandidate,
+    StreamKind, StreamResult, SubtitleCandidate, SubtitleFormat, SubtitleProvider, SubtitleQuery,
+    SubtitleSource, SubtitleTrack, UiPreferences, VesselError, VesselPaths, VesselResult,
 };
-use vessel_iptv::{IptvClient, channel_to_stream_candidate, xtream::xtream_xmltv_url};
+use vessel_iptv::IptvClient;
 use vessel_metadata::{
     CanonicalMetadata, MetaEndpoints, MetadataService, merge_detail_with_override,
 };
-use vessel_plugin_rt::{
-    LoadedPackage, QuickJsDebridProvider, ResolvedSource, SourceResolver, SourceTrustBadge,
-    TsCompileCache, load_plugin_dir, load_plugin_package, pack_plugin_package,
-};
+use vessel_plugin_rt::{SourceResolver, TsCompileCache};
 use vessel_proxy::ProxyServer;
-use vessel_storage::{
-    BackupImportMode, ContinueWatchingEntry, DownloadKind, NewIptvChannel, SqliteSecretStore,
-    SqliteStorage, StorageActor, StoredDownload, StoredEpgNowNext, StoredEpgProgram,
-    StoredIptvChannel, StoredIptvKind, StoredIptvProfile, StoredPlugin,
-};
+use vessel_storage::{BackupImportMode, ContinueWatchingEntry, SqliteSecretStore, SqliteStorage, StorageActor};
+use vessel_trackers::TrackerManager;
 
+use drive_sync::GoogleDriveSyncClient;
+pub use drive_sync::{CloudSyncResult, SyncMergeStatsReport};
 pub use pool::{DEFAULT_IDLE_TTL, DEFAULT_MAX_WARM_PLUGINS, PluginPool};
 pub use vessel_downloader::{DownloadManager, DownloadRequest};
 pub use vessel_iptv::{EpgNowNext, EpgProgram, IptvChannel, IptvKind, IptvProfile};
@@ -129,7 +129,7 @@ pub struct BatchUpdateResult {
     pub failed: Vec<BatchUpdateFailure>,
 }
 
-fn subtitle_ext(format: SubtitleFormat) -> &'static str {
+pub(crate) fn subtitle_ext(format: SubtitleFormat) -> &'static str {
     match format {
         SubtitleFormat::Srt => "srt",
         SubtitleFormat::Ass => "ass",
@@ -227,7 +227,7 @@ type DetailsCacheMap = HashMap<(PluginId, String), (Instant, MediaDetail)>;
 /// Pure core facade orchestrating storage, proxy, isolated QuickJS plugins, and `PlayerBackend`.
 pub struct VesselEngine {
     storage: Arc<SqliteStorage>,
-    secrets: Arc<SqliteSecretStore>,
+    secrets: Arc<dyn SecretStore>,
     proxy: Arc<ProxyServer>,
     player: Arc<dyn PlayerBackend>,
     event_sink: Arc<dyn EventSink>,
@@ -237,6 +237,9 @@ pub struct VesselEngine {
     iptv: IptvClient,
     downloader: DownloadManager,
     debrid: Arc<DebridManager>,
+    oauth: Arc<OAuthManager>,
+    trackers: Arc<TrackerManager>,
+    drive_sync: Arc<GoogleDriveSyncClient>,
     pool: Arc<PluginPool>,
     always_proxy: AtomicBool,
     metadata_enabled: AtomicBool,
@@ -266,7 +269,21 @@ impl VesselEngine {
         always_proxy: bool,
     ) -> VesselResult<Self> {
         let actor = StorageActor::open_with_paths(paths).await?;
-        let secrets = Arc::new(SqliteSecretStore::new(actor.clone()));
+        let secrets: Arc<dyn SecretStore> = Arc::new(SqliteSecretStore::new(actor.clone()));
+        Self::open_with_actor_and_secrets(paths, actor, secrets, player, event_sink, always_proxy)
+            .await
+    }
+
+    /// Provisions `VesselEngine` using an already-opened `StorageActor` and platform `SecretStore`
+    /// (e.g. `OsKeyringSecretStore` on desktop or `AndroidKeyStore` via FFI on Android).
+    pub async fn open_with_actor_and_secrets(
+        paths: &VesselPaths,
+        actor: StorageActor,
+        secrets: Arc<dyn SecretStore>,
+        player: Arc<dyn PlayerBackend>,
+        event_sink: Arc<dyn EventSink>,
+        always_proxy: bool,
+    ) -> VesselResult<Self> {
         let storage = Arc::new(SqliteStorage::new(actor));
         let proxy = Arc::new(ProxyServer::start().await?);
         Self::from_parts_with_downloads(
@@ -285,7 +302,7 @@ impl VesselEngine {
     /// Constructs `VesselEngine` from already-initialized storage, proxy, and player components.
     pub async fn from_parts(
         storage: Arc<SqliteStorage>,
-        secrets: Arc<SqliteSecretStore>,
+        secrets: Arc<dyn SecretStore>,
         proxy: Arc<ProxyServer>,
         player: Arc<dyn PlayerBackend>,
         event_sink: Arc<dyn EventSink>,
@@ -310,7 +327,7 @@ impl VesselEngine {
     #[allow(clippy::too_many_arguments)]
     pub async fn from_parts_with_downloads(
         storage: Arc<SqliteStorage>,
-        secrets: Arc<SqliteSecretStore>,
+        secrets: Arc<dyn SecretStore>,
         proxy: Arc<ProxyServer>,
         player: Arc<dyn PlayerBackend>,
         event_sink: Arc<dyn EventSink>,
@@ -328,8 +345,13 @@ impl VesselEngine {
         ));
         let downloader =
             DownloadManager::new(Arc::clone(&storage), Arc::clone(&event_sink), downloads_dir);
-        let secrets_port: Arc<dyn SecretStore> = secrets.clone();
-        let debrid = Arc::new(DebridManager::new(secrets_port)?);
+        let debrid = Arc::new(DebridManager::new(Arc::clone(&secrets))?);
+        let oauth = Arc::new(OAuthManager::new(Arc::clone(&secrets))?);
+        let trackers = Arc::new(TrackerManager::new(Arc::clone(&oauth), Arc::clone(&storage))?);
+        let drive_sync = Arc::new(GoogleDriveSyncClient::new(
+            Arc::clone(&oauth),
+            Arc::clone(&storage),
+        )?);
 
         Ok(Self {
             storage,
@@ -343,6 +365,9 @@ impl VesselEngine {
             iptv: IptvClient::new(),
             downloader,
             debrid,
+            oauth,
+            trackers,
+            drive_sync,
             pool,
             always_proxy: AtomicBool::new(always_proxy),
             metadata_enabled: AtomicBool::new(true),
@@ -375,7 +400,7 @@ impl VesselEngine {
     }
 
     /// Borrows the secret credential store.
-    pub fn secrets(&self) -> &Arc<SqliteSecretStore> {
+    pub fn secrets(&self) -> &Arc<dyn SecretStore> {
         &self.secrets
     }
 
@@ -420,599 +445,6 @@ impl VesselEngine {
     }
 
     /// Resolves any repository or plugin source (`https://`, `gh:`, `gl:`, shortcode, `vessel://`).
-    pub async fn resolve_source(&self, raw_input: &str) -> VesselResult<ResolvedSource> {
-        self.source_resolver.resolve(raw_input).await
-    }
-
-    /// Persists a `LoadedPackage`, records manifest-declared domains, and registers it in the pool.
-    pub async fn install_package(
-        &self,
-        package: LoadedPackage,
-        repo_id: Option<String>,
-        source_type: &str,
-        local_path: &str,
-    ) -> VesselResult<()> {
-        self.install_package_with_source(package, repo_id, source_type, None, local_path)
-            .await
-    }
-
-    /// Persists a `LoadedPackage` along with its origin `source_url`, preserving existing settings,
-    /// user-approved domains, and enabled state on in-place updates.
-    pub async fn install_package_with_source(
-        &self,
-        package: LoadedPackage,
-        repo_id: Option<String>,
-        source_type: &str,
-        source_url: Option<String>,
-        local_path: &str,
-    ) -> VesselResult<()> {
-        package.manifest.validate()?;
-        let plugin_id = package.manifest.id.clone();
-        let existing = self.storage.get_plugin(&plugin_id).await?;
-        let preserve_enabled = existing.as_ref().map(|p| p.enabled).unwrap_or(true);
-        if existing.is_some() {
-            self.clear_plugin_caches(&plugin_id).await;
-        }
-
-        let stored = StoredPlugin {
-            manifest: package.manifest.clone(),
-            repo_id: repo_id.or_else(|| existing.and_then(|p| p.repo_id)),
-            source_type: source_type.to_owned(),
-            source_url,
-            local_path: local_path.to_owned(),
-            sha256: Some(package.sha256.clone()),
-            enabled: preserve_enabled,
-            allow_dynamic_domains: package.manifest.allow_any_https,
-            installed_at: "1970-01-01T00:00:00Z".into(),
-            updated_at: "1970-01-01T00:00:00Z".into(),
-        };
-        // Persist timestamp consistently using SQLite CURRENT / now when upserting domain grants below.
-        self.storage.upsert_plugin(stored).await?;
-
-        for domain in &package.manifest.domains {
-            let trimmed = domain.trim();
-            if !trimmed.is_empty() {
-                self.storage
-                    .grant_domain(&plugin_id, trimmed, DomainGrantSource::Manifest)
-                    .await?;
-            }
-        }
-
-        let extra_domains = self.storage.list_allowed_domains(&plugin_id).await?;
-        self.pool
-            .register(
-                package.manifest,
-                Arc::new(package.bundle),
-                extra_domains,
-                preserve_enabled,
-            )
-            .await?;
-
-        if let Ok(settings) = self.get_plugin_settings(&plugin_id).await {
-            let _ = self.pool.set_settings(&plugin_id, settings).await;
-        }
-        self.sync_community_debrid_providers().await;
-
-        Ok(())
-    }
-
-    /// Resolves `raw_input` and installs a single `.plugin.vessel` or open directory package directly.
-    pub async fn install_package_from_source(&self, raw_input: &str) -> VesselResult<PluginId> {
-        match self.source_resolver.resolve(raw_input).await? {
-            ResolvedSource::Package {
-                resolved_url,
-                package,
-                ..
-            } => {
-                let id = package.manifest.id.clone();
-                self.install_package(package, None, "source", &resolved_url)
-                    .await?;
-                Ok(id)
-            }
-            ResolvedSource::Repository { repo, .. } => Err(VesselError::InvalidInput(format!(
-                "source '{}' resolved to repository '{}' rather than a single plugin package",
-                raw_input, repo.name
-            ))),
-        }
-    }
-
-    /// Approves an additional HTTPS domain for `plugin_id` (optionally persisting permanently in SQLite).
-    pub async fn grant_plugin_domain(
-        &self,
-        plugin_id: &PluginId,
-        domain: &str,
-        permanent: bool,
-    ) -> VesselResult<()> {
-        self.pool.allow_domain(plugin_id, domain).await?;
-        if permanent {
-            self.storage
-                .grant_domain(plugin_id, domain, DomainGrantSource::UserPermanent)
-                .await?;
-        }
-        Ok(())
-    }
-
-    /// Lists all persisted plugins installed in SQLite.
-    pub async fn list_plugins(&self) -> VesselResult<Vec<StoredPlugin>> {
-        self.storage.list_plugins().await
-    }
-
-    /// Lists active (enabled) plugin IDs currently registered in the pool.
-    pub async fn enabled_plugin_ids(&self) -> Vec<PluginId> {
-        self.pool.enabled_plugin_ids().await
-    }
-
-    /// Lists approved HTTPS domains for `plugin_id`.
-    pub async fn list_allowed_domains(&self, plugin_id: &PluginId) -> VesselResult<Vec<String>> {
-        self.storage.list_allowed_domains(plugin_id).await
-    }
-
-    /// Enables or disables an installed plugin across SQLite and the warm QuickJS pool.
-    pub async fn set_plugin_enabled(
-        &self,
-        plugin_id: &PluginId,
-        enabled: bool,
-    ) -> VesselResult<()> {
-        self.clear_plugin_caches(plugin_id).await;
-        self.storage.set_plugin_enabled(plugin_id, enabled).await?;
-        self.pool.set_enabled(plugin_id, enabled).await?;
-        self.sync_community_debrid_providers().await;
-        Ok(())
-    }
-
-    /// Resolves `raw_input` and persists the package into `plugins_dir` (or tracks local Dev Mode dir),
-    /// tagging an optional `repo_id` group label when installed from a repository.
-    pub async fn install_package_persisted_with_repo(
-        &self,
-        plugins_dir: &Path,
-        raw_input: &str,
-        repo_id: Option<String>,
-    ) -> VesselResult<(PluginId, SourceTrustBadge)> {
-        let inferred_repo = repo_id.or_else(|| infer_repo_group(raw_input));
-        match self.source_resolver.resolve(raw_input).await? {
-            ResolvedSource::Package {
-                resolved_url,
-                package,
-                badge,
-            } => {
-                let id = package.manifest.id.clone();
-                let origin_url = if raw_input.trim().is_empty() {
-                    resolved_url.clone()
-                } else {
-                    resolved_url.clone()
-                };
-                let dev_path = Path::new(&resolved_url);
-                if dev_path.is_dir() {
-                    self.install_package_with_source(
-                        package,
-                        inferred_repo,
-                        "dev_dir",
-                        Some(origin_url),
-                        &resolved_url,
-                    )
-                    .await?;
-                } else {
-                    std::fs::create_dir_all(plugins_dir).map_err(|err| {
-                        VesselError::Storage(format!("create plugins directory: {err}"))
-                    })?;
-                    let pkg_path = plugins_dir.join(format!("{}.plugin.vessel", id.as_str()));
-                    let bytes = pack_plugin_package(
-                        &package.manifest,
-                        package.bundle.files(),
-                        package.icon_png.as_deref(),
-                    )?;
-                    std::fs::write(&pkg_path, bytes).map_err(|err| {
-                        VesselError::Storage(format!("write plugin archive: {err}"))
-                    })?;
-                    let local_path = pkg_path.to_string_lossy().into_owned();
-                    self.install_package_with_source(
-                        package,
-                        inferred_repo,
-                        "package",
-                        Some(origin_url),
-                        &local_path,
-                    )
-                    .await?;
-                }
-                Ok((id, badge))
-            }
-            ResolvedSource::Repository { repo, .. } => Err(VesselError::InvalidInput(format!(
-                "source '{}' resolved to repository '{}' rather than a single plugin package",
-                raw_input, repo.name
-            ))),
-        }
-    }
-
-    /// Resolves `raw_input` and persists the package into `plugins_dir` (or tracks local Dev Mode dir).
-    pub async fn install_package_persisted(
-        &self,
-        plugins_dir: &Path,
-        raw_input: &str,
-    ) -> VesselResult<(PluginId, SourceTrustBadge)> {
-        self.install_package_persisted_with_repo(plugins_dir, raw_input, None)
-            .await
-    }
-
-    /// Ensures built-in first-party plugins are persisted in SQLite and registered in the pool,
-    /// preserving the user's enabled toggle, settings, and granted domains across app updates.
-    pub async fn ensure_builtin_plugins(&self) -> VesselResult<usize> {
-        let packages = builtins::builtin_packages()?;
-        let mut count = 0usize;
-        for pkg in packages {
-            let plugin_id = pkg.manifest.id.clone();
-            let local_path = format!("builtin://{}", plugin_id.as_str());
-            self.install_package_with_source(
-                pkg,
-                Some("builtin".to_owned()),
-                builtins::BUILTIN_SOURCE_TYPE,
-                None,
-                &local_path,
-            )
-            .await?;
-            count += 1;
-        }
-        Ok(count)
-    }
-
-    /// Reloads all persisted plugins from SQLite and their local files/directories into the pool.
-    pub async fn bootstrap_plugins(&self) -> VesselResult<usize> {
-        let mut loaded_count = self.ensure_builtin_plugins().await?;
-        let plugins = self.storage.list_plugins().await?;
-        for stored in plugins {
-            if stored.source_type == builtins::BUILTIN_SOURCE_TYPE {
-                continue;
-            }
-            let path = PathBuf::from(&stored.local_path);
-            let pkg_res = if stored.source_type == "dev_dir" || path.is_dir() {
-                load_plugin_dir(&path)
-            } else {
-                std::fs::read(&path)
-                    .map_err(|err| {
-                        VesselError::Storage(format!(
-                            "read plugin archive '{}': {err}",
-                            path.display()
-                        ))
-                    })
-                    .and_then(|bytes| load_plugin_package(&bytes, None))
-            };
-
-            match pkg_res {
-                Ok(pkg) => {
-                    let plugin_id = pkg.manifest.id.clone();
-                    let extra_domains = self.storage.list_allowed_domains(&plugin_id).await?;
-                    if let Err(err) = self
-                        .pool
-                        .register(
-                            pkg.manifest,
-                            Arc::new(pkg.bundle),
-                            extra_domains,
-                            stored.enabled,
-                        )
-                        .await
-                    {
-                        self.event_sink.emit(EngineEvent::PluginLog {
-                            plugin_id,
-                            level: LogLevel::Warn,
-                            message: format!("Failed registering plugin on startup: {err}"),
-                        });
-                    } else {
-                        if let Ok(settings) = self.get_plugin_settings(&plugin_id).await {
-                            let _ = self.pool.set_settings(&plugin_id, settings).await;
-                        }
-                        loaded_count += 1;
-                    }
-                }
-                Err(err) => {
-                    self.event_sink.emit(EngineEvent::PluginLog {
-                        plugin_id: stored.manifest.id,
-                        level: LogLevel::Warn,
-                        message: format!("Failed loading plugin on startup: {err}"),
-                    });
-                }
-            }
-        }
-        self.sync_community_debrid_providers().await;
-        Ok(loaded_count)
-    }
-
-    /// Uninstalls `plugin_id`, removing packaged archives (never deleting Dev Mode folders) and DB rows.
-    pub async fn uninstall_plugin(&self, plugin_id: &PluginId) -> VesselResult<()> {
-        let existing = self.storage.get_plugin(plugin_id).await?;
-        if existing
-            .as_ref()
-            .is_some_and(|p| p.source_type == builtins::BUILTIN_SOURCE_TYPE)
-        {
-            return Err(VesselError::InvalidInput(format!(
-                "built-in plugin '{}' cannot be uninstalled; disable it instead",
-                plugin_id.as_str()
-            )));
-        }
-        self.clear_plugin_caches(plugin_id).await;
-        self.pool.unregister(plugin_id).await;
-        if let Some(stored) = existing
-            && stored.source_type != "dev_dir"
-        {
-            let path = Path::new(&stored.local_path);
-            if path.is_file() {
-                let _ = std::fs::remove_file(path);
-            }
-        }
-        self.storage.remove_plugin(plugin_id).await?;
-        self.sync_community_debrid_providers().await;
-        Ok(())
-    }
-
-    async fn resolve_repo_entries_cached<'a>(
-        &self,
-        repo_key: &str,
-        cache: &'a mut HashMap<String, Result<Vec<RepoPluginEntry>, String>>,
-    ) -> Result<&'a [RepoPluginEntry], String> {
-        if !cache.contains_key(repo_key) {
-            let fetched = match self.source_resolver.resolve(repo_key).await {
-                Ok(ResolvedSource::Repository { repo, .. }) => Ok(repo.plugins),
-                Ok(ResolvedSource::Package { .. }) => Err(format!(
-                    "source '{repo_key}' resolved to a package instead of a repo"
-                )),
-                Err(err) => Err(err.to_string()),
-            };
-            cache.insert(repo_key.to_owned(), fetched);
-        }
-        match cache.get(repo_key) {
-            Some(Ok(list)) => Ok(list.as_slice()),
-            Some(Err(err)) => Err(err.clone()),
-            None => Err("missing cached repo".into()),
-        }
-    }
-
-    /// Checks all installed plugins for newer versions without modifying any settings or domain grants.
-    pub async fn check_plugin_updates(&self) -> VesselResult<Vec<PluginUpdateInfo>> {
-        let installed = self.storage.list_plugins().await?;
-        let mut repo_cache: HashMap<String, Result<Vec<RepoPluginEntry>, String>> = HashMap::new();
-        let mut out = Vec::with_capacity(installed.len());
-
-        for plugin in installed {
-            let pid = plugin.manifest.id.as_str().to_owned();
-            let current_version = plugin.manifest.version.clone();
-
-            if plugin.source_type == builtins::BUILTIN_SOURCE_TYPE {
-                out.push(PluginUpdateInfo {
-                    plugin_id: pid,
-                    current_version: current_version.clone(),
-                    latest_version: Some(current_version),
-                    update_available: false,
-                    source_url: None,
-                    error: None,
-                });
-                continue;
-            }
-
-            if let Some(repo_key) = infer_repo_source_for_plugin(&plugin) {
-                match self
-                    .resolve_repo_entries_cached(&repo_key, &mut repo_cache)
-                    .await
-                {
-                    Ok(entries) => {
-                        if let Some(entry) = entries.iter().find(|e| e.id.as_str() == pid) {
-                            let source_url = entry
-                                .download_url
-                                .clone()
-                                .or_else(|| entry.source_path.clone())
-                                .or_else(|| plugin.source_url.clone());
-                            let update_available =
-                                is_newer_version(&current_version, &entry.version);
-                            out.push(PluginUpdateInfo {
-                                plugin_id: pid,
-                                current_version,
-                                latest_version: Some(entry.version.clone()),
-                                update_available,
-                                source_url,
-                                error: None,
-                            });
-                            continue;
-                        }
-                    }
-                    Err(err) => {
-                        if plugin.source_url.is_none() {
-                            out.push(PluginUpdateInfo {
-                                plugin_id: pid,
-                                current_version,
-                                latest_version: None,
-                                update_available: false,
-                                source_url: None,
-                                error: Some(err),
-                            });
-                            continue;
-                        }
-                    }
-                }
-            }
-
-            if let Some(ref src) = plugin.source_url {
-                match self.source_resolver.resolve(src).await {
-                    Ok(ResolvedSource::Package { package, .. }) => {
-                        let latest = package.manifest.version;
-                        let update_available = is_newer_version(&current_version, &latest);
-                        out.push(PluginUpdateInfo {
-                            plugin_id: pid,
-                            current_version,
-                            latest_version: Some(latest),
-                            update_available,
-                            source_url: Some(src.clone()),
-                            error: None,
-                        });
-                    }
-                    Ok(ResolvedSource::Repository { repo, .. }) => {
-                        if let Some(entry) = repo.plugins.iter().find(|e| e.id.as_str() == pid) {
-                            let target = entry
-                                .download_url
-                                .clone()
-                                .or_else(|| entry.source_path.clone())
-                                .or_else(|| Some(src.clone()));
-                            let update_available =
-                                is_newer_version(&current_version, &entry.version);
-                            out.push(PluginUpdateInfo {
-                                plugin_id: pid,
-                                current_version,
-                                latest_version: Some(entry.version.clone()),
-                                update_available,
-                                source_url: target,
-                                error: None,
-                            });
-                        } else {
-                            out.push(PluginUpdateInfo {
-                                plugin_id: pid,
-                                current_version,
-                                latest_version: None,
-                                update_available: false,
-                                source_url: Some(src.clone()),
-                                error: None,
-                            });
-                        }
-                    }
-                    Err(err) => {
-                        out.push(PluginUpdateInfo {
-                            plugin_id: pid,
-                            current_version,
-                            latest_version: None,
-                            update_available: false,
-                            source_url: Some(src.clone()),
-                            error: Some(err.to_string()),
-                        });
-                    }
-                }
-            } else {
-                out.push(PluginUpdateInfo {
-                    plugin_id: pid,
-                    current_version,
-                    latest_version: None,
-                    update_available: false,
-                    source_url: None,
-                    error: None,
-                });
-            }
-        }
-
-        Ok(out)
-    }
-
-    /// Updates a single installed plugin in-place, preserving user settings, domain grants, and enabled state.
-    pub async fn update_plugin(
-        &self,
-        plugins_dir: &Path,
-        plugin_id: &PluginId,
-    ) -> VesselResult<(PluginId, SourceTrustBadge, String)> {
-        let Some(stored) = self.storage.get_plugin(plugin_id).await? else {
-            return Err(VesselError::NotFound(format!(
-                "plugin '{}'",
-                plugin_id.as_str()
-            )));
-        };
-
-        if stored.source_type == builtins::BUILTIN_SOURCE_TYPE {
-            return Err(VesselError::InvalidInput(format!(
-                "built-in plugin '{}' updates automatically with Vessel",
-                plugin_id.as_str()
-            )));
-        }
-
-        let mut target_source = if stored.source_type == "dev_dir" {
-            Some(stored.local_path.clone())
-        } else {
-            None
-        };
-
-        if target_source.is_none()
-            && let Some(repo_key) = infer_repo_source_for_plugin(&stored)
-        {
-            let mut cache = HashMap::new();
-            if let Ok(entries) = self
-                .resolve_repo_entries_cached(&repo_key, &mut cache)
-                .await
-                && let Some(entry) = entries.iter().find(|e| e.id == *plugin_id)
-            {
-                target_source = entry
-                    .download_url
-                    .clone()
-                    .or_else(|| entry.source_path.clone());
-            }
-        }
-
-        if target_source.is_none() {
-            target_source = stored.source_url.clone();
-        }
-
-        let Some(raw_target) = target_source.filter(|s| !s.trim().is_empty()) else {
-            return Err(VesselError::InvalidInput(format!(
-                "plugin '{}' has no recorded update source; reinstall once from a repository or URL",
-                plugin_id.as_str()
-            )));
-        };
-
-        let (id, badge) = self
-            .install_package_persisted_with_repo(plugins_dir, &raw_target, stored.repo_id)
-            .await?;
-        let new_version = self
-            .storage
-            .get_plugin(&id)
-            .await?
-            .map(|p| p.manifest.version)
-            .unwrap_or(stored.manifest.version);
-
-        Ok((id, badge, new_version))
-    }
-
-    /// Checks and updates all outdated plugins in-place.
-    pub async fn update_all_plugins(&self, plugins_dir: &Path) -> VesselResult<BatchUpdateResult> {
-        let checks = self.check_plugin_updates().await?;
-        let checked = checks.len();
-        let mut updated = Vec::new();
-        let mut failed = Vec::new();
-
-        for item in checks {
-            if !item.update_available {
-                continue;
-            }
-            let Some(target) = item.source_url else {
-                continue;
-            };
-            let Ok(pid) = PluginId::new(&item.plugin_id) else {
-                continue;
-            };
-            let existing_repo = self.storage.get_plugin(&pid).await?.and_then(|p| p.repo_id);
-            match self
-                .install_package_persisted_with_repo(plugins_dir, &target, existing_repo)
-                .await
-            {
-                Ok((id, badge)) => {
-                    let version = self
-                        .storage
-                        .get_plugin(&id)
-                        .await?
-                        .map(|p| p.manifest.version)
-                        .or(item.latest_version)
-                        .unwrap_or(item.current_version);
-                    updated.push(UpdatedPluginInfo {
-                        plugin_id: id.to_string(),
-                        version,
-                        badge: format!("{badge:?}").to_ascii_lowercase(),
-                    });
-                }
-                Err(err) => {
-                    failed.push(BatchUpdateFailure {
-                        plugin_id: item.plugin_id,
-                        error: err.to_string(),
-                    });
-                }
-            }
-        }
-
-        Ok(BatchUpdateResult {
-            checked,
-            updated,
-            failed,
-        })
-    }
-
     /// Reads declarative modular UI preferences (`ui_preferences`) from SQLite.
     pub async fn get_ui_preferences(&self) -> VesselResult<UiPreferences> {
         self.storage.get_ui_preferences().await
@@ -1033,7 +465,9 @@ impl VesselEngine {
 
     /// Inserts or updates a user library entry.
     pub async fn upsert_library(&self, item: &LibraryItem) -> VesselResult<()> {
-        self.storage.upsert_library(item).await
+        self.storage.upsert_library(item).await?;
+        self.spawn_library_tracker_dispatch(item);
+        Ok(())
     }
 
     /// Removes a media reference from the user library.
@@ -1043,12 +477,16 @@ impl VesselEngine {
 
     /// Exports a `.backup.vessel` JSON snapshot.
     pub async fn export_backup_json(&self, include_secrets: bool) -> VesselResult<String> {
-        self.storage.export_backup_json(include_secrets).await
+        self.storage
+            .export_backup_json_with_secrets(include_secrets, self.secrets.as_ref())
+            .await
     }
 
     /// Imports a `.backup.vessel` JSON snapshot using `SmartMerge` or `ResetAndImport`.
     pub async fn import_backup_json(&self, json: &str, mode: BackupImportMode) -> VesselResult<()> {
-        self.storage.import_backup_json(json, mode).await
+        self.storage
+            .import_backup_json_with_secrets(json, mode, self.secrets.as_ref())
+            .await
     }
 
     /// Reads combined user settings (`settings` + `SecretStore` secret fields) for `plugin_id`.
@@ -1499,7 +937,14 @@ impl VesselEngine {
 
         let task = tokio::spawn(async move {
             if let Err(err) = run_enrichment_and_emit(
-                &storage, &secrets, &metadata, &sink, &pid, &raw_clone, &lang, enabled,
+                &storage,
+                secrets.as_ref(),
+                &metadata,
+                &sink,
+                &pid,
+                &raw_clone,
+                &lang,
+                enabled,
             )
             .await
             {
@@ -2029,7 +1474,9 @@ impl VesselEngine {
 
     /// Persists playback progress into SQLite (`watch_progress`).
     pub async fn record_progress(&self, progress: &PlaybackProgress) -> VesselResult<()> {
-        self.storage.upsert_progress(progress).await
+        self.storage.upsert_progress(progress).await?;
+        self.spawn_progress_tracker_dispatch(progress);
+        Ok(())
     }
 
     /// Reads saved watch progress for a specific `(plugin_id, native_id, season, episode)`.
@@ -2290,611 +1737,6 @@ impl VesselEngine {
     }
 
     /// Saves or updates an IPTV profile, storing any optional Xtream password in `SecretStore`.
-    pub async fn upsert_iptv_profile(
-        &self,
-        profile: IptvProfile,
-        password: Option<&str>,
-    ) -> VesselResult<StoredIptvProfile> {
-        let secret_ref = match password {
-            Some(pass) => {
-                let key = format!("iptv:{}:password", profile.id);
-                self.secrets.set(&key, pass).await?;
-                Some(key)
-            }
-            None => profile.secret_ref,
-        };
-        let stored = StoredIptvProfile {
-            id: profile.id,
-            name: profile.name,
-            kind: match profile.kind {
-                IptvKind::Xtream => StoredIptvKind::Xtream,
-                IptvKind::M3u => StoredIptvKind::M3u,
-            },
-            server_url: profile.server_url,
-            username: profile.username,
-            secret_ref,
-            epg_url: profile.epg_url,
-            user_agent: profile.user_agent,
-            last_synced_at: profile.last_synced_at,
-        };
-        self.storage.upsert_iptv_profile(&stored).await?;
-        Ok(stored)
-    }
-
-    /// Lists configured IPTV profiles.
-    pub async fn list_iptv_profiles(&self) -> VesselResult<Vec<StoredIptvProfile>> {
-        self.storage.list_iptv_profiles().await
-    }
-
-    /// Deletes an IPTV profile, its channels/EPG (via cascade), and any stored password secret.
-    pub async fn delete_iptv_profile(&self, profile_id: &str) -> VesselResult<()> {
-        let profiles = self.storage.list_iptv_profiles().await?;
-        if let Some(target) = profiles.into_iter().find(|p| p.id == profile_id)
-            && let Some(secret_ref) = target.secret_ref
-        {
-            self.secrets.delete(&secret_ref).await?;
-        }
-        self.storage.delete_iptv_profile(profile_id).await
-    }
-
-    /// Syncs channels for `profile_id` from its M3U or Xtream Codes source, preserving favorites.
-    pub async fn sync_iptv_profile(&self, profile_id: &str) -> VesselResult<usize> {
-        let profile = self
-            .storage
-            .list_iptv_profiles()
-            .await?
-            .into_iter()
-            .find(|p| p.id == profile_id)
-            .ok_or_else(|| {
-                VesselError::NotFound(format!("IPTV profile '{profile_id}' not found"))
-            })?;
-
-        let channels = match profile.kind {
-            StoredIptvKind::M3u => {
-                self.iptv
-                    .fetch_m3u(&profile.server_url, profile.user_agent.as_deref())
-                    .await?
-            }
-            StoredIptvKind::Xtream => {
-                let username = profile.username.as_deref().unwrap_or("");
-                let password = match profile.secret_ref.as_deref() {
-                    Some(key) => self.secrets.get(key).await?.unwrap_or_default(),
-                    None => String::new(),
-                };
-                self.iptv
-                    .fetch_xtream_channels(
-                        &profile.server_url,
-                        username,
-                        &password,
-                        profile.user_agent.as_deref(),
-                    )
-                    .await?
-            }
-        };
-
-        let converted: Vec<NewIptvChannel> = channels
-            .into_iter()
-            .map(|ch| NewIptvChannel {
-                stream_id: ch.stream_id,
-                name: ch.name,
-                group_title: ch.group_title,
-                logo_url: ch.logo_url,
-                stream_url: ch.stream_url,
-                tvg_id: ch.tvg_id,
-            })
-            .collect();
-
-        self.storage
-            .replace_iptv_channels(profile_id, converted)
-            .await
-    }
-
-    /// Downloads and stores XMLTV EPG entries for `profile_id`.
-    pub async fn sync_iptv_epg(&self, profile_id: &str) -> VesselResult<usize> {
-        let profile = self
-            .storage
-            .list_iptv_profiles()
-            .await?
-            .into_iter()
-            .find(|p| p.id == profile_id)
-            .ok_or_else(|| {
-                VesselError::NotFound(format!("IPTV profile '{profile_id}' not found"))
-            })?;
-
-        let epg_url = match profile.epg_url {
-            Some(url) if !url.trim().is_empty() => url,
-            _ if profile.kind == StoredIptvKind::Xtream => {
-                let username = profile.username.as_deref().unwrap_or_default();
-                let password = match profile.secret_ref.as_deref() {
-                    Some(key) => self.secrets.get(key).await?.unwrap_or_default(),
-                    None => String::new(),
-                };
-                xtream_xmltv_url(&profile.server_url, username, &password)?
-            }
-            _ => return Ok(0),
-        };
-
-        let programs = self
-            .iptv
-            .fetch_xmltv_epg(&epg_url, profile.user_agent.as_deref())
-            .await?;
-        let stored: Vec<StoredEpgProgram> = programs
-            .into_iter()
-            .map(|p| StoredEpgProgram {
-                channel_tvg_id: p.channel_tvg_id,
-                title: p.title,
-                description: p.description,
-                start_ts: p.start_ts,
-                end_ts: p.end_ts,
-            })
-            .collect();
-        self.storage.replace_epg_programs(profile_id, stored).await
-    }
-
-    /// Searches synced IPTV channels using SQLite FTS5 prefix matching and optional filters.
-    pub async fn search_iptv_channels(
-        &self,
-        profile_id: Option<&str>,
-        query: Option<&str>,
-        group_title: Option<&str>,
-        favorites_only: bool,
-        limit: usize,
-    ) -> VesselResult<Vec<StoredIptvChannel>> {
-        self.storage
-            .search_iptv_channels(profile_id, query, group_title, favorites_only, limit)
-            .await
-    }
-
-    /// Lists sorted IPTV category group names for `profile_id`.
-    pub async fn list_iptv_groups(&self, profile_id: &str) -> VesselResult<Vec<String>> {
-        self.storage.list_iptv_groups(profile_id).await
-    }
-
-    /// Marks or unmarks an IPTV channel row as favorite.
-    pub async fn set_iptv_favorite(&self, channel_id: i64, is_favorite: bool) -> VesselResult<()> {
-        self.storage
-            .set_iptv_favorite(channel_id, is_favorite)
-            .await
-    }
-
-    /// Deletes expired XMLTV EPG entries ending at or before `before_ts`.
-    pub async fn prune_expired_epg(&self, before_ts: i64) -> VesselResult<usize> {
-        self.storage.prune_expired_epg(before_ts).await
-    }
-
-    /// Returns active (`now`) and upcoming (`next`) programs for a channel `tvg_id`.
-    pub async fn get_epg_now_next(
-        &self,
-        profile_id: &str,
-        channel_tvg_id: &str,
-        now_ts: i64,
-    ) -> VesselResult<EpgNowNext> {
-        let StoredEpgNowNext { now, next } = self
-            .storage
-            .get_epg_now_next(profile_id, channel_tvg_id, now_ts)
-            .await?;
-        Ok(EpgNowNext {
-            now: now.map(|p| EpgProgram {
-                channel_tvg_id: p.channel_tvg_id,
-                title: p.title,
-                description: p.description,
-                start_ts: p.start_ts,
-                end_ts: p.end_ts,
-            }),
-            next: next.map(|p| EpgProgram {
-                channel_tvg_id: p.channel_tvg_id,
-                title: p.title,
-                description: p.description,
-                start_ts: p.start_ts,
-                end_ts: p.end_ts,
-            }),
-        })
-    }
-
-    /// Routes an IPTV live channel through Smart Proxy (preserving custom `User-Agent`) and plays it.
-    pub async fn play_iptv_channel(
-        &self,
-        channel: &StoredIptvChannel,
-        profile_user_agent: Option<&str>,
-    ) -> VesselResult<String> {
-        let iptv_ch = IptvChannel {
-            stream_id: channel.stream_id.clone(),
-            name: channel.name.clone(),
-            group_title: channel.group_title.clone(),
-            logo_url: channel.logo_url.clone(),
-            stream_url: channel.stream_url.clone(),
-            tvg_id: channel.tvg_id.clone(),
-            user_agent: None,
-        };
-        let candidate = channel_to_stream_candidate(&iptv_ch, profile_user_agent);
-        let media = MediaRef::new(PluginId::new("iptv")?, channel.stream_id.clone())?;
-        self.play_candidate(PlayCandidateRequest {
-            media,
-            canonical_id: None,
-            season: 0,
-            episode: 0,
-            absolute_episode: None,
-            media_type: MediaType::Movie,
-            candidate,
-            extra_subtitles: Vec::new(),
-            start_position_ms: Some(0),
-            title: Some(channel.name.clone()),
-        })
-        .await
-    }
-
-    /// Enqueues an offline media download (resolving torrent magnets via Debrid when needed).
-    pub async fn enqueue_download(&self, mut req: DownloadRequest) -> VesselResult<StoredDownload> {
-        if req
-            .source_url
-            .trim_start()
-            .to_ascii_lowercase()
-            .starts_with("magnet:?")
-        {
-            let res = self
-                .resolve_torrent_candidate(ResolveDebridRequest {
-                    url: req.source_url.clone(),
-                    torrent: None,
-                    preferred_target: None,
-                    allow_uncached_queue: false,
-                    season: req.season,
-                    episode: req.episode,
-                })
-                .await?;
-            match res {
-                DebridResolution::Ready { url, headers, .. } => {
-                    req.source_url = url;
-                    if !headers.is_empty() {
-                        req.headers = headers;
-                    }
-                    req.kind = DownloadKind::Direct;
-                }
-                DebridResolution::NeedsConfirmation { provider_label, .. } => {
-                    return Err(VesselError::InvalidInput(format!(
-                        "Torrent is not cached on {provider_label}. Queue it to Debrid cloud before downloading."
-                    )));
-                }
-                DebridResolution::NoProviderConfigured { message } => {
-                    return Err(VesselError::InvalidInput(message));
-                }
-            }
-        }
-        self.downloader.enqueue(req).await
-    }
-
-    /// Pauses an active or queued download while preserving partial files / segment progress.
-    pub async fn pause_download(&self, download_id: &str) -> VesselResult<()> {
-        self.downloader.pause(download_id).await
-    }
-
-    /// Resumes a paused or failed download from its SQLite checkpoint or HTTP `Range` offset.
-    pub async fn resume_download(&self, download_id: &str) -> VesselResult<StoredDownload> {
-        self.downloader.resume(download_id).await
-    }
-
-    /// Cancels, removes local media/subtitles folder, and deletes DB state for `download_id`.
-    pub async fn delete_download(&self, download_id: &str) -> VesselResult<()> {
-        self.downloader.delete(download_id).await
-    }
-
-    /// Lists all tracked offline downloads.
-    pub async fn list_downloads(&self) -> VesselResult<Vec<StoredDownload>> {
-        self.downloader.list().await
-    }
-
-    /// Reads one download record by ID.
-    pub async fn get_download(&self, download_id: &str) -> VesselResult<Option<StoredDownload>> {
-        self.downloader.get(download_id).await
-    }
-
-    /// Persists drag-and-drop download queue priority ordering and dispatches queued jobs.
-    pub async fn reorder_downloads(&self, ordered_ids: &[String]) -> VesselResult<()> {
-        self.downloader.reorder(ordered_ids).await
-    }
-
-    /// Registers a completed offline download folder on the loopback HTTP proxy for playback.
-    pub async fn prepare_local_download_playback(
-        &self,
-        download_id: &str,
-    ) -> VesselResult<LocalPlaybackBundle> {
-        let record = self.downloader.get(download_id).await?.ok_or_else(|| {
-            VesselError::NotFound(format!("download '{download_id}' does not exist"))
-        })?;
-        if record.status != DownloadStatus::Completed {
-            return Err(VesselError::InvalidInput(format!(
-                "download '{download_id}' is not completed yet"
-            )));
-        }
-        let media_path = record.local_media_path.as_deref().ok_or_else(|| {
-            VesselError::NotFound(format!("download '{download_id}' has no local media path"))
-        })?;
-        let root_dir = PathBuf::from(&record.local_dir);
-        let media_buf = PathBuf::from(media_path);
-        if !tokio::fs::try_exists(&media_buf).await.unwrap_or(false) {
-            return Err(VesselError::NotFound(format!(
-                "local downloaded file is missing at '{}'",
-                media_buf.display()
-            )));
-        }
-
-        let rel_media = media_buf
-            .strip_prefix(&root_dir)
-            .ok()
-            .or_else(|| media_buf.file_name().map(Path::new))
-            .ok_or_else(|| VesselError::Storage("invalid local media path".into()))?;
-        let rel_str = rel_media.to_string_lossy().replace('\\', "/");
-
-        let base_url = self.proxy.register_local_dir(&root_dir)?;
-        let url = format!("{base_url}/{rel_str}");
-
-        let kind = match record.kind {
-            DownloadKind::Hls => StreamKind::Hls,
-            DownloadKind::Direct => match media_buf
-                .extension()
-                .and_then(|s| s.to_str())
-                .map(|s| s.to_ascii_lowercase())
-                .as_deref()
-            {
-                Some("mkv") => StreamKind::Mkv,
-                Some("webm") => StreamKind::Webm,
-                Some("ts") => StreamKind::MpegTs,
-                Some("m3u8") => StreamKind::Hls,
-                _ => StreamKind::Mp4,
-            },
-        };
-
-        let mut subtitles = Vec::new();
-        for (idx, track) in record.subtitles.into_iter().enumerate() {
-            let ext = subtitle_ext(track.format);
-            let filename = format!("sub_{idx}.{ext}");
-            if tokio::fs::try_exists(root_dir.join(&filename))
-                .await
-                .unwrap_or(false)
-            {
-                subtitles.push(SubtitleTrack {
-                    id: track.id,
-                    source: SubtitleSource::Url {
-                        url: format!("{base_url}/{filename}"),
-                        headers: BTreeMap::new(),
-                    },
-                    lang: track.lang,
-                    label: track.label,
-                    format: track.format,
-                    is_default: track.is_default,
-                });
-            } else if matches!(track.source, SubtitleSource::InlineContent { .. }) {
-                subtitles.push(track);
-            }
-        }
-
-        Ok(LocalPlaybackBundle {
-            download_id: record.id,
-            url,
-            kind,
-            subtitles,
-        })
-    }
-
-    /// Synchronizes enabled `PluginCapability::Debrid` QuickJS community plugins into `DebridManager`.
-    pub async fn sync_community_debrid_providers(&self) {
-        let ids = self
-            .pool
-            .enabled_plugin_ids_with_any(&[PluginCapability::Debrid])
-            .await;
-        let mut community: Vec<Arc<dyn DebridProvider>> = Vec::with_capacity(ids.len());
-        for pid in ids {
-            if let Ok(prov) = self.pool.get_or_load(&pid).await {
-                community.push(Arc::new(QuickJsDebridProvider::new(prov)));
-            }
-        }
-        self.debrid.set_community_providers(community).await;
-    }
-
-    /// Reads persisted Debrid priority order, `only_cached`, and `auto_fallback` preferences.
-    pub async fn get_debrid_preferences(&self) -> VesselResult<DebridPreferences> {
-        Ok(self
-            .storage
-            .get_json_setting::<DebridPreferences>("debrid.preferences")
-            .await?
-            .unwrap_or_default())
-    }
-
-    /// Persists Debrid priority order and routing preferences.
-    pub async fn set_debrid_preferences(
-        &self,
-        prefs: DebridPreferences,
-    ) -> VesselResult<DebridPreferences> {
-        self.storage
-            .set_json_setting("debrid.preferences", &prefs)
-            .await?;
-        Ok(prefs)
-    }
-
-    /// Saves a built-in Debrid API key into `SecretStore`.
-    pub async fn save_debrid_api_key(
-        &self,
-        provider: DebridProviderKind,
-        api_key: &str,
-    ) -> VesselResult<()> {
-        self.debrid.save_builtin_api_key(provider, api_key).await
-    }
-
-    /// Removes stored credentials for a built-in Debrid provider.
-    pub async fn remove_debrid_credentials(&self, provider: DebridProviderKind) -> VesselResult<()> {
-        self.debrid.remove_builtin_credentials(provider).await
-    }
-
-    pub async fn start_real_debrid_device_auth(&self) -> VesselResult<RealDebridDeviceAuthStart> {
-        self.debrid.start_real_debrid_device_auth().await
-    }
-
-    pub async fn poll_real_debrid_device_auth(
-        &self,
-        device_code: &str,
-    ) -> VesselResult<RealDebridDeviceAuthPoll> {
-        self.debrid.poll_real_debrid_device_auth(device_code).await
-    }
-
-    /// Returns live account verification and quota metadata for all built-in + community Debrid providers.
-    pub async fn get_debrid_accounts_status(&self) -> VesselResult<Vec<DebridAccountStatus>> {
-        self.sync_community_debrid_providers().await;
-        let prefs = self.get_debrid_preferences().await?;
-        Ok(self.debrid.accounts_status(&prefs).await)
-    }
-
-    /// Probes bulk Debrid instant cache status for torrent candidates.
-    pub async fn probe_torrent_cache(
-        &self,
-        mut candidates: Vec<StreamCandidate>,
-    ) -> VesselResult<Vec<StreamCandidate>> {
-        self.sync_community_debrid_providers().await;
-        let prefs = self.get_debrid_preferences().await?;
-        self.debrid.probe_cache(&mut candidates, &prefs).await;
-        Ok(candidates)
-    }
-
-    /// Resolves a torrent magnet/info-hash candidate via prioritized Debrid providers.
-    pub async fn resolve_torrent_candidate(
-        &self,
-        req: ResolveDebridRequest,
-    ) -> VesselResult<DebridResolution> {
-        self.sync_community_debrid_providers().await;
-        let prefs = self.get_debrid_preferences().await?;
-        self.debrid.resolve_candidate(&req, &prefs).await
-    }
-
-    /// Lists active and completed transfers across all configured Debrid cloud accounts.
-    pub async fn list_debrid_cloud(&self) -> VesselResult<Vec<DebridCloudItem>> {
-        self.sync_community_debrid_providers().await;
-        let prefs = self.get_debrid_preferences().await?;
-        Ok(self.debrid.list_cloud(&prefs).await)
-    }
-
-    /// Deletes a torrent transfer from the specified Debrid provider's cloud queue.
-    pub async fn delete_debrid_cloud(&self, target: &str, torrent_id: &str) -> VesselResult<()> {
-        self.sync_community_debrid_providers().await;
-        self.debrid.delete_cloud(target, torrent_id).await
-    }
-
-    /// Unrestricts a completed Debrid cloud link into a playable direct HTTPS URL.
-    pub async fn unrestrict_debrid_cloud_link(
-        &self,
-        target: &str,
-        link: &str,
-    ) -> VesselResult<ResolvedHttpLink> {
-        self.sync_community_debrid_providers().await;
-        self.debrid.unrestrict_cloud_link(target, link).await
-    }
-
-    /// Enables or disables automatic IMDb stream lookup for a `Stream` plugin (e.g. Torrentio).
-    pub async fn set_stream_addon_auto_enabled(
-        &self,
-        plugin_id: &PluginId,
-        enabled: bool,
-    ) -> VesselResult<()> {
-        let mut disabled = self.list_disabled_stream_addons().await?;
-        let pid = plugin_id.as_str().to_owned();
-        if enabled {
-            disabled.retain(|x| x != &pid);
-        } else if !disabled.contains(&pid) {
-            disabled.push(pid);
-        }
-        self.storage
-            .set_json_setting("stream_addons.disabled", &disabled)
-            .await
-    }
-
-    /// Lists plugin IDs opted out of automatic IMDb stream addon aggregation.
-    pub async fn list_disabled_stream_addons(&self) -> VesselResult<Vec<String>> {
-        Ok(self
-            .storage
-            .get_json_setting::<Vec<String>>("stream_addons.disabled")
-            .await?
-            .unwrap_or_default())
-    }
-
-    /// Builds a virtual `MediaDetail` backed by Cinemeta/TMDB/AniList so stream-only addons (e.g. Torrentio)
-    /// work seamlessly even without any catalog plugin installed.
-    pub async fn get_virtual_metadata_detail(
-        &self,
-        canonical_id: &str,
-        title_hint: Option<&str>,
-        media_type_hint: Option<MediaType>,
-        preferred_lang: &str,
-    ) -> VesselResult<MediaDetail> {
-        let mut stub = MediaDetail {
-            native_id: format!("virtual::{canonical_id}"),
-            plugin_id: Some(PluginId::new("vessel.metadata")?),
-            media_type: media_type_hint.unwrap_or(MediaType::Movie),
-            is_anime: false,
-            title: title_hint
-                .map(str::trim)
-                .filter(|s| !s.is_empty())
-                .unwrap_or(canonical_id)
-                .to_owned(),
-            original_title: None,
-            year: None,
-            synopsis: None,
-            poster: None,
-            backdrop: None,
-            genres: Vec::new(),
-            rating: None,
-            status: None,
-            content_rating: vessel_domain::ContentRating::Sfw,
-            external_ids: ExternalIds::default(),
-            seasons: None,
-            episodes: Vec::new(),
-            relations: Vec::new(),
-        };
-        apply_canonical_override_hint(&mut stub, canonical_id);
-
-        let tmdb_key = self.secrets.get(TMDB_API_KEY_SECRET).await?;
-        let simkl_key = self.secrets.get(SIMKL_CLIENT_ID_SECRET).await?;
-        let outcome = self
-            .metadata
-            .enrich_detail_with_keys(
-                &stub,
-                preferred_lang,
-                tmdb_key.as_deref(),
-                simkl_key.as_deref(),
-                true,
-            )
-            .await?;
-
-        let mut detail = outcome.detail;
-        detail.plugin_id = Some(PluginId::new("vessel.metadata")?);
-        detail.native_id = format!("virtual::{canonical_id}");
-
-        let imdb_tag = detail.external_ids.imdb.clone().unwrap_or_default();
-        if detail.episodes.is_empty() {
-            detail.episodes.push(vessel_domain::Episode {
-                stream_id: if imdb_tag.is_empty() {
-                    format!("virtual::{canonical_id}::1::1")
-                } else {
-                    format!("virtual::{imdb_tag}::1::1")
-                },
-                season: 1,
-                episode: 1,
-                absolute_episode: None,
-                title: Some(detail.title.clone()),
-                overview: detail.synopsis.clone(),
-                thumbnail: detail.backdrop.clone().or_else(|| detail.poster.clone()),
-                air_date: None,
-                tags: Vec::new(),
-            });
-        } else {
-            for ep in &mut detail.episodes {
-                if ep.stream_id.trim().is_empty() {
-                    ep.stream_id = if imdb_tag.is_empty() {
-                        format!("virtual::{canonical_id}::{}::{}", ep.season, ep.episode)
-                    } else {
-                        format!("virtual::{imdb_tag}::{}::{}", ep.season, ep.episode)
-                    };
-                }
-            }
-        }
-        Ok(detail)
-    }
 
     /// Combines local proxy throughput and active `PlayerBackend` telemetry for the Stats HUD.
     pub async fn get_playback_stats(&self) -> PlaybackStats {
@@ -2968,7 +1810,7 @@ fn match_linked_episode(
         .or_else(|| episodes.iter().find(|e| e.episode == episode))
 }
 
-fn apply_canonical_override_hint(detail: &mut MediaDetail, canonical_id: &str) {
+pub(crate) fn apply_canonical_override_hint(detail: &mut MediaDetail, canonical_id: &str) {
     detail.external_ids = ExternalIds::default();
     if let Some(rest) = canonical_id.strip_prefix("anilist:") {
         if let Ok(id) = rest.parse::<u64>() {
@@ -3007,7 +1849,7 @@ fn apply_canonical_override_hint(detail: &mut MediaDetail, canonical_id: &str) {
 #[allow(clippy::too_many_arguments)]
 async fn run_enrichment_and_emit(
     storage: &SqliteStorage,
-    secrets: &SqliteSecretStore,
+    secrets: &dyn SecretStore,
     metadata: &MetadataService,
     sink: &Arc<dyn EventSink>,
     plugin_id: &PluginId,
@@ -3133,87 +1975,6 @@ fn filter_search_items(
     }
 }
 
-fn infer_repo_group(raw_input: &str) -> Option<String> {
-    let clean = raw_input
-        .trim()
-        .strip_prefix("nuvio-plugin://")
-        .unwrap_or(raw_input.trim());
-    if let Some(rest) = clean.strip_prefix("gh:") {
-        let mut parts = rest.split('/');
-        if let (Some(owner), Some(repo)) = (parts.next(), parts.next()) {
-            let repo_clean = repo.split('@').next().unwrap_or(repo);
-            return Some(format!("{owner}/{repo_clean}"));
-        }
-    }
-    if let Some(after_raw) = clean.strip_prefix("https://raw.githubusercontent.com/") {
-        let mut parts = after_raw.split('/');
-        if let (Some(owner), Some(repo)) = (parts.next(), parts.next()) {
-            return Some(format!("{owner}/{repo}"));
-        }
-    }
-    if clean.starts_with("stremio://") || clean.ends_with("/manifest.json") {
-        return Some("Stremio & External".into());
-    }
-    None
-}
-
-fn infer_repo_source_for_plugin(stored: &StoredPlugin) -> Option<String> {
-    if let Some(ref rid) = stored.repo_id {
-        let trimmed = rid.trim();
-        let lower = trimmed.to_ascii_lowercase();
-        if lower == "anthology (vessel)" || lower == "anthology-vessel" || lower == "tr" {
-            return Some("anthology".into());
-        }
-        if lower == "anthology" {
-            return Some("nuvio".into());
-        }
-        if trimmed.contains('/') && !trimmed.contains(' ') {
-            return Some(format!("gh:{trimmed}"));
-        }
-    }
-    if let Some(ref src) = stored.source_url {
-        if src.contains("/falsisdev/anthology-vessel/") {
-            return Some("anthology".into());
-        }
-        if src.contains("/falsisdev/anthology/") {
-            return Some("nuvio".into());
-        }
-    }
-    None
-}
-
-fn parse_numeric_version(raw: &str) -> Vec<u64> {
-    let clean = raw.trim().trim_start_matches(['v', 'V']);
-    let core = clean.split(['-', '+']).next().unwrap_or(clean);
-    core.split('.')
-        .filter_map(|seg| seg.trim().parse::<u64>().ok())
-        .collect()
-}
-
-fn is_newer_version(current: &str, latest: &str) -> bool {
-    let cur_clean = current.trim().trim_start_matches(['v', 'V']);
-    let lat_clean = latest.trim().trim_start_matches(['v', 'V']);
-    if cur_clean == lat_clean || lat_clean.is_empty() {
-        return false;
-    }
-    let a = parse_numeric_version(cur_clean);
-    let b = parse_numeric_version(lat_clean);
-    if !a.is_empty() && !b.is_empty() {
-        let max_len = a.len().max(b.len());
-        for i in 0..max_len {
-            let av = *a.get(i).unwrap_or(&0);
-            let bv = *b.get(i).unwrap_or(&0);
-            if bv > av {
-                return true;
-            }
-            if bv < av {
-                return false;
-            }
-        }
-        return false;
-    }
-    lat_clean != cur_clean
-}
 
 #[cfg(test)]
 mod tests {

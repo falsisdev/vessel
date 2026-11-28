@@ -9,19 +9,22 @@ repository.workspace = true
 [dependencies]
 async-trait.workspace = true
 getrandom.workspace = true
+reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true
+url.workspace = true
+vessel-auth = { path = "../vessel-auth" }
 vessel-debrid = { path = "../vessel-debrid" }
-vessel-domain = { path = "../vessel-domain" }
+vessel-domain = { path = "../vessel-domain", features = ["http-client"] }
 vessel-downloader = { path = "../vessel-downloader" }
 vessel-iptv = { path = "../vessel-iptv" }
 vessel-metadata = { path = "../vessel-metadata" }
 vessel-plugin-rt = { path = "../vessel-plugin-rt" }
 vessel-proxy = { path = "../vessel-proxy" }
 vessel-storage = { path = "../vessel-storage" }
+vessel-trackers = { path = "../vessel-trackers" }
 
 [dev-dependencies]
 axum.workspace = true
-reqwest.workspace = true

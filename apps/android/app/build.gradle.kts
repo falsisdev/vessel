@@ -47,8 +47,8 @@ android {
         applicationId = "dev.falsis.vessel"
         minSdk = 26
         targetSdk = 36
-        versionCode = 30
-        versionName = "0.3.6"
+        versionCode = 31
+        versionName = "0.4.0"
 
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
@@ -145,6 +145,9 @@ dependencies {
     implementation("androidx.media3:media3-ui:$media3Version")
     implementation("androidx.media3:media3-session:$media3Version")
     implementation("org.jellyfin.media3:media3-ffmpeg-decoder:1.6.1+1")
+
+    // libmpv + libass Android player backend (VOD / MKV / styled ASS subtitles)
+    implementation("io.github.abdallahmehiz:mpv-android-lib:0.1.12")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 }

@@ -94,6 +94,9 @@ class VesselRepository private constructor(private val appContext: Context) {
     private val _toasts = MutableSharedFlow<String>(extraBufferCapacity = 32)
     val toasts: SharedFlow<String> = _toasts.asSharedFlow()
 
+    private val _oauthEvents = MutableSharedFlow<OAuthCompletedEvent>(extraBufferCapacity = 16)
+    val oauthEvents: SharedFlow<OAuthCompletedEvent> = _oauthEvents.asSharedFlow()
+
     private val _autoCheckUpdates = MutableStateFlow(true)
     val autoCheckUpdates: StateFlow<Boolean> = _autoCheckUpdates.asStateFlow()
 
@@ -139,10 +142,12 @@ class VesselRepository private constructor(private val appContext: Context) {
                     handleRawEvent(eventJson)
                 }
             }
+            val secretBridge = AndroidSecretBridge(appContext)
             val instance = VesselMobileCore.open(
                 rootDir = publicRoot.absolutePath,
                 dataDir = dataDir.absolutePath,
                 listener = listener,
+                secretBridge = secretBridge,
             )
             core = instance
             refreshCoreState()
@@ -198,6 +203,10 @@ class VesselRepository private constructor(private val appContext: Context) {
             "metadata_enriched" -> {
                 runCatching { json.decodeFromJsonElement<MetadataEnrichedEvent>(obj) }
                     .onSuccess { _metadataEnriched.tryEmit(it) }
+            }
+            "oauth_completed" -> {
+                runCatching { json.decodeFromJsonElement<OAuthCompletedEvent>(obj) }
+                    .onSuccess { _oauthEvents.tryEmit(it) }
             }
         }
     }
@@ -426,7 +435,9 @@ class VesselRepository private constructor(private val appContext: Context) {
     }
 
     suspend fun enqueueDownload(payload: EnqueueDownloadPayload): StoredDownload = withContext(Dispatchers.IO) {
-        json.decodeFromString(requireCore().enqueueDownloadJson(json.encodeToString(payload)))
+        val dl = json.decodeFromString<StoredDownload>(requireCore().enqueueDownloadJson(json.encodeToString(payload)))
+        runCatching { dev.falsis.vessel.service.DownloadForegroundService.ensureRunning(appContext) }
+        dl
     }
 
     suspend fun pauseDownload(downloadId: String) = withContext(Dispatchers.IO) {
@@ -434,7 +445,9 @@ class VesselRepository private constructor(private val appContext: Context) {
     }
 
     suspend fun resumeDownload(downloadId: String): StoredDownload = withContext(Dispatchers.IO) {
-        json.decodeFromString(requireCore().resumeDownloadJson(downloadId))
+        val dl = json.decodeFromString<StoredDownload>(requireCore().resumeDownloadJson(downloadId))
+        runCatching { dev.falsis.vessel.service.DownloadForegroundService.ensureRunning(appContext) }
+        dl
     }
 
     suspend fun deleteDownload(downloadId: String) = withContext(Dispatchers.IO) {
@@ -950,6 +963,74 @@ class VesselRepository private constructor(private val appContext: Context) {
     suspend fun importBackupJson(rawJson: String, overwrite: Boolean) = withContext(Dispatchers.IO) {
         requireCore().importBackupJson(rawJson, if (overwrite) "reset_and_import" else "smart_merge")
         refreshCoreState()
+    }
+
+    suspend fun saveOAuthClientConfig(
+        provider: String,
+        clientId: String,
+        clientSecret: String? = null,
+    ) = withContext(Dispatchers.IO) {
+        requireCore().saveOauthClientConfig(provider, clientId, clientSecret)
+    }
+
+    suspend fun startOAuthBrowserFlow(
+        provider: String,
+        flow: String = "app_link_pkce",
+        redirectUri: String = "vessel://oauth/callback",
+    ): OAuthStartResult = withContext(Dispatchers.IO) {
+        json.decodeFromString(requireCore().startOauthBrowserFlowJson(provider, flow, redirectUri))
+    }
+
+    suspend fun completeOAuthCallbackUri(callbackUri: String): Boolean = withContext(Dispatchers.IO) {
+        requireCore().completeOauthCallbackUri(callbackUri).isNotBlank()
+    }
+
+    suspend fun startOAuthDeviceCode(provider: String): OAuthDevicePrompt = withContext(Dispatchers.IO) {
+        json.decodeFromString(requireCore().startOauthDeviceCodeJson(provider))
+    }
+
+    suspend fun pollOAuthDeviceCode(provider: String, deviceCode: String): Boolean = withContext(Dispatchers.IO) {
+        requireCore().pollOauthDeviceCode(provider, deviceCode)
+    }
+
+    suspend fun listTrackerAccounts(): List<TrackerAccountStatus> = withContext(Dispatchers.IO) {
+        val c = core ?: return@withContext emptyList()
+        json.decodeFromString(c.listTrackerAccountsJson())
+    }
+
+    suspend fun setTrackerPreferences(
+        provider: String,
+        autoScrobble: Boolean,
+        syncLibrary: Boolean,
+    ) = withContext(Dispatchers.IO) {
+        requireCore().setTrackerPreferences(provider, autoScrobble, syncLibrary)
+    }
+
+    suspend fun disconnectTracker(provider: String) = withContext(Dispatchers.IO) {
+        requireCore().disconnectTracker(provider)
+    }
+
+    suspend fun flushTrackerQueue(): Int = withContext(Dispatchers.IO) {
+        requireCore().flushTrackerQueue().toInt()
+    }
+
+    suspend fun getCloudSyncStatus(): CloudSyncStatus = withContext(Dispatchers.IO) {
+        val c = core ?: return@withContext CloudSyncStatus()
+        json.decodeFromString(c.getCloudSyncStatusJson())
+    }
+
+    suspend fun setCloudSyncAuto(enabled: Boolean) = withContext(Dispatchers.IO) {
+        requireCore().setCloudSyncAuto(enabled)
+    }
+
+    suspend fun syncGoogleDriveNow(): CloudSyncResult = withContext(Dispatchers.IO) {
+        val res = json.decodeFromString<CloudSyncResult>(requireCore().syncGoogleDriveNowJson())
+        refreshCoreState()
+        res
+    }
+
+    suspend fun disconnectGoogleDrive() = withContext(Dispatchers.IO) {
+        requireCore().disconnectGoogleDrive()
     }
 
     companion object {

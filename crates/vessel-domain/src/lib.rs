@@ -1,5 +1,6 @@
 //! Core domain types, errors, and port traits for Vessel.
 
+pub mod auth;
 pub mod debrid;
 pub mod error;
 pub mod event;
@@ -14,6 +15,11 @@ pub mod ports;
 pub mod stream;
 pub mod ui;
 
+pub use auth::{
+    CloudSyncStatus, OAuthClientConfig, OAuthDevicePrompt, OAuthFlowKind, OAuthProviderKind,
+    OAuthStartResult, OAuthTokenBundle, TrackerAccountStatus, TrackerProviderKind,
+    TrackerSyncAction, TrackerSyncStatus,
+};
 pub use debrid::{
     DebridAccountStatus, DebridCacheInfo, DebridCacheState, DebridCloudItem, DebridCloudStatus,
     DebridPreferences, DebridProvider, DebridProviderKind, DebridResolution, DebridResolveOutcome,
@@ -49,11 +55,12 @@ pub use stream::{
     TorrentMeta,
 };
 pub use ui::{
-    AdvancedUiPreferences, CardAspectRatio, CardPreferences, CornerStyle, DetailsPreferences,
-    EpisodeListLayout, FavoriteLiveChannel, HeroBannerMode, HomePreferences, HomePreset,
-    LiveTvCardAspect, LiveTvLogoStyle, LiveTvPreferences, LiveTvViewMode, MobileNavLayout,
-    NavLayout, NavModule, PlayClickBehavior, PlaybackPreferences, ShellPreferences, ThemeColors,
-    ThemeSpec, TvNavLayout, UiDensity, UiPreferences,
+    AdvancedUiPreferences, AndroidDeviceMode, AndroidPlayerEngine, CardAspectRatio,
+    CardPreferences, CornerStyle, DetailsPreferences, EpisodeListLayout, FavoriteLiveChannel,
+    HeroBannerMode, HomePreferences, HomePreset, LiveTvCardAspect, LiveTvLogoStyle,
+    LiveTvPreferences, LiveTvViewMode, MobileNavLayout, NavLayout, NavModule, PlayClickBehavior,
+    PlaybackPreferences, ShellPreferences, ThemeColors, ThemeSpec, TvNavLayout, UiDensity,
+    UiPreferences,
 };
 
 /// Returns the crate version embedded at compile time from `Cargo.toml`.

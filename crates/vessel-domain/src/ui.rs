@@ -350,11 +350,22 @@ pub enum PlayClickBehavior {
     AlwaysAskSource,
 }
 
+/// Android native playback engine routing mode (`auto` picks `mpvkit` for VOD/`.ass` and `exo` for Live IPTV).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AndroidPlayerEngine {
+    #[default]
+    Auto,
+    Mpvkit,
+    Exoplayer,
+}
+
 /// Playback interaction and watched-threshold UI preferences.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct PlaybackPreferences {
     pub click_behavior: PlayClickBehavior,
+    pub android_player_engine: AndroidPlayerEngine,
     pub show_live_control_bar: bool,
     pub auto_next_delay_secs: u16,
     pub watched_threshold_percent: u8,
@@ -365,6 +376,7 @@ impl Default for PlaybackPreferences {
     fn default() -> Self {
         Self {
             click_behavior: PlayClickBehavior::default(),
+            android_player_engine: AndroidPlayerEngine::default(),
             show_live_control_bar: true,
             auto_next_delay_secs: 10,
             watched_threshold_percent: 90,

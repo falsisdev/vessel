@@ -800,6 +800,77 @@ export type EngineEvent =
       level: 'debug' | 'info' | 'warn' | 'error'
       message: string
     }
+  | {
+      type: 'oauth_completed'
+      provider: OAuthProviderKind
+      success: boolean
+      error?: string
+    }
+
+export type OAuthProviderKind =
+  | 'google_drive'
+  | 'trakt'
+  | 'simkl'
+  | 'anilist'
+  | 'myanimelist'
+  | 'kitsu'
+
+export type TrackerProviderKind = 'trakt' | 'simkl' | 'anilist' | 'myanimelist' | 'kitsu'
+
+export interface OAuthDevicePrompt {
+  provider: OAuthProviderKind
+  deviceCode: string
+  userCode: string
+  verificationUri: string
+  verificationUriComplete?: string
+  expiresInSecs: number
+  intervalSecs: number
+}
+
+export type OAuthStartResult =
+  | {
+      kind: 'browser_url'
+      provider: OAuthProviderKind
+      authUrl: string
+      state: string
+      redirectUri: string
+    }
+  | ({ kind: 'device_prompt' } & OAuthDevicePrompt)
+
+export interface TrackerAccountStatus {
+  provider: TrackerProviderKind
+  displayName: string
+  implemented: boolean
+  hasClientConfig: boolean
+  connected: boolean
+  username?: string
+  userId?: string
+  autoScrobble: boolean
+  syncLibrary: boolean
+  lastSyncedAt?: string
+  pendingQueueCount: number
+}
+
+export interface CloudSyncStatus {
+  connected: boolean
+  hasClientConfig: boolean
+  accountEmail?: string
+  deviceId: string
+  autoSync: boolean
+  lastSyncedAt?: string
+  lastError?: string
+  activeTombstones: number
+}
+
+export interface CloudSyncResult {
+  uploadedFileId: string
+  merge: {
+    libraryApplied: number
+    progressApplied: number
+    overridesApplied: number
+  }
+  status: CloudSyncStatus
+}
 
 export interface AppUpdateInfo {
   currentVersion: string

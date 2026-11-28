@@ -192,6 +192,7 @@ fn export_library(conn: &Connection) -> VesselResult<Vec<LibraryItem>> {
             "SELECT plugin_id, native_id, canonical_id, media_type, is_anime,
                     title, poster_url, year, status, added_at, updated_at
              FROM library_items
+             WHERE deleted_at IS NULL
              ORDER BY plugin_id ASC, native_id ASC",
         )
         .map_err(map_sql_err)?;
@@ -213,6 +214,7 @@ fn export_watch_progress(conn: &Connection) -> VesselResult<Vec<PlaybackProgress
                     absolute_episode, position_ms, duration_ms, completed, last_watched_at,
                     title, poster_url, backdrop_url, episode_title
              FROM watch_progress
+             WHERE deleted_at IS NULL
              ORDER BY plugin_id ASC, native_id ASC, season ASC, episode ASC",
         )
         .map_err(map_sql_err)?;
@@ -335,8 +337,8 @@ fn import_library(
         tx.execute(
             "INSERT INTO library_items (
                  id, plugin_id, native_id, canonical_id, media_type, is_anime,
-                 title, poster_url, year, status, added_at, updated_at
-             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
+                 title, poster_url, year, status, added_at, updated_at, deleted_at
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, NULL)
              ON CONFLICT(plugin_id, native_id) DO UPDATE SET
                  canonical_id = excluded.canonical_id,
                  media_type = excluded.media_type,
@@ -345,7 +347,8 @@ fn import_library(
                  poster_url = excluded.poster_url,
                  year = excluded.year,
                  status = excluded.status,
-                 updated_at = excluded.updated_at",
+                 updated_at = excluded.updated_at,
+                 deleted_at = NULL",
             (
                 &row_id,
                 item.media.plugin_id.as_str(),
@@ -405,8 +408,9 @@ fn import_watch_progress(
             "INSERT INTO watch_progress (
                  id, plugin_id, native_id, stream_id, canonical_id, season, episode,
                  absolute_episode, position_ms, duration_ms, completed, last_watched_at,
-                 title, poster_url, backdrop_url, episode_title
-             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)
+                 title, poster_url, backdrop_url, episode_title,
+                 updated_at, deleted_at
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), NULL)
              ON CONFLICT(plugin_id, native_id, season, episode) DO UPDATE SET
                  stream_id = excluded.stream_id,
                  canonical_id = excluded.canonical_id,
@@ -418,7 +422,9 @@ fn import_watch_progress(
                  title = COALESCE(NULLIF(excluded.title, ''), watch_progress.title),
                  poster_url = COALESCE(NULLIF(excluded.poster_url, ''), watch_progress.poster_url),
                  backdrop_url = COALESCE(NULLIF(excluded.backdrop_url, ''), watch_progress.backdrop_url),
-                 episode_title = COALESCE(NULLIF(excluded.episode_title, ''), watch_progress.episode_title)",
+                 episode_title = COALESCE(NULLIF(excluded.episode_title, ''), watch_progress.episode_title),
+                 updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now'),
+                 deleted_at = NULL",
             rusqlite::params![
                 &row_id,
                 prog.media.plugin_id.as_str(),
@@ -481,6 +487,60 @@ impl SqliteStorage {
         let backup = self.export_backup(include_secrets).await?;
         serde_json::to_string_pretty(&backup)
             .map_err(|err| VesselError::Storage(format!("encode backup json: {err}")))
+    }
+
+    /// Exports a `.backup.vessel` JSON snapshot reading secrets from an external `SecretStore` when requested.
+    pub async fn export_backup_json_with_secrets(
+        &self,
+        include_secrets: bool,
+        secret_store: &dyn vessel_domain::SecretStore,
+    ) -> VesselResult<String> {
+        let mut backup = self.export_backup(false).await?;
+        if include_secrets {
+            backup.includes_secrets = true;
+            for key in secret_store.list_keys().await? {
+                if let Some(val) = secret_store.get(&key).await? {
+                    backup.secrets.insert(key, val);
+                }
+            }
+        }
+        serde_json::to_string_pretty(&backup)
+            .map_err(|err| VesselError::Storage(format!("encode backup json: {err}")))
+    }
+
+    /// Parses a `.backup.vessel` JSON string and imports non-secret data in SQLite,
+    /// then persists imported secrets into `secret_store` when `includes_secrets` is set.
+    pub async fn import_backup_json_with_secrets(
+        &self,
+        raw_json: &str,
+        mode: BackupImportMode,
+        secret_store: &dyn vessel_domain::SecretStore,
+    ) -> VesselResult<()> {
+        let mut backup: VesselBackup = serde_json::from_str(raw_json)
+            .map_err(|err| VesselError::InvalidInput(format!("invalid backup json: {err}")))?;
+        backup.validate()?;
+
+        let imported_secrets = if backup.includes_secrets {
+            std::mem::take(&mut backup.secrets)
+        } else {
+            BTreeMap::new()
+        };
+        let should_reset_secrets = mode == BackupImportMode::ResetAndImport && backup.includes_secrets;
+        backup.includes_secrets = false;
+
+        self.import_backup(backup, mode).await?;
+
+        if should_reset_secrets {
+            for old_key in secret_store.list_keys().await? {
+                if !imported_secrets.contains_key(&old_key) {
+                    secret_store.delete(&old_key).await?;
+                }
+            }
+        }
+        for (key, value) in imported_secrets {
+            secret_store.set(&key, &value).await?;
+        }
+        Ok(())
     }
 
     /// Restores a `.backup.vessel` snapshot atomically inside a single SQLite transaction.

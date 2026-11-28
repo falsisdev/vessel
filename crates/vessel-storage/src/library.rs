@@ -182,7 +182,8 @@ impl SqliteStorage {
                         "SELECT plugin_id, native_id, canonical_id, media_type, is_anime,
                                 title, poster_url, year, status, added_at, updated_at
                          FROM library_items
-                         WHERE (?1 IS NULL OR status = ?1)
+                         WHERE deleted_at IS NULL
+                           AND (?1 IS NULL OR status = ?1)
                          ORDER BY updated_at DESC",
                     )
                     .map_err(map_sql_err)?;
@@ -212,8 +213,8 @@ impl SqliteStorage {
                     .execute(
                         "INSERT INTO library_items (
                              id, plugin_id, native_id, canonical_id, media_type, is_anime,
-                             title, poster_url, year, status, added_at, updated_at
-                         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
+                             title, poster_url, year, status, added_at, updated_at, deleted_at
+                         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, NULL)
                          ON CONFLICT(plugin_id, native_id) DO UPDATE SET
                              canonical_id = excluded.canonical_id,
                              media_type = excluded.media_type,
@@ -222,7 +223,8 @@ impl SqliteStorage {
                              poster_url = excluded.poster_url,
                              year = excluded.year,
                              status = excluded.status,
-                             updated_at = excluded.updated_at",
+                             updated_at = excluded.updated_at,
+                             deleted_at = NULL",
                         (
                             &row_id,
                             item.media.plugin_id.as_str(),
@@ -244,7 +246,7 @@ impl SqliteStorage {
             .await
     }
 
-    /// Deletes a library item matching `(plugin_id, native_id)`.
+    /// Soft-deletes a library item matching `(plugin_id, native_id)` with a sync tombstone.
     pub async fn delete_library_item(&self, media: &MediaRef) -> VesselResult<()> {
         let plugin_id = media.plugin_id.as_str().to_owned();
         let native_id = media.native_id.clone();
@@ -253,7 +255,10 @@ impl SqliteStorage {
             .execute(move |db| {
                 db.conn()
                     .execute(
-                        "DELETE FROM library_items WHERE plugin_id = ?1 AND native_id = ?2",
+                        "UPDATE library_items
+                         SET deleted_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now'),
+                             updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+                         WHERE plugin_id = ?1 AND native_id = ?2 AND deleted_at IS NULL",
                         (&plugin_id, &native_id),
                     )
                     .map_err(map_sql_err)?;
@@ -280,7 +285,8 @@ impl SqliteStorage {
                                 duration_ms, completed, last_watched_at,
                                 title, poster_url, backdrop_url, episode_title
                          FROM watch_progress
-                         WHERE plugin_id = ?1 AND native_id = ?2 AND season = ?3 AND episode = ?4",
+                         WHERE plugin_id = ?1 AND native_id = ?2 AND season = ?3 AND episode = ?4
+                           AND deleted_at IS NULL",
                         (media.plugin_id.as_str(), &media.native_id, season, episode),
                         RawProgressRow::from_sql,
                     )
@@ -318,6 +324,7 @@ impl SqliteStorage {
                                 title, poster_url, backdrop_url, episode_title
                          FROM watch_progress
                          WHERE canonical_id = ?1 AND absolute_episode = ?2
+                           AND deleted_at IS NULL
                          ORDER BY last_watched_at DESC
                          LIMIT 1",
                         (&canonical_id, absolute_episode),
@@ -374,11 +381,14 @@ impl SqliteStorage {
                         "INSERT INTO watch_progress (
                              id, plugin_id, native_id, stream_id, canonical_id, season, episode,
                              absolute_episode, position_ms, duration_ms, completed, last_watched_at,
-                             title, poster_url, backdrop_url, episode_title
+                             title, poster_url, backdrop_url, episode_title,
+                             updated_at, deleted_at
                          ) VALUES (
                              ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11,
                              COALESCE(NULLIF(trim(?12), ''), strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-                             ?13, ?14, ?15, ?16
+                             ?13, ?14, ?15, ?16,
+                             strftime('%Y-%m-%dT%H:%M:%SZ', 'now'),
+                             NULL
                          )
                          ON CONFLICT(plugin_id, native_id, season, episode) DO UPDATE SET
                              stream_id = excluded.stream_id,
@@ -391,7 +401,9 @@ impl SqliteStorage {
                              title = COALESCE(NULLIF(excluded.title, ''), watch_progress.title),
                              poster_url = COALESCE(NULLIF(excluded.poster_url, ''), watch_progress.poster_url),
                              backdrop_url = COALESCE(NULLIF(excluded.backdrop_url, ''), watch_progress.backdrop_url),
-                             episode_title = COALESCE(NULLIF(excluded.episode_title, ''), watch_progress.episode_title)",
+                             episode_title = COALESCE(NULLIF(excluded.episode_title, ''), watch_progress.episode_title),
+                             updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now'),
+                             deleted_at = NULL",
                         rusqlite::params![
                             &row_id,
                             progress.media.plugin_id.as_str(),
@@ -436,6 +448,7 @@ impl SqliteStorage {
                                 season, episode
                          FROM watch_progress
                          WHERE plugin_id = ?1 AND native_id = ?2
+                           AND deleted_at IS NULL
                          ORDER BY season ASC, episode ASC",
                     )
                     .map_err(map_sql_err)?;
@@ -477,6 +490,7 @@ impl SqliteStorage {
                                 title, poster_url, backdrop_url, episode_title,
                                 plugin_id, native_id, season, episode
                          FROM watch_progress
+                         WHERE deleted_at IS NULL
                          ORDER BY last_watched_at DESC
                          LIMIT ?1",
                     )
@@ -523,8 +537,11 @@ impl SqliteStorage {
                              li.title, li.poster_url, li.media_type
                          FROM watch_progress wp
                          LEFT JOIN library_items li
-                           ON li.plugin_id = wp.plugin_id AND li.native_id = wp.native_id
-                         WHERE (wp.completed = 1 OR wp.position_ms > 0)
+                           ON li.plugin_id = wp.plugin_id
+                          AND li.native_id = wp.native_id
+                          AND li.deleted_at IS NULL
+                         WHERE wp.deleted_at IS NULL
+                           AND (wp.completed = 1 OR wp.position_ms > 0)
                            AND COALESCE(li.media_type, '') != 'live'
                            AND wp.stream_id NOT LIKE 'tv:%'
                            AND wp.stream_id NOT LIKE 'tv\_%' ESCAPE '\'
@@ -714,7 +731,8 @@ impl SqliteStorage {
                             .query_row(
                                 "SELECT position_ms, duration_ms, completed
                                  FROM watch_progress
-                                 WHERE plugin_id = ?1 AND native_id = ?2 AND season = ?3 AND episode = ?4",
+                                 WHERE plugin_id = ?1 AND native_id = ?2 AND season = ?3 AND episode = ?4
+                                   AND deleted_at IS NULL",
                                 (&plugin_raw, &native_id, next_season, next_episode),
                                 |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
                             )
@@ -791,7 +809,7 @@ impl SqliteStorage {
             .await
     }
 
-    /// Removes saved watch progress for `(plugin_id, native_id)` from Continue Watching.
+    /// Soft-deletes watch progress for `(plugin_id, native_id)` from Continue Watching with a sync tombstone.
     pub async fn delete_watch_progress(
         &self,
         plugin_id: &PluginId,
@@ -803,7 +821,10 @@ impl SqliteStorage {
             .execute(move |db| {
                 db.conn()
                     .execute(
-                        "DELETE FROM watch_progress WHERE plugin_id = ?1 AND native_id = ?2",
+                        "UPDATE watch_progress
+                         SET deleted_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now'),
+                             updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+                         WHERE plugin_id = ?1 AND native_id = ?2 AND deleted_at IS NULL",
                         (&plugin, &native),
                     )
                     .map_err(map_sql_err)?;

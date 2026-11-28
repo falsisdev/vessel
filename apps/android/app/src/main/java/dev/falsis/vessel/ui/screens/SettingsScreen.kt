@@ -75,6 +75,7 @@ import androidx.compose.ui.unit.sp
 import dev.falsis.vessel.BuildConfig
 import dev.falsis.vessel.data.VesselRepository
 import dev.falsis.vessel.ui.components.DebridSettingsSection
+import dev.falsis.vessel.ui.components.SyncAndTrackersSection
 import dev.falsis.vessel.ui.components.VesselButton
 import dev.falsis.vessel.ui.components.VesselFilterChip
 import dev.falsis.vessel.ui.components.VesselOutlinedButton
@@ -121,6 +122,7 @@ fun SettingsScreen(
     var showNavLayoutMenu by remember { mutableStateOf(false) }
     var showHeroModeMenu by remember { mutableStateOf(false) }
     var showPlayClickMenu by remember { mutableStateOf(false) }
+    var showPlayerEngineMenu by remember { mutableStateOf(false) }
     var showAspectMenu by remember { mutableStateOf(false) }
     var showSubOutlineMenu by remember { mutableStateOf(false) }
     var showSubFontMenu by remember { mutableStateOf(false) }
@@ -570,6 +572,39 @@ fun SettingsScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween,
                     ) {
+                        Text(VesselI18n.tr("settings.android_player_engine"), modifier = Modifier.weight(1f))
+                        Box {
+                            val engineLabel = when (prefs.playback.androidPlayerEngine) {
+                                "mpvkit" -> VesselI18n.tr("settings.engine_mpvkit")
+                                "exoplayer" -> VesselI18n.tr("settings.engine_exoplayer")
+                                else -> VesselI18n.tr("settings.engine_auto")
+                            }
+                            VesselOutlinedButton(onClick = { showPlayerEngineMenu = true }, height = tokens.compactButtonHeight) {
+                                Text(engineLabel, style = MaterialTheme.typography.labelMedium)
+                            }
+                            DropdownMenu(expanded = showPlayerEngineMenu, onDismissRequest = { showPlayerEngineMenu = false }) {
+                                listOf(
+                                    "auto" to VesselI18n.tr("settings.engine_auto"),
+                                    "mpvkit" to VesselI18n.tr("settings.engine_mpvkit"),
+                                    "exoplayer" to VesselI18n.tr("settings.engine_exoplayer"),
+                                ).forEach { (key, txt) ->
+                                    DropdownMenuItem(
+                                        text = { Text(txt) },
+                                        onClick = {
+                                            showPlayerEngineMenu = false
+                                            scope.launch { repo.saveUiPreferences(prefs.copy(playback = prefs.playback.copy(androidPlayerEngine = key))) }
+                                        },
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
                         Text(VesselI18n.tr("home.continue_watching"), modifier = Modifier.weight(1f))
                         Switch(
                             checked = prefs.home.showContinueWatching,
@@ -903,6 +938,11 @@ fun SettingsScreen(
         // Debrid & Torrents
         item {
             DebridSettingsSection(repo = repo)
+        }
+
+        // Cloud Sync & Watch Trackers
+        item {
+            SyncAndTrackersSection(repo = repo)
         }
 
         // Backup & Restore (Desktop SettingsView parity)

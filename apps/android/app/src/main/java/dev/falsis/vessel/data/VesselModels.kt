@@ -451,6 +451,7 @@ data class PlaybackPreferences(
     val clickBehavior: String = "quick_start_best",
     val autoNextDelaySecs: Int = 10,
     val watchedThresholdPercent: Int = 90,
+    val androidPlayerEngine: String = "auto",
 )
 
 @Serializable
@@ -723,4 +724,78 @@ data class SubtitleSearchOutcome(
 data class SubtitlePluginInfo(
     val pluginId: String,
     val name: String,
+)
+
+@Serializable
+data class OAuthDevicePrompt(
+    val provider: String,
+    val deviceCode: String,
+    val userCode: String,
+    val verificationUri: String,
+    val verificationUriComplete: String? = null,
+    val expiresInSecs: Long,
+    val intervalSecs: Long,
+)
+
+@Serializable
+data class OAuthStartResult(
+    val kind: String,
+    val provider: String,
+    val authUrl: String? = null,
+    val state: String? = null,
+    val redirectUri: String? = null,
+    val deviceCode: String? = null,
+    val userCode: String? = null,
+    val verificationUri: String? = null,
+    val verificationUriComplete: String? = null,
+    val expiresInSecs: Long? = null,
+    val intervalSecs: Long? = null,
+)
+
+@Serializable
+data class OAuthCompletedEvent(
+    val provider: String,
+    val success: Boolean,
+    val error: String? = null,
+)
+
+@Serializable
+data class TrackerAccountStatus(
+    val provider: String,
+    val displayName: String,
+    val implemented: Boolean = false,
+    val hasClientConfig: Boolean = false,
+    val connected: Boolean = false,
+    val username: String? = null,
+    val userId: String? = null,
+    val autoScrobble: Boolean = true,
+    val syncLibrary: Boolean = true,
+    val lastSyncedAt: String? = null,
+    val pendingQueueCount: Int = 0,
+)
+
+@Serializable
+data class CloudSyncStatus(
+    val connected: Boolean = false,
+    val hasClientConfig: Boolean = false,
+    val accountEmail: String? = null,
+    val deviceId: String = "",
+    val autoSync: Boolean = false,
+    val lastSyncedAt: String? = null,
+    val lastError: String? = null,
+    val activeTombstones: Int = 0,
+)
+
+@Serializable
+data class SyncMergeStatsReport(
+    val libraryApplied: Int = 0,
+    val progressApplied: Int = 0,
+    val overridesApplied: Int = 0,
+)
+
+@Serializable
+data class CloudSyncResult(
+    val uploadedFileId: String,
+    val merge: SyncMergeStatsReport = SyncMergeStatsReport(),
+    val status: CloudSyncStatus = CloudSyncStatus(),
 )

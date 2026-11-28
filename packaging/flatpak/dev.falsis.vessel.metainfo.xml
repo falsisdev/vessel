@@ -26,6 +26,11 @@
   </categories>
   <content_rating type="oars-1.1" />
   <releases>
+    <release version="0.4.0" date="2026-11-28">
+      <description>
+        <p>Replaced SQLite secret storage with hardware-backed OS Keyring and Android KeyStore (AES-256-GCM) with automatic one-time migration, introduced unified OAuth 2.0 (Loopback PKCE, App Link PKCE, Device Code) and watch trackers (Trakt and AniList full support plus extensible Simkl/MyAnimeList/Kitsu slots), added Google Drive appDataFolder cross-device sync with SQLite deletion tombstones and LWW merge, added Android mpvkit (libmpv + libass) VOD playback and DownloadForegroundService background transfers, and modularized engine and Android UI components.</p>
+      </description>
+    </release>
     <release version="0.3.5" date="2026-11-27">
       <description>
         <p>Preserved Android TV Live TV category selection across player navigation, added a collapsible category bar on TV, added cross-platform Live TV channel zapping shortcuts and an in-player mini channel list overlay, enabled focus-following up/down item reordering, expanded Live TV view modes and customization, decoupled Home catalog ordering per section, and added Android TV-specific navigation layouts with a vertically centered left sidebar.</p>

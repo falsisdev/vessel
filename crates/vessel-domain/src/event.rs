@@ -107,6 +107,13 @@ pub enum EngineEvent {
         level: LogLevel,
         message: String,
     },
+    #[serde(rename_all = "camelCase")]
+    OAuthCompleted {
+        provider: crate::auth::OAuthProviderKind,
+        success: bool,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        error: Option<String>,
+    },
 }
 
 #[cfg(test)]

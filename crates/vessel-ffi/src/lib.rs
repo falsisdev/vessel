@@ -10,18 +10,19 @@ use serde::{Deserialize, Serialize};
 use tokio::runtime::{Builder, Runtime};
 use tokio::task::JoinSet;
 use vessel_domain::{
-    DebridPreferences, DebridProviderKind, EngineEvent, EventSink, ExternalIds, HomeSection,
-    LibraryItem, LibraryStatus, LinkedMediaSource, MediaType, PlaybackProgress, PlaybackRequest,
-    PlayerBackend, PluginId, PluginManifest, RepoIndex, ResolveDebridRequest, SecretStore,
-    SkipSegment, StreamCandidate, SubtitleQuery, SubtitleTrack, ThemeColors, ThemeSpec,
-    UiPreferences, VesselError, VesselPaths, VesselResult,
+    CloudSyncStatus, DebridPreferences, DebridProviderKind, EngineEvent, EventSink, ExternalIds,
+    HomeSection, LibraryItem, LibraryStatus, LinkedMediaSource, MediaType, OAuthClientConfig,
+    OAuthFlowKind, OAuthProviderKind, PlaybackProgress, PlaybackRequest, PlayerBackend, PluginId,
+    PluginManifest, RepoIndex, ResolveDebridRequest, SecretStore, SkipSegment, StreamCandidate,
+    SubtitleQuery, SubtitleTrack, ThemeColors, ThemeSpec, TrackerProviderKind, UiPreferences,
+    VesselError, VesselPaths, VesselResult,
 };
 use vessel_engine::{
     DownloadRequest, IptvKind, IptvProfile, MetadataProviderFilter, PlayCandidateRequest,
     SIMKL_CLIENT_ID_SECRET, SkipQuery, TMDB_API_KEY_SECRET, VesselEngine,
 };
 use vessel_plugin_rt::{ResolvedSource, SourceTrustBadge};
-use vessel_storage::{BackupImportMode, DownloadKind};
+use vessel_storage::{BackupImportMode, DownloadKind, MigratingSecretStore, SqliteSecretStore, StorageActor};
 
 uniffi::setup_scaffolding!();
 
@@ -71,10 +72,81 @@ fn from_json<T: for<'de> Deserialize<'de>>(raw: &str, label: &str) -> Result<T, 
     })
 }
 
+fn parse_enum_str<T: for<'de> Deserialize<'de>>(raw: &str, label: &str) -> Result<T, FfiError> {
+    serde_json::from_value(serde_json::Value::String(raw.trim().to_owned())).map_err(|err| {
+        ffi_err(format!(
+            "[VesselInvalidInputError]: invalid {label} '{raw}': {err}"
+        ))
+    })
+}
+
 /// Callback implemented in Kotlin to stream real-time `EngineEvent` JSON payloads from Rust.
 #[uniffi::export(callback_interface)]
 pub trait EngineEventListener: Send + Sync {
     fn on_event_json(&self, event_json: String);
+}
+
+/// Callback implemented in Kotlin backed by Android Keystore (`AES-256-GCM`) for sensitive secrets.
+#[uniffi::export(callback_interface)]
+pub trait NativeSecretBridge: Send + Sync {
+    fn get_secret(&self, key: String) -> Option<String>;
+    fn set_secret(&self, key: String, value: String);
+    fn delete_secret(&self, key: String);
+    fn list_secret_keys(&self) -> Vec<String>;
+}
+
+struct FfiSecretStore {
+    bridge: Arc<Box<dyn NativeSecretBridge>>,
+}
+
+#[async_trait]
+impl SecretStore for FfiSecretStore {
+    async fn get(&self, key: &str) -> VesselResult<Option<String>> {
+        let key = key.trim().to_owned();
+        if key.is_empty() {
+            return Err(VesselError::InvalidInput(
+                "secret key cannot be empty".into(),
+            ));
+        }
+        let bridge = Arc::clone(&self.bridge);
+        tokio::task::spawn_blocking(move || bridge.get_secret(key))
+            .await
+            .map_err(|err| VesselError::Storage(format!("android secret get join error: {err}")))
+    }
+
+    async fn set(&self, key: &str, value: &str) -> VesselResult<()> {
+        let key = key.trim().to_owned();
+        if key.is_empty() {
+            return Err(VesselError::InvalidInput(
+                "secret key cannot be empty".into(),
+            ));
+        }
+        let value = value.to_owned();
+        let bridge = Arc::clone(&self.bridge);
+        tokio::task::spawn_blocking(move || bridge.set_secret(key, value))
+            .await
+            .map_err(|err| VesselError::Storage(format!("android secret set join error: {err}")))
+    }
+
+    async fn delete(&self, key: &str) -> VesselResult<()> {
+        let key = key.trim().to_owned();
+        if key.is_empty() {
+            return Err(VesselError::InvalidInput(
+                "secret key cannot be empty".into(),
+            ));
+        }
+        let bridge = Arc::clone(&self.bridge);
+        tokio::task::spawn_blocking(move || bridge.delete_secret(key))
+            .await
+            .map_err(|err| VesselError::Storage(format!("android secret delete join error: {err}")))
+    }
+
+    async fn list_keys(&self) -> VesselResult<Vec<String>> {
+        let bridge = Arc::clone(&self.bridge);
+        tokio::task::spawn_blocking(move || bridge.list_secret_keys())
+            .await
+            .map_err(|err| VesselError::Storage(format!("android secret list join error: {err}")))
+    }
 }
 
 struct FfiEventSink {
@@ -369,6 +441,7 @@ impl VesselMobileCore {
         root_dir: String,
         data_dir: String,
         listener: Option<Box<dyn EngineEventListener>>,
+        secret_bridge: Option<Box<dyn NativeSecretBridge>>,
     ) -> Result<Arc<Self>, FfiError> {
         let paths = VesselPaths::with_data_dir(root_dir, data_dir)?;
         let runtime = Arc::new(
@@ -390,7 +463,23 @@ impl VesselMobileCore {
         let player: Arc<dyn PlayerBackend> = Arc::new(MobilePlayerNoopBackend);
 
         let engine = runtime.block_on(async {
-            let eng = VesselEngine::open(&paths, player, event_sink, false).await?;
+            let actor = StorageActor::open_with_paths(&paths).await?;
+            let legacy = SqliteSecretStore::new(actor.clone());
+            let secrets: Arc<dyn SecretStore> = match secret_bridge {
+                Some(bridge) => {
+                    let ffi_store: Arc<dyn SecretStore> = Arc::new(FfiSecretStore {
+                        bridge: Arc::new(bridge),
+                    });
+                    let migrating = Arc::new(MigratingSecretStore::new(ffi_store, legacy));
+                    let _ = migrating.migrate_legacy_secrets().await;
+                    migrating
+                }
+                None => Arc::new(legacy),
+            };
+            let eng = VesselEngine::open_with_actor_and_secrets(
+                &paths, actor, secrets, player, event_sink, false,
+            )
+            .await?;
             if let Ok(Some(always_proxy)) =
                 eng.storage().get_json_setting::<bool>("always_proxy").await
             {
@@ -1482,6 +1571,125 @@ impl VesselMobileCore {
         to_json(&bundle)
     }
 
+    pub fn save_oauth_client_config(
+        &self,
+        provider: String,
+        client_id: String,
+        client_secret: Option<String>,
+    ) -> Result<(), FfiError> {
+        let kind: OAuthProviderKind = parse_enum_str(&provider, "oauth provider")?;
+        self.runtime.block_on(self.engine.save_oauth_client_config(
+            kind,
+            OAuthClientConfig {
+                client_id,
+                client_secret,
+            },
+        ))?;
+        Ok(())
+    }
+
+    pub fn start_oauth_browser_flow_json(
+        &self,
+        provider: String,
+        flow: String,
+        redirect_uri: String,
+    ) -> Result<String, FfiError> {
+        let kind: OAuthProviderKind = parse_enum_str(&provider, "oauth provider")?;
+        let flow_kind: OAuthFlowKind = parse_enum_str(&flow, "oauth flow")?;
+        let res = self.runtime.block_on(self.engine.start_oauth_browser_flow(
+            kind,
+            flow_kind,
+            &redirect_uri,
+        ))?;
+        to_json(&res)
+    }
+
+    pub fn complete_oauth_callback_uri(&self, callback_uri: String) -> Result<String, FfiError> {
+        let kind = self
+            .runtime
+            .block_on(self.engine.complete_oauth_callback_uri(&callback_uri))?;
+        Ok(kind.as_str().to_owned())
+    }
+
+    pub fn start_oauth_device_code_json(&self, provider: String) -> Result<String, FfiError> {
+        let kind: OAuthProviderKind = parse_enum_str(&provider, "oauth provider")?;
+        let prompt = self
+            .runtime
+            .block_on(self.engine.start_oauth_device_code(kind))?;
+        to_json(&prompt)
+    }
+
+    pub fn poll_oauth_device_code(
+        &self,
+        provider: String,
+        device_code: String,
+    ) -> Result<bool, FfiError> {
+        let kind: OAuthProviderKind = parse_enum_str(&provider, "oauth provider")?;
+        Ok(self
+            .runtime
+            .block_on(self.engine.poll_oauth_device_code(kind, &device_code))?)
+    }
+
+    pub fn list_tracker_accounts_json(&self) -> Result<String, FfiError> {
+        let accounts = self
+            .runtime
+            .block_on(self.engine.list_tracker_accounts())?;
+        to_json(&accounts)
+    }
+
+    pub fn set_tracker_preferences(
+        &self,
+        provider: String,
+        auto_scrobble: bool,
+        sync_library: bool,
+    ) -> Result<(), FfiError> {
+        let kind: TrackerProviderKind = parse_enum_str(&provider, "tracker provider")?;
+        self.runtime.block_on(self.engine.set_tracker_preferences(
+            kind,
+            auto_scrobble,
+            sync_library,
+        ))?;
+        Ok(())
+    }
+
+    pub fn disconnect_tracker(&self, provider: String) -> Result<(), FfiError> {
+        let kind: TrackerProviderKind = parse_enum_str(&provider, "tracker provider")?;
+        self.runtime
+            .block_on(self.engine.disconnect_tracker(kind))?;
+        Ok(())
+    }
+
+    pub fn flush_tracker_queue(&self) -> Result<u32, FfiError> {
+        let n = self.runtime.block_on(self.engine.flush_tracker_queue())?;
+        Ok(n as u32)
+    }
+
+    pub fn get_cloud_sync_status_json(&self) -> Result<String, FfiError> {
+        let status: CloudSyncStatus = self
+            .runtime
+            .block_on(self.engine.get_cloud_sync_status())?;
+        to_json(&status)
+    }
+
+    pub fn set_cloud_sync_auto(&self, enabled: bool) -> Result<(), FfiError> {
+        self.runtime
+            .block_on(self.engine.set_cloud_sync_auto(enabled))?;
+        Ok(())
+    }
+
+    pub fn sync_google_drive_now_json(&self) -> Result<String, FfiError> {
+        let res = self
+            .runtime
+            .block_on(self.engine.sync_google_drive_now())?;
+        to_json(&res)
+    }
+
+    pub fn disconnect_google_drive(&self) -> Result<(), FfiError> {
+        self.runtime
+            .block_on(self.engine.disconnect_google_drive())?;
+        Ok(())
+    }
+
     pub fn shutdown(&self) {
         self.runtime.block_on(self.engine.shutdown());
     }
@@ -1579,6 +1787,7 @@ mod tests {
             root_dir.to_string_lossy().into_owned(),
             data_dir.to_string_lossy().into_owned(),
             Some(Box::new(listener)),
+            None,
         )
         .expect("open mobile core");
 

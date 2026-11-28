@@ -95,7 +95,7 @@ impl SqliteStorage {
                     .query_row(
                         "SELECT canonical_id, is_disabled, updated_at
                          FROM metadata_overrides
-                         WHERE plugin_id = ?1 AND native_id = ?2",
+                         WHERE plugin_id = ?1 AND native_id = ?2 AND deleted_at IS NULL",
                         (&plugin_id, &native_id),
                         |row| {
                             let canonical_id: Option<String> = row.get(0)?;
@@ -128,12 +128,13 @@ impl SqliteStorage {
             .execute(move |db| {
                 db.conn()
                     .execute(
-                        "INSERT INTO metadata_overrides (plugin_id, native_id, canonical_id, is_disabled, updated_at)
-                         VALUES (?1, ?2, ?3, ?4, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+                        "INSERT INTO metadata_overrides (plugin_id, native_id, canonical_id, is_disabled, updated_at, deleted_at)
+                         VALUES (?1, ?2, ?3, ?4, strftime('%Y-%m-%dT%H:%M:%SZ', 'now'), NULL)
                          ON CONFLICT(plugin_id, native_id) DO UPDATE SET
                              canonical_id = excluded.canonical_id,
                              is_disabled = excluded.is_disabled,
-                             updated_at = excluded.updated_at",
+                             updated_at = excluded.updated_at,
+                             deleted_at = NULL",
                         (&plugin_id, &native_id, &canonical, i32::from(is_disabled)),
                     )
                     .map_err(map_sql_err)?;
